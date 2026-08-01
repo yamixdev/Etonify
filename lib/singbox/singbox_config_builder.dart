@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
@@ -47,6 +48,8 @@ class SingboxConfigBuilder {
     this.russiaGeoipRuPath,
     this.russiaCuratedDirectServicesPath,
     this.russiaAiServicesPath,
+    this.russiaSocialServicesPath,
+    this.trafficRulePreset = TrafficRulePreset.none,
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -96,6 +99,8 @@ class SingboxConfigBuilder {
   final String? russiaGeoipRuPath;
   final String? russiaCuratedDirectServicesPath;
   final String? russiaAiServicesPath;
+  final String? russiaSocialServicesPath;
+  final TrafficRulePreset trafficRulePreset;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -133,8 +138,12 @@ class SingboxConfigBuilder {
         .map((outbound) => outbound.tag)
         .toList(growable: false);
     final visibleGroups = _visibleGroups(outboundTags.toSet());
+    final requestedTrafficRulePreset =
+        trafficRulePreset == TrafficRulePreset.none && useRussiaRouteData
+        ? TrafficRulePreset.russianServicesDirect
+        : trafficRulePreset;
     final russiaRouteDataActive =
-        useRussiaRouteData &&
+        requestedTrafficRulePreset == TrafficRulePreset.russianServicesDirect &&
         _validRuleSetPath(russiaGeositeRuBlockedPath) &&
         _validRuleSetPath(russiaGeositeRuAvailableOnlyInsidePath) &&
         _validRuleSetPath(russiaGeositeCategoryRuPath) &&
@@ -142,8 +151,26 @@ class SingboxConfigBuilder {
         _validRuleSetPath(russiaGeoipRuWhitelistPath) &&
         _validRuleSetPath(russiaGeoipRuPath);
     final russiaCuratedDirectServicesActive =
-        useRussiaRouteData &&
+        requestedTrafficRulePreset == TrafficRulePreset.russianServicesDirect &&
         _validRuleSetPath(russiaCuratedDirectServicesPath);
+    final aiServicesActive =
+        requestedTrafficRulePreset == TrafficRulePreset.aiViaVpn &&
+        _validRuleSetPath(russiaAiServicesPath);
+    final socialServicesActive =
+        requestedTrafficRulePreset == TrafficRulePreset.socialViaVpn &&
+        _validRuleSetPath(russiaSocialServicesPath);
+    final activeTrafficRulePreset = switch (requestedTrafficRulePreset) {
+      TrafficRulePreset.russianServicesDirect when russiaRouteDataActive =>
+        TrafficRulePreset.russianServicesDirect,
+      TrafficRulePreset.aiViaVpn when aiServicesActive =>
+        TrafficRulePreset.aiViaVpn,
+      TrafficRulePreset.socialViaVpn when socialServicesActive =>
+        TrafficRulePreset.socialViaVpn,
+      _ => TrafficRulePreset.none,
+    };
+    final trafficRuleUsesDirectDefault =
+        trafficRulePresetDefinitionFor(activeTrafficRulePreset)?.defaultRoute ==
+        TrafficRuleDefaultRoute.direct;
     final defaultLowestOutboundTags = _lowestOutboundTagsFor(
       lowestProxyTag,
       outbounds,
@@ -220,8 +247,16 @@ class SingboxConfigBuilder {
       proxyOutboundIndexes[proxyStartIndex + i] = outbounds[i].tag;
     }
 
-    final routeFinal = hasProxies ? 'select' : 'direct';
-    final dnsFinal = hasProxies ? 'dns-remote' : 'dns-direct';
+    final routeFinal = trafficRuleUsesDirectDefault
+        ? 'direct'
+        : hasProxies
+        ? 'select'
+        : 'direct';
+    final dnsFinal = trafficRuleUsesDirectDefault
+        ? 'dns-direct'
+        : hasProxies
+        ? 'dns-remote'
+        : 'dns-direct';
     final dnsRemoteDetour = hasProxies
         ? _dnsRemoteDetourFor(selectorDefault, selectableTags.toSet())
         : 'direct';
@@ -261,6 +296,8 @@ class SingboxConfigBuilder {
           ],
           if (russiaRouteDataActive ||
               russiaCuratedDirectServicesActive ||
+              aiServicesActive ||
+              socialServicesActive ||
               adBlockActive)
             'rules': [
               if (russiaRouteDataActive)
@@ -294,6 +331,18 @@ class SingboxConfigBuilder {
                   'rule_set': 'ru-geosite-category-ru',
                   'action': 'route',
                   'server': 'dns-ru-direct',
+                },
+              if (aiServicesActive)
+                {
+                  'rule_set': 'ai-services',
+                  'action': 'route',
+                  'server': hasProxies ? 'dns-remote' : 'dns-direct',
+                },
+              if (socialServicesActive)
+                {
+                  'rule_set': 'social-services',
+                  'action': 'route',
+                  'server': hasProxies ? 'dns-remote' : 'dns-direct',
                 },
               if (adBlockAllowActive)
                 {
@@ -382,6 +431,8 @@ class SingboxConfigBuilder {
           'default_domain_resolver': 'dns-local',
           if (russiaRouteDataActive ||
               russiaCuratedDirectServicesActive ||
+              aiServicesActive ||
+              socialServicesActive ||
               adBlockActive)
             'rule_set': [
               if (russiaCuratedDirectServicesActive)
@@ -429,6 +480,20 @@ class SingboxConfigBuilder {
                   'path': russiaGeoipRuPath,
                 },
               ],
+              if (aiServicesActive)
+                {
+                  'type': 'local',
+                  'tag': 'ai-services',
+                  'format': 'binary',
+                  'path': russiaAiServicesPath,
+                },
+              if (socialServicesActive)
+                {
+                  'type': 'local',
+                  'tag': 'social-services',
+                  'format': 'binary',
+                  'path': russiaSocialServicesPath,
+                },
               if (adBlockAllowActive)
                 {
                   'type': 'local',
@@ -468,6 +533,16 @@ class SingboxConfigBuilder {
               {'rule_set': 'adblock-allow', 'outbound': routeFinal},
             if (adBlockActive)
               {'rule_set': 'adblock-block', 'action': 'reject'},
+            if (aiServicesActive)
+              {
+                'rule_set': 'ai-services',
+                'outbound': hasProxies ? 'select' : 'direct',
+              },
+            if (socialServicesActive)
+              {
+                'rule_set': 'social-services',
+                'outbound': hasProxies ? 'select' : 'direct',
+              },
             if (russiaRouteDataActive)
               {
                 'rule_set': ['ru-geosite-ru-blocked', 'ru-geoip-ru-blocked'],

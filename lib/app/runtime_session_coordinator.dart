@@ -93,7 +93,20 @@ class RuntimeSessionCoordinator {
     required bool transitionInProgress,
     required bool retryScheduled,
     required bool starting,
+    required bool stopping,
   }) {
+    // A native `running=false` event is expected while an explicit stop is in
+    // flight. `transitionInProgress` is shared by startup and shutdown, so it
+    // cannot decide the visual state by itself: otherwise a normal stop is
+    // briefly rendered as "starting core".
+    if (!running && stopping) {
+      return const RuntimeStateDecision(
+        phase: AppConnectionPhase.stopping,
+        keepConnecting: false,
+        clearDisconnectedState: false,
+        retryScheduled: false,
+      );
+    }
     final keepStateDuringError =
         hasError && (transitionInProgress || retryScheduled || starting);
     final keepConnecting =
@@ -122,15 +135,18 @@ class RuntimeSessionCoordinator {
     required bool nativeRecoveryPending,
     required bool localTransitionPending,
     required bool retryScheduled,
+    required bool stopping,
   }) {
-    final phase = running
-        ? AppConnectionPhase.connected
-        : (nativeRecoveryPending || localTransitionPending
-              ? AppConnectionPhase.recovering
-              : AppConnectionPhase.idle);
+    final phase = !running && stopping
+        ? AppConnectionPhase.stopping
+        : (running
+              ? AppConnectionPhase.connected
+              : (nativeRecoveryPending || localTransitionPending
+                    ? AppConnectionPhase.recovering
+                    : AppConnectionPhase.idle));
     return RuntimeSyncDecision(
       phase: phase,
-      retryScheduled: !running && retryScheduled,
+      retryScheduled: phase == AppConnectionPhase.recovering && retryScheduled,
     );
   }
 

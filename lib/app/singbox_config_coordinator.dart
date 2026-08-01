@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
@@ -58,6 +59,8 @@ class SingboxConfigCoordinatorSnapshot {
     required this.russiaGeoipRuPath,
     required this.russiaCuratedDirectServicesPath,
     required this.russiaAiServicesPath,
+    this.russiaSocialServicesPath,
+    this.trafficRulePreset = TrafficRulePreset.none,
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -112,6 +115,8 @@ class SingboxConfigCoordinatorSnapshot {
   final String? russiaGeoipRuPath;
   final String? russiaCuratedDirectServicesPath;
   final String? russiaAiServicesPath;
+  final String? russiaSocialServicesPath;
+  final TrafficRulePreset trafficRulePreset;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -547,6 +552,7 @@ class SingboxConfigCoordinator {
       'sing-box config diagnostics',
       'reason=$reason '
           'useRussiaRouteData=${snapshot.useRussiaRouteData} '
+          'trafficRulePreset=${snapshot.trafficRulePreset.storageValue} '
           'routeDataAvailable=${snapshot.routeDataAvailable} '
           'routeDataPathsValid=${snapshot.routeDataPathsValid} '
           'routeDataSource=${snapshot.routeDataSourceKind} '
@@ -679,6 +685,8 @@ class SingboxConfigCoordinator {
       russiaGeoipRuPath: snapshot.russiaGeoipRuPath,
       russiaCuratedDirectServicesPath: snapshot.russiaCuratedDirectServicesPath,
       russiaAiServicesPath: snapshot.russiaAiServicesPath,
+      russiaSocialServicesPath: snapshot.russiaSocialServicesPath,
+      trafficRulePreset: snapshot.trafficRulePreset,
       bypassLocalNetwork: snapshot.bypassLocalNetwork,
       splitRoutingMode: snapshot.splitRoutingMode,
       splitRoutingPackages: snapshot.splitRoutingPackages,

@@ -8,7 +8,9 @@ import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
+import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
@@ -22,14 +24,26 @@ void clearInstalledAppIconCache() {
   _installedAppIconLoads.clear();
 }
 
+String _trafficRulePresetTitle(
+  AppLocalizations l10n,
+  TrafficRulePreset preset,
+) {
+  return switch (preset) {
+    TrafficRulePreset.none => l10n.trafficRulesNone,
+    TrafficRulePreset.russianServicesDirect => l10n.trafficRulesRussianTitle,
+    TrafficRulePreset.aiViaVpn => l10n.trafficRulesAiTitle,
+    TrafficRulePreset.socialViaVpn => l10n.trafficRulesSocialTitle,
+  };
+}
+
 class SettingsRoutingPage extends StatefulWidget {
   const SettingsRoutingPage({
     super.key,
     required this.currentBlockLeaks,
     required this.currentAdBlockEnabled,
     required this.currentAdBlockStatus,
-    required this.currentRussiaRouteDataEnabled,
     required this.currentRussiaRouteDataStatus,
+    this.currentTrafficRulePreset = TrafficRulePreset.none,
     required this.currentBypassLocalNetwork,
     required this.currentVpnInboundEnabled,
     required this.currentSplitRoutingMode,
@@ -40,10 +54,10 @@ class SettingsRoutingPage extends StatefulWidget {
     required this.onAdBlockEnabledChanged,
     required this.onDownloadAdBlockRuleSet,
     required this.onDeleteAdBlockRuleSet,
-    required this.onRussiaRouteDataEnabledChanged,
-    required this.onCheckRussiaRouteDataUpdate,
     required this.onInstallRussiaRouteData,
     required this.onDeleteRussiaRouteData,
+    this.onTrafficRulePresetChanged,
+    this.onPrepareTrafficRuleData,
     required this.onBypassLocalNetworkChanged,
     required this.onSplitRoutingModeChanged,
     required this.onSplitRoutingPackagesChanged,
@@ -52,8 +66,8 @@ class SettingsRoutingPage extends StatefulWidget {
   final bool currentBlockLeaks;
   final bool currentAdBlockEnabled;
   final AdBlockRuleSetStatus currentAdBlockStatus;
-  final bool currentRussiaRouteDataEnabled;
   final RussiaRouteDataStatus currentRussiaRouteDataStatus;
+  final TrafficRulePreset currentTrafficRulePreset;
   final bool currentBypassLocalNetwork;
   final bool currentVpnInboundEnabled;
   final SplitRoutingMode currentSplitRoutingMode;
@@ -64,10 +78,11 @@ class SettingsRoutingPage extends StatefulWidget {
   final ValueChanged<bool> onAdBlockEnabledChanged;
   final Future<AdBlockRuleSetStatus> Function() onDownloadAdBlockRuleSet;
   final Future<AdBlockRuleSetStatus> Function() onDeleteAdBlockRuleSet;
-  final ValueChanged<bool> onRussiaRouteDataEnabledChanged;
-  final Future<RussiaRouteUpdateCheck> Function() onCheckRussiaRouteDataUpdate;
   final Future<RussiaRouteDataStatus> Function() onInstallRussiaRouteData;
   final Future<RussiaRouteDataStatus> Function() onDeleteRussiaRouteData;
+  final ValueChanged<TrafficRulePreset>? onTrafficRulePresetChanged;
+  final Future<RussiaRouteDataStatus> Function(TrafficRulePreset preset)?
+  onPrepareTrafficRuleData;
   final ValueChanged<bool> onBypassLocalNetworkChanged;
   final ValueChanged<SplitRoutingMode> onSplitRoutingModeChanged;
   final ValueChanged<List<String>> onSplitRoutingPackagesChanged;
@@ -80,16 +95,11 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   late bool _blockLeaks;
   late bool _adBlockEnabled;
   late AdBlockRuleSetStatus _adBlockStatus;
-  late bool _russiaRouteDataEnabled;
-  late RussiaRouteDataStatus _russiaRouteDataStatus;
   late bool _bypassLocalNetwork;
   late SplitRoutingMode _splitRoutingMode;
   late final TextEditingController _packagesController;
   bool _adBlockBusy = false;
   AdBlockUpdateProgress? _adBlockProgress;
-  bool _russiaRouteDataBusy = false;
-  bool _russiaRouteUpdateAvailable = false;
-  RussiaRouteUpdateProgress? _russiaRouteProgress;
   bool _loadingInstalledApps = false;
   String? _installedAppsError;
   bool _manualEditorExpanded = false;
@@ -101,8 +111,6 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
     _blockLeaks = widget.currentBlockLeaks;
     _adBlockEnabled = widget.currentAdBlockEnabled;
     _adBlockStatus = widget.currentAdBlockStatus;
-    _russiaRouteDataEnabled = widget.currentRussiaRouteDataEnabled;
-    _russiaRouteDataStatus = widget.currentRussiaRouteDataStatus;
     _bypassLocalNetwork = widget.currentBypassLocalNetwork;
     _splitRoutingMode = widget.currentSplitRoutingMode;
     _packagesController = TextEditingController(
@@ -112,12 +120,6 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
     _adBlockBusy = adBlockService.isUpdating;
     _adBlockProgress = adBlockService.progress.value;
     adBlockService.progress.addListener(_handleAdBlockProgress);
-    final routeDataService = RussiaRouteDataService.instance;
-    _russiaRouteDataBusy = routeDataService.isUpdating;
-    _russiaRouteProgress = routeDataService.progress.value;
-    RussiaRouteDataService.instance.progress.addListener(
-      _handleRussiaRouteProgress,
-    );
     _installedApps = widget.initialInstalledApps
         .map((item) => _InstalledApp.fromMap(item))
         .where((item) => item.packageName.isNotEmpty)
@@ -143,26 +145,12 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
         )) {
       _adBlockStatus = widget.currentAdBlockStatus;
     }
-    if (!_russiaRouteDataBusy &&
-        !identical(
-          oldWidget.currentRussiaRouteDataStatus,
-          widget.currentRussiaRouteDataStatus,
-        )) {
-      _russiaRouteDataStatus = widget.currentRussiaRouteDataStatus;
-    }
-    if (oldWidget.currentRussiaRouteDataEnabled !=
-        widget.currentRussiaRouteDataEnabled) {
-      _russiaRouteDataEnabled = widget.currentRussiaRouteDataEnabled;
-    }
   }
 
   @override
   void dispose() {
     AdBlockRuleSetService.instance.progress.removeListener(
       _handleAdBlockProgress,
-    );
-    RussiaRouteDataService.instance.progress.removeListener(
-      _handleRussiaRouteProgress,
     );
     _commitPackages();
     _packagesController.dispose();
@@ -186,25 +174,6 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
     final status = await AdBlockRuleSetService.instance.loadStatus();
     if (!mounted || AdBlockRuleSetService.instance.isUpdating) return;
     setState(() => _adBlockStatus = status);
-  }
-
-  void _handleRussiaRouteProgress() {
-    if (!mounted) return;
-    final service = RussiaRouteDataService.instance;
-    final busy = service.isUpdating;
-    setState(() {
-      _russiaRouteDataBusy = busy;
-      _russiaRouteProgress = service.progress.value;
-    });
-    if (!busy) {
-      unawaited(_reloadRussiaRouteStatus());
-    }
-  }
-
-  Future<void> _reloadRussiaRouteStatus() async {
-    final status = await RussiaRouteDataService.instance.loadStatus();
-    if (!mounted || RussiaRouteDataService.instance.isUpdating) return;
-    setState(() => _russiaRouteDataStatus = status);
   }
 
   Future<bool> _loadInstalledApps() async {
@@ -269,6 +238,26 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
 
   void _showOperationError(Object error) {
     AppNotice.show(context, error.toString(), tone: AppNoticeTone.error);
+  }
+
+  Future<void> _openTrafficRules() async {
+    final onPresetChanged = widget.onTrafficRulePresetChanged;
+    if (onPresetChanged == null) {
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => TrafficRulesPage(
+          currentPreset: widget.currentTrafficRulePreset,
+          currentStatus: widget.currentRussiaRouteDataStatus,
+          onPrepareRuleData:
+              widget.onPrepareTrafficRuleData ??
+              (_) => widget.onInstallRussiaRouteData(),
+          onDeleteRuleData: widget.onDeleteRussiaRouteData,
+          onPresetChanged: onPresetChanged,
+        ),
+      ),
+    );
   }
 
   Future<void> _setAdBlock(bool value) async {
@@ -347,138 +336,6 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
       if (mounted) {
         setState(() {
           _adBlockBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _setRussiaRouteData(bool value) async {
-    if (!value) {
-      setState(() {
-        _russiaRouteDataEnabled = false;
-      });
-      widget.onRussiaRouteDataEnabledChanged(false);
-      return;
-    }
-    if (_russiaRouteDataStatus.available) {
-      setState(() {
-        _russiaRouteDataEnabled = true;
-      });
-      widget.onRussiaRouteDataEnabledChanged(true);
-      return;
-    }
-    await _installRussiaRouteData(enableAfterInstall: true);
-  }
-
-  Future<void> _installRussiaRouteData({
-    bool enableAfterInstall = false,
-  }) async {
-    if (_russiaRouteDataBusy) {
-      return;
-    }
-    setState(() {
-      _russiaRouteDataBusy = true;
-      _russiaRouteProgress = const RussiaRouteUpdateProgress(
-        stage: RussiaRouteUpdateStage.checking,
-      );
-    });
-    try {
-      final status = await widget.onInstallRussiaRouteData();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _russiaRouteDataStatus = status;
-        _russiaRouteUpdateAvailable = false;
-        if (enableAfterInstall && status.available) {
-          _russiaRouteDataEnabled = true;
-        }
-      });
-      if (enableAfterInstall && status.available) {
-        widget.onRussiaRouteDataEnabledChanged(true);
-      }
-    } catch (error) {
-      if (mounted) {
-        _showOperationError(error);
-      }
-    } finally {
-      if (mounted) {
-        final service = RussiaRouteDataService.instance;
-        setState(() {
-          _russiaRouteDataBusy = service.isUpdating;
-          _russiaRouteProgress = service.progress.value;
-        });
-      }
-    }
-  }
-
-  Future<void> _checkRussiaRouteDataUpdate() async {
-    if (_russiaRouteDataBusy) {
-      return;
-    }
-    setState(() {
-      _russiaRouteDataBusy = true;
-      _russiaRouteProgress = const RussiaRouteUpdateProgress(
-        stage: RussiaRouteUpdateStage.checking,
-      );
-    });
-    try {
-      final result = await widget.onCheckRussiaRouteDataUpdate();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _russiaRouteDataStatus = result.status;
-        _russiaRouteUpdateAvailable = result.updateAvailable;
-      });
-      final l10n = AppLocalizations.of(context);
-      AppNotice.show(
-        context,
-        result.updateAvailable
-            ? l10n.russiaRoutesUpdateAvailable(result.latestTag)
-            : l10n.russiaRoutesLatest,
-        tone: result.updateAvailable
-            ? AppNoticeTone.info
-            : AppNoticeTone.success,
-      );
-    } catch (error) {
-      if (mounted) {
-        _showOperationError(error);
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _russiaRouteDataBusy = false;
-          _russiaRouteProgress = null;
-        });
-      }
-    }
-  }
-
-  Future<void> _deleteRussiaRouteData() async {
-    if (_russiaRouteDataBusy) {
-      return;
-    }
-    setState(() {
-      _russiaRouteDataBusy = true;
-    });
-    try {
-      final status = await widget.onDeleteRussiaRouteData();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _russiaRouteDataStatus = status;
-        _russiaRouteDataEnabled = false;
-      });
-    } catch (error) {
-      if (mounted) {
-        _showOperationError(error);
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _russiaRouteDataBusy = false;
         });
       }
     }
@@ -602,108 +459,29 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
             const Gap(settingsIslandGap),
             Card(
               margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SettingsLeadingIcon(
-                          icon: Icons.travel_explore_rounded,
-                          color: cs.primary,
-                        ),
-                        const Gap(12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.russiaRoutesTitle,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const Gap(4),
-                              Text(
-                                l10n.russiaRoutesSubtitle,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Gap(16),
-                    _RussiaRouteDataStatusPanel(
-                      status: _russiaRouteDataStatus,
-                      busy: _russiaRouteDataBusy,
-                      progress: _russiaRouteProgress,
-                      l10n: l10n,
-                    ),
-                    const Gap(12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            onPressed: _russiaRouteDataBusy
-                                ? null
-                                : !_russiaRouteDataStatus.available ||
-                                      _russiaRouteUpdateAvailable
-                                ? () => _installRussiaRouteData()
-                                : _checkRussiaRouteDataUpdate,
-                            icon: _russiaRouteDataBusy
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Icon(
-                                    !_russiaRouteDataStatus.available
-                                        ? Icons.download_rounded
-                                        : _russiaRouteUpdateAvailable
-                                        ? Icons.system_update_alt_rounded
-                                        : Icons.refresh_rounded,
-                                  ),
-                            label: Text(
-                              !_russiaRouteDataStatus.available
-                                  ? l10n.russiaRoutesInstallAction
-                                  : _russiaRouteUpdateAvailable
-                                  ? l10n.russiaRoutesReinstallAction
-                                  : l10n.russiaRoutesUpdateAction,
-                            ),
-                          ),
-                        ),
-                        if (_russiaRouteDataStatus.available) ...[
-                          const Gap(10),
-                          OutlinedButton(
-                            onPressed: _russiaRouteDataBusy
-                                ? null
-                                : _deleteRussiaRouteData,
-                            child: Text(l10n.delete),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const Gap(12),
-                    _CompactSwitchRow(
-                      icon: Icons.route_rounded,
-                      title: l10n.russiaRoutesEnableTitle,
-                      subtitle: _russiaRouteDataStatus.available
-                          ? l10n.russiaRoutesEnabledSubtitle
-                          : l10n.russiaRoutesMissingSubtitle,
-                      value: _russiaRouteDataEnabled,
-                      onChanged: _russiaRouteDataBusy
-                          ? null
-                          : _setRussiaRouteData,
-                    ),
-                  ],
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
+                leading: SettingsLeadingIcon(
+                  icon: Icons.alt_route_rounded,
+                  color: cs.primary,
+                ),
+                title: Text(l10n.trafficRulesSettingsTitle),
+                subtitle: Text(
+                  widget.currentTrafficRulePreset == TrafficRulePreset.none
+                      ? l10n.trafficRulesNone
+                      : _trafficRulePresetTitle(
+                          l10n,
+                          widget.currentTrafficRulePreset,
+                        ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: widget.onTrafficRulePresetChanged == null
+                    ? null
+                    : _openTrafficRules,
               ),
             ),
             const Gap(settingsIslandGap),

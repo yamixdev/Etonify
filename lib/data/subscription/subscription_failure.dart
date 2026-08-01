@@ -145,7 +145,8 @@ SubscriptionFailure _classifyMessage(String message) {
     );
   }
   if (message.contains('credentials require https') ||
-      message.contains('sensitive subscription credentials')) {
+      message.contains('sensitive subscription credentials') ||
+      message.contains('subscription urls must use https')) {
     return const SubscriptionFailure(
       SubscriptionFailureKind.credentialsRequireHttps,
     );

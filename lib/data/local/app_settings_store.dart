@@ -4,6 +4,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 import 'secure_hive_storage.dart';
@@ -144,6 +145,7 @@ class AppSettingsState {
     required this.hapticEnabled,
     this.statusNotificationEnabled = true,
     this.notificationTrafficDisplayMode = NotificationTrafficDisplayMode.speed,
+    this.notificationTrafficRefreshSeconds = 2,
     required this.hideServerIp,
     required this.progressiveBlurEnabled,
     this.progressiveBlurConfigured = false,
@@ -179,6 +181,7 @@ class AppSettingsState {
     required this.blockLeaks,
     required this.adBlockEnabled,
     required this.useRussiaRouteData,
+    this.trafficRulePreset = TrafficRulePreset.none,
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -202,6 +205,7 @@ class AppSettingsState {
   final bool hapticEnabled;
   final bool statusNotificationEnabled;
   final NotificationTrafficDisplayMode notificationTrafficDisplayMode;
+  final int notificationTrafficRefreshSeconds;
   final bool hideServerIp;
   final bool progressiveBlurEnabled;
   final bool progressiveBlurConfigured;
@@ -237,6 +241,7 @@ class AppSettingsState {
   final bool blockLeaks;
   final bool adBlockEnabled;
   final bool useRussiaRouteData;
+  final TrafficRulePreset trafficRulePreset;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -260,6 +265,7 @@ class AppSettingsState {
     bool? hapticEnabled,
     bool? statusNotificationEnabled,
     NotificationTrafficDisplayMode? notificationTrafficDisplayMode,
+    int? notificationTrafficRefreshSeconds,
     bool? hideServerIp,
     bool? progressiveBlurEnabled,
     bool? progressiveBlurConfigured,
@@ -295,6 +301,7 @@ class AppSettingsState {
     bool? blockLeaks,
     bool? adBlockEnabled,
     bool? useRussiaRouteData,
+    TrafficRulePreset? trafficRulePreset,
     bool? bypassLocalNetwork,
     SplitRoutingMode? splitRoutingMode,
     List<String>? splitRoutingPackages,
@@ -322,6 +329,9 @@ class AppSettingsState {
           statusNotificationEnabled ?? this.statusNotificationEnabled,
       notificationTrafficDisplayMode:
           notificationTrafficDisplayMode ?? this.notificationTrafficDisplayMode,
+      notificationTrafficRefreshSeconds:
+          notificationTrafficRefreshSeconds ??
+          this.notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp ?? this.hideServerIp,
       progressiveBlurEnabled:
           progressiveBlurEnabled ?? this.progressiveBlurEnabled,
@@ -367,6 +377,7 @@ class AppSettingsState {
       blockLeaks: blockLeaks ?? this.blockLeaks,
       adBlockEnabled: adBlockEnabled ?? this.adBlockEnabled,
       useRussiaRouteData: useRussiaRouteData ?? this.useRussiaRouteData,
+      trafficRulePreset: trafficRulePreset ?? this.trafficRulePreset,
       bypassLocalNetwork: bypassLocalNetwork ?? this.bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode ?? this.splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages ?? this.splitRoutingPackages,
@@ -407,6 +418,8 @@ abstract class AppSettingsStore {
   static const _statusNotificationEnabledKey = 'status_notification_enabled';
   static const _notificationTrafficDisplayModeKey =
       'notification_traffic_display_mode';
+  static const _notificationTrafficRefreshSecondsKey =
+      'notification_traffic_refresh_seconds';
   static const _hideServerIpKey = 'hide_server_ip';
   static const _progressiveBlurEnabledKey = 'progressive_blur_enabled';
   static const _performanceModeKey = 'performance_mode';
@@ -444,6 +457,7 @@ abstract class AppSettingsStore {
   static const _blockLeaksKey = 'block_leaks';
   static const _adBlockEnabledKey = 'ad_block_enabled';
   static const _useRussiaRouteDataKey = 'use_russia_route_data';
+  static const _trafficRulePresetKey = 'traffic_rule_preset';
   static const _bypassLocalNetworkKey = 'bypass_local_network';
   static const _splitRoutingModeKey = 'split_routing_mode';
   static const _splitRoutingPackagesKey = 'split_routing_packages';
@@ -468,6 +482,7 @@ abstract class AppSettingsStore {
     _hapticEnabledKey,
     _statusNotificationEnabledKey,
     _notificationTrafficDisplayModeKey,
+    _notificationTrafficRefreshSecondsKey,
     _hideServerIpKey,
     _proxySortKey,
     _performanceModeKey,
@@ -501,6 +516,7 @@ abstract class AppSettingsStore {
     _blockLeaksKey,
     _adBlockEnabledKey,
     _useRussiaRouteDataKey,
+    _trafficRulePresetKey,
     _bypassLocalNetworkKey,
     _splitRoutingModeKey,
     _splitRoutingPackagesKey,
@@ -566,6 +582,13 @@ abstract class AppSettingsStore {
     final unavailableCheckInterval = int.tryParse(
       map[_urlTestUnavailableCheckIntervalSecondsKey]?.toString() ?? '',
     );
+    final notificationTrafficRefreshSeconds =
+        (int.tryParse(
+                  map[_notificationTrafficRefreshSecondsKey]?.toString() ?? '',
+                ) ??
+                2)
+            .clamp(1, 10)
+            .toInt();
     final defaultUrlTestConcurrency = economy ? 4 : 8;
     final normalizedUrlTestConcurrency =
         (urlTestConcurrency ?? defaultUrlTestConcurrency).clamp(
@@ -621,6 +644,7 @@ abstract class AppSettingsStore {
             'both' => NotificationTrafficDisplayMode.both,
             _ => NotificationTrafficDisplayMode.speed,
           },
+      notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: boolValue(_hideServerIpKey, defaultValue: false),
       progressiveBlurEnabled: boolValue(
         _progressiveBlurEnabledKey,
@@ -743,6 +767,9 @@ abstract class AppSettingsStore {
         _useRussiaRouteDataKey,
         defaultValue: false,
       ),
+      trafficRulePreset: TrafficRulePreset.fromStorage(
+        map[_trafficRulePresetKey],
+      ),
       bypassLocalNetwork: boolValue(_bypassLocalNetworkKey, defaultValue: true),
       splitRoutingMode: switch (map[_splitRoutingModeKey]) {
         'proxy_selected' => SplitRoutingMode.proxySelected,
@@ -797,6 +824,9 @@ abstract class AppSettingsStore {
           : '0',
       _notificationTrafficDisplayModeKey:
           state.notificationTrafficDisplayMode.name,
+      _notificationTrafficRefreshSecondsKey: state
+          .notificationTrafficRefreshSeconds
+          .toString(),
       _hideServerIpKey: state.hideServerIp ? '1' : '0',
       _progressiveBlurEnabledKey: state.progressiveBlurEnabled ? '1' : '0',
       _performanceModeKey: state.performanceMode.name,
@@ -836,6 +866,7 @@ abstract class AppSettingsStore {
       _blockLeaksKey: state.blockLeaks ? '1' : '0',
       _adBlockEnabledKey: state.adBlockEnabled ? '1' : '0',
       _useRussiaRouteDataKey: state.useRussiaRouteData ? '1' : '0',
+      _trafficRulePresetKey: state.trafficRulePreset.storageValue,
       _bypassLocalNetworkKey: state.bypassLocalNetwork ? '1' : '0',
       _splitRoutingModeKey: switch (state.splitRoutingMode) {
         SplitRoutingMode.disabled => 'disabled',
@@ -1050,6 +1081,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             blockLeaks: false,
             adBlockEnabled: false,
             useRussiaRouteData: false,
+            trafficRulePreset: TrafficRulePreset.none,
             bypassLocalNetwork: true,
             splitRoutingMode: SplitRoutingMode.disabled,
             splitRoutingPackages: <String>[],

@@ -39,6 +39,7 @@ import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/happ_crypto_link.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
@@ -276,6 +277,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   bool get _statusNotificationEnabled => _settings.statusNotificationEnabled;
   NotificationTrafficDisplayMode get _notificationTrafficDisplayMode =>
       _settings.notificationTrafficDisplayMode;
+  int get _notificationTrafficRefreshSeconds =>
+      _settings.notificationTrafficRefreshSeconds;
   bool get _hideServerIp => _settings.hideServerIp;
   ProxySort get _proxySort => ProxySort.values.firstWhere(
     (value) => value.name == _settings.proxySort,
@@ -312,7 +315,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   bool get _adBlockEnabled => _settings.adBlockEnabled;
   set _adBlockEnabled(bool value) => _settings.adBlockEnabled = value;
   bool get _useRussiaRouteData => _settings.useRussiaRouteData;
-  set _useRussiaRouteData(bool value) => _settings.useRussiaRouteData = value;
+  TrafficRulePreset get _trafficRulePreset => _settings.trafficRulePreset;
   bool get _bypassLocalNetwork => _settings.bypassLocalNetwork;
   SplitRoutingMode get _splitRoutingMode => _splitRoutingTemporarilyDisabled
       ? SplitRoutingMode.disabled
@@ -1647,6 +1650,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     final signature = <Object?>[
       _statusNotificationEnabled,
       _notificationTrafficDisplayMode.name,
+      _notificationTrafficRefreshSeconds,
       title,
       latency,
       targetTag,
@@ -1663,6 +1667,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       await SingboxRuntime.instance.updateVpnNotificationPresentation(
         detailed: _statusNotificationEnabled,
         trafficDisplayMode: _notificationTrafficDisplayMode.name,
+        trafficRefreshSeconds: _notificationTrafficRefreshSeconds,
         title: title,
         latencyMillis: latency,
         groupTag: 'select',
@@ -3944,6 +3949,14 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _scheduleVpnNotificationSync();
   }
 
+  void _setNotificationTrafficRefreshSeconds(int value) {
+    _applySettingsChange(
+      () => _settings.setNotificationTrafficRefreshSeconds(value),
+    );
+    _lastVpnNotificationPresentationSignature = '';
+    _scheduleVpnNotificationSync();
+  }
+
   void _setHideServerIp(bool value) {
     _applySettingsChange(() => _settings.setHideServerIp(value));
   }
@@ -4522,6 +4535,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           currentStatusNotificationEnabled: _statusNotificationEnabled,
           currentNotificationTrafficDisplayMode:
               _notificationTrafficDisplayMode,
+          currentNotificationTrafficRefreshSeconds:
+              _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
           currentPerformanceMode: _performanceMode,
           currentMemoryLimitEnabled: _memoryLimitEnabled,
@@ -4532,6 +4547,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           onStatusNotificationChanged: _setStatusNotificationEnabled,
           onNotificationTrafficDisplayModeChanged:
               _setNotificationTrafficDisplayMode,
+          onNotificationTrafficRefreshSecondsChanged:
+              _setNotificationTrafficRefreshSeconds,
           onHideServerIpChanged: _setHideServerIp,
           onPerformanceModeChanged: _setPerformanceMode,
           onMemoryLimitChanged: _setMemoryLimitEnabled,
@@ -4756,8 +4773,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     return status;
   }
 
-  void _setRussiaRouteDataEnabled(bool value) {
-    _applySettingsChange(() => _settings.setRussiaRouteDataEnabled(value));
+  void _setTrafficRulePreset(TrafficRulePreset value) {
+    _applySettingsChange(() => _settings.setTrafficRulePreset(value));
   }
 
   Future<RussiaRouteDataStatus> _installRussiaRouteData() async {
@@ -4778,8 +4795,25 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     return status;
   }
 
-  Future<RussiaRouteUpdateCheck> _checkRussiaRouteDataUpdate() {
-    return RussiaRouteDataService.instance.checkForUpdate();
+  Future<RussiaRouteDataStatus> _prepareTrafficRuleData(
+    TrafficRulePreset preset,
+  ) async {
+    var status = _russiaRouteDataStatus;
+    final hadPreparedData = status.available;
+    if (!status.available) {
+      status = await RussiaRouteDataService.instance.ensureBundledInstalled();
+    }
+    if (preset == TrafficRulePreset.aiViaVpn ||
+        preset == TrafficRulePreset.socialViaVpn ||
+        hadPreparedData) {
+      status = await RussiaRouteDataService.instance.ensureUpdated(force: true);
+    }
+    if (!mounted) {
+      return status;
+    }
+    setState(() => _russiaRouteDataStatus = status);
+    _configCoordinator.emitCurrentConfigLog('traffic rule data prepared');
+    return status;
   }
 
   Future<RussiaRouteDataStatus> _deleteRussiaRouteData() async {
@@ -4787,8 +4821,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     if (mounted) {
       setState(() {
         _russiaRouteDataStatus = status;
-        _useRussiaRouteData = false;
       });
+      _applySettingsChange(
+        () => _settings.setTrafficRulePreset(TrafficRulePreset.none),
+      );
     }
     unawaited(_persistState());
     _configCoordinator.emitCurrentConfigLog('russia route data deleted');
@@ -4812,7 +4848,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       setState(() {
         _russiaRouteDataStatus = status;
       });
-      if (changed && _useRussiaRouteData) {
+      if (changed && _trafficRulePreset != TrafficRulePreset.none) {
         _configCoordinator.emitCurrentConfigLog('russia route data updated');
       }
     } catch (error) {
@@ -4921,8 +4957,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
             currentBlockLeaks: _blockLeaks,
             currentAdBlockEnabled: _adBlockEnabled,
             currentAdBlockStatus: _adBlockStatus,
-            currentRussiaRouteDataEnabled: _useRussiaRouteData,
             currentRussiaRouteDataStatus: _russiaRouteDataStatus,
+            currentTrafficRulePreset: _trafficRulePreset,
             currentBypassLocalNetwork: _bypassLocalNetwork,
             currentVpnInboundEnabled: _vpnInboundEnabled,
             currentSplitRoutingMode: _splitRoutingMode,
@@ -4933,10 +4969,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
             onAdBlockEnabledChanged: _setAdBlockEnabled,
             onDownloadAdBlockRuleSet: _downloadAdBlockRuleSet,
             onDeleteAdBlockRuleSet: _deleteAdBlockRuleSet,
-            onRussiaRouteDataEnabledChanged: _setRussiaRouteDataEnabled,
-            onCheckRussiaRouteDataUpdate: _checkRussiaRouteDataUpdate,
             onInstallRussiaRouteData: _installRussiaRouteData,
             onDeleteRussiaRouteData: _deleteRussiaRouteData,
+            onTrafficRulePresetChanged: _setTrafficRulePreset,
+            onPrepareTrafficRuleData: _prepareTrafficRuleData,
             onBypassLocalNetworkChanged: _setBypassLocalNetwork,
             onSplitRoutingModeChanged: _setSplitRoutingMode,
             onSplitRoutingPackagesChanged: _setSplitRoutingPackages,
@@ -5317,6 +5353,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       russiaGeoipRuPath: routeData.geoipRuPath,
       russiaCuratedDirectServicesPath: routeData.curatedDirectServicesPath,
       russiaAiServicesPath: routeData.aiServicesPath,
+      russiaSocialServicesPath: routeData.socialServicesPath,
+      trafficRulePreset: _trafficRulePreset,
       bypassLocalNetwork: _bypassLocalNetwork,
       splitRoutingMode: _splitRoutingMode,
       splitRoutingPackages: _splitRoutingPackages,
@@ -5361,6 +5399,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       transitionInProgress: _runtimeTransitionInProgress,
       retryScheduled: _invalidOutboundRetryScheduled,
       starting: _starting,
+      stopping:
+          _runtimeIntent.explicitStopInProgress ||
+          _connectionPhase == AppConnectionPhase.stopping,
     );
     if (!mounted) return;
     var shouldSyncQuickSettingsTile = false;
@@ -5588,6 +5629,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         nativeRecoveryPending: nativeRecoveryPending,
         localTransitionPending: localTransitionPending,
         retryScheduled: _invalidOutboundRetryScheduled,
+        stopping:
+            _runtimeIntent.explicitStopInProgress ||
+            _connectionPhase == AppConnectionPhase.stopping,
       );
       if (nativeRecoveryPending) {
         _logRuntimeRecoveryStatus(status);

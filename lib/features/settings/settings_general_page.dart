@@ -65,6 +65,7 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentHapticEnabled,
     required this.currentStatusNotificationEnabled,
     required this.currentNotificationTrafficDisplayMode,
+    required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
     required this.currentPerformanceMode,
     required this.currentMemoryLimitEnabled,
@@ -76,6 +77,7 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.onHapticChanged,
     required this.onStatusNotificationChanged,
     required this.onNotificationTrafficDisplayModeChanged,
+    required this.onNotificationTrafficRefreshSecondsChanged,
     required this.onHideServerIpChanged,
     required this.onPerformanceModeChanged,
     required this.onMemoryLimitChanged,
@@ -89,6 +91,7 @@ class SettingsGeneralPage extends StatelessWidget {
   final bool currentHapticEnabled;
   final bool currentStatusNotificationEnabled;
   final NotificationTrafficDisplayMode currentNotificationTrafficDisplayMode;
+  final int currentNotificationTrafficRefreshSeconds;
   final bool currentHideServerIp;
   final AppPerformanceMode currentPerformanceMode;
   final bool currentMemoryLimitEnabled;
@@ -101,6 +104,7 @@ class SettingsGeneralPage extends StatelessWidget {
   final ValueChanged<bool> onStatusNotificationChanged;
   final ValueChanged<NotificationTrafficDisplayMode>
   onNotificationTrafficDisplayModeChanged;
+  final ValueChanged<int> onNotificationTrafficRefreshSecondsChanged;
   final ValueChanged<bool> onHideServerIpChanged;
   final ValueChanged<AppPerformanceMode> onPerformanceModeChanged;
   final void Function(bool value, {bool warningDismissed}) onMemoryLimitChanged;
@@ -374,6 +378,16 @@ class SettingsGeneralPage extends StatelessWidget {
             ),
 
             const Gap(settingsIslandGap),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _NotificationTrafficRefreshSetting(
+                enabled: currentStatusNotificationEnabled,
+                currentSeconds: currentNotificationTrafficRefreshSeconds,
+                onChanged: onNotificationTrafficRefreshSecondsChanged,
+              ),
+            ),
+
+            const Gap(settingsIslandGap),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -572,6 +586,116 @@ class SettingsGeneralPage extends StatelessWidget {
                   value: currentHideServerIp,
                   onChanged: onHideServerIpChanged,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationTrafficRefreshSetting extends StatefulWidget {
+  const _NotificationTrafficRefreshSetting({
+    required this.enabled,
+    required this.currentSeconds,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final int currentSeconds;
+  final ValueChanged<int> onChanged;
+
+  @override
+  State<_NotificationTrafficRefreshSetting> createState() =>
+      _NotificationTrafficRefreshSettingState();
+}
+
+class _NotificationTrafficRefreshSettingState
+    extends State<_NotificationTrafficRefreshSetting> {
+  late int _seconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _seconds = widget.currentSeconds.clamp(1, 10).toInt();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NotificationTrafficRefreshSetting oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.currentSeconds != oldWidget.currentSeconds) {
+      _seconds = widget.currentSeconds.clamp(1, 10).toInt();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
+    final disabledColor = cs.onSurface.withValues(alpha: 0.38);
+    final foregroundColor = widget.enabled ? cs.primary : disabledColor;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsLeadingIcon(
+              icon: Icons.timer_outlined,
+              color: foregroundColor,
+            ),
+            const Gap(16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.notificationTrafficRefreshTitle,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      Text(
+                        l10n.notificationTrafficRefreshSeconds(_seconds),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: widget.enabled ? cs.primary : disabledColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Gap(4),
+                  Text(
+                    l10n.notificationTrafficRefreshSubtitle,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: widget.enabled
+                          ? cs.onSurfaceVariant
+                          : disabledColor,
+                    ),
+                  ),
+                  const Gap(4),
+                  Slider(
+                    value: _seconds.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: l10n.notificationTrafficRefreshSeconds(_seconds),
+                    onChanged: widget.enabled
+                        ? (value) {
+                            final seconds = value.round().clamp(1, 10).toInt();
+                            if (seconds == _seconds) return;
+                            setState(() => _seconds = seconds);
+                            widget.onChanged(seconds);
+                          }
+                        : null,
+                  ),
+                ],
               ),
             ),
           ],

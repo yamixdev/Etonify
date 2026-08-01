@@ -363,6 +363,16 @@
   "notificationTrafficDisplaySpeed": "Current speed",
   "notificationTrafficDisplayTotal": "Total transferred",
   "notificationTrafficDisplayBoth": "Speed and total",
+  "notificationTrafficRefreshTitle": "Traffic refresh",
+  "notificationTrafficRefreshSubtitle": "How often to update data in the notification.",
+  "notificationTrafficRefreshSeconds": "{seconds} s",
+  "@notificationTrafficRefreshSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "notificationConnected": "VPN connected",
   "notificationPingChecking": "...",
   "notificationPingUnavailable": "Latency unavailable",
@@ -974,5 +984,42 @@
   "connectionStageRecovering": "Recovering",
   "connectionStageSelectingProxy": "Selecting server",
   "vpnStartTimedOut": "VPN did not start within 15 seconds. Startup was stopped.",
-  "vpnStartFailed": "Failed to start VPN."
+  "vpnStartFailed": "Failed to start VPN.",
+  "trafficRulesTitle": "Traffic rules",
+  "trafficRulesSettingsTitle": "Traffic rules",
+  "trafficRulesSettingsSubtitle": "Choose one verified rule for domains and IP routes.",
+  "trafficRulesCurrentLabel": "Active rule",
+  "trafficRulesNone": "Not selected",
+  "trafficRulesDeveloperSection": "Developer rules",
+  "trafficRulesVerified": "Verified",
+  "trafficRulesVerifiedInfo": "Verified by MeowTeam. Created by the official developer.",
+  "trafficRulesOnlyOne": "Only one traffic rule can be active at a time to avoid conflicts.",
+  "trafficRulesAvailableOffline": "After preparation, the rule works without an internet connection.",
+  "trafficRulesDataReady": "Rule data is ready",
+  "trafficRulesDataMissing": "Rule data has not been prepared yet",
+  "trafficRulesUpdateData": "Update rule data",
+  "trafficRulesDeleteData": "Delete rule data",
+  "trafficRulesRussianTitle": "Russian services directly",
+  "trafficRulesRussianSubtitle": "Russian services and local addresses bypass the VPN.",
+  "trafficRulesAiTitle": "AI services through VPN",
+  "trafficRulesAiSubtitle": "Popular AI services are routed through the VPN; everything else is direct.",
+  "trafficRulesSocialTitle": "Social networks through VPN",
+  "trafficRulesSocialSubtitle": "Popular social networks and messengers are routed through the VPN; everything else is direct.",
+  "trafficRulesDetails": "Rule details",
+  "trafficRulesDefaultRoute": "Everything else",
+  "trafficRulesDirect": "Direct",
+  "trafficRulesVpn": "Through VPN",
+  "trafficRulesIncludes": "Includes",
+  "trafficRulesLocalNetwork": "Local network always stays direct",
+  "trafficRulesChoose": "Choose rule",
+  "trafficRulesChosen": "Selected",
+  "trafficRulesDisabled": "Disabled",
+  "trafficRulesPreparing": "Preparing rule data…",
+  "trafficRulesPrepareFailed": "Could not prepare rule data. Check your connection and try again.",
+  "trafficRulesRuleCount": "{count} categories",
+  "@trafficRulesRuleCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }

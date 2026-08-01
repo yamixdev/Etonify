@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 
 const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
@@ -54,6 +55,7 @@ class AppSettingsController {
   bool statusNotificationEnabled = true;
   NotificationTrafficDisplayMode notificationTrafficDisplayMode =
       NotificationTrafficDisplayMode.speed;
+  int notificationTrafficRefreshSeconds = 2;
   bool hideServerIp = false;
   String proxySort = 'source';
   bool progressiveBlurEnabled = false;
@@ -87,6 +89,7 @@ class AppSettingsController {
   bool blockLeaks = false;
   bool adBlockEnabled = false;
   bool useRussiaRouteData = false;
+  TrafficRulePreset trafficRulePreset = TrafficRulePreset.none;
   bool bypassLocalNetwork = true;
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled;
   List<String> splitRoutingPackages = const <String>[];
@@ -139,6 +142,7 @@ class AppSettingsController {
       hapticEnabled: hapticEnabled,
       statusNotificationEnabled: statusNotificationEnabled,
       notificationTrafficDisplayMode: notificationTrafficDisplayMode,
+      notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp,
       progressiveBlurEnabled: progressiveBlurEnabled,
       progressiveBlurConfigured: true,
@@ -175,6 +179,7 @@ class AppSettingsController {
       blockLeaks: blockLeaks,
       adBlockEnabled: adBlockEnabled,
       useRussiaRouteData: useRussiaRouteData,
+      trafficRulePreset: trafficRulePreset,
       bypassLocalNetwork: bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages,
@@ -198,6 +203,7 @@ class AppSettingsController {
     hapticEnabled = state.hapticEnabled;
     statusNotificationEnabled = state.statusNotificationEnabled;
     notificationTrafficDisplayMode = state.notificationTrafficDisplayMode;
+    notificationTrafficRefreshSeconds = state.notificationTrafficRefreshSeconds;
     hideServerIp = state.hideServerIp;
     proxySort =
         const {'source', 'latency', 'name', 'country'}.contains(state.proxySort)
@@ -248,7 +254,15 @@ class AppSettingsController {
         .toInt();
     blockLeaks = state.blockLeaks;
     adBlockEnabled = state.adBlockEnabled;
-    useRussiaRouteData = state.useRussiaRouteData;
+    trafficRulePreset =
+        state.trafficRulePreset == TrafficRulePreset.none &&
+            state.useRussiaRouteData
+        ? TrafficRulePreset.russianServicesDirect
+        : state.trafficRulePreset;
+    // Kept only for the legacy config builder call while profiles migrate.
+    // The persisted source of truth is now trafficRulePreset.
+    useRussiaRouteData =
+        trafficRulePreset == TrafficRulePreset.russianServicesDirect;
     bypassLocalNetwork = state.bypassLocalNetwork;
     splitRoutingMode = state.splitRoutingMode;
     splitRoutingPackages = List<String>.from(state.splitRoutingPackages);
@@ -302,6 +316,15 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     notificationTrafficDisplayMode = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setNotificationTrafficRefreshSeconds(int value) {
+    final normalized = value.clamp(1, 10).toInt();
+    if (notificationTrafficRefreshSeconds == normalized) {
+      return const AppSettingsChange.none();
+    }
+    notificationTrafficRefreshSeconds = normalized;
     return const AppSettingsChange(changed: true);
   }
 
@@ -733,13 +756,21 @@ class AppSettingsController {
   }
 
   AppSettingsChange setRussiaRouteDataEnabled(bool value) {
-    if (useRussiaRouteData == value) {
+    return setTrafficRulePreset(
+      value ? TrafficRulePreset.russianServicesDirect : TrafficRulePreset.none,
+    );
+  }
+
+  AppSettingsChange setTrafficRulePreset(TrafficRulePreset value) {
+    if (trafficRulePreset == value) {
       return const AppSettingsChange.none();
     }
-    useRussiaRouteData = value;
+    trafficRulePreset = value;
+    useRussiaRouteData = value == TrafficRulePreset.russianServicesDirect;
     return const AppSettingsChange(
       changed: true,
-      configReason: 'russia route data changed',
+      configReason: 'traffic rule preset changed',
+      forceFullServiceRestart: true,
     );
   }
 

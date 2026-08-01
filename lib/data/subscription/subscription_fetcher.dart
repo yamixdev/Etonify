@@ -65,7 +65,7 @@ class SubscriptionFetcher {
 
     try {
       final headers = await _requestHeaders(requestInfo);
-      _validateRequestSecurity(uri, headers);
+      _validateRequestSecurity(uri);
       if (Platform.isAndroid) {
         try {
           final native = await SingboxRuntime.instance
@@ -178,7 +178,7 @@ class SubscriptionFetcher {
     var uri = initialUri;
     var headers = Map<String, String>.from(initialHeaders);
     for (var redirects = 0; ; redirects++) {
-      _validateRequestSecurity(uri, headers);
+      _validateRequestSecurity(uri);
       final request = await client.getUrl(uri);
       request.followRedirects = false;
       for (final entry in headers.entries) {
@@ -214,7 +214,7 @@ class SubscriptionFetcher {
     }
   }
 
-  static void _validateRequestSecurity(Uri uri, Map<String, String> headers) {
+  static void _validateRequestSecurity(Uri uri) {
     final scheme = uri.scheme.toLowerCase();
     if ((scheme != 'http' && scheme != 'https') || uri.host.isEmpty) {
       throw HttpException('Only HTTP and HTTPS URLs are supported', uri: uri);
@@ -222,51 +222,21 @@ class SubscriptionFetcher {
     if (scheme == 'https') {
       return;
     }
-    final hasSensitiveHeader = headers.keys.any(_isSensitiveHeaderName);
-    final hasSensitiveUrl =
-        uri.userInfo.isNotEmpty ||
-        uri.queryParameters.keys.any(_isSensitiveQueryName);
-    if (hasSensitiveHeader || hasSensitiveUrl) {
+    if (!_isLiteralLoopbackHost(uri.host)) {
       throw HttpException(
-        'Sensitive subscription credentials require HTTPS',
+        'Subscription URLs must use HTTPS. Plain HTTP is allowed only for '
+        'localhost, 127.0.0.1, or [::1].',
         uri: uri,
       );
     }
   }
 
-  static bool _isSensitiveHeaderName(String name) {
-    final normalized = name.trim().toLowerCase();
-    if (const {
-      'authorization',
-      'proxy-authorization',
-      'cookie',
-      'x-hwid',
-    }.contains(normalized)) {
-      return true;
-    }
-    return const [
-      'token',
-      'secret',
-      'password',
-      'api-key',
-      'apikey',
-      'hwid',
-    ].any(normalized.contains);
+  static bool _isLiteralLoopbackHost(String host) {
+    final normalized = host.trim().toLowerCase();
+    return normalized == 'localhost' ||
+        normalized == '127.0.0.1' ||
+        normalized == '::1';
   }
-
-  static bool _isSensitiveQueryName(String name) => const {
-    'token',
-    'access_token',
-    'password',
-    'passwd',
-    'key',
-    'secret',
-    'uuid',
-    'auth',
-    'authorization',
-    'sub',
-    'url',
-  }.contains(name.trim().toLowerCase());
 
   static Map<String, String> _headersForCrossOriginRedirect(
     Map<String, String> headers,
@@ -283,10 +253,8 @@ class SubscriptionFetcher {
       first.port == second.port;
 
   @visibleForTesting
-  static void validateRequestSecurityForTest(
-    Uri uri,
-    Map<String, String> headers,
-  ) => _validateRequestSecurity(uri, headers);
+  static void validateRequestSecurityForTest(Uri uri) =>
+      _validateRequestSecurity(uri);
 
   @visibleForTesting
   static Map<String, String> headersForCrossOriginRedirectForTest(
@@ -392,7 +360,24 @@ class SubscriptionFetcher {
       }
       builder.add(chunk);
     }
-    return utf8.decode(builder.takeBytes(), allowMalformed: true);
+    try {
+      return utf8.decode(builder.takeBytes());
+    } on FormatException {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.invalidContent,
+      );
+    }
+  }
+
+  @visibleForTesting
+  static String decodeResponseUtf8ForTest(List<int> bytes) {
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.invalidContent,
+      );
+    }
   }
 
   static int _defaultPort(Uri uri) {

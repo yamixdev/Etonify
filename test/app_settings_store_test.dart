@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 
 void main() {
   test('defaults to standard performance mode and cold runtime values', () {
@@ -22,6 +23,7 @@ void main() {
       state.notificationTrafficDisplayMode,
       NotificationTrafficDisplayMode.speed,
     );
+    expect(state.notificationTrafficRefreshSeconds, 2);
   });
 
   test('persists the selected notification traffic display mode', () {
@@ -36,6 +38,44 @@ void main() {
       NotificationTrafficDisplayMode.both,
     );
     expect(map['notification_traffic_display_mode'], 'both');
+  });
+
+  test('persists the single selected traffic rule preset', () {
+    final store = _TestSettingsStore();
+    final state = store.mapState(const <String, dynamic>{
+      'traffic_rule_preset': 'social_via_vpn',
+    });
+    final map = store.stateToMap(state);
+
+    expect(state.trafficRulePreset, TrafficRulePreset.socialViaVpn);
+    expect(map['traffic_rule_preset'], 'social_via_vpn');
+    expect(
+      store.mapState(const <String, dynamic>{
+        'traffic_rule_preset': 'unknown',
+      }).trafficRulePreset,
+      TrafficRulePreset.none,
+    );
+  });
+
+  test('persists and bounds notification traffic refresh seconds', () {
+    final store = _TestSettingsStore();
+    final state = store.mapState(const <String, dynamic>{
+      'notification_traffic_refresh_seconds': '20',
+    });
+    final map = store.stateToMap(state);
+
+    expect(state.notificationTrafficRefreshSeconds, 10);
+    expect(map['notification_traffic_refresh_seconds'], '10');
+    expect(
+      store.mapState(const <String, dynamic>{
+        'notification_traffic_refresh_seconds': '0',
+      }).notificationTrafficRefreshSeconds,
+      1,
+    );
+    expect(
+      store.stateToSafeExportMap(state)['notification_traffic_refresh_seconds'],
+      '10',
+    );
   });
 
   test('migrates legacy aggressive performance mode to standard', () {

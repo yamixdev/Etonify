@@ -785,6 +785,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get notificationTrafficDisplayBoth => 'Скорость и общий объём';
 
   @override
+  String get notificationTrafficRefreshTitle => 'Обновление трафика';
+
+  @override
+  String get notificationTrafficRefreshSubtitle =>
+      'Как часто обновлять данные в уведомлении.';
+
+  @override
+  String notificationTrafficRefreshSeconds(int seconds) {
+    return '$seconds с';
+  }
+
+  @override
   String get notificationConnected => 'VPN подключён';
 
   @override
@@ -2329,4 +2341,111 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get vpnStartFailed => 'Не удалось запустить VPN.';
+
+  @override
+  String get trafficRulesTitle => 'Правила трафика';
+
+  @override
+  String get trafficRulesSettingsTitle => 'Правила трафика';
+
+  @override
+  String get trafficRulesSettingsSubtitle =>
+      'Выберите одно проверенное правило для доменов и IP-маршрутов.';
+
+  @override
+  String get trafficRulesCurrentLabel => 'Активное правило';
+
+  @override
+  String get trafficRulesNone => 'Не выбрано';
+
+  @override
+  String get trafficRulesDeveloperSection => 'Правила от разработчика';
+
+  @override
+  String get trafficRulesVerified => 'Проверено';
+
+  @override
+  String get trafficRulesVerifiedInfo =>
+      'Проверено MeowTeam. Создано официальным разработчиком.';
+
+  @override
+  String get trafficRulesOnlyOne =>
+      'Одновременно можно включить только одно правило трафика — так правила не конфликтуют между собой.';
+
+  @override
+  String get trafficRulesAvailableOffline =>
+      'После подготовки правило работает без подключения к интернету.';
+
+  @override
+  String get trafficRulesDataReady => 'Данные правила готовы';
+
+  @override
+  String get trafficRulesDataMissing => 'Данные правила ещё не подготовлены';
+
+  @override
+  String get trafficRulesUpdateData => 'Обновить данные правил';
+
+  @override
+  String get trafficRulesDeleteData => 'Удалить данные правил';
+
+  @override
+  String get trafficRulesRussianTitle => 'Российские сервисы напрямую';
+
+  @override
+  String get trafficRulesRussianSubtitle =>
+      'Российские сервисы и локальные адреса работают в обход VPN.';
+
+  @override
+  String get trafficRulesAiTitle => 'Нейросети через VPN';
+
+  @override
+  String get trafficRulesAiSubtitle =>
+      'Популярные нейросети идут через VPN, остальной трафик — напрямую.';
+
+  @override
+  String get trafficRulesSocialTitle => 'Социальные сети через VPN';
+
+  @override
+  String get trafficRulesSocialSubtitle =>
+      'Популярные соцсети и мессенджеры идут через VPN, остальной трафик — напрямую.';
+
+  @override
+  String get trafficRulesDetails => 'Состав правила';
+
+  @override
+  String get trafficRulesDefaultRoute => 'Всё остальное';
+
+  @override
+  String get trafficRulesDirect => 'Напрямую';
+
+  @override
+  String get trafficRulesVpn => 'Через VPN';
+
+  @override
+  String get trafficRulesIncludes => 'Включает';
+
+  @override
+  String get trafficRulesLocalNetwork =>
+      'Локальная сеть всегда работает напрямую';
+
+  @override
+  String get trafficRulesChoose => 'Выбрать правило';
+
+  @override
+  String get trafficRulesChosen => 'Выбрано';
+
+  @override
+  String get trafficRulesDisabled => 'Отключено';
+
+  @override
+  String get trafficRulesPreparing => 'Подготавливаем данные правила…';
+
+  @override
+  String get trafficRulesPrepareFailed =>
+      'Не удалось подготовить данные правила. Проверьте интернет и повторите попытку.';
+
+  @override
+  String trafficRulesRuleCount(int count) {
+    return 'Категорий: $count';
+  }
 }

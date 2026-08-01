@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
-import 'package:meow_client/models/subscription.dart';
 
 void main() {
   group('SubscriptionFetcher', () {
@@ -40,18 +39,17 @@ void main() {
       expect(userAgent, SubscriptionFetcher.defaultUserAgent);
     });
 
-    test('rejects X-HWID over plain HTTP', () async {
-      await expectLater(
-        SubscriptionFetcher.fetch(
-          'http://127.0.0.1/sub',
-          requestInfo: const SubscriptionInfo(
-            customUserAgent: 'CustomClient/9.9',
-            requireHwid: true,
-            customHwid: 'spoofed-hwid',
-          ),
-        ),
-        throwsA(isA<HttpException>()),
-      );
+    test('permits literal loopback HTTP subscription URLs', () {
+      for (final uri in <Uri>[
+        Uri.parse('http://localhost/sub'),
+        Uri.parse('http://127.0.0.1/sub'),
+        Uri.parse('http://[::1]/sub'),
+      ]) {
+        expect(
+          () => SubscriptionFetcher.validateRequestSecurityForTest(uri),
+          returnsNormally,
+        );
+      }
     });
 
     test('strips custom and credential headers on cross-origin redirect', () {
@@ -67,13 +65,25 @@ void main() {
       expect(redirected, {'User-Agent': 'Etonify/test', 'Accept': '*/*'});
     });
 
-    test('rejects secret query values over plain HTTP', () {
+    test('rejects all remote HTTP subscription URLs', () {
       expect(
         () => SubscriptionFetcher.validateRequestSecurityForTest(
-          Uri.parse('http://example.com/sub?token=secret'),
-          const {'Accept': '*/*'},
+          Uri.parse('http://example.com/sub'),
         ),
         throwsA(isA<HttpException>()),
+      );
+    });
+
+    test('rejects malformed UTF-8 subscription responses', () {
+      expect(
+        () => SubscriptionFetcher.decodeResponseUtf8ForTest(const [0xc3, 0x28]),
+        throwsA(
+          isA<SubscriptionContentException>().having(
+            (error) => error.kind,
+            'kind',
+            SubscriptionContentFailureKind.invalidContent,
+          ),
+        ),
       );
     });
 

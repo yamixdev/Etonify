@@ -7,6 +7,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 Widget _generalSettingsApp({
   required bool statusNotificationEnabled,
   ValueChanged<NotificationTrafficDisplayMode>? onTrafficDisplayChanged,
+  ValueChanged<int>? onTrafficRefreshChanged,
 }) {
   return MaterialApp(
     locale: const Locale('en'),
@@ -20,6 +21,7 @@ Widget _generalSettingsApp({
       currentStatusNotificationEnabled: statusNotificationEnabled,
       currentNotificationTrafficDisplayMode:
           NotificationTrafficDisplayMode.speed,
+      currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
       currentPerformanceMode: AppPerformanceMode.standard,
       currentMemoryLimitEnabled: true,
@@ -32,6 +34,8 @@ Widget _generalSettingsApp({
       onStatusNotificationChanged: (_) {},
       onNotificationTrafficDisplayModeChanged:
           onTrafficDisplayChanged ?? (_) {},
+      onNotificationTrafficRefreshSecondsChanged:
+          onTrafficRefreshChanged ?? (_) {},
       onHideServerIpChanged: (_) {},
       onPerformanceModeChanged: (_) {},
       onMemoryLimitChanged: (_, {warningDismissed = false}) {},
@@ -51,6 +55,11 @@ void main() {
       await tester.pumpWidget(
         _generalSettingsApp(statusNotificationEnabled: false),
       );
+      await tester.scrollUntilVisible(
+        find.byKey(trafficDisplaySetting),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
 
       final tile = tester.widget<ListTile>(find.byKey(trafficDisplaySetting));
       expect(tile.enabled, isFalse);
@@ -69,11 +78,15 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(
+      find.byKey(trafficDisplaySetting),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     final tile = tester.widget<ListTile>(find.byKey(trafficDisplaySetting));
     expect(tile.enabled, isTrue);
     expect(tile.onTap, isNotNull);
 
-    await tester.ensureVisible(find.byKey(trafficDisplaySetting));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(trafficDisplaySetting));
     await tester.pumpAndSettle();
@@ -81,5 +94,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(selected, NotificationTrafficDisplayMode.total);
+  });
+
+  testWidgets(
+    'notification traffic refresh slider is disabled with status off',
+    (tester) async {
+      await tester.pumpWidget(
+        _generalSettingsApp(statusNotificationEnabled: false),
+      );
+
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      expect(slider.min, 1);
+      expect(slider.max, 10);
+      expect(slider.divisions, 9);
+      expect(slider.onChanged, isNull);
+    },
+  );
+
+  testWidgets('notification traffic refresh slider selects whole seconds', (
+    tester,
+  ) async {
+    int? selected;
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        onTrafficRefreshChanged: (value) => selected = value,
+      ),
+    );
+
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    slider.onChanged!(7);
+    await tester.pump();
+
+    expect(selected, 7);
+    expect(find.text('7 s'), findsOneWidget);
   });
 }

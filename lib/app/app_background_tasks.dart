@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -90,6 +91,8 @@ class SingboxConfigBuildInput {
     required this.russiaGeoipRuPath,
     required this.russiaCuratedDirectServicesPath,
     required this.russiaAiServicesPath,
+    required this.russiaSocialServicesPath,
+    this.trafficRulePreset = TrafficRulePreset.none,
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -141,6 +144,8 @@ class SingboxConfigBuildInput {
   final String? russiaGeoipRuPath;
   final String? russiaCuratedDirectServicesPath;
   final String? russiaAiServicesPath;
+  final String? russiaSocialServicesPath;
+  final TrafficRulePreset trafficRulePreset;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -425,6 +430,8 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     russiaGeoipRuPath: input.russiaGeoipRuPath,
     russiaCuratedDirectServicesPath: input.russiaCuratedDirectServicesPath,
     russiaAiServicesPath: input.russiaAiServicesPath,
+    russiaSocialServicesPath: input.russiaSocialServicesPath,
+    trafficRulePreset: input.trafficRulePreset,
     bypassLocalNetwork: input.bypassLocalNetwork,
     splitRoutingMode: input.splitRoutingMode,
     splitRoutingPackages: input.splitRoutingPackages,

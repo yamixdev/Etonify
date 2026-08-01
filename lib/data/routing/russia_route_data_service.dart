@@ -28,6 +28,7 @@ class RussiaRouteDataStatus {
     this.geoipRuPath,
     this.curatedDirectServicesPath,
     this.aiServicesPath,
+    this.socialServicesPath,
     this.installedAtMillis,
     this.lastUpdateCheckAtMillis,
     this.domainListCommunityUpdatedAtMillis,
@@ -55,6 +56,7 @@ class RussiaRouteDataStatus {
       geoipRuPath = null,
       curatedDirectServicesPath = null,
       aiServicesPath = null,
+      socialServicesPath = null,
       installedAtMillis = null,
       lastUpdateCheckAtMillis = null,
       domainListCommunityUpdatedAtMillis = null,
@@ -80,6 +82,7 @@ class RussiaRouteDataStatus {
   final String? geoipRuPath;
   final String? curatedDirectServicesPath;
   final String? aiServicesPath;
+  final String? socialServicesPath;
   final int? installedAtMillis;
   final int? lastUpdateCheckAtMillis;
   final int? domainListCommunityUpdatedAtMillis;
@@ -248,6 +251,18 @@ class RussiaRouteDataService {
     'rutube',
   ];
   static const _aiServicesCategories = <String>['category-ai-!cn'];
+  static const _socialServicesCategories = <String>[
+    'discord',
+    'github',
+    'google',
+    'meta',
+    'openai',
+    'spotify',
+    'telegram',
+    'tiktok',
+    'vk',
+    'whatsapp',
+  ];
 
   Future<RussiaRouteDataStatus>? _updateInFlight;
   final ValueNotifier<RussiaRouteUpdateProgress?> progress = ValueNotifier(
@@ -285,6 +300,7 @@ class RussiaRouteDataService {
     final geoipRuFile = File(paths.geoipRuPath);
     final curatedDirectServicesFile = File(paths.curatedDirectServicesPath);
     final aiServicesFile = File(paths.aiServicesPath);
+    final socialServicesFile = File(paths.socialServicesPath);
     if (!metadataFile.existsSync() ||
         !_hasUsableRuleSet(geositeBlockedFile) ||
         !_hasUsableRuleSet(geositeAvailableOnlyInsideFile) ||
@@ -322,6 +338,9 @@ class RussiaRouteDataService {
             : null,
         aiServicesPath: _hasUsableRuleSet(aiServicesFile)
             ? aiServicesFile.path
+            : null,
+        socialServicesPath: _hasUsableRuleSet(socialServicesFile)
+            ? socialServicesFile.path
             : null,
         installedAtMillis: int.tryParse(
           metadata['installedAtMillis']?.toString() ?? '',
@@ -532,7 +551,8 @@ class RussiaRouteDataService {
           !current.available ||
           downloaded.changed ||
           !File(paths.curatedDirectServicesPath).existsSync() ||
-          !File(paths.aiServicesPath).existsSync();
+          !File(paths.aiServicesPath).existsSync() ||
+          !File(paths.socialServicesPath).existsSync();
       var downloadedCategoryCount = current.domainListCommunityCategoryCount;
       var compiledDomainCount = current.domainListCommunityDomainCount;
       var domainListCommunityUpdatedAtMillis =
@@ -546,6 +566,9 @@ class RussiaRouteDataService {
         final compiledAiServices = await Isolate.run(
           () => _compileAiServicesArtifact(categoryFiles),
         );
+        final compiledSocialServices = await Isolate.run(
+          () => _compileSocialServicesArtifact(categoryFiles),
+        );
         await _writeAtomically(
           paths.curatedDirectServicesPath,
           compiledCuratedDirectServices.ruleSetBytes,
@@ -554,10 +577,15 @@ class RussiaRouteDataService {
           paths.aiServicesPath,
           compiledAiServices.ruleSetBytes,
         );
+        await _writeAtomically(
+          paths.socialServicesPath,
+          compiledSocialServices.ruleSetBytes,
+        );
         downloadedCategoryCount = categoryFiles.length;
         compiledDomainCount =
             compiledCuratedDirectServices.domainCount +
-            compiledAiServices.domainCount;
+            compiledAiServices.domainCount +
+            compiledSocialServices.domainCount;
         domainListCommunityUpdatedAtMillis = nowMillis;
       }
       final installedAtMillis = current.installedAtMillis ?? nowMillis;
@@ -595,6 +623,7 @@ class RussiaRouteDataService {
         geoipRuPath: paths.geoipRuPath,
         curatedDirectServicesPath: paths.curatedDirectServicesPath,
         aiServicesPath: paths.aiServicesPath,
+        socialServicesPath: paths.socialServicesPath,
         installedAtMillis: installedAtMillis,
         lastUpdateCheckAtMillis: successfulCheckAtMillis,
         domainListCommunityUpdatedAtMillis:
@@ -988,6 +1017,7 @@ class RussiaRouteDataService {
     final pending = <String>[
       ..._curatedDirectServicesCategories,
       ..._aiServicesCategories,
+      ..._socialServicesCategories,
     ];
     var changed = false;
     var completed = 0;
@@ -1169,6 +1199,7 @@ class RussiaRouteDataService {
       curatedDirectServicesPath:
           '${base.path}/rule-set-geosite/ru-direct-services.srs',
       aiServicesPath: '${base.path}/rule-set-geosite/ai-services.srs',
+      socialServicesPath: '${base.path}/rule-set-geosite/social-services.srs',
       domainListCommunitySourceDirectoryPath:
           '${base.path}/domain-list-community',
       metadataPath: '${base.path}/manifest.json',
@@ -1212,6 +1243,7 @@ class _RussiaRouteStoragePaths {
     required this.geoipRuPath,
     required this.curatedDirectServicesPath,
     required this.aiServicesPath,
+    required this.socialServicesPath,
     required this.domainListCommunitySourceDirectoryPath,
     required this.metadataPath,
   });
@@ -1225,6 +1257,7 @@ class _RussiaRouteStoragePaths {
   final String geoipRuPath;
   final String curatedDirectServicesPath;
   final String aiServicesPath;
+  final String socialServicesPath;
   final String domainListCommunitySourceDirectoryPath;
   final String metadataPath;
 }
@@ -1365,6 +1398,15 @@ _CompiledRuleSetArtifact _compileAiServicesArtifact(
   return _compileDomainListCommunityArtifact(
     categoryFiles,
     RussiaRouteDataService._aiServicesCategories,
+  );
+}
+
+_CompiledRuleSetArtifact _compileSocialServicesArtifact(
+  Map<String, String> categoryFiles,
+) {
+  return _compileDomainListCommunityArtifact(
+    categoryFiles,
+    RussiaRouteDataService._socialServicesCategories,
   );
 }
 

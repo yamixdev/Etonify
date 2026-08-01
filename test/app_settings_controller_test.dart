@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 
 void main() {
@@ -43,6 +44,24 @@ void main() {
       NotificationTrafficDisplayMode.both,
     );
   });
+
+  test(
+    'notification traffic refresh is bounded and needs no config rebuild',
+    () {
+      final controller = AppSettingsController();
+
+      final change = controller.setNotificationTrafficRefreshSeconds(99);
+
+      expect(change.changed, isTrue);
+      expect(change.configReason, isNull);
+      expect(controller.notificationTrafficRefreshSeconds, 10);
+      expect(
+        controller.setNotificationTrafficRefreshSeconds(-1).changed,
+        isTrue,
+      );
+      expect(controller.notificationTrafficRefreshSeconds, 1);
+    },
+  );
 
   test('DNS preset updates resolver together with preset', () {
     final controller = AppSettingsController();
@@ -171,5 +190,25 @@ void main() {
     expect(change.changed, isTrue);
     expect(change.restartRuntime, isFalse);
     expect(controller.proxySort, 'working');
+  });
+
+  test('traffic rules keep exactly one active preset and restart VPN', () {
+    final controller = AppSettingsController();
+
+    final aiChange = controller.setTrafficRulePreset(
+      TrafficRulePreset.aiViaVpn,
+    );
+    expect(aiChange.changed, isTrue);
+    expect(aiChange.forceFullServiceRestart, isTrue);
+    expect(controller.trafficRulePreset, TrafficRulePreset.aiViaVpn);
+    expect(controller.useRussiaRouteData, isFalse);
+
+    final russianChange = controller.setRussiaRouteDataEnabled(true);
+    expect(russianChange.changed, isTrue);
+    expect(
+      controller.trafficRulePreset,
+      TrafficRulePreset.russianServicesDirect,
+    );
+    expect(controller.useRussiaRouteData, isTrue);
   });
 }

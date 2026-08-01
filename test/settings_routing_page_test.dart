@@ -4,92 +4,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
-  testWidgets('smart routing always offers an explicit update check', (
-    tester,
-  ) async {
-    await _pumpPage(
-      tester,
-      RussiaRouteDataStatus(
-        available: true,
-        sourceName: RussiaRouteDataService.sourceName,
-        sourceKind: RussiaRouteDataService.sourceKindLive,
-        versionTag: '202607011219',
-        releaseTag: '202607011219',
-        verifiedAtMillis: DateTime.now().millisecondsSinceEpoch,
-        verifiedFiles: const ['one', 'two'],
-        lastUpdateCheckAtMillis: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
-
-    expect(find.text('Умная маршрутизация'), findsOneWidget);
-    expect(find.text('Проверить'), findsOneWidget);
-  });
-
-  testWidgets('smart routing shows check action for stale data', (
-    tester,
-  ) async {
-    await _pumpPage(
-      tester,
-      RussiaRouteDataStatus(
-        available: true,
-        sourceName: RussiaRouteDataService.sourceName,
-        sourceKind: RussiaRouteDataService.sourceKindLive,
-        versionTag: '202607011219',
-        releaseTag: '202607011219',
-        verifiedAtMillis: DateTime.now().millisecondsSinceEpoch,
-        verifiedFiles: const ['one', 'two'],
-        lastUpdateCheckAtMillis: DateTime.now()
-            .subtract(const Duration(hours: 25))
-            .millisecondsSinceEpoch,
-      ),
-    );
-
-    expect(find.text('Проверить'), findsOneWidget);
-  });
-
-  testWidgets('smart routing offers bundled installation when missing', (
+  testWidgets('traffic rules replace the old smart routing entry', (
     tester,
   ) async {
     await _pumpPage(tester, const RussiaRouteDataStatus.unavailable());
 
-    expect(find.text('Скачать правила'), findsOneWidget);
+    expect(find.text('Правила трафика'), findsOneWidget);
+    expect(find.text('Умная маршрутизация'), findsNothing);
   });
 
-  testWidgets('smart routing check changes action when update is available', (
+  testWidgets('traffic rules show three verified developer presets', (
     tester,
   ) async {
-    final status = RussiaRouteDataStatus(
-      available: true,
-      sourceName: RussiaRouteDataService.sourceName,
-      sourceKind: RussiaRouteDataService.sourceKindLive,
-      versionTag: '202607011219',
-      releaseTag: '202607011219',
-      verifiedAtMillis: DateTime.now().millisecondsSinceEpoch,
-      verifiedFiles: const ['one', 'two'],
-      lastUpdateCheckAtMillis: DateTime.now().millisecondsSinceEpoch,
-    );
-    await _pumpPage(
-      tester,
-      status,
-      onCheckUpdate: () async => RussiaRouteUpdateCheck(
-        status: status,
-        latestTag: '202607031200',
-        updateAvailable: true,
-      ),
-    );
+    await _pumpPage(tester, const RussiaRouteDataStatus.unavailable());
 
-    await tester.tap(find.text('Проверить'));
+    await tester.tap(find.text('Правила трафика'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Обновить'), findsOneWidget);
-    expect(
-      find.text('Доступна новая версия правил: 202607031200'),
-      findsOneWidget,
-    );
+    expect(find.text('Российские сервисы напрямую'), findsOneWidget);
+    expect(find.text('Нейросети через VPN'), findsOneWidget);
+    expect(find.text('Социальные сети через VPN'), findsOneWidget);
+    expect(find.text('Правила от разработчика'), findsOneWidget);
   });
 
   testWidgets('selected split app keeps name and package on separate rows', (
@@ -165,8 +105,7 @@ Future<void> _pumpPage(
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled,
   List<String> splitRoutingPackages = const [],
   List<Map<String, dynamic>> installedApps = const [],
-  String scrollTo = 'Умная маршрутизация',
-  Future<RussiaRouteUpdateCheck> Function()? onCheckUpdate,
+  String scrollTo = 'Правила трафика',
   ValueChanged<List<String>>? onSplitRoutingPackagesChanged,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
@@ -185,8 +124,8 @@ Future<void> _pumpPage(
         currentBlockLeaks: true,
         currentAdBlockEnabled: false,
         currentAdBlockStatus: const AdBlockRuleSetStatus.unavailable(),
-        currentRussiaRouteDataEnabled: false,
         currentRussiaRouteDataStatus: routeStatus,
+        currentTrafficRulePreset: TrafficRulePreset.none,
         currentBypassLocalNetwork: true,
         currentVpnInboundEnabled: true,
         currentSplitRoutingMode: splitRoutingMode,
@@ -199,17 +138,10 @@ Future<void> _pumpPage(
             const AdBlockRuleSetStatus.unavailable(),
         onDeleteAdBlockRuleSet: () async =>
             const AdBlockRuleSetStatus.unavailable(),
-        onRussiaRouteDataEnabledChanged: (_) {},
-        onCheckRussiaRouteDataUpdate:
-            onCheckUpdate ??
-            () async => RussiaRouteUpdateCheck(
-              status: routeStatus,
-              latestTag: routeStatus.releaseTag ?? routeStatus.versionTag,
-              updateAvailable: false,
-            ),
         onInstallRussiaRouteData: () async => routeStatus,
         onDeleteRussiaRouteData: () async =>
             const RussiaRouteDataStatus.unavailable(),
+        onTrafficRulePresetChanged: (_) {},
         onBypassLocalNetworkChanged: (_) {},
         onSplitRoutingModeChanged: (_) {},
         onSplitRoutingPackagesChanged: onSplitRoutingPackagesChanged ?? (_) {},

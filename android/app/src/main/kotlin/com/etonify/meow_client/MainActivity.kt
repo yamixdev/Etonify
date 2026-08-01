@@ -50,6 +50,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 
@@ -59,24 +62,6 @@ class MainActivity : FlutterFragmentActivity() {
         private const val QUICK_TILE_LABEL_FILE = "quick_tile_label.txt"
         private const val MAX_SUBSCRIPTION_REDIRECTS = 5
         private val SUBSCRIPTION_REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
-        private val SENSITIVE_SUBSCRIPTION_HEADERS = setOf(
-            "authorization",
-            "proxy-authorization",
-            "cookie",
-            "x-hwid",
-        )
-        private val SENSITIVE_SUBSCRIPTION_HEADER_PARTS = setOf(
-            "token",
-            "secret",
-            "password",
-            "api-key",
-            "apikey",
-            "hwid",
-        )
-        private val SENSITIVE_SUBSCRIPTION_QUERY = Regex(
-            "(?:^|&)(?:token|access_token|password|passwd|key|secret|uuid|auth|authorization|sub|url)=",
-            RegexOption.IGNORE_CASE,
-        )
     }
     private val methodChannelName = "meow_client/singbox"
     private val eventChannelName = "meow_client/singbox_events"
@@ -475,7 +460,7 @@ class MainActivity : FlutterFragmentActivity() {
         var requestHeaders = headers.toMap()
         var redirectCount = 0
         while (true) {
-            validateSubscriptionRequest(url, requestHeaders)
+            validateSubscriptionRequest(url)
             val remaining = deadline - SystemClock.elapsedRealtime()
             require(remaining > 0L) { "Subscription request timed out." }
             val connection = network.openConnection(url) as HttpURLConnection
@@ -541,7 +526,7 @@ class MainActivity : FlutterFragmentActivity() {
                 }
                 return linkedMapOf(
                     "statusCode" to statusCode,
-                    "body" to output.toString(Charsets.UTF_8.name()),
+                    "body" to decodeSubscriptionUtf8(output.toByteArray()),
                     "headers" to responseHeaders,
                     "finalUrl" to url.toString(),
                     "network" to MeowDefaultNetworkMonitor.describeNetwork(network),
@@ -553,23 +538,18 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    private fun validateSubscriptionRequest(url: URL, headers: Map<String, String>) {
-        require(url.protocol == "http" || url.protocol == "https") {
-            "Only HTTP and HTTPS URLs are supported."
-        }
-        if (url.protocol == "https") return
-        val hasSensitiveHeader = headers.keys.any(::isSensitiveSubscriptionHeader)
-        val hasSensitiveUrl = !url.userInfo.isNullOrBlank() ||
-            SENSITIVE_SUBSCRIPTION_QUERY.containsMatchIn(url.query.orEmpty())
-        require(!hasSensitiveHeader && !hasSensitiveUrl) {
-            "Sensitive subscription credentials require HTTPS."
-        }
+    private fun validateSubscriptionRequest(url: URL) {
+        SubscriptionTransportPolicy.validate(url)
     }
 
-    private fun isSensitiveSubscriptionHeader(name: String): Boolean {
-        val normalized = name.trim().lowercase()
-        return normalized in SENSITIVE_SUBSCRIPTION_HEADERS ||
-            SENSITIVE_SUBSCRIPTION_HEADER_PARTS.any(normalized::contains)
+    private fun decodeSubscriptionUtf8(bytes: ByteArray): String = try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+    } catch (error: CharacterCodingException) {
+        throw IllegalArgumentException("Subscription response is not valid UTF-8.", error)
     }
 
     private fun isSafeCrossOriginHeader(name: String): Boolean =

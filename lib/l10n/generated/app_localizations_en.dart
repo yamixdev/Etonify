@@ -787,6 +787,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationTrafficDisplayBoth => 'Speed and total';
 
   @override
+  String get notificationTrafficRefreshTitle => 'Traffic refresh';
+
+  @override
+  String get notificationTrafficRefreshSubtitle =>
+      'How often to update data in the notification.';
+
+  @override
+  String notificationTrafficRefreshSeconds(int seconds) {
+    return '$seconds s';
+  }
+
+  @override
   String get notificationConnected => 'VPN connected';
 
   @override
@@ -2325,4 +2337,110 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vpnStartFailed => 'Failed to start VPN.';
+
+  @override
+  String get trafficRulesTitle => 'Traffic rules';
+
+  @override
+  String get trafficRulesSettingsTitle => 'Traffic rules';
+
+  @override
+  String get trafficRulesSettingsSubtitle =>
+      'Choose one verified rule for domains and IP routes.';
+
+  @override
+  String get trafficRulesCurrentLabel => 'Active rule';
+
+  @override
+  String get trafficRulesNone => 'Not selected';
+
+  @override
+  String get trafficRulesDeveloperSection => 'Developer rules';
+
+  @override
+  String get trafficRulesVerified => 'Verified';
+
+  @override
+  String get trafficRulesVerifiedInfo =>
+      'Verified by MeowTeam. Created by the official developer.';
+
+  @override
+  String get trafficRulesOnlyOne =>
+      'Only one traffic rule can be active at a time to avoid conflicts.';
+
+  @override
+  String get trafficRulesAvailableOffline =>
+      'After preparation, the rule works without an internet connection.';
+
+  @override
+  String get trafficRulesDataReady => 'Rule data is ready';
+
+  @override
+  String get trafficRulesDataMissing => 'Rule data has not been prepared yet';
+
+  @override
+  String get trafficRulesUpdateData => 'Update rule data';
+
+  @override
+  String get trafficRulesDeleteData => 'Delete rule data';
+
+  @override
+  String get trafficRulesRussianTitle => 'Russian services directly';
+
+  @override
+  String get trafficRulesRussianSubtitle =>
+      'Russian services and local addresses bypass the VPN.';
+
+  @override
+  String get trafficRulesAiTitle => 'AI services through VPN';
+
+  @override
+  String get trafficRulesAiSubtitle =>
+      'Popular AI services are routed through the VPN; everything else is direct.';
+
+  @override
+  String get trafficRulesSocialTitle => 'Social networks through VPN';
+
+  @override
+  String get trafficRulesSocialSubtitle =>
+      'Popular social networks and messengers are routed through the VPN; everything else is direct.';
+
+  @override
+  String get trafficRulesDetails => 'Rule details';
+
+  @override
+  String get trafficRulesDefaultRoute => 'Everything else';
+
+  @override
+  String get trafficRulesDirect => 'Direct';
+
+  @override
+  String get trafficRulesVpn => 'Through VPN';
+
+  @override
+  String get trafficRulesIncludes => 'Includes';
+
+  @override
+  String get trafficRulesLocalNetwork => 'Local network always stays direct';
+
+  @override
+  String get trafficRulesChoose => 'Choose rule';
+
+  @override
+  String get trafficRulesChosen => 'Selected';
+
+  @override
+  String get trafficRulesDisabled => 'Disabled';
+
+  @override
+  String get trafficRulesPreparing => 'Preparing rule data…';
+
+  @override
+  String get trafficRulesPrepareFailed =>
+      'Could not prepare rule data. Check your connection and try again.';
+
+  @override
+  String trafficRulesRuleCount(int count) {
+    return '$count categories';
+  }
 }

@@ -1490,6 +1490,24 @@ abstract class AppLocalizations {
   /// **'Speed and total'**
   String get notificationTrafficDisplayBoth;
 
+  /// No description provided for @notificationTrafficRefreshTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic refresh'**
+  String get notificationTrafficRefreshTitle;
+
+  /// No description provided for @notificationTrafficRefreshSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How often to update data in the notification.'**
+  String get notificationTrafficRefreshSubtitle;
+
+  /// No description provided for @notificationTrafficRefreshSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} s'**
+  String notificationTrafficRefreshSeconds(int seconds);
+
   /// No description provided for @notificationConnected.
   ///
   /// In en, this message translates to:
@@ -4136,6 +4154,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to start VPN.'**
   String get vpnStartFailed;
+
+  /// No description provided for @trafficRulesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic rules'**
+  String get trafficRulesTitle;
+
+  /// No description provided for @trafficRulesSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic rules'**
+  String get trafficRulesSettingsTitle;
+
+  /// No description provided for @trafficRulesSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose one verified rule for domains and IP routes.'**
+  String get trafficRulesSettingsSubtitle;
+
+  /// No description provided for @trafficRulesCurrentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Active rule'**
+  String get trafficRulesCurrentLabel;
+
+  /// No description provided for @trafficRulesNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not selected'**
+  String get trafficRulesNone;
+
+  /// No description provided for @trafficRulesDeveloperSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer rules'**
+  String get trafficRulesDeveloperSection;
+
+  /// No description provided for @trafficRulesVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get trafficRulesVerified;
+
+  /// No description provided for @trafficRulesVerifiedInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified by MeowTeam. Created by the official developer.'**
+  String get trafficRulesVerifiedInfo;
+
+  /// No description provided for @trafficRulesOnlyOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Only one traffic rule can be active at a time to avoid conflicts.'**
+  String get trafficRulesOnlyOne;
+
+  /// No description provided for @trafficRulesAvailableOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'After preparation, the rule works without an internet connection.'**
+  String get trafficRulesAvailableOffline;
+
+  /// No description provided for @trafficRulesDataReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule data is ready'**
+  String get trafficRulesDataReady;
+
+  /// No description provided for @trafficRulesDataMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule data has not been prepared yet'**
+  String get trafficRulesDataMissing;
+
+  /// No description provided for @trafficRulesUpdateData.
+  ///
+  /// In en, this message translates to:
+  /// **'Update rule data'**
+  String get trafficRulesUpdateData;
+
+  /// No description provided for @trafficRulesDeleteData.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete rule data'**
+  String get trafficRulesDeleteData;
+
+  /// No description provided for @trafficRulesRussianTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Russian services directly'**
+  String get trafficRulesRussianTitle;
+
+  /// No description provided for @trafficRulesRussianSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Russian services and local addresses bypass the VPN.'**
+  String get trafficRulesRussianSubtitle;
+
+  /// No description provided for @trafficRulesAiTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI services through VPN'**
+  String get trafficRulesAiTitle;
+
+  /// No description provided for @trafficRulesAiSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular AI services are routed through the VPN; everything else is direct.'**
+  String get trafficRulesAiSubtitle;
+
+  /// No description provided for @trafficRulesSocialTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Social networks through VPN'**
+  String get trafficRulesSocialTitle;
+
+  /// No description provided for @trafficRulesSocialSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular social networks and messengers are routed through the VPN; everything else is direct.'**
+  String get trafficRulesSocialSubtitle;
+
+  /// No description provided for @trafficRulesDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule details'**
+  String get trafficRulesDetails;
+
+  /// No description provided for @trafficRulesDefaultRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything else'**
+  String get trafficRulesDefaultRoute;
+
+  /// No description provided for @trafficRulesDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct'**
+  String get trafficRulesDirect;
+
+  /// No description provided for @trafficRulesVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'Through VPN'**
+  String get trafficRulesVpn;
+
+  /// No description provided for @trafficRulesIncludes.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes'**
+  String get trafficRulesIncludes;
+
+  /// No description provided for @trafficRulesLocalNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Local network always stays direct'**
+  String get trafficRulesLocalNetwork;
+
+  /// No description provided for @trafficRulesChoose.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose rule'**
+  String get trafficRulesChoose;
+
+  /// No description provided for @trafficRulesChosen.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get trafficRulesChosen;
+
+  /// No description provided for @trafficRulesDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get trafficRulesDisabled;
+
+  /// No description provided for @trafficRulesPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing rule data…'**
+  String get trafficRulesPreparing;
+
+  /// No description provided for @trafficRulesPrepareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not prepare rule data. Check your connection and try again.'**
+  String get trafficRulesPrepareFailed;
+
+  /// No description provided for @trafficRulesRuleCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} categories'**
+  String trafficRulesRuleCount(int count);
 }
 
 class _AppLocalizationsDelegate

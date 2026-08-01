@@ -72,6 +72,7 @@ void main() {
       transitionInProgress: false,
       retryScheduled: true,
       starting: false,
+      stopping: false,
     );
 
     expect(decision.phase, AppConnectionPhase.recovering);
@@ -87,11 +88,41 @@ void main() {
       transitionInProgress: false,
       retryScheduled: false,
       starting: false,
+      stopping: false,
     );
 
     expect(decision.phase, AppConnectionPhase.idle);
     expect(decision.keepConnecting, isFalse);
     expect(decision.clearDisconnectedState, isTrue);
+  });
+
+  test('status sync keeps an explicit stop out of recovery', () {
+    final decision = RuntimeSessionCoordinator().decideStatus(
+      running: false,
+      nativeRecoveryPending: true,
+      localTransitionPending: true,
+      retryScheduled: true,
+      stopping: true,
+    );
+
+    expect(decision.phase, AppConnectionPhase.stopping);
+    expect(decision.retryScheduled, isFalse);
+  });
+
+  test('explicit stop is never rendered as a core start', () {
+    final decision = RuntimeSessionCoordinator().decideStateEvent(
+      running: false,
+      hasError: false,
+      transitionInProgress: true,
+      retryScheduled: false,
+      starting: false,
+      stopping: true,
+    );
+
+    expect(decision.phase, AppConnectionPhase.stopping);
+    expect(decision.keepConnecting, isFalse);
+    expect(decision.clearDisconnectedState, isFalse);
+    expect(decision.retryScheduled, isFalse);
   });
 
   test('late successful cancelled start requires native cleanup', () {

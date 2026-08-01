@@ -37,10 +37,11 @@ internal class MeowForegroundNotification(
         private const val CONTENT_REQUEST_CODE = 4203
         private const val DEFAULT_LATENCY_TIMEOUT_MS = 20_000L
         private const val MAX_TEXT_LENGTH = 120
-        private const val TRAFFIC_REFRESH_INTERVAL_MS = 2_000L
+        private const val DEFAULT_TRAFFIC_REFRESH_SECONDS = 2
         private const val PRESENTATION_PREFS = "meow_foreground_notification"
         private const val PREF_DETAILED = "detailed"
         private const val PREF_TRAFFIC_DISPLAY_MODE = "traffic_display_mode"
+        private const val PREF_TRAFFIC_REFRESH_SECONDS = "traffic_refresh_seconds"
         private const val PREF_TITLE = "title"
         private const val PREF_LATENCY = "latency"
         private const val PREF_CONNECTED_TEXT = "connected_text"
@@ -99,6 +100,7 @@ internal class MeowForegroundNotification(
     private data class Presentation(
         val detailed: Boolean = true,
         val trafficDisplayMode: String = "speed",
+        val trafficRefreshSeconds: Int = DEFAULT_TRAFFIC_REFRESH_SECONDS,
         val title: String = "",
         val latencyMillis: Long? = null,
         val connectedText: String = "VPN подключён",
@@ -153,10 +155,15 @@ internal class MeowForegroundNotification(
                 "both" -> "both"
                 else -> "speed"
             }
+            val trafficRefreshSeconds =
+                (arguments["trafficRefreshSeconds"] as? Number)?.toInt()
+                    ?.coerceIn(1, 10)
+                    ?: DEFAULT_TRAFFIC_REFRESH_SECONDS
             val latency = (arguments["latencyMillis"] as? Number)?.toLong()?.takeIf { it >= 0L }
             presentation = Presentation(
                 detailed = detailed,
                 trafficDisplayMode = trafficDisplayMode,
+                trafficRefreshSeconds = trafficRefreshSeconds,
                 title = text("title", ""),
                 latencyMillis = latency,
                 connectedText = text("connectedText", "VPN подключён"),
@@ -167,6 +174,7 @@ internal class MeowForegroundNotification(
                 urlTestRequest = UrlTestRequest.fromArguments(arguments),
             )
             persistPresentation(presentation)
+            lastTrafficRefreshAt = 0L
             if (!latencyChecking) {
                 // Flutter delivers the last known successful result on every
                 // selected-outbound update. Do not leave an old action result
@@ -199,7 +207,7 @@ internal class MeowForegroundNotification(
             this.trafficAvailable = trafficAvailable
             val now = SystemClock.elapsedRealtime()
             val refreshDue = lastTrafficRefreshAt == 0L ||
-                now - lastTrafficRefreshAt >= TRAFFIC_REFRESH_INTERVAL_MS
+                now - lastTrafficRefreshAt >= presentation.trafficRefreshSeconds * 1_000L
             if (changed && (availabilityChanged || refreshDue)) {
                 displayedUplink = smoothRate(displayedUplink, uplink, trafficAvailable)
                 displayedDownlink = smoothRate(displayedDownlink, downlink, trafficAvailable)
@@ -348,6 +356,10 @@ internal class MeowForegroundNotification(
                 "both" -> "both"
                 else -> "speed"
             },
+            trafficRefreshSeconds = value(
+                PREF_TRAFFIC_REFRESH_SECONDS,
+                DEFAULT_TRAFFIC_REFRESH_SECONDS,
+            ).coerceIn(1, 10),
             title = text(PREF_TITLE, ""),
             latencyMillis = if (presentationPrefs.contains(PREF_LATENCY)) {
                 presentationPrefs.getLong(PREF_LATENCY, -1L).takeIf { it >= 0L }
@@ -368,6 +380,7 @@ internal class MeowForegroundNotification(
         presentationPrefs.edit().apply {
             putBoolean(PREF_DETAILED, value.detailed)
             putString(PREF_TRAFFIC_DISPLAY_MODE, value.trafficDisplayMode)
+            putInt(PREF_TRAFFIC_REFRESH_SECONDS, value.trafficRefreshSeconds)
             putString(PREF_TITLE, value.title)
             putString(PREF_CONNECTED_TEXT, value.connectedText)
             putString(PREF_CHECKING_TEXT, value.checkingText)

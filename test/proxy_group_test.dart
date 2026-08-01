@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -1017,7 +1018,9 @@ void main() {
     final selector = outbounds.firstWhere((entry) => entry['tag'] == 'select');
     final route = (config['route'] as Map).cast<String, dynamic>();
     final routeRules = (route['rules'] as List).cast<Map<String, dynamic>>();
-    final ruleSets = (route['rule_set'] as List).cast<Map<String, dynamic>>();
+    final ruleSets =
+        (route['rule_set'] as List?)?.cast<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
 
     expect(selector['default'], lowestProxyTag);
     expect(outbounds.any((entry) => entry['tag'] == mixedProxyTag), isFalse);
@@ -2320,12 +2323,96 @@ void main() {
     expect(ruDirect['type'], 'udp');
     expect(ruDirect['server'], '77.88.8.1');
   });
+
+  test(
+    'routes only AI categories through VPN when the AI preset is active',
+    () {
+      const subscription = Subscription(
+        id: 'ai-rule',
+        name: 'AI rule',
+        url: 'https://example.com/sub',
+        outbounds: [
+          Outbound(
+            tag: 'node',
+            name: 'Node',
+            config: {
+              'type': 'vless',
+              'tag': 'node',
+              'server': 'node.example.com',
+              'server_port': 443,
+              'uuid': 'node-uuid',
+            },
+          ),
+        ],
+      );
+
+      final config = _defaultBuilder(
+        subscription,
+        trafficRulePreset: TrafficRulePreset.aiViaVpn,
+        russiaAiServicesPath: _russiaRuleSetPath('geosite-ru-blocked.srs'),
+      ).build();
+
+      final route = config['route'] as Map<String, dynamic>;
+      final dns = config['dns'] as Map<String, dynamic>;
+      final ruleSets = (route['rule_set'] as List).cast<Map<String, dynamic>>();
+      final rules = (route['rules'] as List).cast<Map<String, dynamic>>();
+
+      expect(route['final'], 'direct');
+      expect(dns['final'], 'dns-direct');
+      expect(ruleSets.any((item) => item['tag'] == 'ai-services'), isTrue);
+      expect(
+        rules.any(
+          (item) =>
+              item['rule_set'] == 'ai-services' && item['outbound'] == 'select',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'keeps the usual proxy route when selected social rule data is missing',
+    () {
+      const subscription = Subscription(
+        id: 'social-rule',
+        name: 'Social rule',
+        url: 'https://example.com/sub',
+        outbounds: [
+          Outbound(
+            tag: 'node',
+            name: 'Node',
+            config: {
+              'type': 'vless',
+              'tag': 'node',
+              'server': 'node.example.com',
+              'server_port': 443,
+              'uuid': 'node-uuid',
+            },
+          ),
+        ],
+      );
+
+      final config = _defaultBuilder(
+        subscription,
+        trafficRulePreset: TrafficRulePreset.socialViaVpn,
+      ).build();
+
+      final route = config['route'] as Map<String, dynamic>;
+      final ruleSets =
+          (route['rule_set'] as List?)?.cast<Map<String, dynamic>>() ??
+          const <Map<String, dynamic>>[];
+
+      expect(route['final'], 'select');
+      expect(ruleSets.any((item) => item['tag'] == 'social-services'), isFalse);
+    },
+  );
 }
 
 SingboxConfigBuilder _defaultBuilder(
   Subscription subscription, {
   String selectedProxyTag = '',
   bool useRussiaRouteData = false,
+  TrafficRulePreset trafficRulePreset = TrafficRulePreset.none,
   bool markAllServersRussia = false,
   String urlTestUrl = 'https://www.gstatic.com/generate_204',
   int urlTestIntervalSeconds = 180,
@@ -2347,6 +2434,8 @@ SingboxConfigBuilder _defaultBuilder(
   String dnsDirectResolver = 'udp://1.1.1.1',
   String dnsProxyResolver = 'https://dns.cloudflare.com/dns-query',
   String russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
+  String? russiaAiServicesPath,
+  String? russiaSocialServicesPath,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
 }) {
   return SingboxConfigBuilder(
@@ -2398,8 +2487,10 @@ SingboxConfigBuilder _defaultBuilder(
         ? _russiaRuleSetPath('geosite-ru-available-only-inside.srs')
         : null,
     russiaAiServicesPath: useRussiaRouteData
-        ? _russiaRuleSetPath('geosite-ru-blocked.srs')
-        : null,
+        ? russiaAiServicesPath ?? _russiaRuleSetPath('geosite-ru-blocked.srs')
+        : russiaAiServicesPath,
+    russiaSocialServicesPath: russiaSocialServicesPath,
+    trafficRulePreset: trafficRulePreset,
     bypassLocalNetwork: true,
     splitRoutingMode: splitRoutingMode,
     splitRoutingPackages: splitRoutingPackages,

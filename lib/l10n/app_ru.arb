@@ -363,6 +363,16 @@
   "notificationTrafficDisplaySpeed": "Текущая скорость",
   "notificationTrafficDisplayTotal": "Всего передано",
   "notificationTrafficDisplayBoth": "Скорость и общий объём",
+  "notificationTrafficRefreshTitle": "Обновление трафика",
+  "notificationTrafficRefreshSubtitle": "Как часто обновлять данные в уведомлении.",
+  "notificationTrafficRefreshSeconds": "{seconds} с",
+  "@notificationTrafficRefreshSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "notificationConnected": "VPN подключён",
   "notificationPingChecking": "...",
   "notificationPingUnavailable": "Пинг недоступен",
@@ -974,5 +984,42 @@
   "connectionStageRecovering": "Восстановление",
   "connectionStageSelectingProxy": "Выбор сервера",
   "vpnStartTimedOut": "VPN не запустился за 15 секунд. Запуск остановлен.",
-  "vpnStartFailed": "Не удалось запустить VPN."
+  "vpnStartFailed": "Не удалось запустить VPN.",
+  "trafficRulesTitle": "Правила трафика",
+  "trafficRulesSettingsTitle": "Правила трафика",
+  "trafficRulesSettingsSubtitle": "Выберите одно проверенное правило для доменов и IP-маршрутов.",
+  "trafficRulesCurrentLabel": "Активное правило",
+  "trafficRulesNone": "Не выбрано",
+  "trafficRulesDeveloperSection": "Правила от разработчика",
+  "trafficRulesVerified": "Проверено",
+  "trafficRulesVerifiedInfo": "Проверено MeowTeam. Создано официальным разработчиком.",
+  "trafficRulesOnlyOne": "Одновременно можно включить только одно правило трафика — так правила не конфликтуют между собой.",
+  "trafficRulesAvailableOffline": "После подготовки правило работает без подключения к интернету.",
+  "trafficRulesDataReady": "Данные правила готовы",
+  "trafficRulesDataMissing": "Данные правила ещё не подготовлены",
+  "trafficRulesUpdateData": "Обновить данные правил",
+  "trafficRulesDeleteData": "Удалить данные правил",
+  "trafficRulesRussianTitle": "Российские сервисы напрямую",
+  "trafficRulesRussianSubtitle": "Российские сервисы и локальные адреса работают в обход VPN.",
+  "trafficRulesAiTitle": "Нейросети через VPN",
+  "trafficRulesAiSubtitle": "Популярные нейросети идут через VPN, остальной трафик — напрямую.",
+  "trafficRulesSocialTitle": "Социальные сети через VPN",
+  "trafficRulesSocialSubtitle": "Популярные соцсети и мессенджеры идут через VPN, остальной трафик — напрямую.",
+  "trafficRulesDetails": "Состав правила",
+  "trafficRulesDefaultRoute": "Всё остальное",
+  "trafficRulesDirect": "Напрямую",
+  "trafficRulesVpn": "Через VPN",
+  "trafficRulesIncludes": "Включает",
+  "trafficRulesLocalNetwork": "Локальная сеть всегда работает напрямую",
+  "trafficRulesChoose": "Выбрать правило",
+  "trafficRulesChosen": "Выбрано",
+  "trafficRulesDisabled": "Отключено",
+  "trafficRulesPreparing": "Подготавливаем данные правила…",
+  "trafficRulesPrepareFailed": "Не удалось подготовить данные правила. Проверьте интернет и повторите попытку.",
+  "trafficRulesRuleCount": "Категорий: {count}",
+  "@trafficRulesRuleCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  }
 }
