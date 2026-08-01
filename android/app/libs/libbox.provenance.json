@@ -1,13 +1,13 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "2d05a90d500ea1ba033c60bba45c33d1a2b438151a65b9996c5d93806b2c57c3",
-  "source_commit": "ed690de6bf6c5cc066d4ddbd91e7bbd43af7d1b0",
-  "source_version": "v1.13.14-22-ged690de6",
-  "etonify_version": "v1.13.14-etonify.1",
+  "sha256": "29ab509d021f23f88eca650506d7f4c736fa273cc097c8e9e25db520195b20e8",
+  "source_commit": "edbaf2f0617ec8323a64ef0a27b4441ca91f66a8",
+  "source_version": "v1.13.14-25-gedbaf2f0",
+  "etonify_version": "v1.13.15-etonify.1",
   "upstream_commit": "7067276170f03034017eb1887f671b7c9f11a5fd",
   "go": "go version go1.25.12 linux/amd64",
   "gomobile": "v0.1.12",
-  "java": "openjdk 17.0.20 2026-07-21",
+  "java": "openjdk 17.0.19 2026-04-21",
   "android_ndk": "r28",
   "android_api": 23,
   "build_tags": "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0,with_tailscale,ts_omit_logtail,ts_omit_ssh,ts_omit_drive,ts_omit_taildrop,ts_omit_webclient,ts_omit_doctor,ts_omit_capture,ts_omit_kube,ts_omit_aws,ts_omit_synology,ts_omit_bird"
