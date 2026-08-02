@@ -421,6 +421,30 @@ class SubscriptionStore {
     await _withSubscriptionWriteLock(sub.id, () => _saveMetadataUnlocked(sub));
   }
 
+  /// Persists a proxy selection without letting an older in-memory snapshot
+  /// overwrite metadata written by a concurrent subscription refresh.
+  static Future<void> saveSelectedProxyMetadata(Subscription sub) async {
+    await _withSubscriptionWriteLock(sub.id, () async {
+      final raw = _metaStore.get(sub.id);
+      if (raw is! String) {
+        throw StateError('Subscription metadata not found: ${sub.id}');
+      }
+      late final Subscription current;
+      try {
+        current = Subscription.fromMetadataMap(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+      } catch (error) {
+        throw StateError(
+          'Subscription metadata is invalid for ${sub.id}: $error',
+        );
+      }
+      await _saveMetadataUnlocked(
+        current.copyWith(selectedProxyTag: sub.selectedProxyTag),
+      );
+    });
+  }
+
   static Future<void> _saveMetadataUnlocked(Subscription sub) async {
     await _metaStore.put(sub.id, jsonEncode(sub.toMetadataMap()));
   }

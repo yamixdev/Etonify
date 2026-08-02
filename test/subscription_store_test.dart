@@ -271,6 +271,67 @@ void main() {
     expect(saved.groups.single.outboundTags, ['leaf-1', 'leaf-2']);
   });
 
+  test(
+    'selected proxy save preserves newer subscription metadata and payload',
+    () async {
+      const original = Subscription(
+        id: 'selection-race-sub',
+        name: 'Original name',
+        url: 'https://example.com/original',
+        selectedProxyTag: 'leaf-1',
+        lastUpdated: 1,
+        rawContent: 'original subscription payload',
+        outbounds: [
+          Outbound(
+            tag: 'leaf-1',
+            name: 'Leaf 1',
+            config: {'type': 'vless', 'tag': 'leaf-1'},
+          ),
+        ],
+      );
+      await SubscriptionStore.save(original);
+      final staleSelection = SubscriptionStore.get(original.id)!;
+
+      const refreshed = Subscription(
+        id: 'selection-race-sub',
+        name: 'Refreshed name',
+        url: 'https://example.com/refreshed',
+        selectedProxyTag: 'leaf-1',
+        lastUpdated: 2,
+        rawContent: 'refreshed subscription payload',
+        outbounds: [
+          Outbound(
+            tag: 'leaf-1',
+            name: 'Leaf 1 refreshed',
+            config: {'type': 'vless', 'tag': 'leaf-1'},
+          ),
+          Outbound(
+            tag: 'leaf-2',
+            name: 'Leaf 2',
+            config: {'type': 'vless', 'tag': 'leaf-2'},
+          ),
+        ],
+      );
+      await SubscriptionStore.save(refreshed);
+
+      await SubscriptionStore.saveSelectedProxyMetadata(
+        staleSelection.copyWith(selectedProxyTag: 'leaf-2'),
+      );
+
+      final saved = SubscriptionStore.get(original.id);
+      expect(saved, isNotNull);
+      expect(saved!.selectedProxyTag, 'leaf-2');
+      expect(saved.name, 'Refreshed name');
+      expect(saved.url, 'https://example.com/refreshed');
+      expect(saved.lastUpdated, 2);
+      expect(saved.rawContent, 'refreshed subscription payload');
+      expect(saved.outbounds.map((outbound) => outbound.tag), [
+        'leaf-1',
+        'leaf-2',
+      ]);
+    },
+  );
+
   test('keeps selected proxy group when group still has live children', () {
     const outbounds = [
       Outbound(

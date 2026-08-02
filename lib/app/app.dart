@@ -3522,7 +3522,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   }) async {
     try {
       await Future.wait<void>([
-        SubscriptionStore.saveMetadata(updatedSubscription),
+        SubscriptionStore.saveSelectedProxyMetadata(updatedSubscription),
         _persistState(),
       ]);
       if (prepareConfigSnapshot) {
@@ -3569,7 +3569,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     }
     if (activeSubscription.selectedProxyTag == tag) {
       await Future.wait<void>([
-        SubscriptionStore.saveMetadata(activeSubscription),
+        SubscriptionStore.saveSelectedProxyMetadata(activeSubscription),
         _persistState(),
       ]);
       return;
@@ -3591,7 +3591,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           'selected=$tag previous=${activeSubscription.selectedProxyTag}',
     );
     await Future.wait<void>([
-      SubscriptionStore.saveMetadata(updatedSubscription),
+      SubscriptionStore.saveSelectedProxyMetadata(updatedSubscription),
       _persistState(),
     ]);
   }
