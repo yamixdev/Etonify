@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
+import 'package:meow_client/core/network/remote_download_timeout.dart';
 
 class RussiaRouteDataStatus {
   const RussiaRouteDataStatus({
@@ -118,6 +119,20 @@ class RussiaRouteDataStatus {
   }
 }
 
+class RussiaRouteDataFile {
+  const RussiaRouteDataFile({
+    required this.name,
+    required this.sizeBytes,
+    required this.updatedAt,
+  });
+
+  final String name;
+  final int sizeBytes;
+  final DateTime updatedAt;
+
+  bool get isGeoIp => name.startsWith('geoip-');
+}
+
 class RussiaRouteCategoryMetadata {
   const RussiaRouteCategoryMetadata({
     this.etag,
@@ -210,8 +225,8 @@ class RussiaRouteDataService {
   static const _latestReleaseUrl =
       'https://api.github.com/repos/runetfreedom/russia-v2ray-rules-dat/releases/latest';
   static const _maxSingboxZipBytes = 80 * 1024 * 1024;
-  static const _connectTimeout = Duration(seconds: 10);
-  static const _responseTimeout = Duration(seconds: 20);
+  static const _connectTimeout = remoteDownloadIdleTimeout;
+  static const _responseTimeout = remoteDownloadIdleTimeout;
   static const domainListCommunitySourceName = 'v2fly/domain-list-community';
   static const _domainListCommunityRawBaseUrl =
       'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data';
@@ -368,6 +383,59 @@ class RussiaRouteDataService {
     } catch (_) {
       return const RussiaRouteDataStatus.unavailable();
     }
+  }
+
+  Future<List<RussiaRouteDataFile>> listInstalledFiles() async {
+    final paths = await _storagePaths();
+    final candidates = <_RussiaRouteDataFilePath>[
+      _RussiaRouteDataFilePath(
+        'geosite-ru-blocked.srs',
+        paths.geositeRuBlockedPath,
+      ),
+      _RussiaRouteDataFilePath(
+        'geosite-ru-available-only-inside.srs',
+        paths.geositeRuAvailableOnlyInsidePath,
+      ),
+      _RussiaRouteDataFilePath(
+        'geosite-category-ru.srs',
+        paths.geositeCategoryRuPath,
+      ),
+      _RussiaRouteDataFilePath(
+        'geoip-ru-blocked.srs',
+        paths.geoipRuBlockedPath,
+      ),
+      _RussiaRouteDataFilePath(
+        'geoip-ru-whitelist.srs',
+        paths.geoipRuWhitelistPath,
+      ),
+      _RussiaRouteDataFilePath('geoip-ru.srs', paths.geoipRuPath),
+      _RussiaRouteDataFilePath(
+        'ru-direct-services.srs',
+        paths.curatedDirectServicesPath,
+      ),
+      _RussiaRouteDataFilePath('ai-services.srs', paths.aiServicesPath),
+      _RussiaRouteDataFilePath('social-services.srs', paths.socialServicesPath),
+    ];
+    final installed = <RussiaRouteDataFile>[];
+    for (final candidate in candidates) {
+      final file = File(candidate.path);
+      try {
+        final stat = await file.stat();
+        if (stat.type != FileSystemEntityType.file || stat.size <= 4) {
+          continue;
+        }
+        installed.add(
+          RussiaRouteDataFile(
+            name: candidate.name,
+            sizeBytes: stat.size,
+            updatedAt: stat.modified,
+          ),
+        );
+      } on FileSystemException {
+        // A concurrent atomic update may replace a file between lookup and stat.
+      }
+    }
+    return installed;
   }
 
   bool _hasUsableRuleSet(File file) {
@@ -818,10 +886,18 @@ class RussiaRouteDataService {
     client.connectionTimeout = _connectTimeout;
     client.idleTimeout = _responseTimeout;
     try {
-      final request = await client.getUrl(uri).timeout(_connectTimeout);
+      final request = await awaitRemoteDownload(
+        client.getUrl(uri),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.connecting,
+      );
       request.headers.set(HttpHeaders.userAgentHeader, 'EtonifyRouteData/1');
       request.headers.set(HttpHeaders.acceptHeader, accept);
-      final response = await request.close().timeout(_responseTimeout);
+      final response = await awaitRemoteDownload(
+        request.close(),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException(
           'Failed to download route data: HTTP ${response.statusCode}',
@@ -833,7 +909,7 @@ class RussiaRouteDataService {
       final total = response.contentLength > 0
           ? response.contentLength
           : expectedBytes ?? 0;
-      await for (final chunk in response.timeout(_responseTimeout)) {
+      await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
         length += chunk.length;
         if (length > maxBytes) {
           throw HttpException('Route data download is too large', uri: uri);
@@ -1076,7 +1152,11 @@ class RussiaRouteDataService {
     final cacheFile = File(
       '$sourceDirectoryPath/${Uri.encodeComponent(category)}.txt',
     );
-    final request = await client.getUrl(uri).timeout(_connectTimeout);
+    final request = await awaitRemoteDownload(
+      client.getUrl(uri),
+      uri: uri,
+      phase: RemoteDownloadTimeoutPhase.connecting,
+    );
     request.headers.set(HttpHeaders.acceptHeader, 'text/plain,*/*');
     if (!force && cacheFile.existsSync()) {
       final etag = previousMetadata?.etag;
@@ -1088,7 +1168,11 @@ class RussiaRouteDataService {
         request.headers.set(HttpHeaders.ifModifiedSinceHeader, lastModified);
       }
     }
-    final response = await request.close().timeout(_responseTimeout);
+    final response = await awaitRemoteDownload(
+      request.close(),
+      uri: uri,
+      phase: RemoteDownloadTimeoutPhase.awaitingResponse,
+    );
     if (response.statusCode == HttpStatus.notModified &&
         cacheFile.existsSync()) {
       return _DownloadedCategory(
@@ -1105,7 +1189,7 @@ class RussiaRouteDataService {
     }
     final builder = BytesBuilder(copy: false);
     var length = 0;
-    await for (final chunk in response.timeout(_responseTimeout)) {
+    await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
       length += chunk.length;
       if (length > _maxDomainListCategoryBytes) {
         throw HttpException('Route category is too large', uri: uri);
@@ -1230,6 +1314,13 @@ class RussiaRouteDataService {
 
     return path;
   }
+}
+
+class _RussiaRouteDataFilePath {
+  const _RussiaRouteDataFilePath(this.name, this.path);
+
+  final String name;
+  final String path;
 }
 
 class _RussiaRouteStoragePaths {

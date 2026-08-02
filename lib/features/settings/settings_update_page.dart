@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
@@ -291,7 +292,9 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
           status: AppUpdateStatus.error,
           checkedAt: DateTime.now(),
           info: info,
-          error: error.toString(),
+          error:
+              remoteDownloadErrorMessage(AppLocalizations.of(context), error) ??
+              error.toString(),
         );
       });
     }

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
+import 'package:meow_client/core/network/remote_download_timeout.dart';
 
 enum AdBlockUpdateStage {
   connecting,
@@ -259,10 +260,21 @@ class AdBlockRuleSetService {
 
   Future<List<int>> _downloadSourceBytes(Stopwatch stopwatch) async {
     final client = HttpClient();
+    final uri = Uri.parse(sourceUrl);
     try {
-      final request = await client.getUrl(Uri.parse(sourceUrl));
+      client.connectionTimeout = remoteDownloadIdleTimeout;
+      client.idleTimeout = remoteDownloadIdleTimeout;
+      final request = await awaitRemoteDownload(
+        client.getUrl(uri),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.connecting,
+      );
       request.headers.set(HttpHeaders.acceptHeader, 'text/plain,*/*');
-      final response = await request.close();
+      final response = await awaitRemoteDownload(
+        request.close(),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException(
           'Failed to download adblock list: HTTP ${response.statusCode}',
@@ -284,7 +296,7 @@ class AdBlockRuleSetService {
         totalBytes: declaredLength > 0 ? declaredLength : 0,
         elapsedMilliseconds: stopwatch.elapsedMilliseconds,
       );
-      await for (final chunk in response) {
+      await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
         totalBytes += chunk.length;
         if (totalBytes > _maxSourceBytes) {
           throw HttpException(

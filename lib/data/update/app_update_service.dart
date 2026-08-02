@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
+import 'package:meow_client/core/network/remote_download_timeout.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
 import 'package:meow_client/logging/app_log_store.dart';
@@ -330,6 +331,7 @@ class AppUpdateService {
       'https://api.github.com/repos/$repositoryOwner/$repositoryName/releases/latest';
   static const _assetTokens = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
   static const _manifestAssetName = 'etonify-update.json';
+  static const _maxReleaseMetadataBytes = 1024 * 1024;
   Future<AppUpdateCheckResult>? _checkInFlight;
 
   Future<Box<dynamic>> _openBox() async {
@@ -648,21 +650,31 @@ class AppUpdateService {
 
   Future<Map<String, dynamic>> _fetchLatestRelease() async {
     final client = HttpClient();
+    final uri = Uri.parse(_latestReleaseUrl);
     try {
-      client.connectionTimeout = const Duration(seconds: 12);
-      final request = await client
-          .getUrl(Uri.parse(_latestReleaseUrl))
-          .timeout(const Duration(seconds: 15));
+      client.connectionTimeout = remoteDownloadIdleTimeout;
+      client.idleTimeout = remoteDownloadIdleTimeout;
+      final request = await awaitRemoteDownload(
+        client.getUrl(uri),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.connecting,
+      );
       request.headers.set('Accept', 'application/vnd.github+json');
       request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await request.close().timeout(
-        const Duration(seconds: 20),
+      final response = await awaitRemoteDownload(
+        request.close(),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
       );
-      final body = await utf8.decoder.bind(response).join();
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('GitHub returned HTTP ${response.statusCode}');
       }
-      final decoded = jsonDecode(body);
+      final bytes = await readRemoteDownloadBytes(
+        response,
+        uri: uri,
+        maximumBytes: _maxReleaseMetadataBytes,
+      );
+      final decoded = jsonDecode(utf8.decode(bytes, allowMalformed: false));
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('GitHub response is not an object.');
       }
@@ -687,22 +699,28 @@ class AppUpdateService {
     if (url == null || !url.hasScheme) return null;
     final client = HttpClient();
     try {
-      client.connectionTimeout = const Duration(seconds: 12);
-      final request = await client
-          .getUrl(url)
-          .timeout(const Duration(seconds: 15));
+      client.connectionTimeout = remoteDownloadIdleTimeout;
+      client.idleTimeout = remoteDownloadIdleTimeout;
+      final request = await awaitRemoteDownload(
+        client.getUrl(url),
+        uri: url,
+        phase: RemoteDownloadTimeoutPhase.connecting,
+      );
       request.headers.set('Accept', 'application/json');
       request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await request.close().timeout(
-        const Duration(seconds: 20),
+      final response = await awaitRemoteDownload(
+        request.close(),
+        uri: url,
+        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
       );
       if (response.statusCode != HttpStatus.ok) return null;
-      final bytes = await response.fold<List<int>>(<int>[], (all, chunk) {
-        if (all.length + chunk.length > 256 * 1024) {
-          throw const FormatException('Update manifest is too large.');
-        }
-        return all..addAll(chunk);
-      });
+      final bytes = await limitRemoteDownloadIdle(response, uri: url)
+          .fold<List<int>>(<int>[], (all, chunk) {
+            if (all.length + chunk.length > 256 * 1024) {
+              throw const FormatException('Update manifest is too large.');
+            }
+            return all..addAll(chunk);
+          });
       return AppUpdateManifest.fromJson(jsonDecode(utf8.decode(bytes)));
     } catch (error) {
       AppLogStore.warning('updates', 'Update manifest unavailable: $error');
@@ -791,13 +809,19 @@ class AppUpdateService {
     var downloaded = 0;
     var lastEmitAt = startedAt;
     try {
-      client.connectionTimeout = const Duration(seconds: 12);
-      final request = await client
-          .getUrl(Uri.parse(info.asset.downloadUrl))
-          .timeout(const Duration(seconds: 15));
+      final uri = Uri.parse(info.asset.downloadUrl);
+      client.connectionTimeout = remoteDownloadIdleTimeout;
+      client.idleTimeout = remoteDownloadIdleTimeout;
+      final request = await awaitRemoteDownload(
+        client.getUrl(uri),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.connecting,
+      );
       request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await request.close().timeout(
-        const Duration(seconds: 20),
+      final response = await awaitRemoteDownload(
+        request.close(),
+        uri: uri,
+        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
       );
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('Download returned HTTP ${response.statusCode}');
@@ -807,7 +831,7 @@ class AppUpdateService {
           : info.asset.sizeBytes;
       final sink = temp.openWrite();
       try {
-        await for (final chunk in response) {
+        await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
           downloaded += chunk.length;
           sink.add(chunk);
           final now = DateTime.now();
