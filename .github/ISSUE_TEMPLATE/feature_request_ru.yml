@@ -1,0 +1,34 @@
+name: "✨ Предложение — Русский"
+description: Предложить улучшение Etonify или новый сценарий использования.
+title: "[Предложение]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему решает предложение?
+      description: Опишите реальный сценарий, который сейчас неудобен или недоступен.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+      description: Опишите ожидаемое поведение без секретных данных подписки или серверов.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Какие варианты вы уже пробовали?
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверка перед отправкой
+      options:
+        - label: Я проверил, что похожее предложение ещё не создано.
+          required: true
+        - label: В сообщении нет ссылок подписок, ключей, паролей и других секретов.
+          required: true

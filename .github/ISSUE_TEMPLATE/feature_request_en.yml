@@ -1,0 +1,34 @@
+name: "✨ Feature — English"
+description: Suggest an Etonify improvement or a new use case.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe a real workflow that is currently difficult or unavailable.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the expected behavior without including private subscription or server data.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What alternatives have you tried?
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked that a similar request has not already been submitted.
+          required: true
+        - label: This request contains no subscription URLs, keys, passwords, or other secrets.
+          required: true

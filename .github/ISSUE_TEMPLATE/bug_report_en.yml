@@ -1,0 +1,78 @@
+name: "🐞 Bug — English"
+description: Report a reproducible Android client, subscription, or VPN problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Remove subscription URLs, UUIDs, keys, passwords, HWID, private server IP addresses, and other secrets from text and logs before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Etonify version
+      placeholder: For example, 0.3.0-beta.3
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: For example, Pixel 8, Android 16
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does the problem occur?
+      options:
+        - VPN connection, disconnection, or background operation
+        - Wi-Fi and mobile network switching
+        - DNS or routing
+        - Server selection or latency testing
+        - Subscription add, refresh, or import
+        - Application update or installation
+        - Application interface
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the result and whether the same server or subscription works in another client.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: List the actions in order, starting with launching Etonify.
+      placeholder: |
+        1. Opened Etonify…
+        2. Selected…
+        3. Observed…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Additional information
+      description: Attach a screenshot or a diagnostics export with secrets removed. Send large or private logs through the support link above.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked that a similar issue has not already been reported.
+          required: true
+        - label: I removed secrets and private infrastructure data from the report and attachments.
+          required: true

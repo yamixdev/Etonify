@@ -1,0 +1,78 @@
+name: "🐞 Ошибка — Русский"
+description: Сообщить о воспроизводимой ошибке Android-клиента, подписки или VPN.
+title: "[Баг]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за сообщение. Перед публикацией удалите из текста и логов ссылки подписок, UUID, ключи, пароли, HWID, IP-адреса частных серверов и другие секреты.
+  - type: input
+    id: version
+    attributes:
+      label: Версия Etonify
+      placeholder: Например, 0.3.0-beta.3
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Устройство и версия Android
+      placeholder: Например, Redmi Note 14 Pro, Android 15, HyperOS 2
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Где возникла проблема?
+      options:
+        - Подключение, отключение или работа VPN
+        - Переключение Wi-Fi и мобильной сети
+        - DNS или маршрутизация
+        - Выбор сервера или проверка задержки
+        - Добавление, обновление или импорт подписки
+        - Обновление или установка приложения
+        - Интерфейс приложения
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что произошло?
+      description: Опишите результат и сообщите, работает ли тот же сервер или подписка в другом клиенте.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Как воспроизвести?
+      description: Перечислите действия по порядку, начиная с запуска Etonify.
+      placeholder: |
+        1. Открыл Etonify…
+        2. Выбрал…
+        3. Получил…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Как должно работать?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Дополнительная информация
+      description: Приложите скриншот или очищенный от секретов экспорт диагностики. Большие и приватные логи лучше отправить через ссылку поддержки выше.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверка перед отправкой
+      options:
+        - label: Я проверил, что похожая проблема ещё не создана.
+          required: true
+        - label: Я удалил из сообщения и вложений секреты и данные частной инфраструктуры.
+          required: true
