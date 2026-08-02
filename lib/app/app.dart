@@ -4673,7 +4673,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   Future<void> _showChangelogSheet() async {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    unawaited(_refreshAppVersionInfo());
     await showModalBottomSheet<void>(
       context: navigator.context,
       isScrollControlled: true,
