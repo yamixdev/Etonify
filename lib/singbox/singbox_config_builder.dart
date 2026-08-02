@@ -1153,16 +1153,17 @@ class SingboxConfigBuilder {
   }
 
   Map<String, String> _dnsDialFields({required String server, String? detour}) {
+    final fields = <String, String>{};
     final normalizedDetour = _normalizeDnsDetour(detour);
     if (normalizedDetour != null) {
-      return {'detour': normalizedDetour};
+      fields['detour'] = normalizedDetour;
     }
     if (InternetAddress.tryParse(server) == null) {
-      // A direct encrypted DNS server cannot resolve its own hostname. Use
-      // Android's current-network resolver solely for this bootstrap lookup.
-      return const {'domain_resolver': 'dns-local'};
+      // A DNS server addressed by hostname still needs an independent
+      // bootstrap resolver, even when its requests use a proxy detour.
+      fields['domain_resolver'] = 'dns-local';
     }
-    return const {};
+    return fields;
   }
 
   String? _normalizeDnsDetour(String? detour) {

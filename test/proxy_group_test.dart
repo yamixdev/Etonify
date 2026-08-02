@@ -2290,6 +2290,7 @@ void main() {
     });
     expect(remoteDns('tcp://1.1.1.1')['type'], 'tcp');
     expect(remoteDns('tls://dns.google')['server_port'], 853);
+    expect(remoteDns('tls://dns.google')['domain_resolver'], 'dns-local');
     expect(remoteDns('https://dns.google/dns-query'), {
       'type': 'https',
       'tag': 'dns-remote',
@@ -2297,6 +2298,7 @@ void main() {
       'server_port': 443,
       'path': '/dns-query',
       'detour': 'select',
+      'domain_resolver': 'dns-local',
     });
 
     Map<String, dynamic> directDns(String directResolver) {
