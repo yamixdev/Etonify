@@ -26,10 +26,32 @@ void main() {
     await tester.tap(find.text('Правила трафика'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Российские сервисы напрямую'), findsOneWidget);
+    expect(find.text('.RU без VPN'), findsOneWidget);
     expect(find.text('Нейросети через VPN'), findsOneWidget);
     expect(find.text('Социальные сети через VPN'), findsOneWidget);
     expect(find.text('Правила от разработчика'), findsOneWidget);
+  });
+
+  testWidgets('developer traffic rules open a full rule card', (tester) async {
+    await _pumpPage(tester, const RussiaRouteDataStatus.unavailable());
+
+    await tester.tap(find.text('Правила трафика'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Правила от разработчика'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ПРОВЕРЕНО'), findsOneWidget);
+    await tester.tap(find.text('.RU без VPN'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ОПИСАНИЕ'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('DNS ДЛЯ .RU БЕЗ VPN'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('DNS ДЛЯ .RU БЕЗ VPN'), findsOneWidget);
+    expect(find.text('Использовать пресет'), findsOneWidget);
   });
 
   testWidgets('selected split app keeps name and package on separate rows', (
@@ -126,6 +148,7 @@ Future<void> _pumpPage(
         currentAdBlockStatus: const AdBlockRuleSetStatus.unavailable(),
         currentRussiaRouteDataStatus: routeStatus,
         currentTrafficRulePreset: TrafficRulePreset.none,
+        currentRussiaDnsDirectResolver: 'udp://77.88.8.8',
         currentBypassLocalNetwork: true,
         currentVpnInboundEnabled: true,
         currentSplitRoutingMode: splitRoutingMode,
@@ -138,10 +161,9 @@ Future<void> _pumpPage(
             const AdBlockRuleSetStatus.unavailable(),
         onDeleteAdBlockRuleSet: () async =>
             const AdBlockRuleSetStatus.unavailable(),
-        onInstallRussiaRouteData: () async => routeStatus,
-        onDeleteRussiaRouteData: () async =>
-            const RussiaRouteDataStatus.unavailable(),
+        onRefreshRoutingRuleData: () async => routeStatus,
         onTrafficRulePresetChanged: (_) {},
+        onRussiaDnsDirectResolverChanged: (_) {},
         onBypassLocalNetworkChanged: (_) {},
         onSplitRoutingModeChanged: (_) {},
         onSplitRoutingPackagesChanged: onSplitRoutingPackagesChanged ?? (_) {},

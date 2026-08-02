@@ -330,6 +330,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       _settings.experimentalInterruptExistingConnections;
   bool get _experimentalUrlTestStrictTolerance =>
       _settings.experimentalUrlTestStrictTolerance;
+  bool get _experimentalFakeIpEnabled => _settings.experimentalFakeIpEnabled;
 
   bool get _urlTestInFlight => _latencyCoordinator.isRunning;
 
@@ -4599,14 +4600,11 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           currentProxyPreset: _dnsProxyPreset,
           currentProxyResolver: _dnsProxyResolver,
           currentPreferIpv6: _dnsPreferIpv6,
-          currentRussiaDnsDirectResolver: _russiaDnsDirectResolver,
-          currentRussiaRouteDataEnabled: _useRussiaRouteData,
           onDirectPresetChanged: _setDnsDirectPreset,
           onDirectResolverChanged: _setDnsDirectResolver,
           onProxyPresetChanged: _setDnsProxyPreset,
           onProxyResolverChanged: _setDnsProxyResolver,
           onPreferIpv6Changed: _setDnsPreferIpv6,
-          onRussiaDnsDirectResolverChanged: _setRussiaDnsDirectResolver,
         ),
       ),
     );
@@ -4816,21 +4814,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     return status;
   }
 
-  Future<RussiaRouteDataStatus> _deleteRussiaRouteData() async {
-    final status = await RussiaRouteDataService.instance.deleteInstalled();
-    if (mounted) {
-      setState(() {
-        _russiaRouteDataStatus = status;
-      });
-      _applySettingsChange(
-        () => _settings.setTrafficRulePreset(TrafficRulePreset.none),
-      );
-    }
-    unawaited(_persistState());
-    _configCoordinator.emitCurrentConfigLog('russia route data deleted');
-    return status;
-  }
-
   Future<void> _updateRussiaRouteDataIfDue() async {
     final current = _russiaRouteDataStatus;
     if (!current.available || !current.needsDailyUpdate) {
@@ -4936,6 +4919,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     );
   }
 
+  void _setExperimentalFakeIpEnabled(bool value) {
+    _applySettingsChange(() => _settings.setExperimentalFakeIpEnabled(value));
+  }
+
   void _setTlsFragmentationMode(TlsFragmentationMode value) {
     _applySettingsChange(() => _settings.setTlsFragmentationMode(value));
   }
@@ -4959,6 +4946,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
             currentAdBlockStatus: _adBlockStatus,
             currentRussiaRouteDataStatus: _russiaRouteDataStatus,
             currentTrafficRulePreset: _trafficRulePreset,
+            currentRussiaDnsDirectResolver: _russiaDnsDirectResolver,
             currentBypassLocalNetwork: _bypassLocalNetwork,
             currentVpnInboundEnabled: _vpnInboundEnabled,
             currentSplitRoutingMode: _splitRoutingMode,
@@ -4969,9 +4957,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
             onAdBlockEnabledChanged: _setAdBlockEnabled,
             onDownloadAdBlockRuleSet: _downloadAdBlockRuleSet,
             onDeleteAdBlockRuleSet: _deleteAdBlockRuleSet,
-            onInstallRussiaRouteData: _installRussiaRouteData,
-            onDeleteRussiaRouteData: _deleteRussiaRouteData,
+            onRefreshRoutingRuleData: _installRussiaRouteData,
             onTrafficRulePresetChanged: _setTrafficRulePreset,
+            onRussiaDnsDirectResolverChanged: _setRussiaDnsDirectResolver,
             onPrepareTrafficRuleData: _prepareTrafficRuleData,
             onBypassLocalNetworkChanged: _setBypassLocalNetwork,
             onSplitRoutingModeChanged: _setSplitRoutingMode,
@@ -4997,6 +4985,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           currentInterruptExistingConnections:
               _experimentalInterruptExistingConnections,
           currentUrlTestStrictTolerance: _experimentalUrlTestStrictTolerance,
+          currentFakeIpEnabled: _experimentalFakeIpEnabled,
+          fakeIpAvailable:
+              _vpnInboundEnabled &&
+              _splitRoutingMode == SplitRoutingMode.disabled,
           currentTlsFragmentationMode: _tlsFragmentationMode,
           onTcpFastOpenChanged: _setExperimentalTcpFastOpen,
           onTcpMultiPathChanged: _setExperimentalTcpMultiPath,
@@ -5004,6 +4996,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
               _setExperimentalInterruptExistingConnections,
           onUrlTestStrictToleranceChanged:
               _setExperimentalUrlTestStrictTolerance,
+          onFakeIpEnabledChanged: _setExperimentalFakeIpEnabled,
           onTlsFragmentationModeChanged: _setTlsFragmentationMode,
         ),
       ),
@@ -5364,6 +5357,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       tlsFragmentationMode: _tlsFragmentationMode,
       interruptExistingConnections: _experimentalInterruptExistingConnections,
       urlTestStrictTolerance: _experimentalUrlTestStrictTolerance,
+      experimentalFakeIpEnabled: _experimentalFakeIpEnabled,
       markAllServersRussia: _activeSubscription?.markAllServersRussia ?? false,
       capabilities: _latencyCoordinator.capabilities,
     );

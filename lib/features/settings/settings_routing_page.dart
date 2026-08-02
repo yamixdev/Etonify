@@ -4,11 +4,13 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/features/settings/routing_rule_files_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -44,6 +46,7 @@ class SettingsRoutingPage extends StatefulWidget {
     required this.currentAdBlockStatus,
     required this.currentRussiaRouteDataStatus,
     this.currentTrafficRulePreset = TrafficRulePreset.none,
+    required this.currentRussiaDnsDirectResolver,
     required this.currentBypassLocalNetwork,
     required this.currentVpnInboundEnabled,
     required this.currentSplitRoutingMode,
@@ -54,10 +57,10 @@ class SettingsRoutingPage extends StatefulWidget {
     required this.onAdBlockEnabledChanged,
     required this.onDownloadAdBlockRuleSet,
     required this.onDeleteAdBlockRuleSet,
-    required this.onInstallRussiaRouteData,
-    required this.onDeleteRussiaRouteData,
+    required this.onRefreshRoutingRuleData,
     this.onTrafficRulePresetChanged,
     this.onPrepareTrafficRuleData,
+    required this.onRussiaDnsDirectResolverChanged,
     required this.onBypassLocalNetworkChanged,
     required this.onSplitRoutingModeChanged,
     required this.onSplitRoutingPackagesChanged,
@@ -68,6 +71,7 @@ class SettingsRoutingPage extends StatefulWidget {
   final AdBlockRuleSetStatus currentAdBlockStatus;
   final RussiaRouteDataStatus currentRussiaRouteDataStatus;
   final TrafficRulePreset currentTrafficRulePreset;
+  final String currentRussiaDnsDirectResolver;
   final bool currentBypassLocalNetwork;
   final bool currentVpnInboundEnabled;
   final SplitRoutingMode currentSplitRoutingMode;
@@ -78,11 +82,11 @@ class SettingsRoutingPage extends StatefulWidget {
   final ValueChanged<bool> onAdBlockEnabledChanged;
   final Future<AdBlockRuleSetStatus> Function() onDownloadAdBlockRuleSet;
   final Future<AdBlockRuleSetStatus> Function() onDeleteAdBlockRuleSet;
-  final Future<RussiaRouteDataStatus> Function() onInstallRussiaRouteData;
-  final Future<RussiaRouteDataStatus> Function() onDeleteRussiaRouteData;
+  final Future<RussiaRouteDataStatus> Function() onRefreshRoutingRuleData;
   final ValueChanged<TrafficRulePreset>? onTrafficRulePresetChanged;
   final Future<RussiaRouteDataStatus> Function(TrafficRulePreset preset)?
   onPrepareTrafficRuleData;
+  final ValueChanged<String> onRussiaDnsDirectResolverChanged;
   final ValueChanged<bool> onBypassLocalNetworkChanged;
   final ValueChanged<SplitRoutingMode> onSplitRoutingModeChanged;
   final ValueChanged<List<String>> onSplitRoutingPackagesChanged;
@@ -237,7 +241,12 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   }
 
   void _showOperationError(Object error) {
-    AppNotice.show(context, error.toString(), tone: AppNoticeTone.error);
+    final l10n = AppLocalizations.of(context);
+    AppNotice.show(
+      context,
+      remoteDownloadErrorMessage(l10n, error) ?? error.toString(),
+      tone: AppNoticeTone.error,
+    );
   }
 
   Future<void> _openTrafficRules() async {
@@ -250,11 +259,24 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
         builder: (context) => TrafficRulesPage(
           currentPreset: widget.currentTrafficRulePreset,
           currentStatus: widget.currentRussiaRouteDataStatus,
+          currentRussiaDnsDirectResolver: widget.currentRussiaDnsDirectResolver,
           onPrepareRuleData:
               widget.onPrepareTrafficRuleData ??
-              (_) => widget.onInstallRussiaRouteData(),
-          onDeleteRuleData: widget.onDeleteRussiaRouteData,
+              (_) => widget.onRefreshRoutingRuleData(),
           onPresetChanged: onPresetChanged,
+          onRussiaDnsDirectResolverChanged:
+              widget.onRussiaDnsDirectResolverChanged,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRoutingRuleFiles() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => RoutingRuleFilesPage(
+          currentStatus: widget.currentRussiaRouteDataStatus,
+          onRefresh: widget.onRefreshRoutingRuleData,
         ),
       ),
     );
@@ -482,6 +504,34 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                 onTap: widget.onTrafficRulePresetChanged == null
                     ? null
                     : _openTrafficRules,
+              ),
+            ),
+            const Gap(settingsIslandGap),
+            Card(
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: SettingsLeadingIcon(
+                  icon: Icons.folder_copy_rounded,
+                  color: cs.primary,
+                ),
+                title: Text(l10n.routingRuleFilesSettingsTitle),
+                subtitle: Text(
+                  widget.currentRussiaRouteDataStatus.available
+                      ? l10n.routingRuleFilesSettingsReady(
+                          widget
+                              .currentRussiaRouteDataStatus
+                              .verifiedFiles
+                              .length,
+                        )
+                      : l10n.routingRuleFilesSettingsPreparing,
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _openRoutingRuleFiles,
               ),
             ),
             const Gap(settingsIslandGap),

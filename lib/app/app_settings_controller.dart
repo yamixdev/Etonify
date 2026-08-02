@@ -98,6 +98,7 @@ class AppSettingsController {
   bool experimentalTcpMultiPath = false;
   bool experimentalInterruptExistingConnections = true;
   bool experimentalUrlTestStrictTolerance = true;
+  bool experimentalFakeIpEnabled = false;
 
   ThemeMode get themeMode => switch (themePreference) {
     AppThemePreference.dark => ThemeMode.dark,
@@ -189,6 +190,7 @@ class AppSettingsController {
       experimentalInterruptExistingConnections:
           experimentalInterruptExistingConnections,
       experimentalUrlTestStrictTolerance: experimentalUrlTestStrictTolerance,
+      experimentalFakeIpEnabled: experimentalFakeIpEnabled,
     );
   }
 
@@ -273,6 +275,10 @@ class AppSettingsController {
         state.experimentalInterruptExistingConnections;
     experimentalUrlTestStrictTolerance =
         state.experimentalUrlTestStrictTolerance;
+    experimentalFakeIpEnabled =
+        state.experimentalFakeIpEnabled &&
+        vpnInboundEnabled &&
+        splitRoutingMode == SplitRoutingMode.disabled;
     applyPerformanceModePreset(performanceMode);
   }
 
@@ -404,10 +410,14 @@ class AppSettingsController {
   }
 
   AppSettingsChange setVpnInboundEnabled(bool value) {
-    if (vpnInboundEnabled == value) {
+    final disableFakeIp = !value && experimentalFakeIpEnabled;
+    if (vpnInboundEnabled == value && !disableFakeIp) {
       return const AppSettingsChange.none();
     }
     vpnInboundEnabled = value;
+    if (disableFakeIp) {
+      experimentalFakeIpEnabled = false;
+    }
     if (!vpnInboundEnabled && !proxyInboundEnabled) {
       proxyInboundEnabled = true;
     }
@@ -786,10 +796,15 @@ class AppSettingsController {
   }
 
   AppSettingsChange setSplitRoutingMode(SplitRoutingMode value) {
-    if (splitRoutingMode == value) {
+    final disableFakeIp =
+        value != SplitRoutingMode.disabled && experimentalFakeIpEnabled;
+    if (splitRoutingMode == value && !disableFakeIp) {
       return const AppSettingsChange.none();
     }
     splitRoutingMode = value;
+    if (disableFakeIp) {
+      experimentalFakeIpEnabled = false;
+    }
     return const AppSettingsChange(
       changed: true,
       configReason: 'split routing mode changed',
@@ -860,6 +875,22 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'experimental urltest strict tolerance changed',
+    );
+  }
+
+  AppSettingsChange setExperimentalFakeIpEnabled(bool value) {
+    final normalized =
+        value &&
+        vpnInboundEnabled &&
+        splitRoutingMode == SplitRoutingMode.disabled;
+    if (experimentalFakeIpEnabled == normalized) {
+      return const AppSettingsChange.none();
+    }
+    experimentalFakeIpEnabled = normalized;
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'experimental fakeip changed',
+      forceFullServiceRestart: true,
     );
   }
 

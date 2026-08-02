@@ -28,8 +28,6 @@ class _DnsSettingsHarnessState extends State<_DnsSettingsHarness> {
       currentProxyPreset: 'device',
       currentProxyResolver: 'device://network',
       currentPreferIpv6: false,
-      currentRussiaDnsDirectResolver: 'udp://1.1.1.1',
-      currentRussiaRouteDataEnabled: false,
       onDirectPresetChanged: (_) {},
       onDirectResolverChanged: (value) {
         setState(() {
@@ -40,7 +38,6 @@ class _DnsSettingsHarnessState extends State<_DnsSettingsHarness> {
       onProxyPresetChanged: (_) {},
       onProxyResolverChanged: (_) {},
       onPreferIpv6Changed: (_) {},
-      onRussiaDnsDirectResolverChanged: (_) {},
     );
   }
 }

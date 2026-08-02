@@ -128,6 +128,24 @@ void main() {
     expect(packagesChange.forceFullServiceRestart, isTrue);
   });
 
+  test('FakeIP is limited to full VPN TUN and restarts the service', () {
+    final controller = AppSettingsController();
+
+    final enabled = controller.setExperimentalFakeIpEnabled(true);
+    expect(enabled.changed, isTrue);
+    expect(enabled.forceFullServiceRestart, isTrue);
+    expect(controller.experimentalFakeIpEnabled, isTrue);
+
+    controller.setSplitRoutingMode(SplitRoutingMode.proxySelected);
+    expect(controller.experimentalFakeIpEnabled, isFalse);
+    expect(controller.setExperimentalFakeIpEnabled(true).changed, isFalse);
+
+    controller.setSplitRoutingMode(SplitRoutingMode.disabled);
+    controller.setExperimentalFakeIpEnabled(true);
+    controller.setVpnInboundEnabled(false);
+    expect(controller.experimentalFakeIpEnabled, isFalse);
+  });
+
   test('toState keeps external runtime selection fields supplied by app', () {
     final controller = AppSettingsController()
       ..setLocale('ru')
@@ -148,6 +166,7 @@ void main() {
     expect(state.selectedProxyTag, 'vless-1');
     expect(state.localeCode, 'ru');
     expect(state.tlsFragmentationMode, TlsFragmentationMode.record);
+    expect(state.experimentalFakeIpEnabled, isFalse);
   });
 
   test('connection mode never leaves the runtime without an inbound', () {

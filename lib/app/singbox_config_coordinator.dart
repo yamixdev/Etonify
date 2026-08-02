@@ -70,6 +70,7 @@ class SingboxConfigCoordinatorSnapshot {
     required this.tlsFragmentationMode,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
+    this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
     this.snowtunBinaryPath,
@@ -126,6 +127,7 @@ class SingboxConfigCoordinatorSnapshot {
   final TlsFragmentationMode tlsFragmentationMode;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
+  final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
   final String? snowtunBinaryPath;
@@ -696,6 +698,7 @@ class SingboxConfigCoordinator {
       tlsFragmentationMode: snapshot.tlsFragmentationMode,
       interruptExistingConnections: snapshot.interruptExistingConnections,
       urlTestStrictTolerance: snapshot.urlTestStrictTolerance,
+      experimentalFakeIpEnabled: snapshot.experimentalFakeIpEnabled,
       markAllServersRussia: snapshot.markAllServersRussia,
       capabilities: snapshot.capabilities,
       snowtunBinaryPath: snapshot.snowtunBinaryPath,

@@ -2,7 +2,9 @@ package com.etonify.meow_client.singbox
 
 import io.nekohasekai.libbox.StringIterator
 
-internal const val MAX_SPLIT_TUNNEL_PACKAGE_COUNT = 128
+// One additional entry is reserved for Etonify itself when the user enables
+// "Through VPN" split routing. User settings remain capped at 128 packages.
+internal const val MAX_SPLIT_TUNNEL_PACKAGE_COUNT = 129
 
 internal data class SplitTunnelPackages(
     val included: List<String>,

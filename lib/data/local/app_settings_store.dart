@@ -190,6 +190,7 @@ class AppSettingsState {
     required this.experimentalTcpMultiPath,
     required this.experimentalInterruptExistingConnections,
     required this.experimentalUrlTestStrictTolerance,
+    this.experimentalFakeIpEnabled = false,
   });
 
   final int coreConfigSchemaVersion;
@@ -250,6 +251,7 @@ class AppSettingsState {
   final bool experimentalTcpMultiPath;
   final bool experimentalInterruptExistingConnections;
   final bool experimentalUrlTestStrictTolerance;
+  final bool experimentalFakeIpEnabled;
 
   AppSettingsState copyWith({
     int? coreConfigSchemaVersion,
@@ -310,6 +312,7 @@ class AppSettingsState {
     bool? experimentalTcpMultiPath,
     bool? experimentalInterruptExistingConnections,
     bool? experimentalUrlTestStrictTolerance,
+    bool? experimentalFakeIpEnabled,
   }) {
     return AppSettingsState(
       coreConfigSchemaVersion:
@@ -392,6 +395,8 @@ class AppSettingsState {
       experimentalUrlTestStrictTolerance:
           experimentalUrlTestStrictTolerance ??
           this.experimentalUrlTestStrictTolerance,
+      experimentalFakeIpEnabled:
+          experimentalFakeIpEnabled ?? this.experimentalFakeIpEnabled,
     );
   }
 }
@@ -468,6 +473,7 @@ abstract class AppSettingsStore {
       'experimental_interrupt_existing_connections';
   static const _experimentalUrlTestStrictToleranceKey =
       'experimental_urltest_strict_tolerance';
+  static const _experimentalFakeIpEnabledKey = 'experimental_fake_ip_enabled';
 
   Future<AppSettingsState> loadState();
 
@@ -525,6 +531,7 @@ abstract class AppSettingsStore {
     _experimentalTcpMultiPathKey,
     _experimentalInterruptExistingConnectionsKey,
     _experimentalUrlTestStrictToleranceKey,
+    _experimentalFakeIpEnabledKey,
   };
 
   Map<String, dynamic> stateToSafeExportMap(AppSettingsState state) {
@@ -795,6 +802,10 @@ abstract class AppSettingsStore {
         _experimentalUrlTestStrictToleranceKey,
         defaultValue: true,
       ),
+      experimentalFakeIpEnabled: boolValue(
+        _experimentalFakeIpEnabledKey,
+        defaultValue: false,
+      ),
     );
   }
 
@@ -883,6 +894,9 @@ abstract class AppSettingsStore {
           state.experimentalInterruptExistingConnections ? '1' : '0',
       _experimentalUrlTestStrictToleranceKey:
           state.experimentalUrlTestStrictTolerance ? '1' : '0',
+      _experimentalFakeIpEnabledKey: state.experimentalFakeIpEnabled
+          ? '1'
+          : '0',
     };
   }
 }

@@ -8,6 +8,12 @@ import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 class SingboxConfigBuilder {
+  // Etonify downloads rule data and OTA files with Dart's HttpClient. In
+  // include-package split routing, the app itself would otherwise bypass the
+  // selected VPN. This is an internal TUN entry only and is never shown as a
+  // user-selected application. Core outbound sockets are VpnService.protect()-ed
+  // by MeowVpnPlatformInterface, so they do not loop back into this TUN.
+  static const _applicationPackageName = 'com.etonify.meow_client';
   static const List<String> _russiaDirectDomainSuffixes = ['ru', 'su', 'рф'];
   static const String _snowtunProtectPath =
       '@com.etonify.meow_client.snowtun.protect';
@@ -59,6 +65,7 @@ class SingboxConfigBuilder {
     required this.tlsFragmentationMode,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
+    this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
     this.snowtunBinaryPath,
@@ -110,6 +117,7 @@ class SingboxConfigBuilder {
   final TlsFragmentationMode tlsFragmentationMode;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
+  final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
   final String? snowtunBinaryPath;
@@ -213,9 +221,19 @@ class SingboxConfigBuilder {
         vpnInboundEnabled &&
         splitRoutingMode != SplitRoutingMode.disabled &&
         normalizedSplitRoutingPackages.isNotEmpty;
+    // Android installs the VPN DNS address system-wide. FakeIP is therefore
+    // intentionally limited to the full-TUN mode: excluded split-tunnel apps
+    // must never receive an address that only the Etonify core can resolve.
+    final fakeIpActive =
+        experimentalFakeIpEnabled &&
+        vpnInboundEnabled &&
+        splitRoutingMode == SplitRoutingMode.disabled;
     final tunIncludePackages =
         splitRoutingMode == SplitRoutingMode.proxySelected && tunSplitActive
-        ? normalizedSplitRoutingPackages
+        ? <String>{
+            ...normalizedSplitRoutingPackages,
+            _applicationPackageName,
+          }.toList(growable: false)
         : const <String>[];
     final tunExcludePackages =
         splitRoutingMode == SplitRoutingMode.bypassSelected && tunSplitActive
@@ -292,13 +310,21 @@ class SingboxConfigBuilder {
                 ),
                 detour: 'direct',
               ),
+            if (fakeIpActive)
+              const <String, Object>{
+                'type': 'fakeip',
+                'tag': 'dns-fakeip',
+                'inet4_range': '198.18.0.0/15',
+                'inet6_range': 'fc00::/18',
+              },
             const <String, Object>{'type': 'local', 'tag': 'dns-local'},
           ],
           if (russiaRouteDataActive ||
               russiaCuratedDirectServicesActive ||
               aiServicesActive ||
               socialServicesActive ||
-              adBlockActive)
+              adBlockActive ||
+              fakeIpActive)
             'rules': [
               if (russiaRouteDataActive)
                 {
@@ -355,6 +381,15 @@ class SingboxConfigBuilder {
                   'rule_set': 'adblock-block',
                   'action': 'reject',
                   'method': 'default',
+                },
+              // Keep explicit DNS rules above this catch-all. FakeIP must not
+              // become the default resolver because the core itself also
+              // resolves proxy endpoints and bootstrap hostnames.
+              if (fakeIpActive)
+                {
+                  'query_type': ['A', 'AAAA'],
+                  'action': 'route',
+                  'server': 'dns-fakeip',
                 },
             ],
           'final': dnsFinal,

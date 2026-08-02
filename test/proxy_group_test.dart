@@ -733,6 +733,67 @@ void main() {
     expect(tls.containsKey('record_fragment'), isFalse);
   });
 
+  test('FakeIP is generated only for the full VPN TUN', () {
+    const subscription = Subscription(
+      id: 'fakeip-sub',
+      name: 'FakeIP',
+      url: 'file:///fakeip.json',
+      outbounds: [
+        Outbound(
+          tag: 'node',
+          name: 'Node',
+          config: {
+            'type': 'vless',
+            'tag': 'node',
+            'server': 'node.example.com',
+            'server_port': 443,
+            'uuid': 'node-uuid',
+          },
+        ),
+      ],
+    );
+
+    final fullTunConfig = _defaultBuilder(
+      subscription,
+      vpnInboundEnabled: true,
+      experimentalFakeIpEnabled: true,
+    ).build();
+    final fullTunDns = (fullTunConfig['dns'] as Map).cast<String, dynamic>();
+    final fullTunServers = (fullTunDns['servers'] as List).cast<Map>();
+    final fullTunRules = (fullTunDns['rules'] as List).cast<Map>();
+
+    expect(
+      fullTunServers.any(
+        (server) =>
+            server['type'] == 'fakeip' &&
+            server['tag'] == 'dns-fakeip' &&
+            server['inet4_range'] == '198.18.0.0/15',
+      ),
+      isTrue,
+    );
+    final fakeIpRule = fullTunRules.firstWhere(
+      (rule) => rule['server'] == 'dns-fakeip',
+    );
+    expect(fakeIpRule['query_type'], ['A', 'AAAA']);
+    expect(fullTunDns['final'], 'dns-remote');
+
+    final splitTunConfig = _defaultBuilder(
+      subscription,
+      vpnInboundEnabled: true,
+      experimentalFakeIpEnabled: true,
+      splitRoutingMode: SplitRoutingMode.proxySelected,
+      splitRoutingPackages: const ['com.example.app'],
+    ).build();
+    final splitTunDns = (splitTunConfig['dns'] as Map).cast<String, dynamic>();
+    final splitTunServers = (splitTunDns['servers'] as List).cast<Map>();
+
+    expect(
+      splitTunServers.any((server) => server['tag'] == 'dns-fakeip'),
+      isFalse,
+    );
+    expect(splitTunDns.containsKey('rules'), isFalse);
+  });
+
   test('hides group-only chain hop from proxy list and lowest', () {
     const subscription = Subscription(
       id: 'sub',
@@ -1781,7 +1842,10 @@ void main() {
     final tunInbound = (config['inbounds'] as List).cast<Map>().firstWhere(
       (inbound) => inbound['type'] == 'tun',
     );
-    expect(tunInbound['include_package'], ['com.example.app']);
+    expect(tunInbound['include_package'], [
+      'com.example.app',
+      'com.etonify.meow_client',
+    ]);
     expect(tunInbound.containsKey('exclude_package'), isFalse);
     expect(tunInbound['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
 
@@ -2420,6 +2484,7 @@ SingboxConfigBuilder _defaultBuilder(
   int urlTestConcurrency = 30,
   int urlTestUnavailableCheckIntervalSeconds = 5,
   bool urlTestStrictTolerance = true,
+  bool experimentalFakeIpEnabled = false,
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled,
   bool vpnInboundEnabled = false,
   bool proxyInboundEnabled = false,
@@ -2500,6 +2565,7 @@ SingboxConfigBuilder _defaultBuilder(
     tlsFragmentationMode: tlsFragmentationMode,
     interruptExistingConnections: true,
     urlTestStrictTolerance: urlTestStrictTolerance,
+    experimentalFakeIpEnabled: experimentalFakeIpEnabled,
     markAllServersRussia: markAllServersRussia,
     capabilities: capabilities,
   );

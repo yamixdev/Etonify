@@ -102,6 +102,7 @@ class SingboxConfigBuildInput {
     required this.tlsFragmentationMode,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
+    this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
     required this.snowtunBinaryPath,
@@ -155,6 +156,7 @@ class SingboxConfigBuildInput {
   final TlsFragmentationMode tlsFragmentationMode;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
+  final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
   final String? snowtunBinaryPath;
@@ -441,6 +443,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     tlsFragmentationMode: input.tlsFragmentationMode,
     interruptExistingConnections: input.interruptExistingConnections,
     urlTestStrictTolerance: input.urlTestStrictTolerance,
+    experimentalFakeIpEnabled: input.experimentalFakeIpEnabled,
     markAllServersRussia: input.markAllServersRussia,
     capabilities: input.capabilities,
     snowtunBinaryPath: input.snowtunBinaryPath,

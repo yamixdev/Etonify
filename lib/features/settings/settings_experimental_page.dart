@@ -12,11 +12,14 @@ class SettingsExperimentalPage extends StatelessWidget {
     required this.currentTcpMultiPath,
     required this.currentInterruptExistingConnections,
     required this.currentUrlTestStrictTolerance,
+    required this.currentFakeIpEnabled,
+    required this.fakeIpAvailable,
     required this.currentTlsFragmentationMode,
     required this.onTcpFastOpenChanged,
     required this.onTcpMultiPathChanged,
     required this.onInterruptExistingConnectionsChanged,
     required this.onUrlTestStrictToleranceChanged,
+    required this.onFakeIpEnabledChanged,
     required this.onTlsFragmentationModeChanged,
   });
 
@@ -24,11 +27,14 @@ class SettingsExperimentalPage extends StatelessWidget {
   final bool currentTcpMultiPath;
   final bool currentInterruptExistingConnections;
   final bool currentUrlTestStrictTolerance;
+  final bool currentFakeIpEnabled;
+  final bool fakeIpAvailable;
   final TlsFragmentationMode currentTlsFragmentationMode;
   final ValueChanged<bool> onTcpFastOpenChanged;
   final ValueChanged<bool> onTcpMultiPathChanged;
   final ValueChanged<bool> onInterruptExistingConnectionsChanged;
   final ValueChanged<bool> onUrlTestStrictToleranceChanged;
+  final ValueChanged<bool> onFakeIpEnabledChanged;
   final ValueChanged<TlsFragmentationMode> onTlsFragmentationModeChanged;
 
   String _tlsFragmentationModeLabel(
@@ -142,6 +148,20 @@ class SettingsExperimentalPage extends StatelessWidget {
                     subtitle: Text(l10n.experimentalTcpMultiPathSubtitle),
                     value: currentTcpMultiPath,
                     onChanged: onTcpMultiPathChanged,
+                  ),
+                  SwitchListTile(
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.dns_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.experimentalFakeIpTitle),
+                    subtitle: Text(
+                      fakeIpAvailable
+                          ? l10n.experimentalFakeIpSubtitle
+                          : l10n.experimentalFakeIpUnavailableSubtitle,
+                    ),
+                    value: fakeIpAvailable && currentFakeIpEnabled,
+                    onChanged: fakeIpAvailable ? onFakeIpEnabledChanged : null,
                   ),
                 ],
               ),
