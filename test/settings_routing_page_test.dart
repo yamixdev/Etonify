@@ -18,7 +18,7 @@ void main() {
     expect(find.text('Умная маршрутизация'), findsNothing);
   });
 
-  testWidgets('traffic rules show three verified developer presets', (
+  testWidgets('traffic rules show three presets without duplicate navigation', (
     tester,
   ) async {
     await _pumpPage(tester, const RussiaRouteDataStatus.unavailable());
@@ -29,19 +29,24 @@ void main() {
     expect(find.text('.RU без VPN'), findsOneWidget);
     expect(find.text('Нейросети через VPN'), findsOneWidget);
     expect(find.text('Социальные сети через VPN'), findsOneWidget);
-    expect(find.text('Правила от разработчика'), findsOneWidget);
+    expect(find.text('Правила от разработчика'), findsNothing);
+    expect(
+      find.text(
+        'Одновременно можно включить только одно правило трафика — так правила не конфликтуют между собой.',
+      ),
+      findsNothing,
+    );
+    expect(find.text('🇷🇺'), findsOneWidget);
   });
 
-  testWidgets('developer traffic rules open a full rule card', (tester) async {
+  testWidgets('traffic rule card opens details and developer profile', (
+    tester,
+  ) async {
     await _pumpPage(tester, const RussiaRouteDataStatus.unavailable());
 
     await tester.tap(find.text('Правила трафика'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Правила от разработчика'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('ПРОВЕРЕНО'), findsOneWidget);
-    await tester.tap(find.text('.RU без VPN'));
+    await tester.tap(find.byIcon(Icons.info_outline_rounded).first);
     await tester.pumpAndSettle();
 
     expect(find.text('ОПИСАНИЕ'), findsOneWidget);
@@ -52,6 +57,25 @@ void main() {
     );
     expect(find.text('DNS ДЛЯ .RU БЕЗ VPN'), findsOneWidget);
     expect(find.text('Использовать пресет'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('yamixdev'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('yamixdev'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bio'), findsOneWidget);
+    expect(find.text('Telegram'), findsOneWidget);
+    expect(find.text('GitHub'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Проверено'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Проверено MeowTeam. Создано официальным разработчиком.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('selected split app keeps name and package on separate rows', (

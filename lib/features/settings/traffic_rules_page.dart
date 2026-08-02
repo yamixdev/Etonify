@@ -6,6 +6,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/features/settings/developer_profile_sheet.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
@@ -167,42 +168,6 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
     return result;
   }
 
-  Future<void> _openDeveloperRules() async {
-    await Navigator.of(context).push<void>(
-      _trafficRuleRoute(
-        _DeveloperTrafficRulesPage(
-          currentPreset: _currentPreset,
-          onOpenDetails: _openDetails,
-        ),
-      ),
-    );
-  }
-
-  void _showVerifiedInfo() {
-    final l10n = AppLocalizations.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.trafficRulesVerified,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const Gap(8),
-              Text(l10n.trafficRulesVerifiedInfo),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -247,7 +212,7 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
                         if (!value) {
                           _applyPreset(TrafficRulePreset.none);
                         } else {
-                          _openDeveloperRules();
+                          _applyPreset(TrafficRulePreset.russianServicesDirect);
                         }
                       },
               ),
@@ -285,39 +250,6 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
               ),
               const Gap(settingsIslandGap),
             ],
-            Card(
-              margin: EdgeInsets.zero,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: _openDeveloperRules,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: SettingsLeadingIcon(
-                    icon: Icons.verified_user_outlined,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.trafficRulesDeveloperSection),
-                  subtitle: Text(l10n.trafficRulesDeveloperSubtitle),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                ),
-              ),
-            ),
-            const Gap(settingsIslandGap),
-            Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                leading: const Icon(Icons.info_outline_rounded),
-                title: Text(l10n.trafficRulesOnlyOne),
-                trailing: IconButton(
-                  tooltip: l10n.trafficRulesVerified,
-                  onPressed: _showVerifiedInfo,
-                  icon: const Icon(Icons.verified_outlined),
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -456,184 +388,6 @@ class _TrafficRuleQuickCard extends StatelessWidget {
   }
 }
 
-class _DeveloperTrafficRulesPage extends StatefulWidget {
-  const _DeveloperTrafficRulesPage({
-    required this.currentPreset,
-    required this.onOpenDetails,
-  });
-
-  final TrafficRulePreset currentPreset;
-  final Future<TrafficRulePreset?> Function(
-    TrafficRulePresetDefinition definition,
-  )
-  onOpenDetails;
-
-  @override
-  State<_DeveloperTrafficRulesPage> createState() =>
-      _DeveloperTrafficRulesPageState();
-}
-
-class _DeveloperTrafficRulesPageState
-    extends State<_DeveloperTrafficRulesPage> {
-  late TrafficRulePreset _currentPreset;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentPreset = widget.currentPreset;
-  }
-
-  Future<void> _open(TrafficRulePresetDefinition definition) async {
-    final selectedPreset = await widget.onOpenDetails(definition);
-    if (mounted) {
-      setState(() {
-        if (selectedPreset != null) {
-          _currentPreset = selectedPreset;
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return ProgressiveBlurScaffold(
-      appBar: AppBar(title: Text(l10n.trafficRulesDeveloperSection)),
-      body: Theme(
-        data: settingsTileTheme(context),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            settingsScreenPadding.left,
-            progressiveHeaderTopPadding(context, settingsScreenPadding.top),
-            settingsScreenPadding.right,
-            appBottomSafePadding(context, settingsScreenPadding.bottom),
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                l10n.trafficRulesVerified.toUpperCase(),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .5,
-                ),
-              ),
-            ),
-            const Gap(settingsSectionLabelGap),
-            Card(
-              margin: EdgeInsets.zero,
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  for (
-                    var index = 0;
-                    index < trafficRulePresetDefinitions.values.length;
-                    index++
-                  ) ...[
-                    _DeveloperTrafficRuleTile(
-                      definition: trafficRulePresetDefinitions.values.elementAt(
-                        index,
-                      ),
-                      selected:
-                          trafficRulePresetDefinitions.values
-                              .elementAt(index)
-                              .preset ==
-                          _currentPreset,
-                      onTap: () => _open(
-                        trafficRulePresetDefinitions.values.elementAt(index),
-                      ),
-                    ),
-                    if (index < trafficRulePresetDefinitions.values.length - 1)
-                      const Divider(height: 1, indent: 76),
-                  ],
-                ],
-              ),
-            ),
-            const Gap(settingsIslandGap),
-            Text(
-              l10n.trafficRulesOnlyOne,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DeveloperTrafficRuleTile extends StatelessWidget {
-  const _DeveloperTrafficRuleTile({
-    required this.definition,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final TrafficRulePresetDefinition definition;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final accent = _accentFor(cs, definition.preset);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-        child: Row(
-          children: [
-            _PresetGlyph(preset: definition.preset, accent: accent),
-            const Gap(12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _titleFor(l10n, definition.preset),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const Gap(6),
-                      Icon(Icons.verified_rounded, size: 18, color: cs.primary),
-                    ],
-                  ),
-                  const Gap(3),
-                  Text(
-                    _subtitleFor(l10n, definition.preset),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (selected)
-              Icon(Icons.check_circle_rounded, color: accent)
-            else
-              const Icon(Icons.chevron_right_rounded),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _TrafficRuleDetailsPage extends StatefulWidget {
   const _TrafficRuleDetailsPage({
     required this.definition,
@@ -749,6 +503,7 @@ class _TrafficRuleDetailsPageState extends State<_TrafficRuleDetailsPage> {
     final cs = theme.colorScheme;
     final accent = _accentFor(cs, widget.definition.preset);
     final preview = _previewFor(l10n, widget.definition.preset);
+    final author = AppDevelopers.yamixdev(l10n);
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.trafficRulesDetails)),
@@ -789,19 +544,9 @@ class _TrafficRuleDetailsPageState extends State<_TrafficRuleDetailsPage> {
                     const Gap(settingsIslandGap),
                     _DetailsSection(
                       label: l10n.trafficRulesAuthor,
-                      child: Row(
-                        children: [
-                          Icon(Icons.verified_rounded, color: cs.primary),
-                          const Gap(10),
-                          Expanded(
-                            child: Text(
-                              'yamixdev',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: _DeveloperAuthorButton(
+                        profile: author,
+                        onTap: () => showDeveloperProfileSheet(context, author),
                       ),
                     ),
                     const Gap(settingsIslandGap),
@@ -977,6 +722,74 @@ class _RuleHero extends StatelessWidget {
   }
 }
 
+class _DeveloperAuthorButton extends StatelessWidget {
+  const _DeveloperAuthorButton({required this.profile, required this.onTap});
+
+  final DeveloperProfile profile;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: cs.surfaceContainerHighest,
+              backgroundImage: ResizeImage(
+                AssetImage(profile.avatarAsset),
+                width: 128,
+                height: 128,
+              ),
+            ),
+            const Gap(12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          profile.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const Gap(5),
+                      Icon(Icons.verified_rounded, color: cs.primary, size: 19),
+                    ],
+                  ),
+                  const Gap(2),
+                  Text(
+                    profile.role,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Gap(8),
+            const Icon(Icons.chevron_right_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DetailsSection extends StatelessWidget {
   const _DetailsSection({required this.label, required this.child});
 
@@ -1142,7 +955,7 @@ class _PresetGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = switch (preset) {
-      TrafficRulePreset.russianServicesDirect => Icons.flag_rounded,
+      TrafficRulePreset.russianServicesDirect => null,
       TrafficRulePreset.aiViaVpn => Icons.auto_awesome_rounded,
       TrafficRulePreset.socialViaVpn => Icons.share_rounded,
       TrafficRulePreset.none => Icons.remove_rounded,
@@ -1154,7 +967,9 @@ class _PresetGlyph extends StatelessWidget {
         color: accent.withValues(alpha: .14),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Icon(icon, color: accent, size: 28),
+      child: icon == null
+          ? const Center(child: Text('🇷🇺', style: TextStyle(fontSize: 28)))
+          : Icon(icon, color: accent, size: 28),
     );
   }
 }
@@ -1225,7 +1040,7 @@ _RulePreview _previewFor(AppLocalizations l10n, TrafficRulePreset preset) {
 }
 
 Color _accentFor(ColorScheme cs, TrafficRulePreset preset) => switch (preset) {
-  TrafficRulePreset.russianServicesDirect => cs.primary,
+  TrafficRulePreset.russianServicesDirect => const Color(0xFF2F63CC),
   TrafficRulePreset.aiViaVpn => cs.tertiary,
   TrafficRulePreset.socialViaVpn => cs.secondary,
   TrafficRulePreset.none => cs.outline,
@@ -1233,7 +1048,7 @@ Color _accentFor(ColorScheme cs, TrafficRulePreset preset) => switch (preset) {
 
 Color _onAccentFor(ColorScheme cs, TrafficRulePreset preset) =>
     switch (preset) {
-      TrafficRulePreset.russianServicesDirect => cs.onPrimary,
+      TrafficRulePreset.russianServicesDirect => Colors.white,
       TrafficRulePreset.aiViaVpn => cs.onTertiary,
       TrafficRulePreset.socialViaVpn => cs.onSecondary,
       TrafficRulePreset.none => cs.onSurface,

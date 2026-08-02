@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
+import 'package:meow_client/features/settings/developer_profile_sheet.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -556,8 +557,6 @@ class _AboutActionChip extends StatelessWidget {
 class _MeowTeamPage extends StatelessWidget {
   const _MeowTeamPage();
 
-  static final Uri _dudosxdevUri = Uri.parse('https://t.me/dddosxd');
-  static final Uri _yamixdevUri = Uri.parse('https://t.me/Ilushadev');
   static final Uri _telegramUri = Uri.parse('https://t.me/etonify');
   static final Uri _coreUri = Uri.parse(
     'https://github.com/yamixdev/etonify-core/tree/etonify-dev',
@@ -574,6 +573,8 @@ class _MeowTeamPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    final dudosxdev = AppDevelopers.dudosxdev(l10n);
+    final yamixdev = AppDevelopers.yamixdev(l10n);
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.teamPageTitle)),
@@ -624,20 +625,16 @@ class _MeowTeamPage extends StatelessWidget {
           ),
           const Gap(14),
           _DeveloperCard(
-            name: 'dudosxdev',
-            role: l10n.teamDeveloperDdosxdRole,
-            avatarAsset: 'assets/images/team/ddosxd.jpg',
-            onTap: () => _open(context, _dudosxdevUri),
+            profile: dudosxdev,
+            onTap: () => showDeveloperProfileSheet(context, dudosxdev),
           ),
           const Gap(10),
           _DeveloperCard(
-            name: 'yamixdev',
-            role: l10n.teamDeveloperYamixdevRole,
-            avatarAsset: 'assets/images/team/yamixdev.jpg',
-            onTap: () => _open(context, _yamixdevUri),
+            profile: yamixdev,
+            onTap: () => showDeveloperProfileSheet(context, yamixdev),
           ),
           const Gap(10),
-          _DeveloperCard(
+          _TeamLinkCard(
             name: l10n.telegramChannelLabel,
             role: l10n.teamTelegramRole,
             avatarAsset: 'assets/images/team/telegram.png',
@@ -732,7 +729,56 @@ class _TimelineItem extends StatelessWidget {
 }
 
 class _DeveloperCard extends StatelessWidget {
-  const _DeveloperCard({
+  const _DeveloperCard({required this.profile, required this.onTap});
+
+  final DeveloperProfile profile;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        onTap: onTap,
+        leading: CircleAvatar(
+          radius: 22,
+          backgroundImage: ResizeImage(
+            AssetImage(profile.avatarAsset),
+            width: 128,
+            height: 128,
+          ),
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        ),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                profile.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Gap(5),
+            Icon(
+              Icons.verified_rounded,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ],
+        ),
+        subtitle: Text(profile.role),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        titleTextStyle: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamLinkCard extends StatelessWidget {
+  const _TeamLinkCard({
     required this.name,
     required this.role,
     required this.avatarAsset,
@@ -753,7 +799,11 @@ class _DeveloperCard extends StatelessWidget {
         onTap: onTap,
         leading: CircleAvatar(
           radius: 22,
-          backgroundImage: AssetImage(avatarAsset),
+          backgroundImage: ResizeImage(
+            AssetImage(avatarAsset),
+            width: 128,
+            height: 128,
+          ),
           backgroundColor: theme.colorScheme.surfaceContainerHighest,
         ),
         title: Text(name),

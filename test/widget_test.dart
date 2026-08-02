@@ -1553,6 +1553,13 @@ void main() {
     expect(find.text('dudosxdev'), findsOneWidget);
     expect(find.text('yamixdev'), findsOneWidget);
 
+    await tester.tap(find.text('dudosxdev'));
+    await tester.pumpAndSettle();
+    expect(find.text('Telegram'), findsOneWidget);
+    expect(find.text('GitHub'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
     await tester.scrollUntilVisible(find.text('© 2026 MeowTeam™'), 500);
     expect(find.text('© 2026 MeowTeam™'), findsOneWidget);
   });
