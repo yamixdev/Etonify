@@ -103,6 +103,35 @@
   "debugWakeLockSubtitle": "Keeps CPU awake while VPN runs. Off by default because it can heat the phone on aggressive firmware.",
   "debugRecordSnapshot": "Record performance snapshot",
   "debugSnapshotDone": "Performance snapshot added to logs",
+  "debugRuntimeMeasurementTitle": "Background runtime measurement",
+  "debugRuntimeMeasurementSubtitle": "Measures CPU, memory, core tasks, connections and routed traffic every 5 seconds. It runs only while started and never changes VPN routing.",
+  "debugRuntimeMeasurementDuration": "Duration: {duration}",
+  "@debugRuntimeMeasurementDuration": {
+    "placeholders": {
+      "duration": { "type": "String" }
+    }
+  },
+  "debugRuntimeMeasurementProgress": "Running: {elapsed} of {duration}",
+  "@debugRuntimeMeasurementProgress": {
+    "placeholders": {
+      "elapsed": { "type": "String" },
+      "duration": { "type": "String" }
+    }
+  },
+  "debugRuntimeMeasurementStart": "Start measurement",
+  "debugRuntimeMeasurementStop": "Stop measurement",
+  "debugRuntimeMeasurementSave": "Save report",
+  "debugRuntimeMeasurementIdle": "Ready to measure",
+  "debugRuntimeMeasurementCompleted": "Measurement completed",
+  "debugRuntimeMeasurementStopped": "Measurement stopped",
+  "debugRuntimeMeasurementCollecting": "Collecting data…",
+  "debugRuntimeMeasurementHealthy": "No abnormal resource growth was detected.",
+  "debugRuntimeMeasurementHighCpu": "High CPU with low routed traffic. This suggests background native/core work rather than normal transfer load.",
+  "debugRuntimeMeasurementGoroutineGrowth": "Core task count increased during the measurement.",
+  "debugRuntimeMeasurementMemoryGrowth": "Process memory grew noticeably during the measurement.",
+  "debugRuntimeMeasurementConnectionChurn": "Many core connections were present while traffic was low.",
+  "debugRuntimeMeasurementUnavailable": "Not enough data for an assessment yet.",
+  "debugRuntimeMeasurementSaved": "Measurement report is ready to save",
   "teamPageTitle": "MeowTeam",
   "teamIntroTitle": "The team behind Etonify",
   "teamIntroBody": "MeowTeam is two developers building Etonify, its core, and networking components together as an independent open-source project.",
@@ -129,10 +158,14 @@
   "themeDark": "Dark",
   "themeAmoled": "AMOLED",
   "aboutResourcesTitle": "Resources",
-  "aboutResourcesSubtitle": "On-demand Android snapshot. It is not collected in the background.",
+  "aboutResourcesSubtitle": "On-demand Android and core snapshot. CPU appears after the second refresh.",
   "aboutResourcePss": "Memory",
   "aboutResourceNativeHeap": "Native heap",
   "aboutResourceJavaHeap": "Java heap",
+  "aboutResourceCoreMemory": "Core memory",
+  "aboutResourceCoreGoroutines": "Core goroutines",
+  "aboutResourceCoreConnections": "Core connections (in / out)",
+  "aboutResourceProcessCpu": "Process CPU since last refresh",
   "aboutResourceSystemMemory": "Free system RAM",
   "aboutResourceBatteryTemp": "Battery temperature",
   "updatesTitle": "Updates",
@@ -454,9 +487,6 @@
   "dnsResolverTitle": "Resolver",
   "dnsDirectPresetSubtitle": "Recommended: udp://1.1.1.1",
   "dnsDirectResolverSubtitle": "DNS for direct requests without proxy",
-  "dnsRussiaDirectTitle": "Smart routing DNS",
-  "dnsRussiaDirectSubtitle": "Used only for domains routed directly. It does not choose the route, but can return a suitable regional address.",
-  "dnsRussiaDirectResolverSubtitle": "Default: udp://77.88.8.8. Keep this value if you are unsure.",
   "dnsProxyPresetSubtitle": "Recommended: https://dns.cloudflare.com/dns-query",
   "dnsProxyResolverSubtitle": "DNS for requests through proxy",
   "dnsResolverTypeTitle": "Resolver type",
@@ -933,6 +963,9 @@
   "experimentalInterruptConnectionsSubtitle": "Applies proxy changes faster, but old app connections can be dropped.",
   "experimentalUrlTestStrictToleranceTitle": "URLTest 1 ms tolerance",
   "experimentalUrlTestStrictToleranceSubtitle": "Selects the lowest-latency proxy more strictly, but may switch servers more often.",
+  "experimentalFakeIpTitle": "Rewrite DNS answers (FakeIP)",
+  "experimentalFakeIpSubtitle": "Speeds up domain handling inside VPN TUN. Some applications may be incompatible.",
+  "experimentalFakeIpUnavailableSubtitle": "Available only with VPN TUN and split routing turned off.",
   "tlsFragmentationTitle": "TLS fragmentation",
   "tlsFragmentationSubtitle": "Fragments TLS handshakes for proxy outbounds. It can help with DPI, but may slow connection setup.",
   "tlsFragmentationModeDisabled": "Disabled",
@@ -990,7 +1023,13 @@
   "trafficRulesSettingsSubtitle": "Choose one verified rule for domains and IP routes.",
   "trafficRulesCurrentLabel": "Active rule",
   "trafficRulesNone": "Not selected",
+  "trafficRulesUsePresetTitle": "Use traffic rules",
+  "trafficRulesUsePresetSubtitle": "Choose a ready-made preset for domain and IP routing.",
+  "trafficRulesUsePresetAction": "Use preset",
+  "trafficRulesDisablePreset": "Disable preset",
+  "trafficRulesQuickSelection": "Quick selection",
   "trafficRulesDeveloperSection": "Developer rules",
+  "trafficRulesDeveloperSubtitle": "Verified presets with a detailed breakdown.",
   "trafficRulesVerified": "Verified",
   "trafficRulesVerifiedInfo": "Verified by MeowTeam. Created by the official developer.",
   "trafficRulesOnlyOne": "Only one traffic rule can be active at a time to avoid conflicts.",
@@ -999,13 +1038,19 @@
   "trafficRulesDataMissing": "Rule data has not been prepared yet",
   "trafficRulesUpdateData": "Update rule data",
   "trafficRulesDeleteData": "Delete rule data",
-  "trafficRulesRussianTitle": "Russian services directly",
+  "trafficRulesRussianTitle": ".RU without VPN",
   "trafficRulesRussianSubtitle": "Russian services and local addresses bypass the VPN.",
   "trafficRulesAiTitle": "AI services through VPN",
   "trafficRulesAiSubtitle": "Popular AI services are routed through the VPN; everything else is direct.",
   "trafficRulesSocialTitle": "Social networks through VPN",
   "trafficRulesSocialSubtitle": "Popular social networks and messengers are routed through the VPN; everything else is direct.",
   "trafficRulesDetails": "Rule details",
+  "trafficRulesDescription": "Description",
+  "trafficRulesAuthor": "Author",
+  "trafficRulesRoutingDomains": "Domain routing",
+  "trafficRulesSettings": "Settings",
+  "trafficRulesRuDnsTitle": "DNS for .RU without VPN",
+  "trafficRulesRuDnsSubtitle": "Used only for Russian domains that this rule sends directly. Default: udp://77.88.8.8.",
   "trafficRulesDefaultRoute": "Everything else",
   "trafficRulesDirect": "Direct",
   "trafficRulesVpn": "Through VPN",
@@ -1016,6 +1061,54 @@
   "trafficRulesDisabled": "Disabled",
   "trafficRulesPreparing": "Preparing rule data…",
   "trafficRulesPrepareFailed": "Could not prepare rule data. Check your connection and try again.",
+  "remoteDownloadConnectTimeout": "Could not connect to the server within 7 seconds. Check your connection or active VPN and try again.",
+  "remoteDownloadResponseTimeout": "The server did not start responding within 7 seconds. Check your connection or active VPN and try again.",
+  "remoteDownloadIdleTimeout": "The download stopped because the server sent no data for 7 seconds. Try again.",
+  "routingRuleFilesTitle": "Rule files",
+  "routingRuleFilesSettingsTitle": "Rule files",
+  "routingRuleFilesSettingsReady": "{count} files ready",
+  "@routingRuleFilesSettingsReady": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "routingRuleFilesSettingsPreparing": "Bundled files are prepared when you open this screen",
+  "routingRuleFilesReadyTitle": "Rule files are ready",
+  "routingRuleFilesReadySubtitle": "Local SRS files are used by traffic rules and work without an internet connection.",
+  "routingRuleFilesPreparingTitle": "Preparing bundled files",
+  "routingRuleFilesPreparingSubtitle": "Preparing local SRS files for traffic rules.",
+  "routingRuleFilesSourceTitle": "Source and status",
+  "routingRuleFilesSourceMeta": "Source: {source} · version: {version} · files: {count}",
+  "@routingRuleFilesSourceMeta": {
+    "placeholders": {
+      "source": { "type": "String" },
+      "version": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "routingRuleFilesUpdateAction": "Update files",
+  "routingRuleFilesUpdatingAction": "Updating files…",
+  "routingRuleFilesEta": "About {duration} remaining",
+  "@routingRuleFilesEta": {
+    "placeholders": {
+      "duration": { "type": "String" }
+    }
+  },
+  "routingRuleFilesSecondsShort": "{seconds}s",
+  "@routingRuleFilesSecondsShort": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "routingRuleFilesMinutesShort": "{minutes}m",
+  "@routingRuleFilesMinutesShort": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "routingRuleFilesListTitle": "Rule files",
+  "routingRuleFilesEmptyTitle": "Files are not ready yet",
+  "routingRuleFilesEmptySubtitle": "Open this screen again or tap Update files.",
   "trafficRulesRuleCount": "{count} categories",
   "@trafficRulesRuleCount": {
     "placeholders": {

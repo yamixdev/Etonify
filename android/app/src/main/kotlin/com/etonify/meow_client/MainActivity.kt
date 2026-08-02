@@ -33,12 +33,19 @@ import com.etonify.meow_client.singbox.MeowLogSanitizer
 import com.etonify.meow_client.singbox.MeowProxyService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
+import com.etonify.meow_client.singbox.RuntimeMeasurement
 import com.etonify.meow_client.singbox.SingboxController
+import com.etonify.meow_client.generated.ApkInspectionMessage
 import com.etonify.meow_client.generated.FlutterError as PigeonFlutterError
+import com.etonify.meow_client.generated.HttpHeaderMessage
+import com.etonify.meow_client.generated.InstalledAppMessage
 import com.etonify.meow_client.generated.NetworkInterfaceStateMessage
 import com.etonify.meow_client.generated.RuntimeFlagsMessage
 import com.etonify.meow_client.generated.SingboxHostApi
+import com.etonify.meow_client.generated.UnderlyingNetworkFetchRequestMessage
+import com.etonify.meow_client.generated.UnderlyingNetworkFetchResponseMessage
 import com.etonify.meow_client.generated.UrlTestRequestMessage
+import com.etonify.meow_client.generated.VpnNotificationPresentationMessage
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.BinaryMessenger
@@ -83,6 +90,8 @@ class MainActivity : FlutterFragmentActivity() {
     private val subscriptionNetworkExecutor = Executors.newFixedThreadPool(2)
     private val endpointDnsExecutor = Executors.newFixedThreadPool(2)
     private val appIconExecutor = Executors.newFixedThreadPool(3)
+    private var lastPerformanceSnapshotUptimeMs = 0L
+    private var lastPerformanceSnapshotCpuMs = 0L
 
     private val vpnPermissionLauncher: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -162,8 +171,78 @@ class MainActivity : FlutterFragmentActivity() {
     private fun pigeonMap(source: Map<*, *>): Map<String?, Any?> =
         source.entries.associate { entry -> entry.key?.toString() to entry.value }
 
-    private fun pigeonMapList(source: List<Map<String, Any>>): List<Map<String?, Any?>?> =
-        source.map { entry -> pigeonMap(entry) }
+    private fun notificationPresentationArguments(
+        presentation: VpnNotificationPresentationMessage,
+    ): Map<String, Any?> = linkedMapOf(
+        "detailed" to presentation.detailed,
+        "trafficDisplayMode" to presentation.trafficDisplayMode,
+        "trafficRefreshSeconds" to presentation.trafficRefreshSeconds,
+        "title" to presentation.title,
+        "latencyMillis" to presentation.latencyMillis,
+        "groupTag" to presentation.groupTag,
+        "targetOutboundTag" to presentation.targetOutboundTag,
+        "priorityOutboundTag" to presentation.priorityOutboundTag,
+        "excludeOutboundTag" to presentation.excludeOutboundTag,
+        "url" to presentation.url,
+        "timeoutMillis" to presentation.timeoutMillis,
+        "concurrency" to presentation.concurrency,
+        "deadlineMillis" to presentation.deadlineMillis,
+        "connectedText" to presentation.connectedText,
+        "checkingText" to presentation.checkingText,
+        "unavailableText" to presentation.unavailableText,
+        "refreshLabel" to presentation.refreshLabel,
+        "stopLabel" to presentation.stopLabel,
+    )
+
+    private fun underlyingNetworkFetchResponse(
+        response: Map<String, Any>,
+    ): UnderlyingNetworkFetchResponseMessage {
+        val headers = (response["headers"] as? Map<*, *>)
+            .orEmpty()
+            .mapNotNull { (name, value) ->
+                val normalizedName = name?.toString()?.trim().orEmpty()
+                if (normalizedName.isEmpty()) {
+                    null
+                } else {
+                    HttpHeaderMessage(normalizedName, value?.toString().orEmpty())
+                }
+            }
+        return UnderlyingNetworkFetchResponseMessage(
+            statusCode = (response["statusCode"] as? Number)?.toLong() ?: 0L,
+            body = response["body"]?.toString().orEmpty(),
+            headers = headers,
+            finalUrl = response["finalUrl"]?.toString().orEmpty(),
+            network = response["network"]?.toString().orEmpty(),
+        )
+    }
+
+    private fun apkInspectionMessage(inspection: Map<String, Any>): ApkInspectionMessage =
+        ApkInspectionMessage(
+            valid = inspection["valid"] == true,
+            packageName = inspection["packageName"]?.toString().orEmpty(),
+            installedPackageName = inspection["installedPackageName"]?.toString().orEmpty(),
+            versionName = inspection["versionName"]?.toString().orEmpty(),
+            versionCode = (inspection["versionCode"] as? Number)?.toLong() ?: 0L,
+            minSdk = (inspection["minSdk"] as? Number)?.toLong() ?: 0L,
+            targetSdk = (inspection["targetSdk"] as? Number)?.toLong() ?: 0L,
+            deviceSdk = (inspection["deviceSdk"] as? Number)?.toLong() ?: 0L,
+            signingCertificateSha256 = (inspection["signingCertificateSha256"] as? Iterable<*>)
+                ?.mapNotNull { value -> value?.toString() }
+                ?: emptyList(),
+            installedCertificateSha256 = (inspection["installedCertificateSha256"] as? Iterable<*>)
+                ?.mapNotNull { value -> value?.toString() }
+                ?: emptyList(),
+        )
+
+    private fun installedAppMessages(): List<InstalledAppMessage> =
+        getInstalledApps().map { app ->
+            InstalledAppMessage(
+                packageName = app["packageName"]?.toString().orEmpty(),
+                label = app["label"]?.toString().orEmpty(),
+                system = app["system"] == true,
+                launchable = app["launchable"] == true,
+            )
+        }
 
     private fun getOwnPackageInfoCompat(): PackageInfo =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -1063,6 +1142,21 @@ class MainActivity : FlutterFragmentActivity() {
             intArrayOf(android.os.Process.myPid()),
         ).firstOrNull()
         val runtime = Runtime.getRuntime()
+        val snapshotUptimeMs = SystemClock.elapsedRealtime()
+        val processCpuMs = android.os.Process.getElapsedCpuTime()
+        val processCpuPercent = if (lastPerformanceSnapshotUptimeMs > 0L) {
+            val wallDeltaMs = snapshotUptimeMs - lastPerformanceSnapshotUptimeMs
+            val cpuDeltaMs = processCpuMs - lastPerformanceSnapshotCpuMs
+            if (wallDeltaMs > 0L && cpuDeltaMs >= 0L) {
+                cpuDeltaMs.toDouble() * 100.0 / wallDeltaMs.toDouble()
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+        lastPerformanceSnapshotUptimeMs = snapshotUptimeMs
+        lastPerformanceSnapshotCpuMs = processCpuMs
         val batteryIntent = registerReceiver(
             null,
             IntentFilter(Intent.ACTION_BATTERY_CHANGED),
@@ -1096,6 +1190,11 @@ class MainActivity : FlutterFragmentActivity() {
             "nativeHeapSizeKb" to (Debug.getNativeHeapSize() / 1024L),
             "javaHeapUsedKb" to ((runtime.totalMemory() - runtime.freeMemory()) / 1024L),
             "javaHeapMaxKb" to (runtime.maxMemory() / 1024L),
+            "coreMemoryBytes" to SingboxController.coreMemoryBytes,
+            "coreGoroutines" to SingboxController.coreGoroutines,
+            "connectionsIn" to SingboxController.connectionsIn,
+            "connectionsOut" to SingboxController.connectionsOut,
+            "processCpuPercent" to processCpuPercent,
             "systemAvailMemKb" to (memoryInfo.availMem / 1024L),
             "systemLowMemory" to memoryInfo.lowMemory,
             "batteryTemperatureC" to if (batteryTemperatureTenths == Int.MIN_VALUE) {
@@ -1123,6 +1222,10 @@ class MainActivity : FlutterFragmentActivity() {
             "downlink" to SingboxController.downlink,
             "uplinkTotal" to SingboxController.uplinkTotal,
             "downlinkTotal" to SingboxController.downlinkTotal,
+            "coreMemoryBytes" to SingboxController.coreMemoryBytes,
+            "coreGoroutines" to SingboxController.coreGoroutines,
+            "connectionsIn" to SingboxController.connectionsIn,
+            "connectionsOut" to SingboxController.connectionsOut,
             "recordedServiceAlive" to recordedServiceAlive,
             "recordedServiceMode" to recordedState?.mode,
             "recordedServicePid" to recordedState?.pid,
@@ -1436,6 +1539,33 @@ class MainActivity : FlutterFragmentActivity() {
                     callback(Result.success(Unit))
                 }
 
+                override fun setRuntimeUiForeground(
+                    foreground: Boolean,
+                    callback: (Result<Unit>) -> Unit,
+                ) {
+                    SingboxController.setUiForeground(
+                        foreground,
+                        singboxEventSinkRegistration,
+                    )
+                    callback(Result.success(Unit))
+                }
+
+                override fun ensureNotificationPermission(
+                    callback: (Result<Boolean>) -> Unit,
+                ) {
+                    ensureNotificationPermission(boolResult(callback))
+                }
+
+                override fun updateVpnNotificationPresentation(
+                    presentation: VpnNotificationPresentationMessage,
+                    callback: (Result<Unit>) -> Unit,
+                ) {
+                    MeowBoxService.updateNotificationPresentation(
+                        notificationPresentationArguments(presentation),
+                    )
+                    callback(Result.success(Unit))
+                }
+
                 override fun reload(callback: (Result<Unit>) -> Unit) {
                     val serviceClass = when (SingboxController.serviceMode) {
                         "proxy" -> MeowProxyService::class.java
@@ -1595,6 +1725,102 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                 }
 
+                override fun canInstallApks(callback: (Result<Boolean>) -> Unit) {
+                    callback(Result.success(canRequestApkInstalls()))
+                }
+
+                override fun openApkInstallSettings(callback: (Result<Boolean>) -> Unit) {
+                    openApkInstallSettings(boolResult(callback))
+                }
+
+                override fun installDownloadedApk(callback: (Result<Unit>) -> Unit) {
+                    runCatching { installDownloadedApk(unitResult(callback)) }
+                        .onFailure {
+                            callback(errorResult("install_apk_failed", it.message ?: it.toString()))
+                        }
+                }
+
+                override fun inspectDownloadedApk(
+                    path: String,
+                    callback: (Result<ApkInspectionMessage>) -> Unit,
+                ) {
+                    val normalizedPath = path.trim()
+                    if (normalizedPath.isEmpty()) {
+                        callback(errorResult("missing_apk_path", "APK path is empty"))
+                        return
+                    }
+                    ioExecutor.execute {
+                        runCatching { apkInspectionMessage(inspectDownloadedApk(normalizedPath)) }
+                            .onSuccess { inspection ->
+                                mainHandler.post { callback(Result.success(inspection)) }
+                            }
+                            .onFailure { error ->
+                                mainHandler.post {
+                                    callback(errorResult("inspect_apk_failed", error.message ?: error.toString()))
+                                }
+                            }
+                    }
+                }
+
+                override fun fetchUrlOnUnderlyingNetwork(
+                    request: UnderlyingNetworkFetchRequestMessage,
+                    callback: (Result<UnderlyingNetworkFetchResponseMessage>) -> Unit,
+                ) {
+                    val url = request.url.trim()
+                    if (url.isEmpty()) {
+                        callback(errorResult("missing_url", "URL is empty"))
+                        return
+                    }
+                    val headers = request.headers
+                        .mapNotNull { header ->
+                            val name = header?.name?.trim().orEmpty()
+                            if (name.isEmpty()) null else name to header?.value.orEmpty()
+                        }
+                        .toMap()
+                    val maxBytes = request.maxBytes.coerceIn(1L, 32L * 1024L * 1024L).toInt()
+                    val timeoutMs = request.timeoutMillis.coerceIn(3_000L, 60_000L).toInt()
+                    subscriptionNetworkExecutor.execute {
+                        runCatching {
+                            underlyingNetworkFetchResponse(
+                                fetchUrlOnUnderlyingNetwork(url, headers, maxBytes, timeoutMs),
+                            )
+                        }.onSuccess { response ->
+                            mainHandler.post { callback(Result.success(response)) }
+                        }.onFailure { error ->
+                            mainHandler.post {
+                                callback(errorResult("underlying_http_failed", error.message ?: error.toString()))
+                            }
+                        }
+                    }
+                }
+
+                override fun resolveHostOnUnderlyingNetwork(
+                    host: String,
+                    callback: (Result<List<String?>>) -> Unit,
+                ) {
+                    val normalizedHost = host.trim()
+                    if (normalizedHost.isEmpty()) {
+                        callback(errorResult("missing_host", "Host is empty"))
+                        return
+                    }
+                    endpointDnsExecutor.execute {
+                        runCatching { resolveHostOnUnderlyingNetwork(normalizedHost) }
+                            .onSuccess { addresses ->
+                                mainHandler.post { callback(Result.success(addresses)) }
+                            }
+                            .onFailure { error ->
+                                mainHandler.post {
+                                    callback(
+                                        errorResult(
+                                            "underlying_dns_failed",
+                                            error.message ?: error.toString(),
+                                        ),
+                                    )
+                                }
+                            }
+                    }
+                }
+
                 override fun getAndroidId(callback: (Result<String>) -> Unit) {
                     callback(
                         Result.success(
@@ -1668,16 +1894,39 @@ class MainActivity : FlutterFragmentActivity() {
                     callback(Result.success(pigeonMap(buildPerformanceSnapshot())))
                 }
 
+                override fun startRuntimeMeasurement(
+                    durationSeconds: Long,
+                    callback: (Result<Unit>) -> Unit,
+                ) {
+                    RuntimeMeasurement.start(applicationContext, durationSeconds)
+                    callback(Result.success(Unit))
+                }
+
+                override fun stopRuntimeMeasurement(callback: (Result<Unit>) -> Unit) {
+                    RuntimeMeasurement.stop()
+                    callback(Result.success(Unit))
+                }
+
+                override fun getRuntimeMeasurement(
+                    callback: (Result<Map<String?, Any?>>) -> Unit,
+                ) {
+                    callback(Result.success(pigeonMap(RuntimeMeasurement.snapshot())))
+                }
+
+                override fun getRuntimeMeasurementReport(callback: (Result<String>) -> Unit) {
+                    callback(Result.success(RuntimeMeasurement.report()))
+                }
+
                 override fun getHappCrypt5Support(callback: (Result<Map<String?, Any?>>) -> Unit) {
                     callback(Result.success(pigeonMap(getHappCrypt5Support())))
                 }
 
-                override fun getInstalledApps(callback: (Result<List<Map<String?, Any?>?>>) -> Unit) {
+                override fun getInstalledApps(callback: (Result<List<InstalledAppMessage?>>) -> Unit) {
                     Thread {
-                        runCatching { getInstalledApps() }
+                        runCatching { installedAppMessages() }
                             .onSuccess { apps ->
                                 mainHandler.post {
-                                    callback(Result.success(pigeonMapList(apps)))
+                                    callback(Result.success(apps))
                                 }
                             }
                             .onFailure { error ->
@@ -1686,6 +1935,17 @@ class MainActivity : FlutterFragmentActivity() {
                                 }
                             }
                     }.start()
+                }
+
+                override fun getInstalledAppIcon(
+                    packageName: String,
+                    sizePx: Long,
+                    callback: (Result<ByteArray?>) -> Unit,
+                ) {
+                    appIconExecutor.execute {
+                        val iconBytes = getInstalledAppIcon(packageName, sizePx.toInt())
+                        mainHandler.post { callback(Result.success(iconBytes)) }
+                    }
                 }
 
                 override fun setQuickSettingsTileLabel(label: String, callback: (Result<Unit>) -> Unit) {
@@ -1890,30 +2150,27 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(true)
                 }
 
-                "setRuntimeUiForeground" -> {
-                    val foreground = call.argument<Boolean>("foreground")
-                    if (foreground == null) {
-                        result.error("missing_foreground", "Foreground state is missing", null)
-                    } else {
-                        SingboxController.setUiForeground(
-                            foreground,
-                            singboxEventSinkRegistration,
-                        )
-                        result.success(true)
-                    }
-                }
-
-                "ensureNotificationPermission" -> {
-                    ensureNotificationPermission(result)
-                }
-
-                "updateVpnNotificationPresentation" -> {
-                    val arguments = call.arguments as? Map<*, *> ?: emptyMap<String, Any?>()
-                    result.success(MeowBoxService.updateNotificationPresentation(arguments))
-                }
-
                 "getPerformanceSnapshot" -> {
                     result.success(buildPerformanceSnapshot())
+                }
+
+                "startRuntimeMeasurement" -> {
+                    val durationSeconds = call.argument<Number>("durationSeconds")?.toLong() ?: 60L
+                    RuntimeMeasurement.start(applicationContext, durationSeconds)
+                    result.success(null)
+                }
+
+                "stopRuntimeMeasurement" -> {
+                    RuntimeMeasurement.stop()
+                    result.success(null)
+                }
+
+                "getRuntimeMeasurement" -> {
+                    result.success(RuntimeMeasurement.snapshot())
+                }
+
+                "getRuntimeMeasurementReport" -> {
+                    result.success(RuntimeMeasurement.report())
                 }
 
                 "start" -> {
@@ -2112,91 +2369,6 @@ class MainActivity : FlutterFragmentActivity() {
                     launchLogExport(content, suggestedName, result)
                 }
 
-                "canInstallApks" -> {
-                    result.success(canRequestApkInstalls())
-                }
-
-                "openApkInstallSettings" -> {
-                    openApkInstallSettings(result)
-                }
-
-                "installDownloadedApk" -> {
-                    runCatching { installDownloadedApk(result) }
-                        .onFailure { result.error("install_apk_failed", it.message, null) }
-                }
-
-                "inspectDownloadedApk" -> {
-                    val path = call.argument<String>("path")?.trim().orEmpty()
-                    if (path.isEmpty()) {
-                        result.error("missing_apk_path", "APK path is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    ioExecutor.execute {
-                        runCatching { inspectDownloadedApk(path) }
-                            .onSuccess { inspection ->
-                                mainHandler.post { result.success(inspection) }
-                            }
-                            .onFailure { error ->
-                                mainHandler.post {
-                                    result.error("inspect_apk_failed", error.message, null)
-                                }
-                            }
-                    }
-                }
-
-                "fetchUrlOnUnderlyingNetwork" -> {
-                    val url = call.argument<String>("url")?.trim().orEmpty()
-                    if (url.isEmpty()) {
-                        result.error("missing_url", "URL is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    val rawHeaders = call.argument<Map<*, *>>("headers").orEmpty()
-                    val headers = rawHeaders.entries
-                        .mapNotNull { (key, value) ->
-                            val name = key?.toString()?.trim().orEmpty()
-                            val headerValue = value?.toString().orEmpty()
-                            if (name.isEmpty()) null else name to headerValue
-                        }
-                        .toMap()
-                    val maxBytes = (call.argument<Number>("maxBytes")?.toInt()
-                        ?: 16 * 1024 * 1024).coerceIn(1, 32 * 1024 * 1024)
-                    val timeoutMs = call.argument<Number>("timeoutMs")?.toInt() ?: 20_000
-                    subscriptionNetworkExecutor.execute {
-                        runCatching {
-                            fetchUrlOnUnderlyingNetwork(url, headers, maxBytes, timeoutMs)
-                        }.onSuccess { response ->
-                            mainHandler.post { result.success(response) }
-                        }.onFailure { error ->
-                            mainHandler.post {
-                                result.error("underlying_http_failed", error.message, null)
-                            }
-                        }
-                    }
-                }
-
-                "resolveHostOnUnderlyingNetwork" -> {
-                    val host = call.argument<String>("host")?.trim().orEmpty()
-                    if (host.isEmpty()) {
-                        result.error("missing_host", "Host is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    endpointDnsExecutor.execute {
-                        runCatching { resolveHostOnUnderlyingNetwork(host) }
-                            .onSuccess { addresses ->
-                                mainHandler.post { result.success(addresses) }
-                            }
-                            .onFailure { error ->
-                                mainHandler.post {
-                                    result.error(
-                                        "underlying_dns_failed",
-                                        error.message,
-                                        null,
-                                    )
-                                }
-                            }
-                    }
-                }
-
                 "getAndroidId" -> {
                     result.success(
                         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "",
@@ -2224,36 +2396,6 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(getHappCrypt5Support())
                 }
 
-                "getInstalledApps" -> {
-                    Thread {
-                        runCatching { getInstalledApps() }
-                            .onSuccess { apps ->
-                                mainHandler.post {
-                                    result.success(apps)
-                                }
-                            }
-                            .onFailure { error ->
-                                mainHandler.post {
-                                    result.error(
-                                        "get_installed_apps_failed",
-                                        error.message ?: error.toString(),
-                                        null,
-                                    )
-                                }
-                            }
-                    }.start()
-                }
-
-                "getInstalledAppIcon" -> {
-                    val packageName = call.argument<String>("packageName")
-                    val sizePx = call.argument<Int>("sizePx")
-                    appIconExecutor.execute {
-                        val iconBytes = getInstalledAppIcon(packageName, sizePx)
-                        mainHandler.post {
-                            result.success(iconBytes)
-                        }
-                    }
-                }
                 else -> result.notImplemented()
             }
         }

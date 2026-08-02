@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
@@ -393,6 +395,27 @@ class _AboutResourcesCard extends StatelessWidget {
             ),
             const Gap(8),
             _AboutInfoRow(
+              label: l10n.aboutResourceCoreMemory,
+              value: _formatBytes(data?['coreMemoryBytes']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceCoreGoroutines,
+              value: _formatCount(data?['coreGoroutines']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceCoreConnections,
+              value:
+                  '${_formatCount(data?['connectionsIn'])} / ${_formatCount(data?['connectionsOut'])}',
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceProcessCpu,
+              value: _formatPercent(data?['processCpuPercent']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
               label: l10n.aboutResourceSystemMemory,
               value: _formatKb(data?['systemAvailMemKb']),
             ),
@@ -412,6 +435,24 @@ class _AboutResourcesCard extends StatelessWidget {
     if (kb == null || kb <= 0) return '—';
     final mb = kb / 1024;
     return '${mb.toStringAsFixed(mb >= 100 ? 0 : 1)} MB';
+  }
+
+  static String _formatBytes(Object? value) {
+    final bytes = _numValue(value);
+    if (bytes == null || bytes <= 0) return '—';
+    return _formatKb(bytes / 1024);
+  }
+
+  static String _formatCount(Object? value) {
+    final count = _numValue(value);
+    if (count == null || count < 0) return '—';
+    return count.toInt().toString();
+  }
+
+  static String _formatPercent(Object? value) {
+    final percent = _numValue(value);
+    if (percent == null || percent < 0) return '—';
+    return '${percent.toStringAsFixed(percent >= 100 ? 0 : 1)} %';
   }
 
   static String _formatTemperature(Object? value) {
@@ -765,6 +806,10 @@ class _AboutDebugCard extends StatelessWidget {
             ),
             const Gap(14),
             const _RuntimeFlagsToggles(),
+            const Gap(14),
+            const Divider(height: 1),
+            const Gap(14),
+            const _RuntimeMeasurementCard(),
           ],
         ),
       ),
@@ -887,6 +932,291 @@ class _RuntimeFlagsTogglesState extends State<_RuntimeFlagsToggles> {
       ],
     );
   }
+}
+
+class _RuntimeMeasurementCard extends StatefulWidget {
+  const _RuntimeMeasurementCard();
+
+  @override
+  State<_RuntimeMeasurementCard> createState() =>
+      _RuntimeMeasurementCardState();
+}
+
+class _RuntimeMeasurementCardState extends State<_RuntimeMeasurementCard> {
+  static const _minDurationSeconds = 15.0;
+  static const _maxDurationSeconds = 3600.0;
+  static const _durationStepSeconds = 15.0;
+
+  Timer? _refreshTimer;
+  Map<String, dynamic> _measurement = const {};
+  double _durationSeconds = 60.0;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  bool get _running => _measurement['state'] == 'running';
+
+  Future<void> _refresh({bool silent = false}) async {
+    if (_busy && !silent) return;
+    final measurement = await SingboxRuntime.instance.getRuntimeMeasurement();
+    if (!mounted) return;
+    setState(() => _measurement = measurement);
+    _syncRefreshTimer();
+  }
+
+  void _syncRefreshTimer() {
+    if (_running) {
+      _refreshTimer ??= Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => _refresh(silent: true),
+      );
+    } else {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  Future<void> _start() async {
+    if (_busy || _running) return;
+    setState(() => _busy = true);
+    try {
+      await SingboxRuntime.instance.startRuntimeMeasurement(
+        durationSeconds: _durationSeconds.round(),
+      );
+      await _refresh(silent: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _stop() async {
+    if (_busy || !_running) return;
+    setState(() => _busy = true);
+    try {
+      await SingboxRuntime.instance.stopRuntimeMeasurement();
+      await _refresh(silent: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveReport() async {
+    if (_busy || _measurement['reportAvailable'] != true) return;
+    setState(() => _busy = true);
+    try {
+      final report = await SingboxRuntime.instance
+          .getRuntimeMeasurementReport();
+      if (report.trim().isEmpty) return;
+      final savedPath = await SingboxRuntime.instance.exportLogs(
+        content: report,
+        suggestedName:
+            'etonify-runtime-measurement-${DateTime.now().millisecondsSinceEpoch}.txt',
+      );
+      if (!mounted || savedPath == null) return;
+      AppNotice.show(
+        context,
+        AppLocalizations.of(context).debugRuntimeMeasurementSaved,
+        tone: AppNoticeTone.success,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final cs = theme.colorScheme;
+    final state = _measurement['state']?.toString() ?? 'idle';
+    final elapsedSeconds = _intValue(_measurement['elapsedSeconds']);
+    final durationSeconds = _intValue(
+      _measurement['durationSeconds'],
+    ).clamp(_minDurationSeconds.toInt(), _maxDurationSeconds.toInt()).toInt();
+    final statusLabel = switch (state) {
+      'running' => l10n.debugRuntimeMeasurementProgress(
+        _formatDuration(elapsedSeconds),
+        _formatDuration(durationSeconds),
+      ),
+      'completed' => l10n.debugRuntimeMeasurementCompleted,
+      'stopped' => l10n.debugRuntimeMeasurementStopped,
+      _ => l10n.debugRuntimeMeasurementIdle,
+    };
+    final assessment = _assessmentText(l10n, _measurement['assessmentCode']);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.debugRuntimeMeasurementTitle,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const Gap(6),
+        Text(
+          l10n.debugRuntimeMeasurementSubtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+            height: 1.35,
+          ),
+        ),
+        const Gap(12),
+        Text(
+          l10n.debugRuntimeMeasurementDuration(
+            _formatDuration(_durationSeconds.round()),
+          ),
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Slider(
+          value: _durationSeconds,
+          min: _minDurationSeconds,
+          max: _maxDurationSeconds,
+          divisions:
+              ((_maxDurationSeconds - _minDurationSeconds) /
+                      _durationStepSeconds)
+                  .round(),
+          label: _formatDuration(_durationSeconds.round()),
+          onChanged: _busy || _running
+              ? null
+              : (value) {
+                  final snapped =
+                      ((value / _durationStepSeconds).round() *
+                              _durationStepSeconds)
+                          .clamp(_minDurationSeconds, _maxDurationSeconds)
+                          .toDouble();
+                  setState(() => _durationSeconds = snapped);
+                },
+        ),
+        Text(
+          statusLabel,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: _running ? cs.primary : cs.onSurfaceVariant,
+            fontWeight: _running ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        if (assessment != null) ...[
+          const Gap(6),
+          Text(
+            assessment,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.35,
+            ),
+          ),
+        ],
+        if (_measurement['sampleCount'] is num &&
+            (_measurement['sampleCount'] as num) > 1) ...[
+          const Gap(10),
+          _MeasurementSummary(measurement: _measurement),
+        ],
+        const Gap(12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy || _running ? null : _start,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(l10n.debugRuntimeMeasurementStart),
+              ),
+            ),
+            if (_running) ...[
+              const Gap(8),
+              IconButton.outlined(
+                tooltip: l10n.debugRuntimeMeasurementStop,
+                onPressed: _busy ? null : _stop,
+                icon: const Icon(Icons.stop_rounded),
+              ),
+            ],
+            if (_measurement['reportAvailable'] == true) ...[
+              const Gap(8),
+              IconButton.outlined(
+                tooltip: l10n.debugRuntimeMeasurementSave,
+                onPressed: _busy ? null : _saveReport,
+                icon: const Icon(Icons.save_alt_rounded),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  static int _intValue(Object? value) => (value as num?)?.toInt() ?? 0;
+
+  static String _formatDuration(int seconds) {
+    final duration = Duration(
+      seconds: seconds.clamp(0, 99 * 60 * 60 + 59 * 60 + 59).toInt(),
+    );
+    String pad(int value) => value.toString().padLeft(2, '0');
+    if (duration.inHours > 0) {
+      return '${pad(duration.inHours)}:${pad(duration.inMinutes.remainder(60))}:${pad(duration.inSeconds.remainder(60))}';
+    }
+    return '${pad(duration.inMinutes)}:${pad(duration.inSeconds.remainder(60))}';
+  }
+
+  static String? _assessmentText(AppLocalizations l10n, Object? rawCode) {
+    return switch (rawCode?.toString()) {
+      'healthy' => l10n.debugRuntimeMeasurementHealthy,
+      'high_cpu_low_traffic' => l10n.debugRuntimeMeasurementHighCpu,
+      'goroutine_growth' => l10n.debugRuntimeMeasurementGoroutineGrowth,
+      'memory_growth' => l10n.debugRuntimeMeasurementMemoryGrowth,
+      'connection_churn' => l10n.debugRuntimeMeasurementConnectionChurn,
+      'collecting' => l10n.debugRuntimeMeasurementCollecting,
+      'idle' || null => null,
+      _ => l10n.debugRuntimeMeasurementUnavailable,
+    };
+  }
+}
+
+class _MeasurementSummary extends StatelessWidget {
+  const _MeasurementSummary({required this.measurement});
+
+  final Map<String, dynamic> measurement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final cpu = _number(measurement['cpuAveragePercent']);
+    final pss = _number(measurement['pssEndKb']);
+    final goroutines = _number(measurement['coreGoroutinesEnd']);
+    final connections = _number(measurement['connectionsPeak']);
+    final values = <String>[
+      if (cpu != null) 'CPU ${cpu.toStringAsFixed(1)}%',
+      if (pss != null) 'PSS ${(pss / 1024).toStringAsFixed(0)} MB',
+      if (goroutines != null) 'Go ${goroutines.toInt()}',
+      if (connections != null) 'Conn ${connections.toInt()}',
+    ];
+    if (values.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: values
+          .map(
+            (value) => Chip(
+              visualDensity: VisualDensity.compact,
+              side: BorderSide(color: cs.outlineVariant),
+              label: Text(value, style: theme.textTheme.labelSmall),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  static num? _number(Object? value) => value is num ? value : null;
 }
 
 Map<String, dynamic> _withFlutterMemoryStats(Map<String, dynamic> snapshot) {

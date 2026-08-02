@@ -268,6 +268,72 @@ class AppLocalizationsEn extends AppLocalizations {
   String get debugSnapshotDone => 'Performance snapshot added to logs';
 
   @override
+  String get debugRuntimeMeasurementTitle => 'Background runtime measurement';
+
+  @override
+  String get debugRuntimeMeasurementSubtitle =>
+      'Measures CPU, memory, core tasks, connections and routed traffic every 5 seconds. It runs only while started and never changes VPN routing.';
+
+  @override
+  String debugRuntimeMeasurementDuration(String duration) {
+    return 'Duration: $duration';
+  }
+
+  @override
+  String debugRuntimeMeasurementProgress(String elapsed, String duration) {
+    return 'Running: $elapsed of $duration';
+  }
+
+  @override
+  String get debugRuntimeMeasurementStart => 'Start measurement';
+
+  @override
+  String get debugRuntimeMeasurementStop => 'Stop measurement';
+
+  @override
+  String get debugRuntimeMeasurementSave => 'Save report';
+
+  @override
+  String get debugRuntimeMeasurementIdle => 'Ready to measure';
+
+  @override
+  String get debugRuntimeMeasurementCompleted => 'Measurement completed';
+
+  @override
+  String get debugRuntimeMeasurementStopped => 'Measurement stopped';
+
+  @override
+  String get debugRuntimeMeasurementCollecting => 'Collecting data…';
+
+  @override
+  String get debugRuntimeMeasurementHealthy =>
+      'No abnormal resource growth was detected.';
+
+  @override
+  String get debugRuntimeMeasurementHighCpu =>
+      'High CPU with low routed traffic. This suggests background native/core work rather than normal transfer load.';
+
+  @override
+  String get debugRuntimeMeasurementGoroutineGrowth =>
+      'Core task count increased during the measurement.';
+
+  @override
+  String get debugRuntimeMeasurementMemoryGrowth =>
+      'Process memory grew noticeably during the measurement.';
+
+  @override
+  String get debugRuntimeMeasurementConnectionChurn =>
+      'Many core connections were present while traffic was low.';
+
+  @override
+  String get debugRuntimeMeasurementUnavailable =>
+      'Not enough data for an assessment yet.';
+
+  @override
+  String get debugRuntimeMeasurementSaved =>
+      'Measurement report is ready to save';
+
+  @override
   String get teamPageTitle => 'MeowTeam';
 
   @override
@@ -354,7 +420,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutResourcesSubtitle =>
-      'On-demand Android snapshot. It is not collected in the background.';
+      'On-demand Android and core snapshot. CPU appears after the second refresh.';
 
   @override
   String get aboutResourcePss => 'Memory';
@@ -364,6 +430,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutResourceJavaHeap => 'Java heap';
+
+  @override
+  String get aboutResourceCoreMemory => 'Core memory';
+
+  @override
+  String get aboutResourceCoreGoroutines => 'Core goroutines';
+
+  @override
+  String get aboutResourceCoreConnections => 'Core connections (in / out)';
+
+  @override
+  String get aboutResourceProcessCpu => 'Process CPU since last refresh';
 
   @override
   String get aboutResourceSystemMemory => 'Free system RAM';
@@ -1049,17 +1127,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dnsDirectResolverSubtitle =>
       'DNS for direct requests without proxy';
-
-  @override
-  String get dnsRussiaDirectTitle => 'Smart routing DNS';
-
-  @override
-  String get dnsRussiaDirectSubtitle =>
-      'Used only for domains routed directly. It does not choose the route, but can return a suitable regional address.';
-
-  @override
-  String get dnsRussiaDirectResolverSubtitle =>
-      'Default: udp://77.88.8.8. Keep this value if you are unsure.';
 
   @override
   String get dnsProxyPresetSubtitle =>
@@ -2183,6 +2250,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Selects the lowest-latency proxy more strictly, but may switch servers more often.';
 
   @override
+  String get experimentalFakeIpTitle => 'Rewrite DNS answers (FakeIP)';
+
+  @override
+  String get experimentalFakeIpSubtitle =>
+      'Speeds up domain handling inside VPN TUN. Some applications may be incompatible.';
+
+  @override
+  String get experimentalFakeIpUnavailableSubtitle =>
+      'Available only with VPN TUN and split routing turned off.';
+
+  @override
   String get tlsFragmentationTitle => 'TLS fragmentation';
 
   @override
@@ -2355,7 +2433,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficRulesNone => 'Not selected';
 
   @override
+  String get trafficRulesUsePresetTitle => 'Use traffic rules';
+
+  @override
+  String get trafficRulesUsePresetSubtitle =>
+      'Choose a ready-made preset for domain and IP routing.';
+
+  @override
+  String get trafficRulesUsePresetAction => 'Use preset';
+
+  @override
+  String get trafficRulesDisablePreset => 'Disable preset';
+
+  @override
+  String get trafficRulesQuickSelection => 'Quick selection';
+
+  @override
   String get trafficRulesDeveloperSection => 'Developer rules';
+
+  @override
+  String get trafficRulesDeveloperSubtitle =>
+      'Verified presets with a detailed breakdown.';
 
   @override
   String get trafficRulesVerified => 'Verified';
@@ -2385,7 +2483,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficRulesDeleteData => 'Delete rule data';
 
   @override
-  String get trafficRulesRussianTitle => 'Russian services directly';
+  String get trafficRulesRussianTitle => '.RU without VPN';
 
   @override
   String get trafficRulesRussianSubtitle =>
@@ -2407,6 +2505,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trafficRulesDetails => 'Rule details';
+
+  @override
+  String get trafficRulesDescription => 'Description';
+
+  @override
+  String get trafficRulesAuthor => 'Author';
+
+  @override
+  String get trafficRulesRoutingDomains => 'Domain routing';
+
+  @override
+  String get trafficRulesSettings => 'Settings';
+
+  @override
+  String get trafficRulesRuDnsTitle => 'DNS for .RU without VPN';
+
+  @override
+  String get trafficRulesRuDnsSubtitle =>
+      'Used only for Russian domains that this rule sends directly. Default: udp://77.88.8.8.';
 
   @override
   String get trafficRulesDefaultRoute => 'Everything else';
@@ -2438,6 +2555,86 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get trafficRulesPrepareFailed =>
       'Could not prepare rule data. Check your connection and try again.';
+
+  @override
+  String get remoteDownloadConnectTimeout =>
+      'Could not connect to the server within 7 seconds. Check your connection or active VPN and try again.';
+
+  @override
+  String get remoteDownloadResponseTimeout =>
+      'The server did not start responding within 7 seconds. Check your connection or active VPN and try again.';
+
+  @override
+  String get remoteDownloadIdleTimeout =>
+      'The download stopped because the server sent no data for 7 seconds. Try again.';
+
+  @override
+  String get routingRuleFilesTitle => 'Rule files';
+
+  @override
+  String get routingRuleFilesSettingsTitle => 'Rule files';
+
+  @override
+  String routingRuleFilesSettingsReady(int count) {
+    return '$count files ready';
+  }
+
+  @override
+  String get routingRuleFilesSettingsPreparing =>
+      'Bundled files are prepared when you open this screen';
+
+  @override
+  String get routingRuleFilesReadyTitle => 'Rule files are ready';
+
+  @override
+  String get routingRuleFilesReadySubtitle =>
+      'Local SRS files are used by traffic rules and work without an internet connection.';
+
+  @override
+  String get routingRuleFilesPreparingTitle => 'Preparing bundled files';
+
+  @override
+  String get routingRuleFilesPreparingSubtitle =>
+      'Preparing local SRS files for traffic rules.';
+
+  @override
+  String get routingRuleFilesSourceTitle => 'Source and status';
+
+  @override
+  String routingRuleFilesSourceMeta(String source, String version, int count) {
+    return 'Source: $source · version: $version · files: $count';
+  }
+
+  @override
+  String get routingRuleFilesUpdateAction => 'Update files';
+
+  @override
+  String get routingRuleFilesUpdatingAction => 'Updating files…';
+
+  @override
+  String routingRuleFilesEta(String duration) {
+    return 'About $duration remaining';
+  }
+
+  @override
+  String routingRuleFilesSecondsShort(int seconds) {
+    return '${seconds}s';
+  }
+
+  @override
+  String routingRuleFilesMinutesShort(int minutes) {
+    return '${minutes}m';
+  }
+
+  @override
+  String get routingRuleFilesListTitle => 'Rule files';
+
+  @override
+  String get routingRuleFilesEmptyTitle => 'Files are not ready yet';
+
+  @override
+  String get routingRuleFilesEmptySubtitle =>
+      'Open this screen again or tap Update files.';
 
   @override
   String trafficRulesRuleCount(int count) {

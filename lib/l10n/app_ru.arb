@@ -103,6 +103,35 @@
   "debugWakeLockSubtitle": "Держит CPU активным во время VPN. По умолчанию выключен, потому что на агрессивных прошивках может греть телефон.",
   "debugRecordSnapshot": "Записать снимок производительности",
   "debugSnapshotDone": "Снимок производительности добавлен в логи",
+  "debugRuntimeMeasurementTitle": "Измерение работы в фоне",
+  "debugRuntimeMeasurementSubtitle": "Раз в 5 секунд измеряет CPU, память, задачи ядра, соединения и трафик VPN. Работает только после запуска и не меняет маршрутизацию VPN.",
+  "debugRuntimeMeasurementDuration": "Длительность: {duration}",
+  "@debugRuntimeMeasurementDuration": {
+    "placeholders": {
+      "duration": { "type": "String" }
+    }
+  },
+  "debugRuntimeMeasurementProgress": "Идёт: {elapsed} из {duration}",
+  "@debugRuntimeMeasurementProgress": {
+    "placeholders": {
+      "elapsed": { "type": "String" },
+      "duration": { "type": "String" }
+    }
+  },
+  "debugRuntimeMeasurementStart": "Запустить измерение",
+  "debugRuntimeMeasurementStop": "Остановить измерение",
+  "debugRuntimeMeasurementSave": "Сохранить отчёт",
+  "debugRuntimeMeasurementIdle": "Готово к измерению",
+  "debugRuntimeMeasurementCompleted": "Измерение завершено",
+  "debugRuntimeMeasurementStopped": "Измерение остановлено",
+  "debugRuntimeMeasurementCollecting": "Собираем данные…",
+  "debugRuntimeMeasurementHealthy": "За время измерения аномального роста ресурсов не найдено.",
+  "debugRuntimeMeasurementHighCpu": "Высокий CPU при низком трафике VPN. Вероятна фоновая работа native-части или ядра, а не обычная передача данных.",
+  "debugRuntimeMeasurementGoroutineGrowth": "Количество задач ядра выросло во время измерения.",
+  "debugRuntimeMeasurementMemoryGrowth": "Память процесса заметно выросла во время измерения.",
+  "debugRuntimeMeasurementConnectionChurn": "При низком трафике было много соединений ядра.",
+  "debugRuntimeMeasurementUnavailable": "Пока недостаточно данных для оценки.",
+  "debugRuntimeMeasurementSaved": "Отчёт измерения готов к сохранению",
   "teamPageTitle": "MeowTeam",
   "teamIntroTitle": "Команда Etonify",
   "teamIntroBody": "MeowTeam — два разработчика, которые вместе развивают Etonify, ядро и сетевые компоненты как независимый открытый проект.",
@@ -129,10 +158,14 @@
   "themeDark": "Тёмная",
   "themeAmoled": "AMOLED",
   "aboutResourcesTitle": "Ресурсы",
-  "aboutResourcesSubtitle": "Снимок Android по запросу. В фоне эти данные не собираются.",
+  "aboutResourcesSubtitle": "Снимок Android и ядра по запросу. CPU появится после второго обновления.",
   "aboutResourcePss": "Память",
   "aboutResourceNativeHeap": "Native heap",
   "aboutResourceJavaHeap": "Java heap",
+  "aboutResourceCoreMemory": "Память ядра",
+  "aboutResourceCoreGoroutines": "Горутины ядра",
+  "aboutResourceCoreConnections": "Соединения ядра (вход. / исход.)",
+  "aboutResourceProcessCpu": "CPU процесса с прошлого обновления",
   "aboutResourceSystemMemory": "Свободная RAM системы",
   "aboutResourceBatteryTemp": "Температура батареи",
   "updatesTitle": "Обновления",
@@ -454,9 +487,6 @@
   "dnsResolverTitle": "Резолвер",
   "dnsDirectPresetSubtitle": "Рекомендуется udp://1.1.1.1",
   "dnsDirectResolverSubtitle": "DNS для прямых запросов без прокси",
-  "dnsRussiaDirectTitle": "DNS умной маршрутизации",
-  "dnsRussiaDirectSubtitle": "Используется только для доменов, направленных напрямую. На выбор маршрута не влияет, но помогает получить подходящий региональный адрес.",
-  "dnsRussiaDirectResolverSubtitle": "По умолчанию udp://77.88.8.8. Если не уверены, оставьте это значение.",
   "dnsProxyPresetSubtitle": "Рекомендуется https://dns.cloudflare.com/dns-query",
   "dnsProxyResolverSubtitle": "DNS для запросов через прокси",
   "dnsResolverTypeTitle": "Вариант резолвера",
@@ -933,6 +963,9 @@
   "experimentalInterruptConnectionsSubtitle": "Быстрее применяет смену прокси, но старые соединения приложений могут оборваться.",
   "experimentalUrlTestStrictToleranceTitle": "URLTest tolerance 1 мс",
   "experimentalUrlTestStrictToleranceSubtitle": "Строже выбирает самый быстрый прокси, но может чаще переключать сервер.",
+  "experimentalFakeIpTitle": "Подменять DNS-ответы (FakeIP)",
+  "experimentalFakeIpSubtitle": "Ускоряет обработку доменов внутри VPN TUN. Некоторые приложения могут быть несовместимы.",
+  "experimentalFakeIpUnavailableSubtitle": "Доступно только в VPN TUN без раздельной маршрутизации.",
   "tlsFragmentationTitle": "TLS fragmentation",
   "tlsFragmentationSubtitle": "Фрагментирует TLS handshake у прокси-аутбаундов. Может помочь при DPI, но иногда замедляет подключение.",
   "tlsFragmentationModeDisabled": "Выключено",
@@ -990,7 +1023,13 @@
   "trafficRulesSettingsSubtitle": "Выберите одно проверенное правило для доменов и IP-маршрутов.",
   "trafficRulesCurrentLabel": "Активное правило",
   "trafficRulesNone": "Не выбрано",
+  "trafficRulesUsePresetTitle": "Использовать правила трафика",
+  "trafficRulesUsePresetSubtitle": "Выберите готовый пресет для маршрутизации доменов и IP-адресов.",
+  "trafficRulesUsePresetAction": "Использовать пресет",
+  "trafficRulesDisablePreset": "Отключить пресет",
+  "trafficRulesQuickSelection": "Быстрый выбор",
   "trafficRulesDeveloperSection": "Правила от разработчика",
+  "trafficRulesDeveloperSubtitle": "Проверенные пресеты с подробным составом.",
   "trafficRulesVerified": "Проверено",
   "trafficRulesVerifiedInfo": "Проверено MeowTeam. Создано официальным разработчиком.",
   "trafficRulesOnlyOne": "Одновременно можно включить только одно правило трафика — так правила не конфликтуют между собой.",
@@ -999,13 +1038,19 @@
   "trafficRulesDataMissing": "Данные правила ещё не подготовлены",
   "trafficRulesUpdateData": "Обновить данные правил",
   "trafficRulesDeleteData": "Удалить данные правил",
-  "trafficRulesRussianTitle": "Российские сервисы напрямую",
+  "trafficRulesRussianTitle": ".RU без VPN",
   "trafficRulesRussianSubtitle": "Российские сервисы и локальные адреса работают в обход VPN.",
   "trafficRulesAiTitle": "Нейросети через VPN",
   "trafficRulesAiSubtitle": "Популярные нейросети идут через VPN, остальной трафик — напрямую.",
   "trafficRulesSocialTitle": "Социальные сети через VPN",
   "trafficRulesSocialSubtitle": "Популярные соцсети и мессенджеры идут через VPN, остальной трафик — напрямую.",
   "trafficRulesDetails": "Состав правила",
+  "trafficRulesDescription": "Описание",
+  "trafficRulesAuthor": "Автор",
+  "trafficRulesRoutingDomains": "Маршрутизация доменов",
+  "trafficRulesSettings": "Настройки",
+  "trafficRulesRuDnsTitle": "DNS для .RU без VPN",
+  "trafficRulesRuDnsSubtitle": "Используется только для российских доменов, которые правило отправляет напрямую. По умолчанию: udp://77.88.8.8.",
   "trafficRulesDefaultRoute": "Всё остальное",
   "trafficRulesDirect": "Напрямую",
   "trafficRulesVpn": "Через VPN",
@@ -1016,6 +1061,54 @@
   "trafficRulesDisabled": "Отключено",
   "trafficRulesPreparing": "Подготавливаем данные правила…",
   "trafficRulesPrepareFailed": "Не удалось подготовить данные правила. Проверьте интернет и повторите попытку.",
+  "remoteDownloadConnectTimeout": "Не удалось подключиться к серверу за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.",
+  "remoteDownloadResponseTimeout": "Сервер не начал отвечать за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.",
+  "remoteDownloadIdleTimeout": "Загрузка остановлена: сервер не передавал данные 7 секунд. Попробуйте ещё раз.",
+  "routingRuleFilesTitle": "Файлы правил",
+  "routingRuleFilesSettingsTitle": "Файлы правил",
+  "routingRuleFilesSettingsReady": "Готово файлов: {count}",
+  "@routingRuleFilesSettingsReady": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "routingRuleFilesSettingsPreparing": "Встроенные файлы будут подготовлены при открытии",
+  "routingRuleFilesReadyTitle": "Файлы правил готовы",
+  "routingRuleFilesReadySubtitle": "Локальные SRS-файлы используются правилами трафика и работают без интернета.",
+  "routingRuleFilesPreparingTitle": "Готовим встроенные файлы",
+  "routingRuleFilesPreparingSubtitle": "Подготавливаем локальные SRS-файлы для правил трафика.",
+  "routingRuleFilesSourceTitle": "Источник и состояние",
+  "routingRuleFilesSourceMeta": "Источник: {source} · версия: {version} · файлов: {count}",
+  "@routingRuleFilesSourceMeta": {
+    "placeholders": {
+      "source": { "type": "String" },
+      "version": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "routingRuleFilesUpdateAction": "Обновить файлы",
+  "routingRuleFilesUpdatingAction": "Обновляем файлы…",
+  "routingRuleFilesEta": "Осталось примерно: {duration}",
+  "@routingRuleFilesEta": {
+    "placeholders": {
+      "duration": { "type": "String" }
+    }
+  },
+  "routingRuleFilesSecondsShort": "{seconds} с",
+  "@routingRuleFilesSecondsShort": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+  "routingRuleFilesMinutesShort": "{minutes} мин",
+  "@routingRuleFilesMinutesShort": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "routingRuleFilesListTitle": "Файлы правил",
+  "routingRuleFilesEmptyTitle": "Файлы ещё не готовы",
+  "routingRuleFilesEmptySubtitle": "Откройте экран ещё раз или нажмите «Обновить файлы».",
   "trafficRulesRuleCount": "Категорий: {count}",
   "@trafficRulesRuleCount": {
     "placeholders": {

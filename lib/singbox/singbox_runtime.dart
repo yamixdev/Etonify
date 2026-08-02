@@ -310,11 +310,9 @@ class SingboxRuntime {
       return;
     }
     try {
-      await _methods.invokeMethod<void>('setRuntimeUiForeground', {
-        'foreground': foreground,
-      });
+      await _hostApi.setRuntimeUiForeground(foreground);
     } on MissingPluginException {
-      // Older Android bridges keep their existing telemetry behavior.
+      // Keep non-Android and incomplete development hosts non-fatal.
     }
   }
 
@@ -323,13 +321,8 @@ class SingboxRuntime {
       return true;
     }
     try {
-      return await _methods.invokeMethod<bool>(
-            'ensureNotificationPermission',
-          ) ??
-          false;
+      return await _hostApi.ensureNotificationPermission();
     } on MissingPluginException {
-      // Android versions before the notification-status bridge continue to use
-      // their existing foreground-service notification.
       return true;
     }
   }
@@ -358,29 +351,30 @@ class SingboxRuntime {
       return;
     }
     try {
-      await _methods.invokeMethod<void>('updateVpnNotificationPresentation', {
-        'detailed': detailed,
-        'trafficDisplayMode': trafficDisplayMode,
-        'trafficRefreshSeconds': trafficRefreshSeconds,
-        'title': title,
-        'latencyMillis': latencyMillis,
-        'groupTag': groupTag,
-        'targetOutboundTag': targetOutboundTag,
-        'priorityOutboundTag': priorityOutboundTag,
-        'excludeOutboundTag': excludeOutboundTag,
-        'url': url,
-        'timeoutMillis': timeoutMillis,
-        'concurrency': concurrency,
-        'deadlineMillis': deadlineMillis,
-        'connectedText': connectedText,
-        'checkingText': checkingText,
-        'unavailableText': unavailableText,
-        'refreshLabel': refreshLabel,
-        'stopLabel': stopLabel,
-      });
+      await _hostApi.updateVpnNotificationPresentation(
+        pigeon.VpnNotificationPresentationMessage(
+          detailed: detailed,
+          trafficDisplayMode: trafficDisplayMode,
+          trafficRefreshSeconds: trafficRefreshSeconds,
+          title: title,
+          latencyMillis: latencyMillis,
+          groupTag: groupTag,
+          targetOutboundTag: targetOutboundTag,
+          priorityOutboundTag: priorityOutboundTag,
+          excludeOutboundTag: excludeOutboundTag,
+          url: url,
+          timeoutMillis: timeoutMillis,
+          concurrency: concurrency,
+          deadlineMillis: deadlineMillis,
+          connectedText: connectedText,
+          checkingText: checkingText,
+          unavailableText: unavailableText,
+          refreshLabel: refreshLabel,
+          stopLabel: stopLabel,
+        ),
+      );
     } on MissingPluginException {
-      // Keep compatibility with a previously installed Android host during a
-      // Flutter hot restart or an in-place development upgrade.
+      // Keep non-Android and incomplete development hosts non-fatal.
     }
   }
 
@@ -596,8 +590,7 @@ class SingboxRuntime {
       return false;
     }
     try {
-      final value = await _methods.invokeMethod<bool>('canInstallApks');
-      return value == true;
+      return await _hostApi.canInstallApks();
     } on MissingPluginException {
       return false;
     }
@@ -608,7 +601,7 @@ class SingboxRuntime {
       return;
     }
     try {
-      await _methods.invokeMethod<void>('openApkInstallSettings');
+      await _hostApi.openApkInstallSettings();
     } on MissingPluginException {
       // Ignore on non-Android bridge builds.
     }
@@ -619,8 +612,8 @@ class SingboxRuntime {
       return;
     }
     // Native code deliberately selects the sole APK from private files/updates.
-    // The package installer never receives a path controlled by MethodChannel.
-    await _methods.invokeMethod<void>('installDownloadedApk');
+    // The package installer never receives a path controlled by Flutter.
+    await _hostApi.installDownloadedApk();
   }
 
   Future<Map<String, dynamic>> inspectDownloadedApk(String path) async {
@@ -631,11 +624,19 @@ class SingboxRuntime {
     if (normalizedPath.isEmpty) {
       throw ArgumentError.value(path, 'path', 'APK path is empty');
     }
-    return await _methods.invokeMapMethod<String, dynamic>(
-          'inspectDownloadedApk',
-          <String, Object?>{'path': normalizedPath},
-        ) ??
-        const <String, dynamic>{'valid': false};
+    final inspection = await _hostApi.inspectDownloadedApk(normalizedPath);
+    return <String, dynamic>{
+      'valid': inspection.valid,
+      'packageName': inspection.packageName,
+      'installedPackageName': inspection.installedPackageName,
+      'versionName': inspection.versionName,
+      'versionCode': inspection.versionCode,
+      'minSdk': inspection.minSdk,
+      'targetSdk': inspection.targetSdk,
+      'deviceSdk': inspection.deviceSdk,
+      'signingCertificateSha256': inspection.signingCertificateSha256,
+      'installedCertificateSha256': inspection.installedCertificateSha256,
+    };
   }
 
   Future<Map<String, dynamic>> fetchUrlOnUnderlyingNetwork({
@@ -649,16 +650,32 @@ class SingboxRuntime {
         'Underlying-network HTTP is only available on Android.',
       );
     }
-    return await _methods.invokeMapMethod<String, dynamic>(
-          'fetchUrlOnUnderlyingNetwork',
-          <String, Object?>{
-            'url': uri.toString(),
-            'headers': headers,
-            'maxBytes': maxBytes,
-            'timeoutMs': timeout.inMilliseconds,
-          },
-        ) ??
-        const <String, dynamic>{};
+    final response = await _hostApi.fetchUrlOnUnderlyingNetwork(
+      pigeon.UnderlyingNetworkFetchRequestMessage(
+        url: uri.toString(),
+        headers: headers.entries
+            .map(
+              (entry) => pigeon.HttpHeaderMessage(
+                name: entry.key,
+                value: entry.value,
+              ),
+            )
+            .toList(growable: false),
+        maxBytes: maxBytes,
+        timeoutMillis: timeout.inMilliseconds,
+      ),
+    );
+    return <String, dynamic>{
+      'statusCode': response.statusCode,
+      'body': response.body,
+      'headers': <String, String>{
+        for (final header in response.headers)
+          if (header != null && header.name.trim().isNotEmpty)
+            header.name.toLowerCase(): header.value,
+      },
+      'finalUrl': response.finalUrl,
+      'network': response.network,
+    };
   }
 
   Future<List<String>> resolveHostOnUnderlyingNetwork({
@@ -674,13 +691,11 @@ class SingboxRuntime {
     if (normalizedHost.isEmpty) {
       throw ArgumentError.value(host, 'host', 'Host is empty');
     }
-    final addresses = await _methods
-        .invokeListMethod<String>(
-          'resolveHostOnUnderlyingNetwork',
-          <String, Object?>{'host': normalizedHost},
-        )
+    final addresses = await _hostApi
+        .resolveHostOnUnderlyingNetwork(normalizedHost)
         .timeout(timeout);
-    return (addresses ?? const <String>[])
+    return addresses
+        .whereType<String>()
         .map((address) => address.trim())
         .where((address) => address.isNotEmpty)
         .toSet()
@@ -822,6 +837,63 @@ class SingboxRuntime {
     }
   }
 
+  Future<void> startRuntimeMeasurement({required int durationSeconds}) async {
+    if (!Platform.isAndroid) return;
+    final normalizedDuration = durationSeconds.clamp(15, 3600).toInt();
+    try {
+      await _withMethodChannelFallback(
+        () => _hostApi.startRuntimeMeasurement(normalizedDuration),
+        () => _methods.invokeMethod<void>('startRuntimeMeasurement', {
+          'durationSeconds': normalizedDuration,
+        }),
+      );
+    } on MissingPluginException {
+      // The diagnostics panel is unavailable on older Android bridges.
+    }
+  }
+
+  Future<void> stopRuntimeMeasurement() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _withMethodChannelFallback(
+        _hostApi.stopRuntimeMeasurement,
+        () => _methods.invokeMethod<void>('stopRuntimeMeasurement'),
+      );
+    } on MissingPluginException {
+      // The diagnostics panel is unavailable on older Android bridges.
+    }
+  }
+
+  Future<Map<String, dynamic>> getRuntimeMeasurement() async {
+    if (!Platform.isAndroid) return const {};
+    try {
+      return await _withMethodChannelFallback<Map<String, dynamic>>(
+        () async => _normalizeMap(await _hostApi.getRuntimeMeasurement()),
+        () async =>
+            await _methods.invokeMapMethod<String, dynamic>(
+              'getRuntimeMeasurement',
+            ) ??
+            const {},
+      );
+    } on MissingPluginException {
+      return const {};
+    }
+  }
+
+  Future<String> getRuntimeMeasurementReport() async {
+    if (!Platform.isAndroid) return '';
+    try {
+      return await _withMethodChannelFallback<String>(
+        _hostApi.getRuntimeMeasurementReport,
+        () => _methods
+            .invokeMethod<String>('getRuntimeMeasurementReport')
+            .then((value) => value ?? ''),
+      );
+    } on MissingPluginException {
+      return '';
+    }
+  }
+
   Future<Map<String, dynamic>> getHappCrypt5Support() async {
     if (!Platform.isAndroid) {
       return const {
@@ -852,14 +924,18 @@ class SingboxRuntime {
       return const <Map<String, dynamic>>[];
     }
     try {
-      // Pigeon map generics are stricter than Android's runtime payload shape
-      // here: the codec can return _Map<Object?, Object?> and generated Pigeon
-      // code casts it before our normalizer runs. Keep installed-apps on the
-      // legacy MethodChannel until it is migrated to a typed Pigeon DTO.
-      final value = await _methods.invokeListMethod<dynamic>(
-        'getInstalledApps',
-      );
-      return _normalizeMapList(value);
+      final apps = await _hostApi.getInstalledApps();
+      return apps
+          .whereType<pigeon.InstalledAppMessage>()
+          .map(
+            (app) => <String, dynamic>{
+              'packageName': app.packageName,
+              'label': app.label,
+              'system': app.system,
+              'launchable': app.launchable,
+            },
+          )
+          .toList(growable: false);
     } on MissingPluginException {
       return const <Map<String, dynamic>>[];
     }
@@ -873,10 +949,10 @@ class SingboxRuntime {
       return null;
     }
     try {
-      return await _methods.invokeMethod<Uint8List>('getInstalledAppIcon', {
-        'packageName': packageName.trim(),
-        'sizePx': sizePx.clamp(24, 96).toInt(),
-      });
+      return await _hostApi.getInstalledAppIcon(
+        packageName.trim(),
+        sizePx.clamp(24, 96).toInt(),
+      );
     } on MissingPluginException {
       return null;
     } on PlatformException {

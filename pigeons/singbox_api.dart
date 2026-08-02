@@ -67,6 +67,125 @@ class UrlTestRequestMessage {
   bool force;
 }
 
+class VpnNotificationPresentationMessage {
+  VpnNotificationPresentationMessage({
+    required this.detailed,
+    required this.trafficDisplayMode,
+    required this.trafficRefreshSeconds,
+    required this.title,
+    this.latencyMillis,
+    required this.groupTag,
+    required this.targetOutboundTag,
+    required this.priorityOutboundTag,
+    required this.excludeOutboundTag,
+    required this.url,
+    required this.timeoutMillis,
+    required this.concurrency,
+    required this.deadlineMillis,
+    required this.connectedText,
+    required this.checkingText,
+    required this.unavailableText,
+    required this.refreshLabel,
+    required this.stopLabel,
+  });
+
+  bool detailed;
+  String trafficDisplayMode;
+  int trafficRefreshSeconds;
+  String title;
+  int? latencyMillis;
+  String groupTag;
+  String targetOutboundTag;
+  String priorityOutboundTag;
+  String excludeOutboundTag;
+  String url;
+  int timeoutMillis;
+  int concurrency;
+  int deadlineMillis;
+  String connectedText;
+  String checkingText;
+  String unavailableText;
+  String refreshLabel;
+  String stopLabel;
+}
+
+class HttpHeaderMessage {
+  HttpHeaderMessage({required this.name, required this.value});
+
+  String name;
+  String value;
+}
+
+class UnderlyingNetworkFetchRequestMessage {
+  UnderlyingNetworkFetchRequestMessage({
+    required this.url,
+    required this.headers,
+    required this.maxBytes,
+    required this.timeoutMillis,
+  });
+
+  String url;
+  List<HttpHeaderMessage?> headers;
+  int maxBytes;
+  int timeoutMillis;
+}
+
+class UnderlyingNetworkFetchResponseMessage {
+  UnderlyingNetworkFetchResponseMessage({
+    required this.statusCode,
+    required this.body,
+    required this.headers,
+    required this.finalUrl,
+    required this.network,
+  });
+
+  int statusCode;
+  String body;
+  List<HttpHeaderMessage?> headers;
+  String finalUrl;
+  String network;
+}
+
+class ApkInspectionMessage {
+  ApkInspectionMessage({
+    required this.valid,
+    required this.packageName,
+    required this.installedPackageName,
+    required this.versionName,
+    required this.versionCode,
+    required this.minSdk,
+    required this.targetSdk,
+    required this.deviceSdk,
+    required this.signingCertificateSha256,
+    required this.installedCertificateSha256,
+  });
+
+  bool valid;
+  String packageName;
+  String installedPackageName;
+  String versionName;
+  int versionCode;
+  int minSdk;
+  int targetSdk;
+  int deviceSdk;
+  List<String?> signingCertificateSha256;
+  List<String?> installedCertificateSha256;
+}
+
+class InstalledAppMessage {
+  InstalledAppMessage({
+    required this.packageName,
+    required this.label,
+    required this.system,
+    required this.launchable,
+  });
+
+  String packageName;
+  String label;
+  bool system;
+  bool launchable;
+}
+
 @HostApi()
 abstract class SingboxHostApi {
   @async
@@ -95,6 +214,17 @@ abstract class SingboxHostApi {
 
   @async
   void setRuntimeFlags(RuntimeFlagsMessage flags);
+
+  @async
+  void setRuntimeUiForeground(bool foreground);
+
+  @async
+  bool ensureNotificationPermission();
+
+  @async
+  void updateVpnNotificationPresentation(
+    VpnNotificationPresentationMessage presentation,
+  );
 
   @async
   void reload();
@@ -130,6 +260,26 @@ abstract class SingboxHostApi {
   String? exportLogs(String content, String suggestedName);
 
   @async
+  bool canInstallApks();
+
+  @async
+  bool openApkInstallSettings();
+
+  @async
+  void installDownloadedApk();
+
+  @async
+  ApkInspectionMessage inspectDownloadedApk(String path);
+
+  @async
+  UnderlyingNetworkFetchResponseMessage fetchUrlOnUnderlyingNetwork(
+    UnderlyingNetworkFetchRequestMessage request,
+  );
+
+  @async
+  List<String?> resolveHostOnUnderlyingNetwork(String host);
+
+  @async
   String getAndroidId();
 
   @async
@@ -154,10 +304,25 @@ abstract class SingboxHostApi {
   Map<String?, Object?> getPerformanceSnapshot();
 
   @async
+  void startRuntimeMeasurement(int durationSeconds);
+
+  @async
+  void stopRuntimeMeasurement();
+
+  @async
+  Map<String?, Object?> getRuntimeMeasurement();
+
+  @async
+  String getRuntimeMeasurementReport();
+
+  @async
   Map<String?, Object?> getHappCrypt5Support();
 
   @async
-  List<Map<String?, Object?>?> getInstalledApps();
+  List<InstalledAppMessage?> getInstalledApps();
+
+  @async
+  Uint8List? getInstalledAppIcon(String packageName, int sizePx);
 
   @async
   void setQuickSettingsTileLabel(String label);

@@ -269,6 +269,72 @@ class AppLocalizationsRu extends AppLocalizations {
   String get debugSnapshotDone => 'Снимок производительности добавлен в логи';
 
   @override
+  String get debugRuntimeMeasurementTitle => 'Измерение работы в фоне';
+
+  @override
+  String get debugRuntimeMeasurementSubtitle =>
+      'Раз в 5 секунд измеряет CPU, память, задачи ядра, соединения и трафик VPN. Работает только после запуска и не меняет маршрутизацию VPN.';
+
+  @override
+  String debugRuntimeMeasurementDuration(String duration) {
+    return 'Длительность: $duration';
+  }
+
+  @override
+  String debugRuntimeMeasurementProgress(String elapsed, String duration) {
+    return 'Идёт: $elapsed из $duration';
+  }
+
+  @override
+  String get debugRuntimeMeasurementStart => 'Запустить измерение';
+
+  @override
+  String get debugRuntimeMeasurementStop => 'Остановить измерение';
+
+  @override
+  String get debugRuntimeMeasurementSave => 'Сохранить отчёт';
+
+  @override
+  String get debugRuntimeMeasurementIdle => 'Готово к измерению';
+
+  @override
+  String get debugRuntimeMeasurementCompleted => 'Измерение завершено';
+
+  @override
+  String get debugRuntimeMeasurementStopped => 'Измерение остановлено';
+
+  @override
+  String get debugRuntimeMeasurementCollecting => 'Собираем данные…';
+
+  @override
+  String get debugRuntimeMeasurementHealthy =>
+      'За время измерения аномального роста ресурсов не найдено.';
+
+  @override
+  String get debugRuntimeMeasurementHighCpu =>
+      'Высокий CPU при низком трафике VPN. Вероятна фоновая работа native-части или ядра, а не обычная передача данных.';
+
+  @override
+  String get debugRuntimeMeasurementGoroutineGrowth =>
+      'Количество задач ядра выросло во время измерения.';
+
+  @override
+  String get debugRuntimeMeasurementMemoryGrowth =>
+      'Память процесса заметно выросла во время измерения.';
+
+  @override
+  String get debugRuntimeMeasurementConnectionChurn =>
+      'При низком трафике было много соединений ядра.';
+
+  @override
+  String get debugRuntimeMeasurementUnavailable =>
+      'Пока недостаточно данных для оценки.';
+
+  @override
+  String get debugRuntimeMeasurementSaved =>
+      'Отчёт измерения готов к сохранению';
+
+  @override
   String get teamPageTitle => 'MeowTeam';
 
   @override
@@ -354,7 +420,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aboutResourcesSubtitle =>
-      'Снимок Android по запросу. В фоне эти данные не собираются.';
+      'Снимок Android и ядра по запросу. CPU появится после второго обновления.';
 
   @override
   String get aboutResourcePss => 'Память';
@@ -364,6 +430,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aboutResourceJavaHeap => 'Java heap';
+
+  @override
+  String get aboutResourceCoreMemory => 'Память ядра';
+
+  @override
+  String get aboutResourceCoreGoroutines => 'Горутины ядра';
+
+  @override
+  String get aboutResourceCoreConnections => 'Соединения ядра (вход. / исход.)';
+
+  @override
+  String get aboutResourceProcessCpu => 'CPU процесса с прошлого обновления';
 
   @override
   String get aboutResourceSystemMemory => 'Свободная RAM системы';
@@ -1046,17 +1124,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dnsDirectResolverSubtitle => 'DNS для прямых запросов без прокси';
-
-  @override
-  String get dnsRussiaDirectTitle => 'DNS умной маршрутизации';
-
-  @override
-  String get dnsRussiaDirectSubtitle =>
-      'Используется только для доменов, направленных напрямую. На выбор маршрута не влияет, но помогает получить подходящий региональный адрес.';
-
-  @override
-  String get dnsRussiaDirectResolverSubtitle =>
-      'По умолчанию udp://77.88.8.8. Если не уверены, оставьте это значение.';
 
   @override
   String get dnsProxyPresetSubtitle =>
@@ -2187,6 +2254,17 @@ class AppLocalizationsRu extends AppLocalizations {
       'Строже выбирает самый быстрый прокси, но может чаще переключать сервер.';
 
   @override
+  String get experimentalFakeIpTitle => 'Подменять DNS-ответы (FakeIP)';
+
+  @override
+  String get experimentalFakeIpSubtitle =>
+      'Ускоряет обработку доменов внутри VPN TUN. Некоторые приложения могут быть несовместимы.';
+
+  @override
+  String get experimentalFakeIpUnavailableSubtitle =>
+      'Доступно только в VPN TUN без раздельной маршрутизации.';
+
+  @override
   String get tlsFragmentationTitle => 'TLS fragmentation';
 
   @override
@@ -2359,7 +2437,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficRulesNone => 'Не выбрано';
 
   @override
+  String get trafficRulesUsePresetTitle => 'Использовать правила трафика';
+
+  @override
+  String get trafficRulesUsePresetSubtitle =>
+      'Выберите готовый пресет для маршрутизации доменов и IP-адресов.';
+
+  @override
+  String get trafficRulesUsePresetAction => 'Использовать пресет';
+
+  @override
+  String get trafficRulesDisablePreset => 'Отключить пресет';
+
+  @override
+  String get trafficRulesQuickSelection => 'Быстрый выбор';
+
+  @override
   String get trafficRulesDeveloperSection => 'Правила от разработчика';
+
+  @override
+  String get trafficRulesDeveloperSubtitle =>
+      'Проверенные пресеты с подробным составом.';
 
   @override
   String get trafficRulesVerified => 'Проверено';
@@ -2389,7 +2487,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficRulesDeleteData => 'Удалить данные правил';
 
   @override
-  String get trafficRulesRussianTitle => 'Российские сервисы напрямую';
+  String get trafficRulesRussianTitle => '.RU без VPN';
 
   @override
   String get trafficRulesRussianSubtitle =>
@@ -2411,6 +2509,25 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get trafficRulesDetails => 'Состав правила';
+
+  @override
+  String get trafficRulesDescription => 'Описание';
+
+  @override
+  String get trafficRulesAuthor => 'Автор';
+
+  @override
+  String get trafficRulesRoutingDomains => 'Маршрутизация доменов';
+
+  @override
+  String get trafficRulesSettings => 'Настройки';
+
+  @override
+  String get trafficRulesRuDnsTitle => 'DNS для .RU без VPN';
+
+  @override
+  String get trafficRulesRuDnsSubtitle =>
+      'Используется только для российских доменов, которые правило отправляет напрямую. По умолчанию: udp://77.88.8.8.';
 
   @override
   String get trafficRulesDefaultRoute => 'Всё остальное';
@@ -2443,6 +2560,86 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get trafficRulesPrepareFailed =>
       'Не удалось подготовить данные правила. Проверьте интернет и повторите попытку.';
+
+  @override
+  String get remoteDownloadConnectTimeout =>
+      'Не удалось подключиться к серверу за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.';
+
+  @override
+  String get remoteDownloadResponseTimeout =>
+      'Сервер не начал отвечать за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.';
+
+  @override
+  String get remoteDownloadIdleTimeout =>
+      'Загрузка остановлена: сервер не передавал данные 7 секунд. Попробуйте ещё раз.';
+
+  @override
+  String get routingRuleFilesTitle => 'Файлы правил';
+
+  @override
+  String get routingRuleFilesSettingsTitle => 'Файлы правил';
+
+  @override
+  String routingRuleFilesSettingsReady(int count) {
+    return 'Готово файлов: $count';
+  }
+
+  @override
+  String get routingRuleFilesSettingsPreparing =>
+      'Встроенные файлы будут подготовлены при открытии';
+
+  @override
+  String get routingRuleFilesReadyTitle => 'Файлы правил готовы';
+
+  @override
+  String get routingRuleFilesReadySubtitle =>
+      'Локальные SRS-файлы используются правилами трафика и работают без интернета.';
+
+  @override
+  String get routingRuleFilesPreparingTitle => 'Готовим встроенные файлы';
+
+  @override
+  String get routingRuleFilesPreparingSubtitle =>
+      'Подготавливаем локальные SRS-файлы для правил трафика.';
+
+  @override
+  String get routingRuleFilesSourceTitle => 'Источник и состояние';
+
+  @override
+  String routingRuleFilesSourceMeta(String source, String version, int count) {
+    return 'Источник: $source · версия: $version · файлов: $count';
+  }
+
+  @override
+  String get routingRuleFilesUpdateAction => 'Обновить файлы';
+
+  @override
+  String get routingRuleFilesUpdatingAction => 'Обновляем файлы…';
+
+  @override
+  String routingRuleFilesEta(String duration) {
+    return 'Осталось примерно: $duration';
+  }
+
+  @override
+  String routingRuleFilesSecondsShort(int seconds) {
+    return '$seconds с';
+  }
+
+  @override
+  String routingRuleFilesMinutesShort(int minutes) {
+    return '$minutes мин';
+  }
+
+  @override
+  String get routingRuleFilesListTitle => 'Файлы правил';
+
+  @override
+  String get routingRuleFilesEmptyTitle => 'Файлы ещё не готовы';
+
+  @override
+  String get routingRuleFilesEmptySubtitle =>
+      'Откройте экран ещё раз или нажмите «Обновить файлы».';
 
   @override
   String trafficRulesRuleCount(int count) {

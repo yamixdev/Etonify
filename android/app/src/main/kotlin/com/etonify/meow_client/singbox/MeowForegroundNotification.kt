@@ -209,8 +209,15 @@ internal class MeowForegroundNotification(
             val refreshDue = lastTrafficRefreshAt == 0L ||
                 now - lastTrafficRefreshAt >= presentation.trafficRefreshSeconds * 1_000L
             if (changed && (availabilityChanged || refreshDue)) {
-                displayedUplink = smoothRate(displayedUplink, uplink, trafficAvailable)
-                displayedDownlink = smoothRate(displayedDownlink, downlink, trafficAvailable)
+                // `uplink` and `downlink` are already one-second samples from
+                // the core status stream. Averaging them again made short
+                // downloads appear far slower than their actual rate (for
+                // example, a 1 MiB/s Telegram download could remain in KiB/s
+                // after an idle sample). The refresh preference controls only
+                // how often Android redraws the notification, not the value
+                // of the latest sample.
+                displayedUplink = currentTrafficRate(uplink, trafficAvailable)
+                displayedDownlink = currentTrafficRate(downlink, trafficAvailable)
                 lastTrafficRefreshAt = now
                 refreshLocked()
             }
@@ -309,16 +316,6 @@ internal class MeowForegroundNotification(
             }
             refreshLocked()
         }
-    }
-
-    private fun smoothRate(previous: Long, incoming: Long, available: Boolean): Long {
-        if (!available || incoming <= 0L) {
-            return (previous * 2L) / 3L
-        }
-        if (previous <= 0L) {
-            return incoming
-        }
-        return ((previous * 2L) + incoming) / 3L
     }
 
     private fun restorePresentation(): Presentation {
@@ -514,6 +511,10 @@ internal class MeowForegroundNotification(
     }
 
     private fun serviceIntent(action: String, requestCode: Int): PendingIntent {
+        // `service` is the concrete VPN or local-proxy service that owns this
+        // notification. Keeping that component makes the PendingIntent
+        // explicit and ensures Android dispatches the action to a registered
+        // Service rather than the MeowBoxService helper.
         val intent = Intent(service, service.javaClass).apply {
             this.action = action
             if (action == MeowBoxService.ACTION_STOP) {

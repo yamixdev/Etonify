@@ -111,6 +111,26 @@ object SingboxController {
     var downlinkTotal: Long = 0
         private set
 
+    /**
+     * Latest lightweight runtime counters from the libbox status stream.
+     * They are diagnostic data only: no polling is added on the Android side.
+     */
+    @Volatile
+    var coreMemoryBytes: Long = 0
+        private set
+
+    @Volatile
+    var coreGoroutines: Int = 0
+        private set
+
+    @Volatile
+    var connectionsIn: Int = 0
+        private set
+
+    @Volatile
+    var connectionsOut: Int = 0
+        private set
+
     @Volatile
     private var trafficAvailable: Boolean = false
 
@@ -268,6 +288,10 @@ object SingboxController {
             downlink = message.downlink
             uplinkTotal = message.uplinkTotal
             downlinkTotal = message.downlinkTotal
+            coreMemoryBytes = message.memory
+            coreGoroutines = message.goroutines.toInt()
+            connectionsIn = message.connectionsIn.toInt()
+            connectionsOut = message.connectionsOut.toInt()
             // Some libbox builds briefly report trafficAvailable=false while
             // their cumulative counters are already populated. Treat a
             // non-zero rate or total as authoritative so the foreground
@@ -291,8 +315,10 @@ object SingboxController {
                     "downlink" to downlink,
                     "uplinkTotal" to uplinkTotal,
                     "downlinkTotal" to downlinkTotal,
-                    "connectionsIn" to message.connectionsIn,
-                    "connectionsOut" to message.connectionsOut,
+                    "coreMemoryBytes" to coreMemoryBytes,
+                    "coreGoroutines" to coreGoroutines,
+                    "connectionsIn" to connectionsIn,
+                    "connectionsOut" to connectionsOut,
                     "trafficAvailable" to trafficAvailable,
                 ),
             )
@@ -396,6 +422,10 @@ object SingboxController {
             downlink = 0
             uplinkTotal = 0
             downlinkTotal = 0
+            coreMemoryBytes = 0
+            coreGoroutines = 0
+            connectionsIn = 0
+            connectionsOut = 0
             trafficAvailable = false
         }
         emitCurrentState(error)

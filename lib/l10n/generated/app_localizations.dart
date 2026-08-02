@@ -578,6 +578,114 @@ abstract class AppLocalizations {
   /// **'Performance snapshot added to logs'**
   String get debugSnapshotDone;
 
+  /// No description provided for @debugRuntimeMeasurementTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background runtime measurement'**
+  String get debugRuntimeMeasurementTitle;
+
+  /// No description provided for @debugRuntimeMeasurementSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Measures CPU, memory, core tasks, connections and routed traffic every 5 seconds. It runs only while started and never changes VPN routing.'**
+  String get debugRuntimeMeasurementSubtitle;
+
+  /// No description provided for @debugRuntimeMeasurementDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Duration: {duration}'**
+  String debugRuntimeMeasurementDuration(String duration);
+
+  /// No description provided for @debugRuntimeMeasurementProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Running: {elapsed} of {duration}'**
+  String debugRuntimeMeasurementProgress(String elapsed, String duration);
+
+  /// No description provided for @debugRuntimeMeasurementStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start measurement'**
+  String get debugRuntimeMeasurementStart;
+
+  /// No description provided for @debugRuntimeMeasurementStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop measurement'**
+  String get debugRuntimeMeasurementStop;
+
+  /// No description provided for @debugRuntimeMeasurementSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save report'**
+  String get debugRuntimeMeasurementSave;
+
+  /// No description provided for @debugRuntimeMeasurementIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to measure'**
+  String get debugRuntimeMeasurementIdle;
+
+  /// No description provided for @debugRuntimeMeasurementCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Measurement completed'**
+  String get debugRuntimeMeasurementCompleted;
+
+  /// No description provided for @debugRuntimeMeasurementStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Measurement stopped'**
+  String get debugRuntimeMeasurementStopped;
+
+  /// No description provided for @debugRuntimeMeasurementCollecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting data…'**
+  String get debugRuntimeMeasurementCollecting;
+
+  /// No description provided for @debugRuntimeMeasurementHealthy.
+  ///
+  /// In en, this message translates to:
+  /// **'No abnormal resource growth was detected.'**
+  String get debugRuntimeMeasurementHealthy;
+
+  /// No description provided for @debugRuntimeMeasurementHighCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'High CPU with low routed traffic. This suggests background native/core work rather than normal transfer load.'**
+  String get debugRuntimeMeasurementHighCpu;
+
+  /// No description provided for @debugRuntimeMeasurementGoroutineGrowth.
+  ///
+  /// In en, this message translates to:
+  /// **'Core task count increased during the measurement.'**
+  String get debugRuntimeMeasurementGoroutineGrowth;
+
+  /// No description provided for @debugRuntimeMeasurementMemoryGrowth.
+  ///
+  /// In en, this message translates to:
+  /// **'Process memory grew noticeably during the measurement.'**
+  String get debugRuntimeMeasurementMemoryGrowth;
+
+  /// No description provided for @debugRuntimeMeasurementConnectionChurn.
+  ///
+  /// In en, this message translates to:
+  /// **'Many core connections were present while traffic was low.'**
+  String get debugRuntimeMeasurementConnectionChurn;
+
+  /// No description provided for @debugRuntimeMeasurementUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough data for an assessment yet.'**
+  String get debugRuntimeMeasurementUnavailable;
+
+  /// No description provided for @debugRuntimeMeasurementSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Measurement report is ready to save'**
+  String get debugRuntimeMeasurementSaved;
+
   /// No description provided for @teamPageTitle.
   ///
   /// In en, this message translates to:
@@ -737,7 +845,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutResourcesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On-demand Android snapshot. It is not collected in the background.'**
+  /// **'On-demand Android and core snapshot. CPU appears after the second refresh.'**
   String get aboutResourcesSubtitle;
 
   /// No description provided for @aboutResourcePss.
@@ -757,6 +865,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Java heap'**
   String get aboutResourceJavaHeap;
+
+  /// No description provided for @aboutResourceCoreMemory.
+  ///
+  /// In en, this message translates to:
+  /// **'Core memory'**
+  String get aboutResourceCoreMemory;
+
+  /// No description provided for @aboutResourceCoreGoroutines.
+  ///
+  /// In en, this message translates to:
+  /// **'Core goroutines'**
+  String get aboutResourceCoreGoroutines;
+
+  /// No description provided for @aboutResourceCoreConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Core connections (in / out)'**
+  String get aboutResourceCoreConnections;
+
+  /// No description provided for @aboutResourceProcessCpu.
+  ///
+  /// In en, this message translates to:
+  /// **'Process CPU since last refresh'**
+  String get aboutResourceProcessCpu;
 
   /// No description provided for @aboutResourceSystemMemory.
   ///
@@ -1951,24 +2083,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'DNS for direct requests without proxy'**
   String get dnsDirectResolverSubtitle;
-
-  /// No description provided for @dnsRussiaDirectTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Smart routing DNS'**
-  String get dnsRussiaDirectTitle;
-
-  /// No description provided for @dnsRussiaDirectSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Used only for domains routed directly. It does not choose the route, but can return a suitable regional address.'**
-  String get dnsRussiaDirectSubtitle;
-
-  /// No description provided for @dnsRussiaDirectResolverSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Default: udp://77.88.8.8. Keep this value if you are unsure.'**
-  String get dnsRussiaDirectResolverSubtitle;
 
   /// No description provided for @dnsProxyPresetSubtitle.
   ///
@@ -3873,6 +3987,24 @@ abstract class AppLocalizations {
   /// **'Selects the lowest-latency proxy more strictly, but may switch servers more often.'**
   String get experimentalUrlTestStrictToleranceSubtitle;
 
+  /// No description provided for @experimentalFakeIpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rewrite DNS answers (FakeIP)'**
+  String get experimentalFakeIpTitle;
+
+  /// No description provided for @experimentalFakeIpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Speeds up domain handling inside VPN TUN. Some applications may be incompatible.'**
+  String get experimentalFakeIpSubtitle;
+
+  /// No description provided for @experimentalFakeIpUnavailableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Available only with VPN TUN and split routing turned off.'**
+  String get experimentalFakeIpUnavailableSubtitle;
+
   /// No description provided for @tlsFragmentationTitle.
   ///
   /// In en, this message translates to:
@@ -4185,11 +4317,47 @@ abstract class AppLocalizations {
   /// **'Not selected'**
   String get trafficRulesNone;
 
+  /// No description provided for @trafficRulesUsePresetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use traffic rules'**
+  String get trafficRulesUsePresetTitle;
+
+  /// No description provided for @trafficRulesUsePresetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a ready-made preset for domain and IP routing.'**
+  String get trafficRulesUsePresetSubtitle;
+
+  /// No description provided for @trafficRulesUsePresetAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Use preset'**
+  String get trafficRulesUsePresetAction;
+
+  /// No description provided for @trafficRulesDisablePreset.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable preset'**
+  String get trafficRulesDisablePreset;
+
+  /// No description provided for @trafficRulesQuickSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick selection'**
+  String get trafficRulesQuickSelection;
+
   /// No description provided for @trafficRulesDeveloperSection.
   ///
   /// In en, this message translates to:
   /// **'Developer rules'**
   String get trafficRulesDeveloperSection;
+
+  /// No description provided for @trafficRulesDeveloperSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified presets with a detailed breakdown.'**
+  String get trafficRulesDeveloperSubtitle;
 
   /// No description provided for @trafficRulesVerified.
   ///
@@ -4242,7 +4410,7 @@ abstract class AppLocalizations {
   /// No description provided for @trafficRulesRussianTitle.
   ///
   /// In en, this message translates to:
-  /// **'Russian services directly'**
+  /// **'.RU without VPN'**
   String get trafficRulesRussianTitle;
 
   /// No description provided for @trafficRulesRussianSubtitle.
@@ -4280,6 +4448,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rule details'**
   String get trafficRulesDetails;
+
+  /// No description provided for @trafficRulesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get trafficRulesDescription;
+
+  /// No description provided for @trafficRulesAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'Author'**
+  String get trafficRulesAuthor;
+
+  /// No description provided for @trafficRulesRoutingDomains.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain routing'**
+  String get trafficRulesRoutingDomains;
+
+  /// No description provided for @trafficRulesSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get trafficRulesSettings;
+
+  /// No description provided for @trafficRulesRuDnsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS for .RU without VPN'**
+  String get trafficRulesRuDnsTitle;
+
+  /// No description provided for @trafficRulesRuDnsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Used only for Russian domains that this rule sends directly. Default: udp://77.88.8.8.'**
+  String get trafficRulesRuDnsSubtitle;
 
   /// No description provided for @trafficRulesDefaultRoute.
   ///
@@ -4340,6 +4544,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not prepare rule data. Check your connection and try again.'**
   String get trafficRulesPrepareFailed;
+
+  /// No description provided for @remoteDownloadConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the server within 7 seconds. Check your connection or active VPN and try again.'**
+  String get remoteDownloadConnectTimeout;
+
+  /// No description provided for @remoteDownloadResponseTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not start responding within 7 seconds. Check your connection or active VPN and try again.'**
+  String get remoteDownloadResponseTimeout;
+
+  /// No description provided for @remoteDownloadIdleTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The download stopped because the server sent no data for 7 seconds. Try again.'**
+  String get remoteDownloadIdleTimeout;
+
+  /// No description provided for @routingRuleFilesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule files'**
+  String get routingRuleFilesTitle;
+
+  /// No description provided for @routingRuleFilesSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule files'**
+  String get routingRuleFilesSettingsTitle;
+
+  /// No description provided for @routingRuleFilesSettingsReady.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files ready'**
+  String routingRuleFilesSettingsReady(int count);
+
+  /// No description provided for @routingRuleFilesSettingsPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Bundled files are prepared when you open this screen'**
+  String get routingRuleFilesSettingsPreparing;
+
+  /// No description provided for @routingRuleFilesReadyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule files are ready'**
+  String get routingRuleFilesReadyTitle;
+
+  /// No description provided for @routingRuleFilesReadySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local SRS files are used by traffic rules and work without an internet connection.'**
+  String get routingRuleFilesReadySubtitle;
+
+  /// No description provided for @routingRuleFilesPreparingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing bundled files'**
+  String get routingRuleFilesPreparingTitle;
+
+  /// No description provided for @routingRuleFilesPreparingSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing local SRS files for traffic rules.'**
+  String get routingRuleFilesPreparingSubtitle;
+
+  /// No description provided for @routingRuleFilesSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source and status'**
+  String get routingRuleFilesSourceTitle;
+
+  /// No description provided for @routingRuleFilesSourceMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source} · version: {version} · files: {count}'**
+  String routingRuleFilesSourceMeta(String source, String version, int count);
+
+  /// No description provided for @routingRuleFilesUpdateAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update files'**
+  String get routingRuleFilesUpdateAction;
+
+  /// No description provided for @routingRuleFilesUpdatingAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating files…'**
+  String get routingRuleFilesUpdatingAction;
+
+  /// No description provided for @routingRuleFilesEta.
+  ///
+  /// In en, this message translates to:
+  /// **'About {duration} remaining'**
+  String routingRuleFilesEta(String duration);
+
+  /// No description provided for @routingRuleFilesSecondsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds}s'**
+  String routingRuleFilesSecondsShort(int seconds);
+
+  /// No description provided for @routingRuleFilesMinutesShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes}m'**
+  String routingRuleFilesMinutesShort(int minutes);
+
+  /// No description provided for @routingRuleFilesListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rule files'**
+  String get routingRuleFilesListTitle;
+
+  /// No description provided for @routingRuleFilesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Files are not ready yet'**
+  String get routingRuleFilesEmptyTitle;
+
+  /// No description provided for @routingRuleFilesEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open this screen again or tap Update files.'**
+  String get routingRuleFilesEmptySubtitle;
 
   /// No description provided for @trafficRulesRuleCount.
   ///
