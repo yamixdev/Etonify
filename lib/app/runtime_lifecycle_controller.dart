@@ -460,7 +460,7 @@ class RuntimeLifecycleController {
           error: 'vpn_permission_denied',
         );
       }
-      return startRuntimeWithBuild(
+      return await startRuntimeWithBuild(
         build: build,
         useVpn: useVpn,
         promotePreparedConfig: promotePreparedConfig,

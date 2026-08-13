@@ -39,6 +39,9 @@ class SubscriptionFailure {
 }
 
 class SubscriptionHttpStatusException extends HttpException {
+  // HttpException needs a message assembled from [statusCode], so its URI
+  // cannot be forwarded as a super parameter here.
+  // ignore: use_super_parameters
   SubscriptionHttpStatusException(this.statusCode, {Uri? uri})
     : super('Subscription server returned HTTP $statusCode', uri: uri);
 
