@@ -66,6 +66,8 @@ diagnostics/
 *.trace
 
 # Local caches and temporary files
+.agents/
+skills-lock.json
 *.tmp
 *.temp
 *.bak
