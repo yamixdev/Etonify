@@ -117,6 +117,14 @@ class MeowBoxService(
                 )
             }
         }
+
+        fun requestNotificationLatencyRefresh(): Boolean {
+            var accepted = false
+            for (boxService in activeServices) {
+                accepted = boxService.foregroundNotification.requestLatencyRefresh() || accepted
+            }
+            return accepted
+        }
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -712,7 +720,10 @@ class MeowBoxService(
                 )
             }
 
-            cleanupComplete = clientDisconnected && cleanupComplete
+            // CommandClient is only the diagnostics/status consumer. A blocked
+            // disconnect must not keep the VPN foreground notification alive
+            // after the native service itself has successfully closed below.
+            // closeService()/close() remain the authoritative cleanup steps.
         }
 
         // Затем закрываем native runtime и CommandServer.

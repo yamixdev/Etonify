@@ -81,6 +81,26 @@ class MeowVpnService : VpnService() {
                 ?: return
             boxService.requestRuntimeRecovery("network_change:$reason")
         }
+
+        fun cancelScheduledRestart(context: Context, reason: String) {
+            val flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            val restartIntent = Intent(context, MeowVpnService::class.java)
+                .setAction(MeowBoxService.ACTION_START)
+            val pending = PendingIntent.getForegroundService(
+                context,
+                RESTART_REQUEST_CODE,
+                restartIntent,
+                flags,
+            ) ?: return
+            runCatching {
+                val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                alarm.cancel(pending)
+                pending.cancel()
+                MeowDiagnostics.log(TAG, "scheduled_restart_cancelled reason=$reason")
+            }.onFailure {
+                Log.w(TAG, "cancelScheduledRestart failed reason=$reason", it)
+            }
+        }
     }
 
     private lateinit var boxService: MeowBoxService
@@ -227,22 +247,7 @@ class MeowVpnService : VpnService() {
     }
 
     private fun cancelScheduledRestart(reason: String) {
-        val flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        val restartIntent = Intent(this, MeowVpnService::class.java)
-            .setAction(MeowBoxService.ACTION_START)
-        val pending = PendingIntent.getForegroundService(
-            this,
-            RESTART_REQUEST_CODE,
-            restartIntent,
-            flags,
-        ) ?: return
-        runCatching {
-            val alarm = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarm.cancel(pending)
-            pending.cancel()
-            MeowDiagnostics.log(TAG, "scheduled_restart_cancelled reason=$reason")
-        }.onFailure {
-            Log.w(TAG, "cancelScheduledRestart failed reason=$reason", it)
-        }
+        cancelScheduledRestart(this, reason)
     }
+
 }

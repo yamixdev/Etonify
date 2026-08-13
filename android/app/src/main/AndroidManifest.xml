@@ -118,6 +118,10 @@
                 android:value="user-initiated local proxy tunnel" />
         </service>
 
+        <receiver
+            android:name=".singbox.MeowNotificationActionReceiver"
+            android:exported="false" />
+
         <service
             android:name=".MeowQuickSettingsTileService"
             android:exported="true"

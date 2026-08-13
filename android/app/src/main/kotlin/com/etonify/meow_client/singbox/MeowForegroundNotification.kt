@@ -57,6 +57,15 @@ internal class MeowForegroundNotification(
         private const val PREF_URLTEST_TIMEOUT = "urltest_timeout"
         private const val PREF_URLTEST_CONCURRENCY = "urltest_concurrency"
         private const val PREF_URLTEST_DEADLINE = "urltest_deadline"
+
+        fun clearPersistedState(context: Context, notificationId: Int) {
+            context.getSharedPreferences(PRESENTATION_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply()
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(notificationId)
+        }
     }
 
     private data class UrlTestRequest(
@@ -130,6 +139,7 @@ internal class MeowForegroundNotification(
     private var displayedUplink = 0L
     private var displayedDownlink = 0L
     private var lastTrafficRefreshAt = 0L
+    private var refreshPending = false
     private var latencyChecking = false
     private var latencyActionGeneration = 0L
     private var latencyActionInFlight = false
@@ -226,7 +236,7 @@ internal class MeowForegroundNotification(
 
     fun clearSavedPresentation() {
         synchronized(this) {
-            presentationPrefs.edit().clear().apply()
+            clearPersistedState(service, notificationId)
             presentation = Presentation()
             displayedUplink = 0L
             displayedDownlink = 0L
@@ -426,11 +436,17 @@ internal class MeowForegroundNotification(
     }
 
     private fun refreshLocked() {
-        if (!foregroundStarted) {
+        if (!foregroundStarted || refreshPending) {
             return
         }
+        // Several core events can arrive in one main-loop turn. Coalescing
+        // them prevents Android from seeing a burst of foreground-notification
+        // reposts, which can make an ongoing VPN notification jump around the
+        // shade relative to navigation and media notifications.
+        refreshPending = true
         mainHandler.post {
             synchronized(this) {
+                refreshPending = false
                 if (foregroundStarted) {
                     notificationManager.notify(notificationId, buildNotification())
                 }
@@ -461,7 +477,13 @@ internal class MeowForegroundNotification(
             .setShowWhen(false)
             .setContentIntent(contentIntent())
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            foregroundPresentationNeedsImmediateDelivery(lifecycleStatus)
+        ) {
+            // IMMEDIATE is needed only while a new foreground service is
+            // becoming visible. Reapplying it to the long-running Connected
+            // notification asks Android to promote every traffic refresh.
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
         if (showDetails && presentation.urlTestRequest != null) {
@@ -469,7 +491,10 @@ internal class MeowForegroundNotification(
                 Notification.Action.Builder(
                     Icon.createWithResource(service, android.R.drawable.ic_popup_sync),
                     presentation.refreshLabel,
-                    serviceIntent(ACTION_REFRESH_LATENCY, ACTION_REFRESH_REQUEST_CODE),
+                    notificationActionIntent(
+                        MeowNotificationActionReceiver.ACTION_REFRESH_LATENCY,
+                        ACTION_REFRESH_REQUEST_CODE,
+                    ),
                 ).build(),
             )
         }
@@ -477,9 +502,12 @@ internal class MeowForegroundNotification(
             Notification.Action.Builder(
                 Icon.createWithResource(service, android.R.drawable.ic_menu_close_clear_cancel),
                 presentation.stopLabel,
-                // The stop path removes the foreground notification only after
-                // runtime cleanup is confirmed by MeowBoxService.
-                serviceIntent(MeowBoxService.ACTION_STOP, ACTION_STOP_REQUEST_CODE),
+                // A receiver can stop an existing service without creating a
+                // new one when Android delivers a stale notification action.
+                notificationActionIntent(
+                    MeowNotificationActionReceiver.ACTION_STOP_RUNTIME,
+                    ACTION_STOP_REQUEST_CODE,
+                ),
             ).build(),
         )
         return builder.build()
@@ -510,24 +538,8 @@ internal class MeowForegroundNotification(
         else -> status
     }
 
-    private fun serviceIntent(action: String, requestCode: Int): PendingIntent {
-        // `service` is the concrete VPN or local-proxy service that owns this
-        // notification. Keeping that component makes the PendingIntent
-        // explicit and ensures Android dispatches the action to a registered
-        // Service rather than the MeowBoxService helper.
-        val intent = Intent(service, service.javaClass).apply {
-            this.action = action
-            if (action == MeowBoxService.ACTION_STOP) {
-                putExtra(MeowBoxService.EXTRA_STOP_REASON, "notification_action")
-            }
-        }
-        return PendingIntent.getService(
-            service,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
+    private fun notificationActionIntent(action: String, requestCode: Int): PendingIntent =
+        MeowNotificationActionReceiver.pendingIntent(service, action, requestCode)
 
     private fun contentIntent(): PendingIntent {
         val intent = Intent(service, MainActivity::class.java).apply {
@@ -561,3 +573,12 @@ internal class MeowForegroundNotification(
     private fun formatRate(bytesPerSecond: Long): String =
         "${formatBytes(max(0L, bytesPerSecond))}/с"
 }
+
+/**
+ * A foreground service needs immediate notification delivery only while it is
+ * being created. Once connected, leave ordering and visual timing to Android
+ * so Etonify's regular traffic refreshes do not compete with navigation or
+ * media notifications.
+ */
+internal fun foregroundPresentationNeedsImmediateDelivery(status: String): Boolean =
+    status == "Starting" || status == "Restarting"

@@ -769,7 +769,12 @@ object SingboxController {
                     addCommand(Libbox.CommandGroup)
                     addCommand(Libbox.CommandLog)
                     addCommand(Libbox.CommandStatus)
-                    statusInterval = if (MeowApplication.performanceMode == "economy") 2_000L else 1_000L
+                    // CommandClientOptions carries a Go time.Duration, i.e.
+                    // nanoseconds, not milliseconds. Passing 1_000 here used
+                    // to sample status every microsecond, so the byte delta was
+                    // displayed as a one-second rate and severely understated
+                    // notification traffic while burning needless CPU.
+                    statusInterval = commandStatusIntervalNanos(MeowApplication.performanceMode)
                 }
                 client = Libbox.newCommandClient(createCommandClientHandler(epoch), options)
                 commandClient = client
@@ -1137,3 +1142,6 @@ object SingboxController {
         }
     }
 }
+
+internal fun commandStatusIntervalNanos(performanceMode: String): Long =
+    if (performanceMode == "economy") 2_000_000_000L else 1_000_000_000L
