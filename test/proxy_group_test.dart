@@ -642,6 +642,74 @@ void main() {
     expect(outbounds.any((entry) => entry['tag'] == mixedProxyTag), isFalse);
   });
 
+  test('emits WireGuard peer configs as selectable endpoints', () {
+    const subscription = Subscription(
+      id: 'wireguard-sub',
+      name: 'WireGuard',
+      url: 'file:///wireguard.conf',
+      selectedProxyTag: 'wireguard-node',
+      outbounds: [
+        Outbound(
+          tag: 'wireguard-node',
+          name: 'WireGuard node',
+          config: {
+            'type': 'wireguard',
+            'tag': 'wireguard-node',
+            'private_key': 'yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=',
+            'address': ['10.0.0.2/32'],
+            'peers': [
+              {
+                'address': 'wg.example.com',
+                'port': 51820,
+                'public_key': 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=',
+                'allowed_ips': ['0.0.0.0/0', '::/0'],
+                'persistent_keepalive_interval': '25s',
+              },
+            ],
+          },
+        ),
+        Outbound(
+          tag: 'vless-node',
+          name: 'VLESS node',
+          config: {
+            'type': 'vless',
+            'tag': 'vless-node',
+            'server': 'vless.example.com',
+            'server_port': 443,
+            'uuid': '11111111-1111-1111-1111-111111111111',
+          },
+        ),
+      ],
+    );
+
+    final config = _defaultBuilder(
+      subscription,
+      selectedProxyTag: 'wireguard-node',
+    ).build();
+    final outbounds = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final endpoints = (config['endpoints'] as List)
+        .cast<Map<String, dynamic>>();
+    final selector = outbounds.firstWhere((entry) => entry['tag'] == 'select');
+    final wireGuard = endpoints.singleWhere(
+      (entry) => entry['tag'] == 'wireguard-node',
+    );
+
+    expect(selector['outbounds'], contains('wireguard-node'));
+    expect(selector['default'], 'wireguard-node');
+    expect(outbounds.any((entry) => entry['tag'] == 'wireguard-node'), isFalse);
+    expect(wireGuard.containsKey('server'), isFalse);
+    expect((wireGuard['peers'] as List).single['address'], 'wg.example.com');
+    expect(
+      (wireGuard['peers'] as List).single['persistent_keepalive_interval'],
+      25,
+    );
+    final lowest = outbounds.singleWhere(
+      (entry) => entry['tag'] == lowestProxyTag,
+    );
+    expect(lowest['outbounds'], containsAll(['wireguard-node', 'vless-node']));
+  });
+
   test('applies TLS record fragmentation only to TLS proxy outbounds', () {
     const subscription = Subscription(
       id: 'sub',

@@ -1,4 +1,4 @@
-/// Parses WireGuard `.conf` files into a sing-box WireGuard endpoint outbound.
+/// Parses WireGuard `.conf` files into a sing-box WireGuard endpoint.
 ///
 /// Example input:
 /// ```ini
@@ -20,23 +20,32 @@ class WireGuardConfigParser {
 
   /// Returns `true` if [content] looks like a WireGuard .conf file.
   static bool canParse(String content) {
-    return content.contains('[Interface]') && content.contains('[Peer]');
+    return RegExp(
+          r'^\s*\[\s*Interface\s*\]\s*$',
+          caseSensitive: false,
+          multiLine: true,
+        ).hasMatch(content) &&
+        RegExp(
+          r'^\s*\[\s*Peer\s*\]\s*$',
+          caseSensitive: false,
+          multiLine: true,
+        ).hasMatch(content);
   }
 
   /// Parses a WireGuard config into a single sing-box outbound map.
   /// Returns a list with 0 or 1 element.
   static List<Map<String, dynamic>> parse(String content) {
     final sections = _parseSections(content);
-    final iface = sections['Interface'];
+    final iface = _firstSection(sections, 'interface');
     if (iface == null) return [];
 
     final result = <String, dynamic>{'type': 'wireguard', 'tag': ''};
 
     // Interface → private_key, address, mtu
-    final privateKey = iface['PrivateKey'] ?? '';
+    final privateKey = iface.values['PrivateKey'] ?? '';
     if (privateKey.isNotEmpty) result['private_key'] = privateKey;
 
-    final address = iface['Address'] ?? '';
+    final address = iface.values['Address'] ?? '';
     if (address.isNotEmpty) {
       result['address'] = address
           .split(',')
@@ -45,14 +54,14 @@ class WireGuardConfigParser {
           .toList();
     }
 
-    final mtu = int.tryParse(iface['MTU'] ?? '');
+    final mtu = int.tryParse(iface.values['MTU'] ?? '');
     if (mtu != null && mtu > 0) result['mtu'] = mtu;
 
     // Peers
     final peers = <Map<String, dynamic>>[];
-    for (final entry in sections.entries) {
-      if (entry.key != 'Peer') continue;
-      final p = entry.value;
+    for (final section in sections) {
+      if (section.name.toLowerCase() != 'peer') continue;
+      final p = section.values;
       final peer = <String, dynamic>{};
 
       // Endpoint → address + port
@@ -81,9 +90,10 @@ class WireGuardConfigParser {
         peer['allowed_ips'] = ['0.0.0.0/0', '::/0'];
       }
 
-      final keepalive = p['PersistentKeepalive'] ?? '';
-      if (keepalive.isNotEmpty) {
-        peer['persistent_keepalive_interval'] = '${keepalive}s';
+      final keepalive = int.tryParse(p['PersistentKeepalive'] ?? '');
+      if (keepalive != null && keepalive >= 0 && keepalive <= 65535) {
+        // sing-box expects an integer number of seconds, not a Go duration.
+        peer['persistent_keepalive_interval'] = keepalive;
       }
 
       peers.add(peer);
@@ -103,16 +113,10 @@ class WireGuardConfigParser {
 
   // ─────────────────── INI parser ───────────────────
 
-  /// Parses INI-style sections. Returns a map of section name → key-value pairs.
-  /// Note: multiple [Peer] sections are supported by returning them with the
-  /// same key (last one wins in a regular Map, so we use a special approach).
-  static Map<String, Map<String, String>> _parseSections(String content) {
-    // We need to handle multiple [Peer] sections. For simplicity, we merge
-    // all peers into the first Peer section since most configs have one peer.
-    // For proper multi-peer support, the parse() method already handles it
-    // by re-scanning.
-    final result = <String, Map<String, String>>{};
-    String currentSection = '';
+  /// Parses INI-style sections without merging repeated [Peer] blocks.
+  static List<_WireGuardIniSection> _parseSections(String content) {
+    final result = <_WireGuardIniSection>[];
+    _WireGuardIniSection? currentSection;
 
     for (final line in content.split('\n')) {
       final trimmed = line.trim();
@@ -123,21 +127,33 @@ class WireGuardConfigParser {
       }
 
       if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-        currentSection = trimmed.substring(1, trimmed.length - 1);
-        result.putIfAbsent(currentSection, () => {});
+        currentSection = _WireGuardIniSection(
+          trimmed.substring(1, trimmed.length - 1).trim(),
+        );
+        result.add(currentSection);
         continue;
       }
 
-      if (currentSection.isNotEmpty) {
+      if (currentSection != null) {
         final eqIdx = trimmed.indexOf('=');
         if (eqIdx > 0) {
           final key = trimmed.substring(0, eqIdx).trim();
           final value = trimmed.substring(eqIdx + 1).trim();
-          result[currentSection]![key] = value;
+          currentSection.values[key] = value;
         }
       }
     }
     return result;
+  }
+
+  static _WireGuardIniSection? _firstSection(
+    List<_WireGuardIniSection> sections,
+    String name,
+  ) {
+    for (final section in sections) {
+      if (section.name.toLowerCase() == name) return section;
+    }
+    return null;
   }
 
   static void _parseEndpoint(
@@ -162,4 +178,11 @@ class WireGuardConfigParser {
       if (port != null) cb(host, port);
     }
   }
+}
+
+class _WireGuardIniSection {
+  _WireGuardIniSection(this.name);
+
+  final String name;
+  final Map<String, String> values = <String, String>{};
 }

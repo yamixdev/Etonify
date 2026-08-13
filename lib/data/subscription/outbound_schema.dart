@@ -545,32 +545,49 @@ class ParsedOutboundSchema {
         return 'missing wireguard address';
       }
       final peers = config['peers'];
-      if (peers is List) {
-        for (var i = 0; i < peers.length; i++) {
-          final peer = peers[i];
-          if (peer is! Map) {
-            return 'invalid wireguard peer $i';
+      if (peers is! List || peers.isEmpty) {
+        return 'missing wireguard peers';
+      }
+      for (var i = 0; i < peers.length; i++) {
+        final peer = peers[i];
+        if (peer is! Map) {
+          return 'invalid wireguard peer $i';
+        }
+        final peerAddress = peer['address']?.toString().trim() ?? '';
+        if (peerAddress.isEmpty) {
+          return 'missing wireguard peer $i address';
+        }
+        final peerPort = _intValue(peer['port']);
+        if (peerPort == null || peerPort <= 0 || peerPort > 65535) {
+          return 'invalid wireguard peer $i port';
+        }
+        final publicKey = (peer['public_key'] as String?)?.trim() ?? '';
+        if (publicKey.isEmpty) {
+          return 'missing wireguard peer $i public_key';
+        }
+        if (!_isValidBase64Key(publicKey, 32)) {
+          return 'invalid wireguard peer $i public_key';
+        }
+        final preSharedKey = (peer['pre_shared_key'] as String?)?.trim() ?? '';
+        if (preSharedKey.isNotEmpty && !_isValidBase64Key(preSharedKey, 32)) {
+          return 'invalid wireguard peer $i pre_shared_key';
+        }
+        final allowedIps = peer['allowed_ips'];
+        if (allowedIps is! List || allowedIps.isEmpty) {
+          return 'missing wireguard peer $i allowed_ips';
+        }
+        final keepalive = peer['persistent_keepalive_interval'];
+        if (keepalive != null) {
+          final keepaliveSeconds = _wireGuardKeepaliveSeconds(keepalive);
+          if (keepaliveSeconds == null ||
+              keepaliveSeconds < 0 ||
+              keepaliveSeconds > 65535) {
+            return 'invalid wireguard peer $i persistent_keepalive_interval';
           }
-          final publicKey = (peer['public_key'] as String?)?.trim() ?? '';
-          if (publicKey.isEmpty) {
-            return 'missing wireguard peer $i public_key';
-          }
-          if (!_isValidBase64Key(publicKey, 32)) {
-            return 'invalid wireguard peer $i public_key';
-          }
-          final preSharedKey =
-              (peer['pre_shared_key'] as String?)?.trim() ?? '';
-          if (preSharedKey.isNotEmpty && !_isValidBase64Key(preSharedKey, 32)) {
-            return 'invalid wireguard peer $i pre_shared_key';
-          }
-          final allowedIps = peer['allowed_ips'];
-          if (allowedIps is! List || allowedIps.isEmpty) {
-            return 'missing wireguard peer $i allowed_ips';
-          }
-          final reserved = peer['reserved'];
-          if (reserved is List && !_isValidWireGuardReserved(reserved)) {
-            return 'invalid wireguard peer $i reserved';
-          }
+        }
+        final reserved = peer['reserved'];
+        if (reserved is List && !_isValidWireGuardReserved(reserved)) {
+          return 'invalid wireguard peer $i reserved';
         }
       }
     }
@@ -976,6 +993,7 @@ class ParsedOutboundSchema {
         final sanitizedPeers = peers
             .map((peer) => _sanitizeWireGuardPeer(peer))
             .whereType<Map<String, dynamic>>()
+            .map(_normalizeWireGuardPeer)
             .toList(growable: false);
         if (sanitizedPeers.isEmpty) {
           sanitized.remove('peers');
@@ -1000,9 +1018,13 @@ class ParsedOutboundSchema {
       }
     }
 
-    if (_normalizedType(outbound['type']) == 'hysteria2') {
+    if (_usesQuicTransport(outbound)) {
       final tls = outbound['tls'];
       if (tls is Map) {
+        // uTLS copies a TCP ClientHello and sing-box deliberately does not
+        // support it for QUIC-based outbounds. Keep the subscription's real
+        // SNI and ALPN, but never pass an invalid uTLS option to Hysteria,
+        // TUIC, Naive QUIC or the V2Ray QUIC transport.
         tls.remove('utls');
       }
     }
@@ -1044,6 +1066,7 @@ class ParsedOutboundSchema {
       return null;
     }
     final tls = _retainAllowedKeys(Map<String, dynamic>.from(value), _tlsKeys);
+    final alpn = _sanitizeAlpn(tls['alpn']);
     final ech = _sanitizeNestedMap(tls['ech'], _tlsEchKeys);
     final utls = _sanitizeNestedMap(tls['utls'], _tlsUtlsKeys);
     final reality = _sanitizeNestedMap(tls['reality'], _tlsRealityKeys);
@@ -1066,7 +1089,45 @@ class ParsedOutboundSchema {
       tls['reality'] = reality;
     }
 
+    if (alpn == null) {
+      tls.remove('alpn');
+    } else {
+      tls['alpn'] = alpn;
+    }
+
     return tls.isEmpty ? null : tls;
+  }
+
+  /// sing-box expects ALPN as a string list. Imports produced by older clients
+  /// sometimes serialize it as a comma-separated string; normalize that form
+  /// instead of dropping the server-provided HTTP/2 or HTTP/3 negotiation.
+  static List<String>? _sanitizeAlpn(dynamic value) {
+    final values = switch (value) {
+      String text => text.split(','),
+      List items => items.map((item) => item.toString()),
+      _ => const <String>[],
+    };
+    final result = <String>[];
+    for (final value in values) {
+      final normalized = value.trim();
+      if (normalized.isEmpty || normalized.length > 255) continue;
+      if (!result.contains(normalized)) {
+        result.add(normalized);
+      }
+    }
+    return result.isEmpty ? null : result;
+  }
+
+  static bool _usesQuicTransport(Map<String, dynamic> outbound) {
+    final type = _normalizedType(outbound['type']);
+    if (type == 'hysteria' || type == 'hysteria2' || type == 'tuic') {
+      return true;
+    }
+    if (type == 'naive' && outbound['quic'] == true) {
+      return true;
+    }
+    final transport = outbound['transport'];
+    return transport is Map && _normalizedType(transport['type']) == 'quic';
   }
 
   static Map<String, dynamic>? _sanitizeTransport(dynamic value) {
@@ -1228,6 +1289,19 @@ class ParsedOutboundSchema {
     return _sanitizeNestedMap(value, _wireGuardPeerKeys);
   }
 
+  /// Older Etonify builds wrote WireGuard keepalive as a Go-style duration
+  /// (`25s`). The stable sing-box endpoint schema accepts an integer number
+  /// of seconds, so preserve existing imports by migrating that one form.
+  static Map<String, dynamic> _normalizeWireGuardPeer(
+    Map<String, dynamic> peer,
+  ) {
+    final seconds = _wireGuardKeepaliveSeconds(
+      peer['persistent_keepalive_interval'],
+    );
+    if (seconds == null) return peer;
+    return {...peer, 'persistent_keepalive_interval': seconds};
+  }
+
   static Map<String, dynamic>? _sanitizeXhttpXmux(dynamic value) {
     if (value is! Map) {
       return null;
@@ -1356,6 +1430,17 @@ class ParsedOutboundSchema {
       return int.tryParse(value);
     }
     return null;
+  }
+
+  static int? _wireGuardKeepaliveSeconds(dynamic value) {
+    final direct = _intValue(value);
+    if (direct != null) return direct;
+    if (value is! String) return null;
+    final match = RegExp(
+      r'^(\d+)\s*s$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    return match == null ? null : int.tryParse(match.group(1)!);
   }
 
   static String _normalizedType(dynamic value) {

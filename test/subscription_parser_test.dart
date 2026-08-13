@@ -303,6 +303,79 @@ void main() {
       expect(sanitized?['tls']['reality']['short_id'], 'ab01');
     });
 
+    test('keeps QUIC SNI and ALPN while removing unsupported uTLS', () {
+      const quicOutbounds = [
+        {
+          'type': 'hysteria2',
+          'tag': 'hy2',
+          'server': 'hy2.example.com',
+          'server_port': 443,
+          'tls': {
+            'enabled': true,
+            'server_name': 'front.hy2.example',
+            'alpn': 'h3, h2',
+            'utls': {'enabled': true, 'fingerprint': 'chrome'},
+          },
+        },
+        {
+          'type': 'tuic',
+          'tag': 'tuic',
+          'server': 'tuic.example.com',
+          'server_port': 443,
+          'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+          'tls': {
+            'enabled': true,
+            'server_name': 'front.tuic.example',
+            'alpn': ['h3', 'h3'],
+            'utls': {'enabled': true, 'fingerprint': 'chrome'},
+          },
+        },
+        {
+          'type': 'naive',
+          'tag': 'naive-quic',
+          'server': 'naive.example.com',
+          'server_port': 443,
+          'quic': true,
+          'tls': {
+            'enabled': true,
+            'server_name': 'front.naive.example',
+            'alpn': ['h3'],
+            'utls': {'enabled': true, 'fingerprint': 'chrome'},
+          },
+        },
+        {
+          'type': 'vless',
+          'tag': 'vless-quic',
+          'server': 'vless.example.com',
+          'server_port': 443,
+          'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+          'transport': {'type': 'quic'},
+          'tls': {
+            'enabled': true,
+            'server_name': 'front.vless.example',
+            'alpn': ['h3'],
+            'utls': {'enabled': true, 'fingerprint': 'chrome'},
+          },
+        },
+      ];
+
+      for (final outbound in quicOutbounds) {
+        final sanitized = ParsedOutboundSchema.sanitize(outbound);
+        final tls = (sanitized?['tls'] as Map?)?.cast<String, dynamic>();
+        expect(
+          tls,
+          isNotNull,
+          reason: 'TLS is retained for ${outbound['tag']}',
+        );
+        expect(tls!['server_name'], startsWith('front.'));
+        expect(tls.containsKey('utls'), isFalse);
+        expect(tls['alpn'], isNotEmpty);
+      }
+
+      final hy2 = ParsedOutboundSchema.sanitize(quicOutbounds.first)!;
+      expect(hy2['tls']['alpn'], ['h3', 'h2']);
+    });
+
     test('validates VLESS encryption during import and startup validation', () {
       const baseOutbound = {
         'type': 'vless',
@@ -1184,7 +1257,57 @@ PersistentKeepalive = 25
         r['peers'][0]['pre_shared_key'],
         'e6OeLbqRHGEhDi1n3dRNqHQO3RKSIWJgc9jX7WFR2EU=',
       );
-      expect(r['peers'][0]['persistent_keepalive_interval'], '25s');
+      expect(r['peers'][0]['persistent_keepalive_interval'], 25);
+    });
+
+    test('preserves every peer and bracketed IPv6 endpoints', () {
+      const content = '''
+[Interface]
+PrivateKey = yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=
+Address = 10.0.0.2/32
+
+[Peer]
+PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+AllowedIPs = 0.0.0.0/0
+Endpoint = wg-one.example:51820
+
+[Peer]
+PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+AllowedIPs = ::/0
+Endpoint = [2001:db8::1]:51821
+PersistentKeepalive = 15
+''';
+
+      final result = WireGuardConfigParser.parse(content).single;
+      final peers = (result['peers'] as List).cast<Map<String, dynamic>>();
+
+      expect(peers, hasLength(2));
+      expect(peers[0]['address'], 'wg-one.example');
+      expect(peers[0]['port'], 51820);
+      expect(peers[1]['address'], '2001:db8::1');
+      expect(peers[1]['port'], 51821);
+      expect(peers[1]['persistent_keepalive_interval'], 15);
+    });
+
+    test('migrates legacy keepalive durations to endpoint seconds', () {
+      final sanitized = ParsedOutboundSchema.sanitize({
+        'type': 'wireguard',
+        'private_key': 'yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=',
+        'address': ['10.0.0.2/32'],
+        'peers': [
+          {
+            'address': 'wg.example.com',
+            'port': 51820,
+            'public_key': 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=',
+            'allowed_ips': ['0.0.0.0/0'],
+            'persistent_keepalive_interval': '25s',
+          },
+        ],
+      });
+
+      expect(sanitized, isNotNull);
+      final peer = (sanitized!['peers'] as List).single as Map<String, dynamic>;
+      expect(peer['persistent_keepalive_interval'], 25);
     });
   });
 
