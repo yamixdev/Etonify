@@ -2540,6 +2540,52 @@ void main() {
       expect(ruleSets.any((item) => item['tag'] == 'social-services'), isFalse);
     },
   );
+  test(
+    'home proxy cache retains only the selected proxy for a large profile',
+    () {
+      final subscription = Subscription(
+        id: 'large',
+        name: 'Large profile',
+        url: 'https://example.test/large',
+        selectedProxyTag: 'node-777',
+        outbounds: List<Outbound>.generate(
+          1000,
+          (index) => Outbound(
+            tag: 'node-$index',
+            name: 'Node $index',
+            config: {
+              'type': 'vless',
+              'server': 'node-$index.example.test',
+              'server_port': 443,
+              'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            },
+          ),
+        ),
+      );
+
+      final cache = buildHomeProxyCache(
+        ProxyCacheBuildInput(
+          subscription: subscription,
+          selectedProxyTag: 'node-777',
+          lowestLatency: null,
+          runtimeLowestOutboundTag: null,
+          runtimeLowestSelections: const <String, String>{},
+          urlTestInFlight: false,
+          runtimeLatencies: const <String, int>{},
+          unavailableLatencyTags: const <String>{},
+          latencyErrors: const <String, String>{},
+          runtimeGroupSelections: const <String, String>{},
+          markAllServersRussia: false,
+        ),
+      );
+
+      expect(cache.includesFullProxyList, isFalse);
+      expect(cache.totalTopLevelProxyCount, 1000);
+      expect(cache.activeProxies, isEmpty);
+      expect(cache.groupChildrenByTag, isEmpty);
+      expect(cache.displayProxy?.tag, 'node-777');
+    },
+  );
 }
 
 SingboxConfigBuilder _defaultBuilder(

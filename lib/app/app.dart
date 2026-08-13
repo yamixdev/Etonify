@@ -218,9 +218,13 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   List<AppProxySummary> _activeProxiesCache = const [];
   final ProxyRuntimeVisualStore _proxyRuntimeVisualStates =
       ProxyRuntimeVisualStore();
+  Map<String, AppProxySummary> _proxySummariesByTagCache =
+      const <String, AppProxySummary>{};
   Map<String, List<AppProxySummary>> _activeGroupChildrenByTagCache =
       const <String, List<AppProxySummary>>{};
   int _activeTopLevelProxiesCount = 0;
+  bool _fullProxyListCacheReady = false;
+  bool _fullProxyListCacheRequested = false;
   Subscription? _activeLookupSubscription;
   List<Outbound> _activeVisibleOutboundsLookup = const [];
   Map<String, Outbound> _activeOutboundByTagLookup = const {};
@@ -233,6 +237,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   int _groupsEventsSinceLastDiagnosticsLog = 0;
   DateTime? _lastGroupsDiagnosticsLogAt;
   Set<String> _preloadedProxyFlagCodes = const <String>{};
+  static const _maximumPreloadedProxyFlags = 24;
   AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
 
   AppConnectionPhase get _connectionPhase => _runtimeConnection.phase;
@@ -424,9 +429,15 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       _activeProxiesCache = const [];
       _activeGroupChildrenByTagCache = const <String, List<AppProxySummary>>{};
       _activeTopLevelProxiesCount = 0;
+      _fullProxyListCacheReady = false;
+      _fullProxyListCacheRequested = false;
       _publishProxyRuntimeVisualStates();
       _publishTrafficDashboardSnapshot();
       unawaited(_syncQuickSettingsTileLabel());
+      return;
+    }
+    if (!_fullProxyListCacheRequested) {
+      _refreshHomeProxyCache();
       return;
     }
     _derivedCacheBuildQueued = true;
@@ -452,6 +463,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       _activeProxiesCache = const [];
       _activeGroupChildrenByTagCache = const <String, List<AppProxySummary>>{};
       _activeTopLevelProxiesCount = 0;
+      _fullProxyListCacheReady = false;
+      _fullProxyListCacheRequested = false;
       _publishProxyRuntimeVisualStates();
       _publishTrafficDashboardSnapshot();
       unawaited(_syncQuickSettingsTileLabel());
@@ -472,6 +485,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
             _activeProxiesCache = result.activeProxies;
             _activeGroupChildrenByTagCache = result.groupChildrenByTag;
             _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
+            _fullProxyListCacheReady = result.includesFullProxyList;
+            _fullProxyListCacheRequested = result.includesFullProxyList;
           });
           _publishProxyRuntimeVisualStates();
           _publishTrafficDashboardSnapshot();
@@ -494,6 +509,60 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         );
       }
     }());
+  }
+
+  void _refreshHomeProxyCache() {
+    final subscription = _activeSubscription;
+    if (subscription == null) {
+      return;
+    }
+    final generation = _derivedCacheBuildGeneration;
+    final input = _currentProxyCacheBuildInput(subscription);
+    _derivedCacheBuildInFlight = true;
+    unawaited(() async {
+      try {
+        final result = await buildHomeProxyCacheInBackground(input);
+        if (!mounted || generation != _derivedCacheBuildGeneration) {
+          return;
+        }
+        setState(() {
+          _activeProfileCache = result.activeProfile;
+          _displayProxyCache = result.displayProxy;
+          _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
+          _activeProxiesCache = const <AppProxySummary>[];
+          _activeGroupChildrenByTagCache =
+              const <String, List<AppProxySummary>>{};
+          _fullProxyListCacheReady = false;
+        });
+        _publishProxyRuntimeVisualStates();
+        _publishTrafficDashboardSnapshot();
+        _preloadProxyFlags();
+        unawaited(_syncQuickSettingsTileLabel());
+      } finally {
+        _derivedCacheBuildInFlight = false;
+      }
+      if (!mounted ||
+          (!_derivedCacheBuildQueued &&
+              generation == _derivedCacheBuildGeneration)) {
+        return;
+      }
+      _derivedCacheBuildQueued = false;
+      _derivedCacheBuildTimer?.cancel();
+      _derivedCacheBuildTimer = Timer(
+        _derivedCacheBuildDebounce,
+        _runDerivedCacheBuild,
+      );
+    }());
+  }
+
+  void _ensureFullProxyListCache() {
+    if (_activeSubscription == null ||
+        _fullProxyListCacheReady ||
+        _fullProxyListCacheRequested) {
+      return;
+    }
+    _fullProxyListCacheRequested = true;
+    _rebuildDerivedCaches();
   }
 
   ProxyCacheBuildInput _currentProxyCacheBuildInput(
@@ -549,15 +618,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   }
 
   void _publishProxyRuntimeVisualStates() {
-    final summariesByTag = <String, AppProxySummary>{
-      for (final proxy in _activeProxiesCache) proxy.tag: proxy,
-      for (final children in _activeGroupChildrenByTagCache.values)
-        for (final proxy in children) proxy.tag: proxy,
-    };
+    _refreshProxySummariesByTagCache();
+    final summariesByTag = _proxySummariesByTagCache;
     final displayProxy = _displayProxyCache;
-    if (displayProxy != null) {
-      summariesByTag[displayProxy.tag] = displayProxy;
-    }
     ProxyRuntimeVisualState runtimeStateFor(AppProxySummary proxy) {
       final runtimeProxy = _withRuntimeProxyState(proxy, summariesByTag);
       return _runtimeVisualStateFor(runtimeProxy);
@@ -575,6 +638,19 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _proxyRuntimeVisualStates.replaceAll(next);
   }
 
+  void _refreshProxySummariesByTagCache() {
+    final summaries = <String, AppProxySummary>{
+      for (final proxy in _activeProxiesCache) proxy.tag: proxy,
+      for (final children in _activeGroupChildrenByTagCache.values)
+        for (final proxy in children) proxy.tag: proxy,
+    };
+    final displayProxy = _displayProxyCache;
+    if (displayProxy != null) {
+      summaries[displayProxy.tag] = displayProxy;
+    }
+    _proxySummariesByTagCache = summaries;
+  }
+
   void _publishProxyRuntimeVisualStatesForTags(
     Iterable<String> tags, {
     bool notifyRevision = false,
@@ -585,15 +661,57 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       if (tag.isEmpty) {
         continue;
       }
-      final proxy = _displayProxyForSelectedTag(tag);
+      final proxy =
+          _proxySummariesByTagCache[tag] ?? _displayProxyForSelectedTag(tag);
       updates[tag] = proxy == null
           ? null
-          : _runtimeVisualStateFor(_withDirectRuntimeProxyState(proxy));
+          : _runtimeVisualStateFor(
+              _withRuntimeProxyState(proxy, _proxySummariesByTagCache),
+            );
     }
     _proxyRuntimeVisualStates.updateTags(
       updates,
       notifyRevision: notifyRevision,
     );
+  }
+
+  void _publishProxyRuntimeVisualStatesForUrlTestTags(Iterable<String> tags) {
+    final directTags = tags
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toSet();
+    if (directTags.isEmpty) {
+      return;
+    }
+    if (!_fullProxyListCacheReady) {
+      final displayProxy = _displayProxyCache;
+      if (displayProxy == null) {
+        return;
+      }
+      final selectedChildTag = displayProxy.selectedChildTag;
+      final affectsDisplay =
+          directTags.contains(displayProxy.tag) ||
+          (selectedChildTag != null && directTags.contains(selectedChildTag)) ||
+          isLowestProxyTag(displayProxy.tag);
+      if (affectsDisplay) {
+        _publishProxyRuntimeVisualStatesForTags([
+          displayProxy.tag,
+        ], notifyRevision: true);
+      }
+      return;
+    }
+    final affectedTags = <String>{...directTags};
+    for (final proxy in _activeProxiesCache) {
+      if (isLowestProxyTag(proxy.tag)) {
+        affectedTags.add(proxy.tag);
+      }
+    }
+    for (final entry in _activeGroupChildrenByTagCache.entries) {
+      if (entry.value.any((child) => directTags.contains(child.tag))) {
+        affectedTags.add(entry.key);
+      }
+    }
+    _publishProxyRuntimeVisualStatesForTags(affectedTags, notifyRevision: true);
   }
 
   Future<bool> _networkInterfaceUsable({String reason = 'dart_check'}) async {
@@ -736,12 +854,31 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   }
 
   void _preloadProxyFlags() {
-    final codes = <String>{
-      for (final proxy in _activeProxiesCache) proxy.countryCode,
-      for (final children in _activeGroupChildrenByTagCache.values)
-        for (final proxy in children) proxy.countryCode,
-      if (_displayProxyCache != null) _displayProxyCache!.countryCode,
-    }.map(CountryFlagBadge.circleFlagCodeFor).whereType<String>().toSet();
+    final codes = <String>{};
+    void addCode(String countryCode) {
+      if (codes.length >= _maximumPreloadedProxyFlags) {
+        return;
+      }
+      final code = CountryFlagBadge.circleFlagCodeFor(countryCode);
+      if (code != null) {
+        codes.add(code);
+      }
+    }
+
+    // Favour the active card and the first visible proxy rows. The rest are
+    // loaded by their own lazy widgets when the user scrolls, rather than
+    // keeping every distinct flag in a very large subscription decoded.
+    if (_displayProxyCache case final displayProxy?) {
+      addCode(displayProxy.countryCode);
+    }
+    for (final proxy in _activeProxiesCache) {
+      addCode(proxy.countryCode);
+    }
+    for (final children in _activeGroupChildrenByTagCache.values) {
+      for (final proxy in children) {
+        addCode(proxy.countryCode);
+      }
+    }
     if (codes.isEmpty || setEquals(codes, _preloadedProxyFlagCodes)) {
       return;
     }
@@ -952,6 +1089,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _activeProxiesCache = result.activeProxies;
     _activeGroupChildrenByTagCache = result.groupChildrenByTag;
     _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
+    _fullProxyListCacheReady = result.includesFullProxyList;
+    _fullProxyListCacheRequested = result.includesFullProxyList;
     _publishProxyRuntimeVisualStates();
     _publishTrafficDashboardSnapshot();
     _preloadProxyFlags();
@@ -984,6 +1123,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _activeProxiesCache = const [];
     _activeGroupChildrenByTagCache = const <String, List<AppProxySummary>>{};
     _activeTopLevelProxiesCount = 0;
+    _fullProxyListCacheReady = false;
+    _fullProxyListCacheRequested = false;
     _publishProxyRuntimeVisualStates();
     _publishTrafficDashboardSnapshot();
   }
@@ -1459,6 +1600,13 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     if (_displayProxyCache?.tag == normalized) {
       return true;
     }
+    if (!_fullProxyListCacheReady) {
+      _ensureActiveLookupCaches();
+      return _activeOutboundByTagLookup.containsKey(normalized) ||
+          _activeGroupByTagLookup.containsKey(normalized) ||
+          _proxyChainForTag(normalized) != null ||
+          isLowestProxyTag(normalized);
+    }
     for (final proxy in _activeProxiesCache) {
       if (proxy.tag == normalized) {
         return true;
@@ -1478,6 +1626,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     final normalizedGroupTag = groupTag.trim();
     final normalizedChildTag = childTag.trim();
     if (normalizedGroupTag.isEmpty || normalizedChildTag.isEmpty) {
+      return false;
+    }
+    if (!_fullProxyListCacheReady) {
       return false;
     }
     for (final proxy in _activeProxiesCache) {
@@ -1892,27 +2043,26 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     clearInstalledAppIconCache();
     _clearInstalledAppsCache();
 
-    ++_derivedCacheBuildGeneration;
-    _derivedCacheBuildTimer?.cancel();
-    _derivedCacheBuildTimer = null;
-    _derivedCacheBuildQueued = false;
-    _derivedCacheBuildInFlight = false;
+    // Keep the compact proxy view-model cache. Clearing it here forced an
+    // isolate rebuild and a root setState immediately after Android warned
+    // about memory pressure, which made the first frame after returning from
+    // the background noticeably freeze. The heavyweight image/icon and source
+    // caches above are enough to release meaningful memory; proxy summaries
+    // are needed for an instant, responsive home screen.
     _proxyChainTargetSourceCache.clear();
-    _activeProxiesCache = const <AppProxySummary>[];
-    _displayProxyCache = null;
-    _activeGroupChildrenByTagCache = const <String, List<AppProxySummary>>{};
+    _preloadedProxyFlagCodes = const <String>{};
+    var trafficDashboardChanged = false;
     if (!_connected) {
       _resetTrafficDashboardData();
+      trafficDashboardChanged = true;
     } else if (_trafficSamples.length > 60) {
       _trafficSamples = List<TrafficSample>.unmodifiable(
         _trafficSamples.skip(_trafficSamples.length - 60),
       );
+      trafficDashboardChanged = true;
     }
-    _trafficDashboardSnapshot.value = _currentTrafficDashboardSnapshot();
-
-    if (mounted) {
-      setState(() {});
-      _rebuildDerivedCaches();
+    if (trafficDashboardChanged) {
+      _publishTrafficDashboardSnapshot(force: true);
     }
 
     AppLogStore.info(
@@ -1922,7 +2072,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
           'proxyRowsBefore=$proxyCacheBefore groupCachesBefore=$groupCacheBefore '
           'proxyChainSourcesBefore=$proxyChainSourcesBefore '
           'trafficSamplesBefore=$samplesBefore '
-          'installedAppsBefore=$installedAppsBefore',
+          'installedAppsBefore=$installedAppsBefore '
+          'proxyViewModelsRetained=true',
     );
   }
 
@@ -2471,9 +2622,22 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
 
   Future<void> _bootstrap() async {
     final bootstrapStopwatch = Stopwatch()..start();
-    final bootstrap = await _bootstrapController.load(
-      providedStore: widget.store,
-    );
+    late final AppBootstrapResult bootstrap;
+    try {
+      bootstrap = await _bootstrapController.load(providedStore: widget.store);
+    } catch (error, stackTrace) {
+      AppLogStore.error(
+        'bootstrap',
+        'Fatal bootstrap failure: $error\n$stackTrace',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _ready = true;
+      });
+      return;
+    }
     final criticalBootstrapMs = bootstrapStopwatch.elapsedMilliseconds;
     final store = bootstrap.store;
     final ownsStore = bootstrap.ownsStore;
@@ -2547,12 +2711,21 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       );
     });
     if (!useInMemoryBootstrap) {
-      _scheduleDeferredBootstrapStatuses();
+      _scheduleDeferredBootstrapStatuses(
+        includeAdBlock: state.adBlockEnabled,
+        includeRussiaRouteData: state.useRussiaRouteData,
+      );
     }
     if (!useInMemoryBootstrap && normalized.activeSubscriptionId.isNotEmpty) {
-      // Keep the first frame metadata-only, then hydrate just the active
-      // subscription so the collapsed proxy footer is restored after restart.
-      unawaited(_ensureActiveSubscriptionHydratedForRuntime());
+      // Keep the first frame metadata-only. Opening the encrypted payload box
+      // and building thousands of proxy view models is intentionally delayed
+      // until Flutter has presented the home screen.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(SubscriptionStore.ensurePayloadReady());
+          unawaited(_ensureActiveSubscriptionHydratedForRuntime());
+        }
+      });
     }
     unawaited(_syncQuickSettingsTileLabel());
     AppLogStore.info('sing-box', 'startup');
@@ -2591,17 +2764,31 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     }
   }
 
-  void _scheduleDeferredBootstrapStatuses() {
+  void _scheduleDeferredBootstrapStatuses({
+    required bool includeAdBlock,
+    required bool includeRussiaRouteData,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      unawaited(_refreshDeferredBootstrapStatuses());
+      unawaited(
+        _refreshDeferredBootstrapStatuses(
+          includeAdBlock: includeAdBlock,
+          includeRussiaRouteData: includeRussiaRouteData,
+        ),
+      );
     });
   }
 
-  Future<void> _refreshDeferredBootstrapStatuses() async {
-    final statuses = await _bootstrapController.loadDeferredStatuses();
+  Future<void> _refreshDeferredBootstrapStatuses({
+    required bool includeAdBlock,
+    required bool includeRussiaRouteData,
+  }) async {
+    final statuses = await _bootstrapController.loadDeferredStatuses(
+      includeAdBlock: includeAdBlock,
+      includeRussiaRouteData: includeRussiaRouteData,
+    );
     if (!mounted) {
       return;
     }
@@ -4205,6 +4392,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         runtimeSnapshot: _currentSubscriptionRuntimeSnapshot(
           preserveRuntimeState: preserveRuntimeState,
         ),
+        buildFullProxyList: _fullProxyListCacheRequested,
       );
       if (!mounted ||
           !_subscriptionCoordinator.isHydrationCurrent(generation)) {
@@ -4323,6 +4511,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       runtimeSnapshot: _currentSubscriptionRuntimeSnapshot(
         preserveRuntimeState: true,
       ),
+      buildFullProxyList: _fullProxyListCacheRequested,
     );
     if (!mounted || !_subscriptionCoordinator.isHydrationCurrent(generation)) {
       return false;
@@ -6159,7 +6348,9 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       if (result.requiresRootRebuild) {
         _applyRuntimeStateToDerivedCaches();
       } else {
-        _publishProxyRuntimeVisualStates();
+        _publishProxyRuntimeVisualStatesForUrlTestTags(
+          result.affectedProxyTags,
+        );
       }
     }
 
@@ -6946,6 +7137,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         initialSort: _proxySort,
         progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
         runtimeStates: _proxyRuntimeVisualStates,
+        proxyListLoading:
+            _fullProxyListCacheRequested && !_fullProxyListCacheReady,
       ),
       callbacks: ProxiesPresentationCallbacks(
         changeSort: _setProxySort,
@@ -7017,7 +7210,12 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         });
       },
       onOpenRequested: () {
-        unawaited(_ensureActiveSubscriptionHydratedForRuntime());
+        unawaited(() async {
+          final hydrated = await _ensureActiveSubscriptionHydratedForRuntime();
+          if (mounted && hydrated) {
+            _ensureFullProxyListCache();
+          }
+        }());
       },
       homeBuilder: (context, metrics, gestures) => _buildHomePresentation(
         context,

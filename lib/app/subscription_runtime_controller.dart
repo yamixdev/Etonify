@@ -208,6 +208,7 @@ class SubscriptionRuntimeController {
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
     required String? Function(String subscriptionId) payloadSnapshotFor,
+    bool buildFullProxyList = true,
   }) async {
     if (metadataSubscriptions.isEmpty) {
       return const ResolvedSubscriptions(
@@ -236,6 +237,7 @@ class SubscriptionRuntimeController {
       preserveRuntimeState: preserveRuntimeState,
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshot: payloadSnapshotFor(activeMetadata.id),
+      buildFullProxyList: buildFullProxyList,
     );
     final subscriptions = metadataSubscriptions
         .map(
@@ -260,6 +262,7 @@ class SubscriptionRuntimeController {
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
     required String? payloadSnapshot,
+    bool buildFullProxyList = true,
   }) {
     final metadataMap = metadata.toMetadataMap();
     final lowestLatency = preserveRuntimeState
@@ -304,21 +307,22 @@ class SubscriptionRuntimeController {
       final normalizedSubscription = subscription.copyWith(
         selectedProxyTag: normalized.selectedProxyTag,
       );
-      final proxyCache = buildProxyCache(
-        ProxyCacheBuildInput(
-          subscription: normalizedSubscription,
-          selectedProxyTag: normalized.selectedProxyTag,
-          lowestLatency: lowestLatency,
-          runtimeLowestOutboundTag: runtimeLowestOutboundTag,
-          runtimeLowestSelections: runtimeLowestSelections,
-          urlTestInFlight: urlTestInFlight,
-          runtimeLatencies: runtimeLatencies,
-          unavailableLatencyTags: unavailableLatencyTags,
-          latencyErrors: latencyErrors,
-          runtimeGroupSelections: runtimeGroupSelections,
-          markAllServersRussia: markAllServersRussia,
-        ),
+      final cacheInput = ProxyCacheBuildInput(
+        subscription: normalizedSubscription,
+        selectedProxyTag: normalized.selectedProxyTag,
+        lowestLatency: lowestLatency,
+        runtimeLowestOutboundTag: runtimeLowestOutboundTag,
+        runtimeLowestSelections: runtimeLowestSelections,
+        urlTestInFlight: urlTestInFlight,
+        runtimeLatencies: runtimeLatencies,
+        unavailableLatencyTags: unavailableLatencyTags,
+        latencyErrors: latencyErrors,
+        runtimeGroupSelections: runtimeGroupSelections,
+        markAllServersRussia: markAllServersRussia,
       );
+      final proxyCache = buildFullProxyList
+          ? buildProxyCache(cacheInput)
+          : buildHomeProxyCache(cacheInput);
       return HydratedActiveSubscription(
         subscription: normalizedSubscription,
         normalized: normalized,

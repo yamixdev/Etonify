@@ -46,6 +46,7 @@ class ProxyCacheBuildResult {
     required this.activeProxies,
     this.groupChildrenByTag = const <String, List<AppProxySummary>>{},
     required this.totalTopLevelProxyCount,
+    this.includesFullProxyList = true,
   });
 
   final AppProfileSummary? activeProfile;
@@ -53,6 +54,7 @@ class ProxyCacheBuildResult {
   final List<AppProxySummary> activeProxies;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final int totalTopLevelProxyCount;
+  final bool includesFullProxyList;
 }
 
 class SingboxConfigBuildInput {
@@ -236,6 +238,241 @@ Future<ProxyCacheBuildResult> buildProxyCacheInBackground(
     () => buildProxyCache(input),
     debugName: 'meow-proxy-cache',
   );
+}
+
+/// Builds the compact state required by the home screen.
+///
+/// The full proxy list deliberately has a separate builder: a subscription
+/// with thousands of nodes should not allocate a second complete set of
+/// presentation objects just to show the selected server on the home page.
+Future<ProxyCacheBuildResult> buildHomeProxyCacheInBackground(
+  ProxyCacheBuildInput input,
+) {
+  return Isolate.run(
+    () => buildHomeProxyCache(input),
+    debugName: 'meow-home-proxy-cache',
+  );
+}
+
+ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
+  final subscription = input.subscription;
+  if (subscription == null) {
+    return const ProxyCacheBuildResult(
+      activeProfile: null,
+      displayProxy: null,
+      activeProxies: <AppProxySummary>[],
+      groupChildrenByTag: <String, List<AppProxySummary>>{},
+      totalTopLevelProxyCount: 0,
+      includesFullProxyList: false,
+    );
+  }
+
+  final visibleOutbounds = subscription.outbounds
+      .where((outbound) => !outbound.info.deleted)
+      .toList(growable: false);
+  final selectableOutbounds = visibleOutbounds
+      .where((outbound) => !_isGroupOnlyOutbound(outbound))
+      .toList(growable: false);
+  final activeProfile = _buildProfileSummary(subscription);
+  final displayProxy = _buildHomeDisplayProxy(
+    input,
+    subscription,
+    visibleOutbounds,
+    selectableOutbounds,
+  );
+  return ProxyCacheBuildResult(
+    activeProfile: activeProfile,
+    displayProxy: displayProxy,
+    activeProxies: const <AppProxySummary>[],
+    totalTopLevelProxyCount: selectableOutbounds.length,
+    includesFullProxyList: false,
+  );
+}
+
+AppProxySummary _buildHomeDisplayProxy(
+  ProxyCacheBuildInput input,
+  Subscription subscription,
+  List<Outbound> visibleOutbounds,
+  List<Outbound> selectableOutbounds,
+) {
+  final selectedTag = input.selectedProxyTag.trim();
+  final outboundByTag = <String, Outbound>{
+    for (final outbound in visibleOutbounds) outbound.tag: outbound,
+  };
+  final groupByTag = <String, SubscriptionGroup>{
+    for (final group in subscription.groups) group.tag: group,
+  };
+  final chainByTag = <String, SubscriptionProxyChain>{
+    for (final chain in subscription.proxyChains) chain.tag: chain,
+  };
+
+  AppProxySummary summaryForOutbound(Outbound outbound) =>
+      _buildProxySummary(input, outbound);
+
+  AppProxySummary? selectedGroupChild(SubscriptionGroup group) {
+    final runtimeSelected = input.runtimeGroupSelections[group.tag]?.trim();
+    if (runtimeSelected != null && runtimeSelected.isNotEmpty) {
+      final selected = outboundByTag[runtimeSelected];
+      if (selected != null && !selected.info.deleted) {
+        return summaryForOutbound(selected);
+      }
+    }
+    AppProxySummary? first;
+    AppProxySummary? best;
+    int? bestLatency;
+    for (final tag in group.outboundTags) {
+      final outbound = outboundByTag[tag];
+      if (outbound == null || outbound.info.deleted) {
+        continue;
+      }
+      final summary = summaryForOutbound(outbound);
+      first ??= summary;
+      if (summary.latencyUnavailable || summary.latency == null) {
+        continue;
+      }
+      if (bestLatency == null || summary.latency! < bestLatency) {
+        bestLatency = summary.latency;
+        best = summary;
+      }
+    }
+    return best ?? first;
+  }
+
+  AppProxySummary groupSummary(SubscriptionGroup group) {
+    final child = selectedGroupChild(group);
+    final childName = child?.displayName;
+    final childCountry = child?.countryCode ?? '';
+    final childCount = group.outboundTags
+        .where(outboundByTag.containsKey)
+        .length;
+    final count = childCount == 0 ? group.outboundTags.length : childCount;
+    final groupCountry = input.markAllServersRussia
+        ? 'RU'
+        : _normalizeCountryCode(group.country);
+    return AppProxySummary(
+      tag: group.tag,
+      displayName: group.name.trim().isEmpty ? group.tag : group.name,
+      countryCode: childCountry.isNotEmpty ? childCountry : groupCountry,
+      type: 'urltest',
+      server: '',
+      port: 0,
+      detailText: childName == null || childName.isEmpty
+          ? 'URLTest · $count outbounds'
+          : 'URLTest · $childName',
+      ip: child?.ip ?? '',
+      latency: child?.latency,
+      latencyFresh: child?.latencyFresh ?? false,
+      latencyChecking:
+          child?.latencyChecking ?? (input.urlTestInFlight && child == null),
+      latencyUnavailable: child?.latencyUnavailable ?? false,
+      latencyError: child?.latencyError,
+      protocolLabel: childName == null || childName.isEmpty
+          ? 'URLTest · $count outbounds'
+          : 'URLTest · $childName',
+      endpointLabel: child?.endpointLabel ?? '',
+      isGroup: true,
+      childCount: count,
+      selectedChildTag: child?.tag,
+      selectedChildName: childName,
+      highlighted: selectedTag == group.tag,
+    );
+  }
+
+  if (isLowestProxyTag(selectedTag)) {
+    final selectedTagForLowest =
+        input.runtimeLowestSelections[selectedTag] ??
+        (selectedTag == lowestProxyTag ? input.runtimeLowestOutboundTag : null);
+    AppProxySummary? selected;
+    if (selectedTagForLowest != null && selectedTagForLowest.isNotEmpty) {
+      final group = groupByTag[selectedTagForLowest];
+      if (group != null) {
+        selected = selectedGroupChild(group);
+      } else {
+        final outbound = outboundByTag[selectedTagForLowest];
+        if (outbound != null) {
+          selected = summaryForOutbound(outbound);
+        }
+      }
+    }
+    final invalidSelection =
+        selected == null ||
+        input.unavailableLatencyTags.contains(selected.tag) ||
+        input.latencyErrors.containsKey(selected.tag);
+    if (invalidSelection) {
+      final allUnavailable =
+          selectableOutbounds.isNotEmpty &&
+          selectableOutbounds.every(
+            (outbound) => input.unavailableLatencyTags.contains(outbound.tag),
+          );
+      return AppProxySummary(
+        tag: selectedTag.isEmpty ? lowestProxyTag : selectedTag,
+        displayName: lowestProxyBaseLabel(selectedTag),
+        countryCode: '',
+        type: 'urltest',
+        server: '',
+        port: 0,
+        detailText: 'URLTest · auto',
+        ip: '',
+        latency: null,
+        latencyFresh: false,
+        latencyChecking: input.urlTestInFlight,
+        latencyUnavailable: allUnavailable,
+        latencyError: null,
+        protocolLabel: 'URLTest · auto',
+        endpointLabel: '',
+        highlighted: true,
+      );
+    }
+    return selected.copyWith(
+      tag: selectedTag,
+      displayName: lowestProxyDisplayName(selectedTag, selected.displayName),
+      detailText: 'URLTest · ${selected.displayName}',
+      protocolLabel: 'URLTest · ${selected.protocolLabel}',
+      selectedChildTag: selected.tag,
+      selectedChildName: selected.displayName,
+      highlighted: true,
+    );
+  }
+
+  final group = groupByTag[selectedTag];
+  if (group != null) {
+    return groupSummary(group);
+  }
+  final chain = chainByTag[selectedTag];
+  if (chain != null) {
+    final target = outboundByTag[chain.targetTag];
+    if (target != null) {
+      final targetSummary = summaryForOutbound(target);
+      final runtimeLatency = input.runtimeLatencies[chain.tag];
+      final unavailable = input.unavailableLatencyTags.contains(chain.tag);
+      final error = input.latencyErrors[chain.tag];
+      return targetSummary.copyWith(
+        tag: chain.tag,
+        displayName: chain.name.trim().isEmpty
+            ? '${chain.detourTag} -> ${targetSummary.displayName}'
+            : chain.name.trim(),
+        detailText:
+            'Chain · ${chain.detourTag} -> ${targetSummary.displayName}',
+        protocolLabel: 'Chain · ${targetSummary.protocolLabel}',
+        latency: runtimeLatency ?? targetSummary.latency,
+        clearLatency:
+            runtimeLatency == null &&
+            targetSummary.latency == null &&
+            unavailable,
+        latencyFresh: runtimeLatency != null || targetSummary.latencyFresh,
+        latencyChecking: input.urlTestInFlight,
+        latencyUnavailable: unavailable,
+        latencyError: error,
+        clearLatencyError: error == null,
+        highlighted: true,
+      );
+    }
+  }
+  final selectedOutbound = outboundByTag[selectedTag];
+  if (selectedOutbound != null) {
+    return summaryForOutbound(selectedOutbound);
+  }
+  return _fallbackDisplayProxy(subscription, selectableOutbounds);
 }
 
 ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {

@@ -24,6 +24,7 @@ class ProxiesPresentationData {
     required this.initialSort,
     required this.progressiveBlurEnabled,
     required this.runtimeStates,
+    this.proxyListLoading = false,
   });
 
   final List<AppProxySummary> proxies;
@@ -41,6 +42,7 @@ class ProxiesPresentationData {
   final ProxySort initialSort;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore runtimeStates;
+  final bool proxyListLoading;
 
   double get speedBytesPerSecond =>
       connected && trafficAvailable ? downlinkBytesPerSecond.toDouble() : 0;
@@ -127,6 +129,7 @@ class ProxiesPresentationBuilder {
       isProxyChainTag: callbacks.isProxyChainTag,
       onActiveProxyHideIpChanged: callbacks.changeHideActiveProxyIp,
       runtimeStates: data.runtimeStates,
+      loading: data.proxyListLoading,
       embedded: true,
       sheetMetricsListenable: panelMetricsListenable,
       scrollController: scrollController,

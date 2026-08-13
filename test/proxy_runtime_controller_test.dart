@@ -29,6 +29,8 @@ void main() {
 
     expect(result.changed, isTrue);
     expect(result.requiresRootRebuild, isFalse);
+    expect(result.shouldRebuildProxyCache, isFalse);
+    expect(result.affectedProxyTags, {'vless-1'});
     expect(controller.runtimeLatencies['vless-1'], 73);
     expect(controller.lowestLatency, 73);
     expect(controller.unavailableLatencyTags, isNot(contains('vless-1')));

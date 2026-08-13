@@ -322,6 +322,7 @@ class ProxiesPage extends StatefulWidget {
     this.sheetCornerRadius = 0,
     this.onHeaderTap,
     this.runtimeStates,
+    this.loading = false,
     this.groupChildrenByTag = const <String, List<AppProxySummary>>{},
   });
 
@@ -363,6 +364,7 @@ class ProxiesPage extends StatefulWidget {
   final double sheetCornerRadius;
   final VoidCallback? onHeaderTap;
   final ProxyRuntimeVisualStore? runtimeStates;
+  final bool loading;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
 
   @override
@@ -944,12 +946,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
             : entries.length,
         itemBuilder: (context, index) {
           if (widget.proxies.isEmpty) {
-            return Center(
-              child: Text(
-                l10n.noProxies,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            );
+            return _buildEmptyOrLoadingState(context: context, l10n: l10n);
           }
           return _buildEmbeddedEntry(
             context: context,
@@ -998,11 +995,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required double listTopPadding,
     required double listBottomPadding,
   }) {
-    final theme = Theme.of(context);
     if (widget.proxies.isEmpty) {
-      return Center(
-        child: Text(l10n.noProxies, style: theme.textTheme.titleMedium),
-      );
+      return _buildEmptyOrLoadingState(context: context, l10n: l10n);
     }
     final entries = _visibleEntries();
     return ListView.builder(
@@ -1011,6 +1005,27 @@ class _ProxiesPageState extends State<ProxiesPage> {
       itemBuilder: (context, index) {
         return _buildEntry(context: context, l10n: l10n, entry: entries[index]);
       },
+    );
+  }
+
+  Widget _buildEmptyOrLoadingState({
+    required BuildContext context,
+    required AppLocalizations l10n,
+  }) {
+    if (widget.loading) {
+      return const Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 3),
+        ),
+      );
+    }
+    return Center(
+      child: Text(
+        l10n.noProxies,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
     );
   }
 

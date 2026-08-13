@@ -39,6 +39,7 @@ class ProxyRuntimeGroupUpdateResult {
     required this.shouldRebuildProxyCache,
     required this.shouldClearRuntimeProxySelectionGuard,
     required this.realOutboundRuntimeStateChanged,
+    required this.affectedProxyTags,
   });
 
   static const noChanges = ProxyRuntimeGroupUpdateResult(
@@ -47,6 +48,7 @@ class ProxyRuntimeGroupUpdateResult {
     shouldRebuildProxyCache: false,
     shouldClearRuntimeProxySelectionGuard: false,
     realOutboundRuntimeStateChanged: false,
+    affectedProxyTags: <String>{},
   );
 
   final bool changed;
@@ -54,6 +56,11 @@ class ProxyRuntimeGroupUpdateResult {
   final bool shouldRebuildProxyCache;
   final bool shouldClearRuntimeProxySelectionGuard;
   final bool realOutboundRuntimeStateChanged;
+
+  /// Outbounds whose URLTest state changed in this event. The UI can update
+  /// only these rows (plus their derived groups) instead of recreating visual
+  /// state for every proxy in a large subscription.
+  final Set<String> affectedProxyTags;
 }
 
 class ProxyRuntimeController {
@@ -478,6 +485,7 @@ class ProxyRuntimeController {
       shouldRebuildProxyCache: shouldRebuildProxyCache,
       shouldClearRuntimeProxySelectionGuard: runtimeSelectionConfirmsPending,
       realOutboundRuntimeStateChanged: realOutboundRuntimeStateChanged,
+      affectedProxyTags: Set<String>.unmodifiable(touchedTags),
     );
   }
 

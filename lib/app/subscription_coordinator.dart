@@ -9,6 +9,7 @@ typedef SubscriptionMetadataLoader = Future<List<Subscription>> Function();
 typedef SubscriptionLoader = Future<Subscription?> Function(String id);
 typedef SubscriptionRefresher = Future<Subscription> Function(String id);
 typedef SubscriptionPayloadSnapshotLoader = String? Function(String id);
+typedef SubscriptionPayloadPreloader = Future<void> Function();
 
 class SubscriptionAutoRefreshResult {
   const SubscriptionAutoRefreshResult({
@@ -29,6 +30,7 @@ class SubscriptionCoordinator {
     SubscriptionLoader? loadSubscription,
     SubscriptionRefresher? refreshSubscription,
     SubscriptionPayloadSnapshotLoader? payloadSnapshotFor,
+    SubscriptionPayloadPreloader? ensurePayloadReady,
   }) : _runtime = runtime,
        _loadMetadata =
            loadMetadata ?? SubscriptionStore.getAllMetadataInBackground,
@@ -37,13 +39,19 @@ class SubscriptionCoordinator {
        _refreshSubscription =
            refreshSubscription ?? ((id) => SubscriptionStore.refresh(id)),
        _payloadSnapshotFor =
-           payloadSnapshotFor ?? SubscriptionStore.payloadSnapshotFor;
+           payloadSnapshotFor ?? SubscriptionStore.payloadSnapshotFor,
+       _ensurePayloadReady =
+           ensurePayloadReady ??
+           (payloadSnapshotFor == null
+               ? SubscriptionStore.ensurePayloadReady
+               : null);
 
   final SubscriptionRuntimeController _runtime;
   final SubscriptionMetadataLoader _loadMetadata;
   final SubscriptionLoader _loadSubscription;
   final SubscriptionRefresher _refreshSubscription;
   final SubscriptionPayloadSnapshotLoader _payloadSnapshotFor;
+  final SubscriptionPayloadPreloader? _ensurePayloadReady;
 
   int _hydrationGeneration = 0;
   Future<bool>? _activeHydrationInFlight;
@@ -87,7 +95,9 @@ class SubscriptionCoordinator {
     required String selectedProxyTag,
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
+    bool buildFullProxyList = true,
   }) async {
+    await _ensurePayloadReady?.call();
     return _runtime.resolveSubscriptions(
       metadataSubscriptions: await _loadMetadata(),
       activeSubscriptionId: activeSubscriptionId,
@@ -95,6 +105,7 @@ class SubscriptionCoordinator {
       preserveRuntimeState: preserveRuntimeState,
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshotFor: _payloadSnapshotFor,
+      buildFullProxyList: buildFullProxyList,
     );
   }
 
@@ -104,7 +115,9 @@ class SubscriptionCoordinator {
     required bool preferSelectedProxyTag,
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
-  }) {
+    bool buildFullProxyList = true,
+  }) async {
+    await _ensurePayloadReady?.call();
     return _runtime.hydrateActiveSubscriptionAndBuildProxyCache(
       metadata: metadata,
       selectedProxyTag: selectedProxyTag,
@@ -112,6 +125,7 @@ class SubscriptionCoordinator {
       preserveRuntimeState: preserveRuntimeState,
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshot: _payloadSnapshotFor(metadata.id),
+      buildFullProxyList: buildFullProxyList,
     );
   }
 

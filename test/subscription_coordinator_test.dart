@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
@@ -74,6 +75,42 @@ void main() {
     expect(coordinator.isHydrationCurrent(first), isFalse);
     expect(coordinator.isHydrationCurrent(second), isTrue);
   });
+
+  test(
+    'active hydration waits for payload storage before reading a proxy',
+    () async {
+      final stored = _subscription('active');
+      var payloadReady = false;
+      final coordinator = SubscriptionCoordinator(
+        runtime: SubscriptionRuntimeController(),
+        loadMetadata: () async => [stored.copyWith(outbounds: const [])],
+        loadSubscription: (_) async => stored,
+        ensurePayloadReady: () async {
+          await Future<void>.delayed(Duration.zero);
+          payloadReady = true;
+        },
+        payloadSnapshotFor: (id) {
+          expect(id, stored.id);
+          expect(payloadReady, isTrue);
+          return jsonEncode(stored.toPayloadMap());
+        },
+      );
+
+      final hydrated = await coordinator.hydrateActiveSubscription(
+        metadata: stored.copyWith(outbounds: const []),
+        selectedProxyTag: 'proxy-1',
+        preferSelectedProxyTag: true,
+        preserveRuntimeState: false,
+        runtimeSnapshot: const SubscriptionRuntimeSnapshot(),
+        buildFullProxyList: false,
+      );
+
+      expect(hydrated.subscription.outbounds, hasLength(1));
+      expect(hydrated.proxyCache.includesFullProxyList, isFalse);
+      expect(hydrated.proxyCache.activeProxies, isEmpty);
+      expect(hydrated.proxyCache.displayProxy?.tag, 'proxy-1');
+    },
+  );
 
   test('auto refresh reports an active runtime change', () async {
     final original = _subscription('active');
