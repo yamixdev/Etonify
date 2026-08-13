@@ -72,7 +72,7 @@ class AppBootstrapController {
     RussiaRouteStatusLoader? loadRussiaRouteStatus,
   }) : _initializeHive = initializeHive ?? HiveAppSettingsStore.initHive,
        _initializeSubscriptions =
-           initializeSubscriptions ?? SubscriptionStore.init,
+           initializeSubscriptions ?? SubscriptionStore.initForBootstrap,
        _openSettingsStore = openSettingsStore ?? HiveAppSettingsStore.open,
        _loadAppVersionInfo =
            loadAppVersionInfo ??
@@ -98,10 +98,9 @@ class AppBootstrapController {
     AppSettingsStore? store;
     var ownsStore = false;
     late AppSettingsState state;
-    var adBlockStatus = const AdBlockRuleSetStatus.unavailable();
-    var russiaRouteDataStatus = const RussiaRouteDataStatus.unavailable();
+    const adBlockStatus = AdBlockRuleSetStatus.unavailable();
+    const russiaRouteDataStatus = RussiaRouteDataStatus.unavailable();
     final appVersionInfoFuture = readAppVersionInfo();
-    final coreCapabilitiesFuture = _readCoreCapabilities();
     final usesInMemoryStore = providedStore is MemoryAppSettingsStore;
 
     try {
@@ -118,14 +117,6 @@ class AppBootstrapController {
         ownsStore = providedStore == null;
       }
       state = await store.loadState();
-      if (state.adBlockEnabled || state.useRussiaRouteData) {
-        final requiredStatuses = await loadDeferredStatuses(
-          includeAdBlock: state.adBlockEnabled,
-          includeRussiaRouteData: state.useRussiaRouteData,
-        );
-        adBlockStatus = requiredStatuses.adBlockStatus;
-        russiaRouteDataStatus = requiredStatuses.russiaRouteDataStatus;
-      }
     } catch (error, stackTrace) {
       AppLogStore.error(
         'bootstrap',
@@ -143,7 +134,10 @@ class AppBootstrapController {
     }
 
     final appVersionInfo = await appVersionInfoFuture;
-    final coreCapabilities = await coreCapabilitiesFuture;
+    // The native capability bridge is needed for migration planning, but it
+    // must not compete with encrypted Hive I/O during cold start. On slower
+    // devices that contention was visible as a blank 1–3 second launch.
+    final coreCapabilities = await _readCoreCapabilities();
     final migration = CoreConfigMigration.plan(
       state: state,
       capabilities: coreCapabilities,
@@ -182,8 +176,12 @@ class AppBootstrapController {
     );
   }
 
-  /// Reads status data that is useful for settings UI but not needed to draw
-  /// the initial screen when the related features are disabled.
+  /// Reads status data for the routing settings UI.
+  ///
+  /// These file-system checks are intentionally kept out of the critical
+  /// bootstrap path even when the corresponding feature is enabled. The
+  /// config builder reads the persisted settings and rule-set services
+  /// directly; a status only changes what the UI displays.
   Future<BootstrapDeferredStatuses> loadDeferredStatuses({
     bool includeAdBlock = true,
     bool includeRussiaRouteData = true,

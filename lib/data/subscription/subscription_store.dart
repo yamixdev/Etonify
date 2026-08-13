@@ -47,6 +47,8 @@ class SubscriptionStore {
   static const _localFileImportScheme = 'meow-file';
   static Box? _metaBox;
   static Box? _payloadBox;
+  static Future<void>? _payloadInitialization;
+  static bool _payloadMigrationRequired = false;
   static final Map<String, Future<void>> _subscriptionWriteLocks =
       <String, Future<void>>{};
   static final Map<String, Future<Subscription>> _refreshesInFlight =
@@ -54,11 +56,87 @@ class SubscriptionStore {
 
   // ─────────────────── Lifecycle ───────────────────
 
-  /// Opens the Hive box. Must be called before any other method.
-  static Future<void> init() async {
-    if (_metaBox != null) {
-      return;
+  /// Opens subscription storage.
+  ///
+  /// Most callers need both boxes and keep the default [openPayload] value.
+  /// Startup uses [initForBootstrap] instead: it opens only compact metadata,
+  /// allowing the first screen to appear before encrypted multi-megabyte
+  /// subscription payloads are mapped into Hive.
+  static Future<void> init({bool openPayload = true}) async {
+    if (_metaBox == null) {
+      await _openMetadataBox();
     }
+    if (openPayload || _payloadMigrationRequired) {
+      await ensurePayloadReady();
+    }
+  }
+
+  /// Prepares only the small metadata box for the application bootstrap.
+  static Future<void> initForBootstrap() => init(openPayload: false);
+
+  /// Opens the heavy encrypted payload box exactly once.
+  ///
+  /// All runtime/config callers await this before reading proxy definitions.
+  /// Multiple requests share one future, so a quick tap on Connect while the
+  /// post-frame warm-up is running cannot race the Hive open operation.
+  static Future<void> ensurePayloadReady() {
+    if (_payloadBox != null) {
+      return Future<void>.value();
+    }
+    final pending = _payloadInitialization;
+    if (pending != null) {
+      return pending;
+    }
+    late final Future<void> initialization;
+    initialization = () async {
+      try {
+        if (_metaBox == null) {
+          await _openMetadataBox();
+        }
+        if (_payloadBox != null) {
+          return;
+        }
+        final totalStopwatch = Stopwatch()..start();
+        final payloadStopwatch = Stopwatch()..start();
+        _payloadBox = Hive.isBoxOpen(_payloadBoxName)
+            ? Hive.box(_payloadBoxName)
+            : await Hive.openBox(
+                _payloadBoxName,
+                encryptionCipher: SecureHiveStorage.cipher,
+              );
+        payloadStopwatch.stop();
+        await _runStorageMigrations();
+        _payloadMigrationRequired = false;
+        totalStopwatch.stop();
+        await HiveStorageDiagnostics.logBoxOnce(
+          label: _payloadBoxName,
+          box: _payloadBox!,
+          openElapsed: payloadStopwatch.elapsed,
+        );
+        AppLogStore.info(
+          'storage metrics',
+          'subscriptionPayloadStorageReadyMs='
+              '${totalStopwatch.elapsedMilliseconds}',
+        );
+      } catch (error, stackTrace) {
+        AppLogStore.error(
+          'subscription storage',
+          'Failed to initialize Hive subscription payloads: '
+              '$error\n$stackTrace',
+        );
+        rethrow;
+      } finally {
+        if (identical(_payloadInitialization, initialization) &&
+            _payloadBox == null) {
+          _payloadInitialization = null;
+        }
+      }
+    }();
+    _payloadInitialization = initialization;
+    return initialization;
+  }
+
+  static Future<void> _openMetadataBox() async {
     final totalStopwatch = Stopwatch()..start();
     try {
       await SecureHiveStorage.init();
@@ -70,36 +148,27 @@ class SubscriptionStore {
               encryptionCipher: SecureHiveStorage.cipher,
             );
       metaStopwatch.stop();
-      final payloadStopwatch = Stopwatch()..start();
-      _payloadBox = Hive.isBoxOpen(_payloadBoxName)
-          ? Hive.box(_payloadBoxName)
-          : await Hive.openBox(
-              _payloadBoxName,
-              encryptionCipher: SecureHiveStorage.cipher,
-            );
-      payloadStopwatch.stop();
-      await _runStorageMigrations();
-      await Future.wait<void>([
-        HiveStorageDiagnostics.logBoxOnce(
-          label: _metaBoxName,
-          box: _metaBox!,
-          openElapsed: metaStopwatch.elapsed,
-        ),
-        HiveStorageDiagnostics.logBoxOnce(
-          label: _payloadBoxName,
-          box: _payloadBox!,
-          openElapsed: payloadStopwatch.elapsed,
-        ),
-      ]);
       totalStopwatch.stop();
+      await HiveStorageDiagnostics.logBoxOnce(
+        label: _metaBoxName,
+        box: _metaBox!,
+        openElapsed: metaStopwatch.elapsed,
+      );
       AppLogStore.info(
         'storage metrics',
-        'subscriptionStorageReadyMs=${totalStopwatch.elapsedMilliseconds}',
+        'subscriptionMetadataStorageReadyMs='
+            '${totalStopwatch.elapsedMilliseconds}',
       );
+      // Storage schema upgrades move data between the metadata and payload
+      // boxes. The bootstrap decides to complete that one-time migration
+      // atomically instead of rendering an incomplete legacy profile list.
+      final storedVersion =
+          (_metaStore.get(_storageSchemaVersionKey) as num?)?.toInt() ?? 0;
+      _payloadMigrationRequired = storedVersion < _storageSchemaVersion;
     } catch (error, stackTrace) {
       AppLogStore.error(
         'subscription storage',
-        'Failed to initialize Hive subscription boxes: '
+        'Failed to initialize Hive subscription metadata: '
             '$error\n$stackTrace',
       );
       rethrow;
@@ -162,10 +231,11 @@ class SubscriptionStore {
   }
 
   static Box get _payloadStore {
-    assert(
-      _payloadBox != null,
-      'SubscriptionStore.init() must be called first',
-    );
+    if (_payloadBox == null) {
+      throw StateError(
+        'SubscriptionStore.ensurePayloadReady() must be awaited first',
+      );
+    }
     return _payloadBox!;
   }
 
@@ -244,6 +314,7 @@ class SubscriptionStore {
   /// Loads all complete subscriptions while decoding large payload JSON away
   /// from the UI isolate. Hive values are copied before the worker starts.
   static Future<List<Subscription>> getAllInBackground() async {
+    await ensurePayloadReady();
     final metadataSnapshot = _metadataJsonSnapshot();
     if (metadataSnapshot.isEmpty) {
       return const <Subscription>[];
@@ -337,6 +408,7 @@ class SubscriptionStore {
   /// Loads one complete subscription without decoding its payload on the UI
   /// isolate. Hive values are copied before the worker starts.
   static Future<Subscription?> getInBackground(String id) async {
+    await ensurePayloadReady();
     final metadataRaw = _metaStore.get(id);
     if (metadataRaw is! String) {
       return null;
@@ -379,6 +451,9 @@ class SubscriptionStore {
   /// [payloadJsonFor] for a multi-megabyte profile on the UI isolate would
   /// undo the startup benefit of compressed storage.
   static String? payloadSnapshotFor(String id) {
+    if (_payloadBox == null) {
+      return null;
+    }
     final raw = _payloadStore.get(id);
     return raw is String ? raw : null;
   }
@@ -391,6 +466,7 @@ class SubscriptionStore {
   static Future<Subscription> withPayloadInBackground(
     Subscription metadata,
   ) async {
+    await ensurePayloadReady();
     final raw = _payloadStore.get(metadata.id);
     if (raw is! String) {
       return metadata;
@@ -404,6 +480,7 @@ class SubscriptionStore {
 
   /// Saves (creates or updates) a subscription.
   static Future<void> save(Subscription sub) async {
+    await ensurePayloadReady();
     await _withSubscriptionWriteLock(sub.id, () => _saveUnlocked(sub));
   }
 
@@ -462,6 +539,7 @@ class SubscriptionStore {
     Map<String, Map<String, String?>> externalInfos =
         const <String, Map<String, String?>>{},
   }) async {
+    await ensurePayloadReady();
     var saved = false;
     await _withSubscriptionWriteLock(id, () async {
       saved = await _saveOutboundRuntimeInfoInBackgroundUnlocked(
@@ -528,17 +606,20 @@ class SubscriptionStore {
 
   /// Deletes a subscription by ID.
   static Future<void> delete(String id) async {
+    await ensurePayloadReady();
     await _metaStore.delete(id);
     await _payloadStore.delete(id);
   }
 
   static Future<void> deleteMany(Iterable<String> ids) async {
+    await ensurePayloadReady();
     await _metaStore.deleteAll(ids);
     await _payloadStore.deleteAll(ids);
   }
 
   /// Deletes all subscriptions.
   static Future<void> clear() async {
+    await ensurePayloadReady();
     await _metaStore.clear();
     await _payloadStore.clear();
   }
@@ -561,6 +642,7 @@ class SubscriptionStore {
     Duration? operationTimeout,
     bool Function()? isCancelled,
   }) async {
+    await ensurePayloadReady();
     final id = SubscriptionFetcher.generateId();
     final deadline = _operationDeadline(operationTimeout);
     _throwIfImportCancelled(isCancelled);
@@ -687,6 +769,7 @@ class SubscriptionStore {
     Duration? operationTimeout,
     bool Function()? isCancelled,
   }) async {
+    await ensurePayloadReady();
     final deadline = _operationDeadline(operationTimeout);
     _throwIfImportCancelled(isCancelled);
     final parseResult = await _withDeadline(
@@ -774,6 +857,7 @@ class SubscriptionStore {
     String id, {
     Duration? operationTimeout,
   }) async {
+    await ensurePayloadReady();
     final existingBeforeFetch = get(id);
     if (existingBeforeFetch == null) {
       throw StateError('Subscription $id not found');
@@ -866,6 +950,7 @@ class SubscriptionStore {
   /// This is useful when parsing rules change and we want to re-interpret the
   /// already stored subscription payload.
   static Future<Subscription> reparseFromRaw(String id) async {
+    await ensurePayloadReady();
     final existingBeforeParse = get(id);
     if (existingBeforeParse == null) {
       throw StateError('Subscription $id not found');
@@ -1460,6 +1545,9 @@ class SubscriptionStore {
   }
 
   static Subscription _withPayload(Subscription metadata) {
+    if (_payloadBox == null) {
+      return metadata;
+    }
     final raw = _payloadStore.get(metadata.id);
     if (raw is! String) {
       return metadata;

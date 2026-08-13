@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -77,6 +79,40 @@ void main() {
     expect(result.coreCapabilities, same(LibboxCapabilities.bundledLegacy));
   });
 
+  test('opens encrypted storage before the core capability bridge', () async {
+    final order = <String>[];
+    final storageReady = Completer<void>();
+    final controller = AppBootstrapController(
+      fallbackClientVersionLabel: '0.3.0',
+      initializeHive: () async => order.add('hive'),
+      initializeSubscriptions: () async {
+        order.add('subscriptions');
+        await storageReady.future;
+      },
+      openSettingsStore: () async {
+        order.add('settings');
+        return MemoryAppSettingsStore();
+      },
+      loadAppVersionInfo: () async => const AppVersionInfo(
+        packageName: '',
+        versionName: '0.3.0',
+        versionCode: 0,
+      ),
+      loadCoreCapabilities: () async {
+        order.add('capabilities');
+        return LibboxCapabilities.bundledLegacy;
+      },
+    );
+
+    final load = controller.load();
+    await Future<void>.delayed(Duration.zero);
+    expect(order, ['hive', 'subscriptions', 'settings']);
+
+    storageReady.complete();
+    await load;
+    expect(order.last, 'capabilities');
+  });
+
   test('disabled rule-set status is deferred until after bootstrap', () async {
     var adBlockRequests = 0;
     var russiaRouteRequests = 0;
@@ -113,7 +149,7 @@ void main() {
     expect(russiaRouteRequests, 1);
   });
 
-  test('enabled rule-set status remains in the safe startup path', () async {
+  test('enabled rule-set status is deferred until after bootstrap', () async {
     var adBlockRequests = 0;
     var russiaRouteRequests = 0;
     final store = MemoryAppSettingsStore();
@@ -141,7 +177,17 @@ void main() {
       },
     );
 
-    await controller.load(providedStore: store);
+    final result = await controller.load(providedStore: store);
+
+    expect(result.adBlockStatus.available, isFalse);
+    expect(result.russiaRouteDataStatus.available, isFalse);
+    expect(adBlockRequests, 0);
+    expect(russiaRouteRequests, 0);
+
+    await controller.loadDeferredStatuses(
+      includeAdBlock: true,
+      includeRussiaRouteData: true,
+    );
 
     expect(adBlockRequests, 1);
     expect(russiaRouteRequests, 1);
