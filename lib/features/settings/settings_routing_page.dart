@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -1561,8 +1562,11 @@ class _AppPickerSheet extends StatefulWidget {
 }
 
 class _AppPickerSheetState extends State<_AppPickerSheet> {
+  static const _searchDebounce = Duration(milliseconds: 150);
+
   late final TextEditingController _searchController;
   late final Set<String> _selected;
+  Timer? _searchDebounceTimer;
   String _query = '';
   List<_InstalledApp> _visibleApps = const <_InstalledApp>[];
 
@@ -1584,6 +1588,7 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -1594,18 +1599,14 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
       return;
     }
     final search = _InstalledAppSearchQuery(_query);
-    final scoredApps = widget.apps
-        .asMap()
-        .entries
-        .map((entry) {
-          return _ScoredInstalledApp(
-            entry.value,
-            _installedAppSearchScorePrepared(entry.value, search),
-            entry.key,
-          );
-        })
-        .where((entry) => entry.score >= 0)
-        .toList(growable: false);
+    final scoredApps = <_ScoredInstalledApp>[];
+    for (var index = 0; index < widget.apps.length; index++) {
+      final app = widget.apps[index];
+      final score = _installedAppSearchScorePrepared(app, search);
+      if (score >= 0) {
+        scoredApps.add(_ScoredInstalledApp(app, score, index));
+      }
+    }
     scoredApps.sort((a, b) {
       final scoreCompare = a.score.compareTo(b.score);
       if (scoreCompare != 0) {
@@ -1614,6 +1615,34 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
       return a.index.compareTo(b.index);
     });
     _visibleApps = scoredApps.map((entry) => entry.app).toList(growable: false);
+  }
+
+  void _onSearchChanged(String value) {
+    final nextQuery = value.trim();
+    _searchDebounceTimer?.cancel();
+    if (nextQuery == _query) {
+      return;
+    }
+
+    // Clearing a query should feel immediate. Non-empty searches wait for the
+    // user to pause typing so a large installed-app list is not rescored and
+    // resorted on every keystroke.
+    if (nextQuery.isEmpty) {
+      setState(() {
+        _query = '';
+        _rebuildVisibleApps();
+      });
+      return;
+    }
+    _searchDebounceTimer = Timer(_searchDebounce, () {
+      if (!mounted || nextQuery == _query) {
+        return;
+      }
+      setState(() {
+        _query = nextQuery;
+        _rebuildVisibleApps();
+      });
+    });
   }
 
   @override
@@ -1644,12 +1673,7 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
           const Gap(12),
           TextField(
             controller: _searchController,
-            onChanged: (value) {
-              setState(() {
-                _query = value.trim();
-                _rebuildVisibleApps();
-              });
-            },
+            onChanged: _onSearchChanged,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search_rounded),
               hintText: l10n.splitRoutingSearchHint,
@@ -1659,6 +1683,11 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
           Expanded(
             child: ListView.builder(
               itemCount: _visibleApps.length,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              addSemanticIndexes: false,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               itemBuilder: (context, index) {
                 final app = _visibleApps[index];
                 final selected = _selected.contains(app.packageName);
