@@ -92,12 +92,14 @@ void main() {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);
     controller.runtimeLatencies.addAll({'vless-active': 81, 'vless-other': 44});
-    controller.runtimeLatencyTimes.addAll({'vless-active': 10, 'vless-other': 10});
+    controller.runtimeLatencyTimes.addAll({
+      'vless-active': 10,
+      'vless-other': 10,
+    });
 
-    final changed = controller.invalidateNetworkMeasurements(
-      const ['vless-active'],
-      preserveUnrelatedMeasurements: true,
-    );
+    final changed = controller.invalidateNetworkMeasurements(const [
+      'vless-active',
+    ], preserveUnrelatedMeasurements: true);
 
     expect(changed, isTrue);
     expect(controller.runtimeLatencies['vless-active'], isNull);
@@ -355,39 +357,30 @@ void main() {
     );
   });
 
-  test(
-    'runtime selected event is ignored when selection updates are disabled',
-    () {
-      final controller = ProxyRuntimeController();
-      addTearDown(controller.dispose);
+  test('runtime selector state never overwrites a manual proxy choice', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
 
-      final result = controller.applyGroupUpdates(
-        _input(
-          selectedProxyTag: 'vless-2',
-          runtimeSelectionUpdatesAllowed: false,
-          rawGroups: [
-            {
-              'tag': 'select',
-              'selected': 'vless-1',
-              'items': [
-                {
-                  'tag': 'vless-1',
-                  'status': 'available',
-                  'delay': 73,
-                  'time': 1,
-                },
-              ],
-            },
-          ],
-        ),
-      );
+    final result = controller.applyGroupUpdates(
+      _input(
+        selectedProxyTag: 'vless-2',
+        rawGroups: [
+          {
+            'tag': 'select',
+            'selected': 'vless-1',
+            'items': [
+              {'tag': 'vless-1', 'status': 'available', 'delay': 73, 'time': 1},
+            ],
+          },
+        ],
+      ),
+    );
 
-      expect(result.changed, isTrue);
-      expect(result.selectedProxyTagToApply, isNull);
-      expect(result.requiresRootRebuild, isFalse);
-      expect(controller.runtimeLatencies['vless-1'], 73);
-    },
-  );
+    expect(result.changed, isTrue);
+    expect(result.requiresRootRebuild, isFalse);
+    expect(result.shouldClearRuntimeProxySelectionGuard, isFalse);
+    expect(controller.runtimeLatencies['vless-1'], 73);
+  });
 
   test('session activity without new telemetry does not rebuild UI', () {
     final controller = ProxyRuntimeController();
@@ -406,7 +399,7 @@ void main() {
     expect(result.requiresRootRebuild, isFalse);
   });
 
-  test('confirmed runtime selection still requires a root rebuild', () {
+  test('runtime selector state cannot replace a manual proxy choice', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);
 
@@ -419,9 +412,26 @@ void main() {
       ),
     );
 
+    expect(result, same(ProxyRuntimeGroupUpdateResult.noChanges));
+  });
+
+  test('matching runtime selector state confirms a manual proxy choice', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+
+    final result = controller.applyGroupUpdates(
+      _input(
+        selectedProxyTag: 'france',
+        pendingRuntimeSelectTag: 'france',
+        rawGroups: [
+          {'tag': 'select', 'selected': 'france', 'items': const <dynamic>[]},
+        ],
+      ),
+    );
+
     expect(result.changed, isTrue);
-    expect(result.selectedProxyTagToApply, 'vless-1');
-    expect(result.requiresRootRebuild, isTrue);
+    expect(result.shouldClearRuntimeProxySelectionGuard, isTrue);
+    expect(result.requiresRootRebuild, isFalse);
   });
 
   test('stale runtime selection cannot replace pending startup choice', () {
@@ -438,7 +448,7 @@ void main() {
       ),
     );
 
-    expect(result.selectedProxyTagToApply, isNull);
+    expect(result, same(ProxyRuntimeGroupUpdateResult.noChanges));
     expect(result.shouldClearRuntimeProxySelectionGuard, isFalse);
   });
 
@@ -498,7 +508,6 @@ ProxyRuntimeGroupUpdateInput _input({
   required List<dynamic> rawGroups,
   String selectedProxyTag = 'vless-1',
   String? pendingRuntimeSelectTag,
-  bool runtimeSelectionUpdatesAllowed = true,
   bool latencySessionRunning = false,
   StaleLatencyResultFilter? shouldIgnoreLatencyResult,
 }) {
@@ -522,7 +531,6 @@ ProxyRuntimeGroupUpdateInput _input({
     ),
     selectedProxyTag: selectedProxyTag,
     pendingRuntimeSelectTag: pendingRuntimeSelectTag,
-    runtimeSelectionUpdatesAllowed: runtimeSelectionUpdatesAllowed,
     currentResolvedActiveOutboundTag: 'vless-1',
     activeOutboundTags: const {'vless-1', 'vless-2'},
     latencySessionRunning: latencySessionRunning,

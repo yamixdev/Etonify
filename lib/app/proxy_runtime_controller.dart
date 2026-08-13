@@ -11,7 +11,6 @@ class ProxyRuntimeGroupUpdateInput {
     required this.activeSubscription,
     required this.selectedProxyTag,
     required this.pendingRuntimeSelectTag,
-    required this.runtimeSelectionUpdatesAllowed,
     required this.currentResolvedActiveOutboundTag,
     required this.activeOutboundTags,
     required this.latencySessionRunning,
@@ -24,7 +23,6 @@ class ProxyRuntimeGroupUpdateInput {
   final Subscription activeSubscription;
   final String selectedProxyTag;
   final String? pendingRuntimeSelectTag;
-  final bool runtimeSelectionUpdatesAllowed;
   final String? currentResolvedActiveOutboundTag;
   final Set<String> activeOutboundTags;
   final bool latencySessionRunning;
@@ -41,7 +39,6 @@ class ProxyRuntimeGroupUpdateResult {
     required this.shouldRebuildProxyCache,
     required this.shouldClearRuntimeProxySelectionGuard,
     required this.realOutboundRuntimeStateChanged,
-    this.selectedProxyTagToApply,
   });
 
   static const noChanges = ProxyRuntimeGroupUpdateResult(
@@ -57,7 +54,6 @@ class ProxyRuntimeGroupUpdateResult {
   final bool shouldRebuildProxyCache;
   final bool shouldClearRuntimeProxySelectionGuard;
   final bool realOutboundRuntimeStateChanged;
-  final String? selectedProxyTagToApply;
 }
 
 class ProxyRuntimeController {
@@ -391,6 +387,9 @@ class ProxyRuntimeController {
     );
 
     final pendingRuntimeSelectTag = input.pendingRuntimeSelectTag;
+    // The app owns the persisted `select` choice. Native status is used only
+    // to confirm a user action; a URLTest group's background failover must not
+    // silently replace a manually selected outbound in the profile.
     final runtimeSelectionConfirmsPending =
         pendingRuntimeSelectTag != null &&
         runtimeSelected == pendingRuntimeSelectTag;
@@ -408,14 +407,6 @@ class ProxyRuntimeController {
       );
     }
 
-    final runtimeSelectionChanged =
-        input.runtimeSelectionUpdatesAllowed &&
-        !runtimeSelectionIsStaleDuringPending &&
-        runtimeSelected != null &&
-        runtimeSelected.isNotEmpty &&
-        !isLowestProxyTag(runtimeSelected) &&
-        !isLowestProxyTag(input.selectedProxyTag) &&
-        input.selectedProxyTag != runtimeSelected;
     final latencyStateChanged =
         lowestLatency != nextLowestLatency ||
         !mapEquals(runtimeLatencies, nextRuntimeLatencies) ||
@@ -431,14 +422,12 @@ class ProxyRuntimeController {
         !mapEquals(runtimeLowestSelections, lowestSelections) ||
         !mapEquals(runtimeGroupSelections, groupSelections);
 
-    if (!runtimeSelectionChanged && !latencyStateChanged) {
+    if (!runtimeSelectionConfirmsPending && !latencyStateChanged) {
       return ProxyRuntimeGroupUpdateResult.noChanges;
     }
 
     final nextRuntimeLowestOutboundTag = lowestSelections[lowestProxyTag];
     final shouldRebuildProxyCache =
-        (runtimeSelectionChanged &&
-            !input.proxyCacheContainsTag(runtimeSelected)) ||
         lowestSelections.values.any(
           (tag) => !input.proxyCacheContainsTag(tag),
         ) ||
@@ -455,9 +444,7 @@ class ProxyRuntimeController {
       groupSelections,
     );
     final requiresRootRebuild =
-        runtimeSelectionChanged ||
-        lowestSelectionsChanged ||
-        groupSelectionsChanged;
+        lowestSelectionsChanged || groupSelectionsChanged;
 
     runtimeLatencies
       ..clear()
@@ -491,7 +478,6 @@ class ProxyRuntimeController {
       shouldRebuildProxyCache: shouldRebuildProxyCache,
       shouldClearRuntimeProxySelectionGuard: runtimeSelectionConfirmsPending,
       realOutboundRuntimeStateChanged: realOutboundRuntimeStateChanged,
-      selectedProxyTagToApply: runtimeSelectionChanged ? runtimeSelected : null,
     );
   }
 

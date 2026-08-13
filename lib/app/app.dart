@@ -85,7 +85,7 @@ class MeowClient extends StatefulWidget {
 }
 
 class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
-  static const _fallbackClientVersionLabel = '0.3.0-beta.1';
+  static const _fallbackClientVersionLabel = '0.3.0-beta.4';
   static const _requiredLegalVersion = '0.2.1';
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
   static const _lowestProxyTag = lowestProxyTag;
@@ -5160,22 +5160,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     );
   }
 
-  void _setSelectedProxyTagLocally(String tag) {
-    final activeSubscription = _activeSubscription;
-    if (activeSubscription != null &&
-        activeSubscription.selectedProxyTag != tag) {
-      final updatedSubscription = _withSelectedOutbound(
-        activeSubscription,
-        tag,
-      );
-      _subscriptions = _replaceSubscription(updatedSubscription);
-      _activeLookupSubscription = null;
-    }
-    _selectedProxyTag = tag;
-    _displayProxyCache = _displayProxyForSelectedTag(tag) ?? _displayProxyCache;
-    _scheduleVpnNotificationSync();
-  }
-
   int _beginLocalProxySelection() {
     final hadPending = _proxySelection.hasPendingRuntimeSelection;
     final generation = _proxySelection.beginLocalSelection();
@@ -6152,13 +6136,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         activeSubscription: activeSubscription,
         selectedProxyTag: _selectedProxyTag,
         pendingRuntimeSelectTag: _proxySelection.pendingRuntimeSelectTag,
-        runtimeSelectionUpdatesAllowed: _proxySelection
-            .runtimeSelectionUpdatesAllowed(
-              connected: _connected,
-              connectionStable:
-                  _connectionPhase == AppConnectionPhase.connected,
-              transitionInProgress: _runtimeTransitionInProgress,
-            ),
         currentResolvedActiveOutboundTag: previousActiveOutboundTag,
         activeOutboundTags: _activeOutboundByTagLookup.keys.toSet(),
         latencySessionRunning: _latencyCoordinator.isRunning,
@@ -6178,10 +6155,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     void applyRuntimeUpdates() {
       if (result.shouldClearRuntimeProxySelectionGuard) {
         _clearRuntimeProxySelectionGuard();
-      }
-      final selectedTag = result.selectedProxyTagToApply;
-      if (selectedTag != null) {
-        _setSelectedProxyTagLocally(selectedTag);
       }
       if (result.requiresRootRebuild) {
         _applyRuntimeStateToDerivedCaches();
