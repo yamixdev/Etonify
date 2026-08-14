@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 typedef ReleaseNotesLinkHandler = void Function(Uri uri);
 
-class ReleaseNotesCard extends StatelessWidget {
+class ReleaseNotesCard extends StatefulWidget {
   const ReleaseNotesCard({
     super.key,
     required this.body,
@@ -21,11 +21,39 @@ class ReleaseNotesCard extends StatelessWidget {
   final ReleaseNotesLinkHandler? onOpenLink;
 
   @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+  State<ReleaseNotesCard> createState() => _ReleaseNotesCardState();
+}
+
+class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
+  late String _releaseNotes;
+  ThemeData? _styleTheme;
+  TextStyle? _bodyStyle;
+  TextStyle? _titleStyle;
+  MarkdownStyleSheet? _markdownStyleSheet;
+
+  @override
+  void initState() {
+    super.initState();
+    _releaseNotes = _limitedReleaseNotes(widget.body);
+  }
+
+  @override
+  void didUpdateWidget(ReleaseNotesCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.body != oldWidget.body) {
+      _releaseNotes = _limitedReleaseNotes(widget.body);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     final theme = Theme.of(context);
+    if (identical(theme, _styleTheme)) {
+      return;
+    }
+    _styleTheme = theme;
     final colors = theme.colorScheme;
-    final releaseNotes = _limitedReleaseNotes(body);
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(
       color: colors.onSurfaceVariant,
       height: 1.35,
@@ -34,96 +62,91 @@ class ReleaseNotesCard extends StatelessWidget {
       fontWeight: FontWeight.w900,
       color: colors.onSurface,
     );
+    _bodyStyle = bodyStyle;
+    _titleStyle = theme.textTheme.titleMedium?.copyWith(
+      fontWeight: FontWeight.w800,
+    );
+    _markdownStyleSheet = MarkdownStyleSheet(
+      p: bodyStyle,
+      pPadding: const EdgeInsets.only(bottom: 8),
+      a: bodyStyle?.copyWith(
+        color: colors.primary,
+        decoration: TextDecoration.underline,
+        decorationColor: colors.primary.withValues(alpha: .7),
+        fontWeight: FontWeight.w700,
+      ),
+      h1: headingStyle,
+      h2: headingStyle,
+      h3: headingStyle,
+      h4: headingStyle,
+      h5: headingStyle,
+      h6: headingStyle,
+      h1Padding: const EdgeInsets.only(top: 8, bottom: 6),
+      h2Padding: const EdgeInsets.only(top: 8, bottom: 6),
+      h3Padding: const EdgeInsets.only(top: 6, bottom: 4),
+      strong: bodyStyle?.copyWith(fontWeight: FontWeight.w800),
+      em: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
+      del: bodyStyle?.copyWith(decoration: TextDecoration.lineThrough),
+      code: bodyStyle?.copyWith(
+        color: colors.onSurface,
+        backgroundColor: colors.surfaceContainerHighest,
+        fontFamily: 'monospace',
+        fontSize: (bodyStyle.fontSize ?? 14) * .94,
+      ),
+      codeblockPadding: const EdgeInsets.all(12),
+      codeblockDecoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: .65),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      blockquote: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
+      blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+      blockquoteDecoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: .45),
+        border: Border(left: BorderSide(color: colors.primary, width: 3)),
+        borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
+      ),
+      listBullet: bodyStyle?.copyWith(
+        color: colors.primary,
+        fontWeight: FontWeight.w800,
+      ),
+      listIndent: 22,
+      blockSpacing: 8,
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: colors.outlineVariant.withValues(alpha: .65)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
 
     return Card(
-      margin: margin,
+      margin: widget.margin,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.updatesReleaseNotesTitle,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            Text(l10n.updatesReleaseNotesTitle, style: _titleStyle),
             const Gap(12),
-            if (releaseNotes.isEmpty)
-              Text(l10n.updatesNoReleaseNotes, style: bodyStyle)
+            if (_releaseNotes.isEmpty)
+              Text(l10n.updatesNoReleaseNotes, style: _bodyStyle)
             else
-              MarkdownBody(
-                data: releaseNotes,
-                // Long-press selection intercepts drag gestures in the updater
-                // and changelog sheet, making the surrounding list feel stuck.
-                // Links still remain tappable through onTapLink below.
-                selectable: false,
-                fitContent: true,
-                shrinkWrap: true,
-                onTapLink: (_, href, _) => _openLink(href),
-                imageBuilder: _blockedImageBuilder,
-                styleSheet: MarkdownStyleSheet(
-                  p: bodyStyle,
-                  pPadding: const EdgeInsets.only(bottom: 8),
-                  a: bodyStyle?.copyWith(
-                    color: colors.primary,
-                    decoration: TextDecoration.underline,
-                    decorationColor: colors.primary.withValues(alpha: .7),
-                    fontWeight: FontWeight.w700,
-                  ),
-                  h1: headingStyle,
-                  h2: headingStyle,
-                  h3: headingStyle,
-                  h4: headingStyle,
-                  h5: headingStyle,
-                  h6: headingStyle,
-                  h1Padding: const EdgeInsets.only(top: 8, bottom: 6),
-                  h2Padding: const EdgeInsets.only(top: 8, bottom: 6),
-                  h3Padding: const EdgeInsets.only(top: 6, bottom: 4),
-                  strong: bodyStyle?.copyWith(fontWeight: FontWeight.w800),
-                  em: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
-                  del: bodyStyle?.copyWith(
-                    decoration: TextDecoration.lineThrough,
-                  ),
-                  code: bodyStyle?.copyWith(
-                    color: colors.onSurface,
-                    backgroundColor: colors.surfaceContainerHighest,
-                    fontFamily: 'monospace',
-                    fontSize: (bodyStyle.fontSize ?? 14) * .94,
-                  ),
-                  codeblockPadding: const EdgeInsets.all(12),
-                  codeblockDecoration: BoxDecoration(
-                    color: colors.surfaceContainerHighest.withValues(
-                      alpha: .65,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  blockquote: bodyStyle?.copyWith(fontStyle: FontStyle.italic),
-                  blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
-                  blockquoteDecoration: BoxDecoration(
-                    color: colors.surfaceContainerHighest.withValues(
-                      alpha: .45,
-                    ),
-                    border: Border(
-                      left: BorderSide(color: colors.primary, width: 3),
-                    ),
-                    borderRadius: const BorderRadius.horizontal(
-                      right: Radius.circular(10),
-                    ),
-                  ),
-                  listBullet: bodyStyle?.copyWith(
-                    color: colors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  listIndent: 22,
-                  blockSpacing: 8,
-                  horizontalRuleDecoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: colors.outlineVariant.withValues(alpha: .65),
-                      ),
-                    ),
-                  ),
+              RepaintBoundary(
+                child: MarkdownBody(
+                  data: _releaseNotes,
+                  // Long-press selection intercepts drag gestures in the
+                  // updater and changelog sheet, making the surrounding list
+                  // feel stuck. Links remain tappable through onTapLink.
+                  selectable: false,
+                  fitContent: true,
+                  shrinkWrap: true,
+                  onTapLink: (_, href, _) => _openLink(href),
+                  imageBuilder: _blockedImageBuilder,
+                  styleSheet: _markdownStyleSheet,
                 ),
               ),
           ],
@@ -139,7 +162,7 @@ class ReleaseNotesCard extends StatelessWidget {
         uri.host.isEmpty) {
       return;
     }
-    final handler = onOpenLink;
+    final handler = widget.onOpenLink;
     if (handler != null) {
       handler(uri);
       return;

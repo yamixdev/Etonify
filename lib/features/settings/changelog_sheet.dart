@@ -160,7 +160,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                 ),
                 const Gap(10),
                 if (_contentReady)
-                  RepaintBoundary(child: ReleaseNotesCard(body: info.body))
+                  ReleaseNotesCard(body: info.body)
                 else
                   const _ChangelogLoadingCard(),
               ] else if (_errorMessage case final error?)

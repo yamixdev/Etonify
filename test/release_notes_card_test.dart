@@ -47,10 +47,7 @@ closeAll()
           .map((widget) => widget.text.toPlainText()),
       ...tester
           .widgetList<SelectableText>(find.byType(SelectableText))
-          .map(
-            (widget) =>
-                widget.data ?? widget.textSpan?.toPlainText() ?? '',
-          ),
+          .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? ''),
     ].join('\n');
 
     expect(renderedText, contains('Исправления'));
@@ -76,17 +73,62 @@ closeAll()
     expect(
       openedUris,
       contains(
-        Uri.parse(
-          'https://github.com/yamixdev/etonify-core/tree/etonify-dev',
+        Uri.parse('https://github.com/yamixdev/etonify-core/tree/etonify-dev'),
+      ),
+    );
+    expect(openedUris, contains(Uri.parse('https://example.com/docs')));
+  });
+
+  testWidgets('keeps parsed markdown when an unchanged parent rebuilds', (
+    tester,
+  ) async {
+    late StateSetter rebuild;
+    var revision = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return Column(
+                  children: [
+                    Text('revision $revision'),
+                    const ReleaseNotesCard(
+                      body: '[Etonify](https://github.com/yamixdev/Etonify)',
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
-    expect(
-      openedUris,
-      contains(Uri.parse('https://example.com/docs')),
-    );
+    await tester.pump();
+
+    final before = _linkRecognizers(tester).single;
+    rebuild(() => revision++);
+    await tester.pump();
+    final after = _linkRecognizers(tester).single;
+
+    expect(find.text('revision 1'), findsOneWidget);
+    expect(identical(after, before), isTrue);
   });
 }
+
+Iterable<TapGestureRecognizer> _linkRecognizers(WidgetTester tester) =>
+    _textSpans(
+      tester,
+    ).map((span) => span.recognizer).whereType<TapGestureRecognizer>();
 
 Iterable<TextSpan> _textSpans(WidgetTester tester) sync* {
   for (final widget in tester.widgetList<RichText>(find.byType(RichText))) {
