@@ -93,7 +93,7 @@ class MeowClient extends ConsumerStatefulWidget {
 
 class _MeowClientState extends ConsumerState<MeowClient>
     with WidgetsBindingObserver {
-  static const _fallbackClientVersionLabel = '0.3.0-beta.4';
+  static const _fallbackClientVersionLabel = '0.3.0-beta.5';
   static const _requiredLegalVersion = '0.2.1';
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
   static const _lowestProxyTag = lowestProxyTag;
