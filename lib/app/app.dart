@@ -22,6 +22,7 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/app/providers/proxy_runtime_providers.dart';
 import 'package:meow_client/app/providers/subscription_catalog_provider.dart';
 import 'package:meow_client/app/providers/vpn_runtime_state_provider.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
@@ -212,8 +213,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   AppProfileSummary? _activeProfileCache;
   AppProxySummary? _displayProxyCache;
   List<AppProxySummary> _activeProxiesCache = const [];
-  final ProxyRuntimeVisualStore _proxyRuntimeVisualStates =
-      ProxyRuntimeVisualStore();
+  late final ProxyRuntimeVisualStore _proxyRuntimeVisualStates;
   Map<String, AppProxySummary> _proxySummariesByTagCache =
       const <String, AppProxySummary>{};
   Map<String, List<AppProxySummary>> _activeGroupChildrenByTagCache =
@@ -350,7 +350,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _settings.experimentalUrlTestStrictTolerance;
   bool get _experimentalFakeIpEnabled => _settings.experimentalFakeIpEnabled;
 
-  bool get _urlTestInFlight => _latencyCoordinator.isRunning;
+  bool get _urlTestInFlight => ref.read(proxyLatencySessionProvider).running;
 
   int? get _lowestLatency => _proxyRuntime.lowestLatency;
   set _lowestLatency(int? value) => _proxyRuntime.lowestLatency = value;
@@ -1889,6 +1889,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _singboxRuntime = ref.read(singboxRuntimeProvider);
     _appUpdateService = ref.read(appUpdateServiceProvider);
     _russiaRouteDataService = ref.read(russiaRouteDataServiceProvider);
+    _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
       runtime: ref.read(subscriptionRuntimeControllerProvider),
     );
@@ -1925,7 +1926,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       operationGeneration: () => _runtimeOperations.diagnosticGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
-      onSessionChanged: (_, _, _) {
+      onSessionChanged: (running, kind, targetTag) {
+        ref
+            .read(proxyLatencySessionProvider.notifier)
+            .update(running: running, kind: kind, targetTag: targetTag);
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
@@ -2016,7 +2020,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       unawaited(store.close());
     }
     _proxyRuntime.dispose();
-    _proxyRuntimeVisualStates.dispose();
     _trafficDashboardSnapshot.dispose();
     _trafficUiSnapshot.dispose();
     super.dispose();
