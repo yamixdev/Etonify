@@ -22,6 +22,7 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/app/providers/vpn_runtime_state_provider.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/runtime_connection_controller.dart';
 import 'package:meow_client/app/runtime_command_coordinator.dart';
@@ -724,6 +725,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         generation: state.generation,
         usable: state.usable,
       );
+      if (mounted) {
+        ref
+            .read(vpnRuntimeStateProvider.notifier)
+            .updateNetwork(generation: state.generation, usable: state.usable);
+      }
       if (wasUsable != state.usable) {
         _applyRuntimeStateToDerivedCaches();
       }
@@ -3053,6 +3059,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }) {
     _runtimeOperations.synchronizeSelection(_selectedProxyTag);
     final transition = _runtimeConnection.transitionTo(phase);
+    if (mounted) {
+      ref
+          .read(vpnRuntimeStateProvider.notifier)
+          .transitionTo(phase, retryScheduled: retryScheduled);
+    }
     if (transition.becameConnected) {
       _connectedSince = DateTime.now();
     } else if (!_connected &&
@@ -5686,6 +5697,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       generation: networkGeneration,
       usable: usable,
     );
+    if (mounted) {
+      ref
+          .read(vpnRuntimeStateProvider.notifier)
+          .updateNetwork(generation: networkGeneration, usable: usable);
+    }
     _runtimeCommands.invalidate();
     _latencyCoordinator.cancel();
     _activeProxyIpController.cancelPending();
@@ -7220,6 +7236,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   Widget build(BuildContext context) {
     ref.watch(appSettingsProvider.select((snapshot) => snapshot.revision));
+    ref.watch(vpnRuntimeStateProvider);
     return AppRootShell(
       navigatorKey: _navigatorKey,
       lightTheme: _lightTheme,
