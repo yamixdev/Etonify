@@ -25,6 +25,7 @@ import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/app/providers/proxy_runtime_providers.dart';
 import 'package:meow_client/app/providers/subscription_catalog_provider.dart';
 import 'package:meow_client/app/providers/vpn_runtime_state_provider.dart';
+import 'package:meow_client/app/providers/vpn_lifecycle_commands_provider.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/runtime_connection_controller.dart';
 import 'package:meow_client/app/runtime_command_coordinator.dart';
@@ -145,6 +146,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final SingboxRuntime _singboxRuntime;
   late final AppUpdateService _appUpdateService;
   late final RussiaRouteDataService _russiaRouteDataService;
+  late final VpnLifecycleCommands _vpnLifecycleCommands;
   int _locationLookupActiveRequests = 0;
   int _locationLookupGeneration = 0;
   bool _locationLookupRefreshRequested = false;
@@ -1889,6 +1891,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _singboxRuntime = ref.read(singboxRuntimeProvider);
     _appUpdateService = ref.read(appUpdateServiceProvider);
     _russiaRouteDataService = ref.read(russiaRouteDataServiceProvider);
+    _vpnLifecycleCommands = ref.read(vpnLifecycleCommandsProvider);
     _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
       runtime: ref.read(subscriptionRuntimeControllerProvider),
@@ -1960,6 +1963,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       shouldRecordLog: _shouldRecordSingBoxLog,
       onRuntimeLogIssue: _handleRuntimeLogIssue,
     );
+    _vpnLifecycleCommands.bind(
+      toggle: (source) => _toggleConnection(source: source),
+      stop: (reason, allowQueuedRestart) =>
+          _stopRuntime(reason: reason, allowQueuedRestart: allowQueuedRestart),
+    );
     WidgetsBinding.instance.addObserver(this);
     _configureImageCacheForAndroid();
     _refreshThemeCache();
@@ -1989,6 +1997,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   @override
   void dispose() {
+    _vpnLifecycleCommands.unbind();
     WidgetsBinding.instance.removeObserver(this);
     _subscriptionAutoRefreshTimer?.cancel();
     _latencyCoordinator.dispose();
@@ -7122,8 +7131,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         versionLabel: _clientVersionLabel,
       ),
       callbacks: HomePresentationCallbacks(
-        toggleConnection: () =>
-            unawaited(_toggleConnection(source: 'home.connection_button')),
+        toggleConnection: () => unawaited(
+          _vpnLifecycleCommands.toggle(source: 'home.connection_button'),
+        ),
         refreshLatency: () => unawaited(_runActiveProxyUrlTest()),
         refreshActiveProxyIp: _refreshActiveProxyIp,
         openSubscriptions: _showSubscriptionsPage,
