@@ -21,6 +21,7 @@ import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/runtime_connection_controller.dart';
 import 'package:meow_client/app/runtime_command_coordinator.dart';
@@ -141,7 +142,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _notificationPermissionPromptAttempted = false;
   bool _notificationPermissionRequestInFlight = false;
   String _lastVpnNotificationPresentationSignature = '';
-  late final AppSettingsController _settings;
   late final SingboxRuntime _singboxRuntime;
   late final AppUpdateService _appUpdateService;
   late final RussiaRouteDataService _russiaRouteDataService;
@@ -250,6 +250,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _runtimeRecovery.excludedOutboundTags;
 
   bool get _legalAccepted => _acceptedLegalVersion == _requiredLegalVersion;
+
+  AppSettingsController get _settings =>
+      ref.read(appSettingsProvider).controller;
 
   Subscription? get _activeSubscription {
     for (final subscription in _subscriptions) {
@@ -1865,7 +1868,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   void initState() {
     super.initState();
-    _settings = ref.read(appSettingsControllerProvider);
+    ref.read(appSettingsProvider);
     _singboxRuntime = ref.read(singboxRuntimeProvider);
     _appUpdateService = ref.read(appUpdateServiceProvider);
     _russiaRouteDataService = ref.read(russiaRouteDataServiceProvider);
@@ -2702,10 +2705,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _subscriptions = subscriptions;
       _activeProfileId = normalized.activeSubscriptionId;
       _selectedProxyTag = normalized.selectedProxyTag;
-      _settings.applyState(
-        state,
-        progressiveBlurEnabledOverride: progressiveBlurEnabled,
-      );
+      ref
+          .read(appSettingsProvider.notifier)
+          .hydrate(
+            state,
+            progressiveBlurEnabledOverride: progressiveBlurEnabled,
+          );
       _adBlockStatus = adBlockStatus;
       _russiaRouteDataStatus = russiaRouteDataStatus;
       _setConnectionPhase(AppConnectionPhase.idle);
@@ -2828,7 +2833,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     required String configReason,
   }) async {
     setState(() {
-      _settings.applyState(state, progressiveBlurEnabledOverride: false);
+      ref
+          .read(appSettingsProvider.notifier)
+          .hydrate(state, progressiveBlurEnabledOverride: false);
       _refreshThemeCache();
     });
     await _persistState();
@@ -2867,7 +2874,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _applySettingsChange(AppSettingsChange Function() mutate) {
     late final AppSettingsChange change;
     setState(() {
-      change = mutate();
+      change = ref.read(appSettingsProvider.notifier).mutate((_) => mutate());
       if (change.refreshTheme) {
         _refreshThemeCache();
       }
@@ -7212,6 +7219,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(appSettingsProvider.select((snapshot) => snapshot.revision));
     return AppRootShell(
       navigatorKey: _navigatorKey,
       lightTheme: _lightTheme,
