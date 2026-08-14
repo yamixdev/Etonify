@@ -73,7 +73,7 @@ void main() {
     await tester.tap(find.byTooltip('Проверено'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Проверено MeowTeam. Создано официальным разработчиком.'),
+      find.text('Участник команды MeowTeam.'),
       findsOneWidget,
     );
   });

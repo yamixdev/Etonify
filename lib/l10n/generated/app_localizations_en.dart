@@ -380,6 +380,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Android client, interface, core, and releases';
 
   @override
+  String get teamDeveloperVerificationInfo => 'Member of MeowTeam.';
+
+  @override
   String get teamTelegramRole => 'Official channel and release news';
 
   @override
@@ -423,7 +426,35 @@ class AppLocalizationsEn extends AppLocalizations {
       'On-demand Android and core snapshot. CPU appears after the second refresh.';
 
   @override
-  String get aboutResourcePss => 'Memory';
+  String get aboutResourcesPssTitle => 'Process memory';
+
+  @override
+  String get aboutResourcesPssSubtitle =>
+      'PSS is the primary memory estimate for the app, including its share of common pages. Do not add the rows below to PSS: they are a breakdown and separate metrics.';
+
+  @override
+  String get aboutResourcePss => 'Total PSS';
+
+  @override
+  String get aboutResourceNativePss => 'Native PSS';
+
+  @override
+  String get aboutResourceDalvikPss => 'Android VM PSS';
+
+  @override
+  String get aboutResourceOtherPss => 'Other PSS';
+
+  @override
+  String get aboutResourceGraphicsPss => 'Graphics PSS';
+
+  @override
+  String get aboutResourceCodePss => 'Code PSS';
+
+  @override
+  String get aboutResourceStackPss => 'Stack PSS';
+
+  @override
+  String get aboutResourcesRuntimeTitle => 'Client and core';
 
   @override
   String get aboutResourceNativeHeap => 'Native heap';
@@ -435,10 +466,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutResourceCoreMemory => 'Core memory';
 
   @override
+  String get aboutResourceFlutterImageCache => 'Flutter image cache';
+
+  @override
   String get aboutResourceCoreGoroutines => 'Core goroutines';
 
   @override
   String get aboutResourceCoreConnections => 'Core connections (in / out)';
+
+  @override
+  String get aboutResourcesSystemTitle => 'System';
 
   @override
   String get aboutResourceProcessCpu => 'Process CPU since last refresh';

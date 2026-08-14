@@ -202,7 +202,7 @@ class _DeveloperProfileSheetState extends State<_DeveloperProfileSheet> {
                                 const Gap(8),
                                 Flexible(
                                   child: Text(
-                                    l10n.trafficRulesVerifiedInfo,
+                                    l10n.teamDeveloperVerificationInfo,
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: cs.onPrimaryContainer,

@@ -380,6 +380,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Android-клиент, интерфейс, ядро и релизы';
 
   @override
+  String get teamDeveloperVerificationInfo => 'Участник команды MeowTeam.';
+
+  @override
   String get teamTelegramRole => 'Официальный канал и новости релизов';
 
   @override
@@ -423,7 +426,35 @@ class AppLocalizationsRu extends AppLocalizations {
       'Снимок Android и ядра по запросу. CPU появится после второго обновления.';
 
   @override
-  String get aboutResourcePss => 'Память';
+  String get aboutResourcesPssTitle => 'Память процесса';
+
+  @override
+  String get aboutResourcesPssSubtitle =>
+      'PSS — основная оценка памяти приложения с учётом доли общих страниц. Не складывайте строки ниже с PSS: это расшифровка и отдельные показатели.';
+
+  @override
+  String get aboutResourcePss => 'Всего PSS';
+
+  @override
+  String get aboutResourceNativePss => 'Нативный PSS';
+
+  @override
+  String get aboutResourceDalvikPss => 'Android VM PSS';
+
+  @override
+  String get aboutResourceOtherPss => 'Прочий PSS';
+
+  @override
+  String get aboutResourceGraphicsPss => 'Графика PSS';
+
+  @override
+  String get aboutResourceCodePss => 'Код PSS';
+
+  @override
+  String get aboutResourceStackPss => 'Стек PSS';
+
+  @override
+  String get aboutResourcesRuntimeTitle => 'Клиент и ядро';
 
   @override
   String get aboutResourceNativeHeap => 'Native heap';
@@ -435,10 +466,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutResourceCoreMemory => 'Память ядра';
 
   @override
+  String get aboutResourceFlutterImageCache => 'Кэш изображений Flutter';
+
+  @override
   String get aboutResourceCoreGoroutines => 'Горутины ядра';
 
   @override
   String get aboutResourceCoreConnections => 'Соединения ядра (вход. / исход.)';
+
+  @override
+  String get aboutResourcesSystemTitle => 'Система';
 
   @override
   String get aboutResourceProcessCpu => 'CPU процесса с прошлого обновления';

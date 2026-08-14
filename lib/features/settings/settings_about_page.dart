@@ -380,11 +380,65 @@ class _AboutResourcesCard extends StatelessWidget {
               ),
             ),
             const Gap(12),
+            Text(
+              l10n.aboutResourcesPssTitle,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Gap(4),
+            Text(
+              l10n.aboutResourcesPssSubtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+            const Gap(10),
             _AboutInfoRow(
               label: l10n.aboutResourcePss,
               value: _formatKb(data?['totalPssKb']),
             ),
             const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceNativePss,
+              value: _formatKb(data?['nativePssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceDalvikPss,
+              value: _formatKb(data?['dalvikPssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceOtherPss,
+              value: _formatKb(data?['otherPssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceGraphicsPss,
+              value: _formatKb(data?['graphicsPssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceCodePss,
+              value: _formatKb(data?['codePssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceStackPss,
+              value: _formatKb(data?['stackPssKb']),
+            ),
+            const Gap(14),
+            Text(
+              l10n.aboutResourcesRuntimeTitle,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Gap(10),
             _AboutInfoRow(
               label: l10n.aboutResourceNativeHeap,
               value: _formatKb(data?['nativeHeapAllocatedKb']),
@@ -401,6 +455,11 @@ class _AboutResourcesCard extends StatelessWidget {
             ),
             const Gap(8),
             _AboutInfoRow(
+              label: l10n.aboutResourceFlutterImageCache,
+              value: _formatBytes(data?['flutterImageCacheBytes']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
               label: l10n.aboutResourceCoreGoroutines,
               value: _formatCount(data?['coreGoroutines']),
             ),
@@ -410,7 +469,15 @@ class _AboutResourcesCard extends StatelessWidget {
               value:
                   '${_formatCount(data?['connectionsIn'])} / ${_formatCount(data?['connectionsOut'])}',
             ),
-            const Gap(8),
+            const Gap(14),
+            Text(
+              l10n.aboutResourcesSystemTitle,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Gap(10),
             _AboutInfoRow(
               label: l10n.aboutResourceProcessCpu,
               value: _formatPercent(data?['processCpuPercent']),

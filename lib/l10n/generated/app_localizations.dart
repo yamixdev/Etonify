@@ -764,6 +764,12 @@ abstract class AppLocalizations {
   /// **'Android client, interface, core, and releases'**
   String get teamDeveloperYamixdevRole;
 
+  /// No description provided for @teamDeveloperVerificationInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Member of MeowTeam.'**
+  String get teamDeveloperVerificationInfo;
+
   /// No description provided for @teamTelegramRole.
   ///
   /// In en, this message translates to:
@@ -848,11 +854,65 @@ abstract class AppLocalizations {
   /// **'On-demand Android and core snapshot. CPU appears after the second refresh.'**
   String get aboutResourcesSubtitle;
 
+  /// No description provided for @aboutResourcesPssTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Process memory'**
+  String get aboutResourcesPssTitle;
+
+  /// No description provided for @aboutResourcesPssSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PSS is the primary memory estimate for the app, including its share of common pages. Do not add the rows below to PSS: they are a breakdown and separate metrics.'**
+  String get aboutResourcesPssSubtitle;
+
   /// No description provided for @aboutResourcePss.
   ///
   /// In en, this message translates to:
-  /// **'Memory'**
+  /// **'Total PSS'**
   String get aboutResourcePss;
+
+  /// No description provided for @aboutResourceNativePss.
+  ///
+  /// In en, this message translates to:
+  /// **'Native PSS'**
+  String get aboutResourceNativePss;
+
+  /// No description provided for @aboutResourceDalvikPss.
+  ///
+  /// In en, this message translates to:
+  /// **'Android VM PSS'**
+  String get aboutResourceDalvikPss;
+
+  /// No description provided for @aboutResourceOtherPss.
+  ///
+  /// In en, this message translates to:
+  /// **'Other PSS'**
+  String get aboutResourceOtherPss;
+
+  /// No description provided for @aboutResourceGraphicsPss.
+  ///
+  /// In en, this message translates to:
+  /// **'Graphics PSS'**
+  String get aboutResourceGraphicsPss;
+
+  /// No description provided for @aboutResourceCodePss.
+  ///
+  /// In en, this message translates to:
+  /// **'Code PSS'**
+  String get aboutResourceCodePss;
+
+  /// No description provided for @aboutResourceStackPss.
+  ///
+  /// In en, this message translates to:
+  /// **'Stack PSS'**
+  String get aboutResourceStackPss;
+
+  /// No description provided for @aboutResourcesRuntimeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Client and core'**
+  String get aboutResourcesRuntimeTitle;
 
   /// No description provided for @aboutResourceNativeHeap.
   ///
@@ -872,6 +932,12 @@ abstract class AppLocalizations {
   /// **'Core memory'**
   String get aboutResourceCoreMemory;
 
+  /// No description provided for @aboutResourceFlutterImageCache.
+  ///
+  /// In en, this message translates to:
+  /// **'Flutter image cache'**
+  String get aboutResourceFlutterImageCache;
+
   /// No description provided for @aboutResourceCoreGoroutines.
   ///
   /// In en, this message translates to:
@@ -883,6 +949,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Core connections (in / out)'**
   String get aboutResourceCoreConnections;
+
+  /// No description provided for @aboutResourcesSystemTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get aboutResourcesSystemTitle;
 
   /// No description provided for @aboutResourceProcessCpu.
   ///
