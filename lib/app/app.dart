@@ -22,6 +22,7 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/app/providers/subscription_catalog_provider.dart';
 import 'package:meow_client/app/providers/vpn_runtime_state_provider.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/runtime_connection_controller.dart';
@@ -127,14 +128,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _runtimeErrorDialogVisible = false;
   bool _noValidOutboundsDialogVisible = false;
   bool _trafficAvailable = false;
-  bool _activeProfileRefreshInFlight = false;
   bool _deepLinkImportInFlight = false;
   bool _settingsBackupOperationInFlight = false;
   bool _locationLookupInFlight = false;
   bool _proxyPanelInteractionActive = false;
   int _proxyPanelResetGeneration = 0;
-  String _activeProfileId = '';
-  String _selectedProxyTag = '';
   String _clientVersionLabel = _fallbackClientVersionLabel;
   int _clientVersionCode = 0;
   String _clientPackageName = '';
@@ -211,7 +209,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
-  List<Subscription> _subscriptions = const [];
   AppProfileSummary? _activeProfileCache;
   AppProxySummary? _displayProxyCache;
   List<AppProxySummary> _activeProxiesCache = const [];
@@ -255,14 +252,28 @@ class _MeowClientState extends ConsumerState<MeowClient>
   AppSettingsController get _settings =>
       ref.read(appSettingsProvider).controller;
 
-  Subscription? get _activeSubscription {
-    for (final subscription in _subscriptions) {
-      if (subscription.id == _activeProfileId) {
-        return subscription;
-      }
-    }
-    return null;
-  }
+  SubscriptionCatalogState get _subscriptionCatalog =>
+      ref.read(subscriptionCatalogProvider);
+
+  List<Subscription> get _subscriptions => _subscriptionCatalog.subscriptions;
+  set _subscriptions(List<Subscription> value) => ref
+      .read(subscriptionCatalogProvider.notifier)
+      .replaceSubscriptions(value);
+
+  String get _activeProfileId => _subscriptionCatalog.activeProfileId;
+
+  String get _selectedProxyTag => _subscriptionCatalog.selectedProxyTag;
+  set _selectedProxyTag(String value) =>
+      ref.read(subscriptionCatalogProvider.notifier).selectProxy(value);
+
+  bool get _activeProfileRefreshInFlight =>
+      _subscriptionCatalog.activeProfileRefreshing;
+  set _activeProfileRefreshInFlight(bool value) => ref
+      .read(subscriptionCatalogProvider.notifier)
+      .setActiveProfileRefreshing(value);
+
+  Subscription? get _activeSubscription =>
+      _subscriptionCatalog.activeSubscription;
 
   AppProfileSummary? get _activeProfile {
     return _activeProfileCache;
@@ -2708,9 +2719,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _onboardingCompleted = state.onboardingCompleted;
       _acceptedLegalVersion = state.acceptedLegalVersion;
       _acceptedLegalAtMillis = state.acceptedLegalAtMillis;
-      _subscriptions = subscriptions;
-      _activeProfileId = normalized.activeSubscriptionId;
-      _selectedProxyTag = normalized.selectedProxyTag;
+      ref
+          .read(subscriptionCatalogProvider.notifier)
+          .replace(
+            subscriptions: subscriptions,
+            activeProfileId: normalized.activeSubscriptionId,
+            selectedProxyTag: normalized.selectedProxyTag,
+          );
       ref
           .read(appSettingsProvider.notifier)
           .hydrate(
@@ -4341,9 +4356,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
 
     setState(() {
-      _subscriptions = subscriptions;
-      _activeProfileId = nextActiveId;
-      _selectedProxyTag = normalized.selectedProxyTag;
+      ref
+          .read(subscriptionCatalogProvider.notifier)
+          .replace(
+            subscriptions: subscriptions,
+            activeProfileId: nextActiveId,
+            selectedProxyTag: normalized.selectedProxyTag,
+          );
       _lastEmptyAfterDropInvalidWarningSubscriptionId = null;
       if (shouldResetRuntimeState) {
         if (!preserveLatencyDuringReload) {
@@ -4439,9 +4458,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _latencyCoordinator.cancel();
       }
       setState(() {
-        _subscriptions = resolved.subscriptions;
-        _activeProfileId = normalized.activeSubscriptionId;
-        _selectedProxyTag = normalized.selectedProxyTag;
+        ref
+            .read(subscriptionCatalogProvider.notifier)
+            .replace(
+              subscriptions: resolved.subscriptions,
+              activeProfileId: normalized.activeSubscriptionId,
+              selectedProxyTag: normalized.selectedProxyTag,
+            );
         if (shouldResetRuntimeState) {
           if (!preserveLatencyDuringReload) {
             _runtimeLatencies.clear();
@@ -7236,6 +7259,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   Widget build(BuildContext context) {
     ref.watch(appSettingsProvider.select((snapshot) => snapshot.revision));
+    ref.watch(subscriptionCatalogProvider);
     ref.watch(vpnRuntimeStateProvider);
     return AppRootShell(
       navigatorKey: _navigatorKey,
