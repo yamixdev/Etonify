@@ -705,7 +705,8 @@ class MeowBoxService(
             )
         }
 
-        var cleanupComplete = true
+        var nativeServiceClosed = true
+        var commandServerClosed = true
 
         // Сначала отключаем активный CommandClient.
         if (shouldStopRuntimeState) {
@@ -728,30 +729,49 @@ class MeowBoxService(
 
         // Затем закрываем native runtime и CommandServer.
         if (server != null) {
-            cleanupComplete = runCleanupStep("closeService source=$source") {
+            nativeServiceClosed = runCleanupStep("closeService source=$source") {
                 server.closeService()
-            } && cleanupComplete
+            }
 
-            cleanupComplete = runCleanupStep("close command server source=$source") {
-                server.close()
-            } && cleanupComplete
+            // CommandServer is only the local RPC/status endpoint. Once
+            // closeService() has acknowledged the native VPN shutdown, a slow
+            // CommandServer.close() must not keep the foreground notification
+            // and Android service alive indefinitely.
+            if (nativeServiceClosed) {
+                commandServerClosed = runCleanupStep("close command server source=$source") {
+                    server.close()
+                }
+            }
         }
 
-        if (!cleanupComplete) {
+        if (!nativeServiceClosed) {
             SingboxController.log(
                 "error",
-                "VPN service cleanup incomplete source=$source " +
+                "VPN native service cleanup incomplete source=$source " +
                     "service=${service.javaClass.simpleName}",
             )
             MeowDiagnostics.log(
                 TAG,
                 "runtime stop not acknowledged source=$source " +
                     "generation=$generation activeGeneration=$activeGeneration " +
-                    "cleanupComplete=false",
+                    "nativeServiceClosed=false",
             )
 
             showForeground("Stopping")
             return
+        }
+
+        if (!commandServerClosed) {
+            SingboxController.log(
+                "warning",
+                "VPN command server cleanup incomplete after native stop source=$source " +
+                    "service=${service.javaClass.simpleName}",
+            )
+            MeowDiagnostics.log(
+                TAG,
+                "command server close not acknowledged after native stop source=$source " +
+                    "generation=$generation activeGeneration=$activeGeneration",
+            )
         }
 
         commandServer = null
