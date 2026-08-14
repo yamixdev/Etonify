@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/app/app.dart';
 import 'package:meow_client/logging/app_log_store.dart';
@@ -36,7 +37,7 @@ Future<void> main() async {
           systemNavigationBarContrastEnforced: false,
         ),
       );
-      runApp(const MeowClient());
+      runApp(const ProviderScope(child: MeowClient()));
     },
     (error, stackTrace) {
       _recordFatalError('zone', error, stackTrace);

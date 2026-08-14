@@ -350,11 +350,17 @@ class SingboxRuntime {
     if (!Platform.isAndroid) {
       return;
     }
+    final normalizedTrafficDisplayMode = switch (trafficDisplayMode) {
+      pigeon.notificationTrafficModeTotal =>
+        pigeon.notificationTrafficModeTotal,
+      pigeon.notificationTrafficModeBoth => pigeon.notificationTrafficModeBoth,
+      _ => pigeon.notificationTrafficModeSpeed,
+    };
     try {
       await _hostApi.updateVpnNotificationPresentation(
         pigeon.VpnNotificationPresentationMessage(
           detailed: detailed,
-          trafficDisplayMode: trafficDisplayMode,
+          trafficDisplayMode: normalizedTrafficDisplayMode,
           trafficRefreshSeconds: trafficRefreshSeconds,
           title: title,
           latencyMillis: latencyMillis,
@@ -655,10 +661,8 @@ class SingboxRuntime {
         url: uri.toString(),
         headers: headers.entries
             .map(
-              (entry) => pigeon.HttpHeaderMessage(
-                name: entry.key,
-                value: entry.value,
-              ),
+              (entry) =>
+                  pigeon.HttpHeaderMessage(name: entry.key, value: entry.value),
             )
             .toList(growable: false),
         maxBytes: maxBytes,

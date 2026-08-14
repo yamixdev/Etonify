@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/singbox/singbox_api.g.dart' as pigeon;
 
 class RuntimeStateEvent {
   const RuntimeStateEvent({
@@ -80,7 +81,7 @@ class RuntimeEventController {
   void dispatch(Map<String, dynamic> event) {
     final type = event['type'] as String? ?? '';
     switch (type) {
-      case 'state':
+      case pigeon.runtimeEventState:
         _onState(
           RuntimeStateEvent(
             running: event['running'] == true,
@@ -89,13 +90,13 @@ class RuntimeEventController {
           ),
         );
         break;
-      case 'status':
+      case pigeon.runtimeEventStatus:
         _onStatus(event);
         break;
-      case 'network':
+      case pigeon.runtimeEventNetwork:
         _onNetwork(event);
         break;
-      case 'groups':
+      case pigeon.runtimeEventGroups:
         _onGroups(
           RuntimeGroupsEvent(
             groups: (event['groups'] as List?) ?? const [],
@@ -104,13 +105,13 @@ class RuntimeEventController {
           ),
         );
         break;
-      case 'nativeLog':
+      case pigeon.runtimeEventNativeLog:
         _recordNativeLog(event);
         break;
-      case 'logs':
+      case pigeon.runtimeEventLogs:
         _recordLogBatch(event);
         break;
-      case 'logLevel':
+      case pigeon.runtimeEventLogLevel:
         break;
       default:
         break;

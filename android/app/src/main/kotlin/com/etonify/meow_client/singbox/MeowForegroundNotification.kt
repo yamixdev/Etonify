@@ -14,6 +14,9 @@ import android.os.Looper
 import android.os.SystemClock
 import com.etonify.meow_client.MainActivity
 import com.etonify.meow_client.R
+import com.etonify.meow_client.generated.notificationTrafficModeBoth
+import com.etonify.meow_client.generated.notificationTrafficModeSpeed
+import com.etonify.meow_client.generated.notificationTrafficModeTotal
 import kotlin.math.max
 
 /**
@@ -108,7 +111,7 @@ internal class MeowForegroundNotification(
 
     private data class Presentation(
         val detailed: Boolean = true,
-        val trafficDisplayMode: String = "speed",
+        val trafficDisplayMode: String = notificationTrafficModeSpeed,
         val trafficRefreshSeconds: Int = DEFAULT_TRAFFIC_REFRESH_SECONDS,
         val title: String = "",
         val latencyMillis: Long? = null,
@@ -161,9 +164,9 @@ internal class MeowForegroundNotification(
 
             val detailed = arguments["detailed"] as? Boolean ?: true
             val trafficDisplayMode = when (arguments["trafficDisplayMode"]?.toString()) {
-                "total" -> "total"
-                "both" -> "both"
-                else -> "speed"
+                notificationTrafficModeTotal -> notificationTrafficModeTotal
+                notificationTrafficModeBoth -> notificationTrafficModeBoth
+                else -> notificationTrafficModeSpeed
             }
             val trafficRefreshSeconds =
                 (arguments["trafficRefreshSeconds"] as? Number)?.toInt()
@@ -358,10 +361,10 @@ internal class MeowForegroundNotification(
         }
         return Presentation(
             detailed = presentationPrefs.getBoolean(PREF_DETAILED, true),
-            trafficDisplayMode = when (text(PREF_TRAFFIC_DISPLAY_MODE, "speed")) {
-                "total" -> "total"
-                "both" -> "both"
-                else -> "speed"
+            trafficDisplayMode = when (text(PREF_TRAFFIC_DISPLAY_MODE, notificationTrafficModeSpeed)) {
+                notificationTrafficModeTotal -> notificationTrafficModeTotal
+                notificationTrafficModeBoth -> notificationTrafficModeBoth
+                else -> notificationTrafficModeSpeed
             },
             trafficRefreshSeconds = value(
                 PREF_TRAFFIC_REFRESH_SECONDS,
@@ -517,8 +520,8 @@ internal class MeowForegroundNotification(
         val speed = "↓ ${formatRate(displayedDownlink)}  ↑ ${formatRate(displayedUplink)}"
         val totals = "↓ ${formatBytes(downlinkTotal)}  ↑ ${formatBytes(uplinkTotal)}"
         val traffic = when (presentation.trafficDisplayMode) {
-            "total" -> totals
-            "both" -> "$speed  ·  всего $totals"
+            notificationTrafficModeTotal -> totals
+            notificationTrafficModeBoth -> "$speed  ·  всего $totals"
             else -> speed
         }
         val latency = when {

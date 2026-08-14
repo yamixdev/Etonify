@@ -1,5 +1,23 @@
 import 'package:pigeon/pigeon.dart';
 
+// Values shared by the native runtime event stream and its Dart consumer.
+// Keeping them in the Pigeon contract prevents the two sides from silently
+// drifting when a new event type is added or renamed.
+const String runtimeEventClearLogs = 'clearLogs';
+const String runtimeEventClient = 'client';
+const String runtimeEventGroups = 'groups';
+const String runtimeEventLogLevel = 'logLevel';
+const String runtimeEventLogs = 'logs';
+const String runtimeEventNativeLog = 'nativeLog';
+const String runtimeEventNetwork = 'network';
+const String runtimeEventState = 'state';
+const String runtimeEventStatus = 'status';
+
+// Wire values used by Flutter settings and the Android foreground service.
+const String notificationTrafficModeSpeed = 'speed';
+const String notificationTrafficModeTotal = 'total';
+const String notificationTrafficModeBoth = 'both';
+
 @ConfigurePigeon(
   PigeonOptions(
     dartOut: 'lib/singbox/singbox_api.g.dart',

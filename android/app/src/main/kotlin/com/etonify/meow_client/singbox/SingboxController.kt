@@ -5,6 +5,15 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import com.etonify.meow_client.MeowApplication
+import com.etonify.meow_client.generated.runtimeEventClearLogs
+import com.etonify.meow_client.generated.runtimeEventClient
+import com.etonify.meow_client.generated.runtimeEventGroups
+import com.etonify.meow_client.generated.runtimeEventLogLevel
+import com.etonify.meow_client.generated.runtimeEventLogs
+import com.etonify.meow_client.generated.runtimeEventNativeLog
+import com.etonify.meow_client.generated.runtimeEventNetwork
+import com.etonify.meow_client.generated.runtimeEventState
+import com.etonify.meow_client.generated.runtimeEventStatus
 import io.flutter.plugin.common.EventChannel
 import io.nekohasekai.libbox.CommandClient
 import io.nekohasekai.libbox.CommandClientHandler
@@ -151,14 +160,14 @@ object SingboxController {
 
         override fun clearLogs() {
             if (!commandClientLifecycle.acceptsEvents(epoch)) return
-            emit(mapOf("type" to "clearLogs"))
+            emit(mapOf("type" to runtimeEventClearLogs))
         }
 
         override fun initializeClashMode(modeList: StringIterator?, currentMode: String?) = Unit
 
         override fun setDefaultLogLevel(level: Int) {
             if (!commandClientLifecycle.acceptsEvents(epoch)) return
-            emit(mapOf("type" to "logLevel", "level" to level))
+            emit(mapOf("type" to runtimeEventLogLevel, "level" to level))
         }
 
         override fun updateClashMode(newMode: String?) = Unit
@@ -254,7 +263,7 @@ object SingboxController {
             }
             emitCoalescedGroups(
                 mapOf(
-                    "type" to "groups",
+                    "type" to runtimeEventGroups,
                     "groups" to groups,
                     "runtimeGeneration" to activeRuntimeGeneration,
                 ),
@@ -279,7 +288,7 @@ object SingboxController {
                     MeowDiagnostics.log(TAG, "libbox log level=${entry.level} message=$message")
                 }
             }
-            emit(mapOf("type" to "logs", "logs" to logs))
+            emit(mapOf("type" to runtimeEventLogs, "logs" to logs))
         }
 
         override fun writeStatus(message: StatusMessage?) {
@@ -310,7 +319,7 @@ object SingboxController {
             )
             emitCoalescedStatus(
                 mapOf(
-                    "type" to "status",
+                    "type" to runtimeEventStatus,
                     "uplink" to uplink,
                     "downlink" to downlink,
                     "uplinkTotal" to uplinkTotal,
@@ -554,7 +563,7 @@ object SingboxController {
             else -> Log.i(TAG, safeMessage)
         }
         MeowDiagnostics.log(TAG, "nativeLog level=$level message=$message")
-        emit(mapOf("type" to "nativeLog", "level" to level, "message" to message))
+        emit(mapOf("type" to runtimeEventNativeLog, "level" to level, "message" to message))
     }
 
     private fun maybeReassertDefaultInterfaceFromCoreLog(message: String) {
@@ -644,7 +653,7 @@ object SingboxController {
         }
         Log.i(TAG, "command client connected epoch=$epoch")
         MeowDiagnostics.log(TAG, "command_stream_connected epoch=$epoch")
-        emit(mapOf("type" to "client", "connected" to true))
+        emit(mapOf("type" to runtimeEventClient, "connected" to true))
     }
 
     private fun handleCommandClientDisconnected(epoch: Long, message: String?) {
@@ -677,7 +686,7 @@ object SingboxController {
                 )
                 emit(
                     mapOf(
-                        "type" to "client",
+                        "type" to runtimeEventClient,
                         "connected" to false,
                         "expected" to true,
                     ),
@@ -696,7 +705,7 @@ object SingboxController {
                 // to know that diagnostics are recovering in the background.
                 emit(
                     mapOf(
-                        "type" to "client",
+                        "type" to runtimeEventClient,
                         "connected" to false,
                         "recovering" to true,
                     ),
@@ -793,7 +802,7 @@ object SingboxController {
                 if (decision.kind == CommandDisconnectKind.UNEXPECTED) {
                     emit(
                         mapOf(
-                            "type" to "client",
+                            "type" to runtimeEventClient,
                             "connected" to false,
                             "recovering" to true,
                         ),
@@ -849,7 +858,7 @@ object SingboxController {
             commandClientLifecycle.finishExpectedDisconnect(disconnectEpoch)
             emit(
                 mapOf(
-                    "type" to "client",
+                    "type" to runtimeEventClient,
                     "connected" to false,
                     "expected" to true,
                 ),
@@ -1020,7 +1029,7 @@ object SingboxController {
     ) {
         emit(
             mapOf(
-                "type" to "network",
+                "type" to runtimeEventNetwork,
                 "reason" to reason,
                 "description" to description,
                 "interfaceName" to interfaceName,
@@ -1097,7 +1106,7 @@ object SingboxController {
     private fun emitCurrentState(error: String? = null) {
         emit(
             mapOf(
-                "type" to "state",
+                "type" to runtimeEventState,
                 "running" to running,
                 "mode" to serviceMode,
                 "runtimeGeneration" to activeRuntimeGeneration,
@@ -1109,7 +1118,7 @@ object SingboxController {
     private fun emitCurrentStatus() {
         emit(
             mapOf(
-                "type" to "status",
+                "type" to runtimeEventStatus,
                 "uplink" to uplink,
                 "downlink" to downlink,
                 "uplinkTotal" to uplinkTotal,
