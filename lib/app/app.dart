@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
@@ -19,6 +20,7 @@ import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
+import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/runtime_connection_controller.dart';
 import 'package:meow_client/app/runtime_command_coordinator.dart';
@@ -75,16 +77,17 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/theme/demo_app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
-class MeowClient extends StatefulWidget {
+class MeowClient extends ConsumerStatefulWidget {
   const MeowClient({super.key, this.store});
 
   final AppSettingsStore? store;
 
   @override
-  State<MeowClient> createState() => _MeowClientState();
+  ConsumerState<MeowClient> createState() => _MeowClientState();
 }
 
-class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
+class _MeowClientState extends ConsumerState<MeowClient>
+    with WidgetsBindingObserver {
   static const _fallbackClientVersionLabel = '0.3.0-beta.4';
   static const _requiredLegalVersion = '0.2.1';
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
@@ -100,8 +103,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   static const _androidImageCacheMaximumBytes = 32 * 1024 * 1024;
   static const _androidImageCacheMaximumEntries = 64;
   static const _proxyChainTargetSourceCacheMaximumEntries = 2;
-  static const _subscriptionAutoRefreshMinDelay = Duration(seconds: 30);
-  static const _subscriptionAutoRefreshMaxDelay = Duration(hours: 6);
   static const _splitRoutingTemporarilyDisabled = false;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeData _lightTheme;
@@ -140,7 +141,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   bool _notificationPermissionPromptAttempted = false;
   bool _notificationPermissionRequestInFlight = false;
   String _lastVpnNotificationPresentationSignature = '';
-  final AppSettingsController _settings = AppSettingsController();
+  late final AppSettingsController _settings;
+  late final SingboxRuntime _singboxRuntime;
+  late final AppUpdateService _appUpdateService;
+  late final RussiaRouteDataService _russiaRouteDataService;
   int _locationLookupActiveRequests = 0;
   int _locationLookupGeneration = 0;
   bool _locationLookupRefreshRequested = false;
@@ -203,13 +207,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
   final RuntimeStartupUrlTestGate _runtimeStartupUrlTestGate =
       RuntimeStartupUrlTestGate();
-  final SubscriptionCoordinator _subscriptionCoordinator =
-      SubscriptionCoordinator(
-        runtime: SubscriptionRuntimeController(
-          autoRefreshMinDelay: _subscriptionAutoRefreshMinDelay,
-          autoRefreshMaxDelay: _subscriptionAutoRefreshMaxDelay,
-        ),
-      );
+  late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
   List<Subscription> _subscriptions = const [];
@@ -716,7 +714,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
 
   Future<bool> _networkInterfaceUsable({String reason = 'dart_check'}) async {
     try {
-      final state = await SingboxRuntime.instance.getNetworkInterfaceState();
+      final state = await _singboxRuntime.getNetworkInterfaceState();
       final wasUsable = _runtimeOperations.networkUsable;
       _networkInterfaceGeneration = state.generation;
       _runtimeOperations.updateNetwork(
@@ -1756,7 +1754,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       return;
     }
     _lastQuickSettingsTileLabel = nextLabel;
-    await SingboxRuntime.instance.setQuickSettingsTileLabel(nextLabel);
+    await _singboxRuntime.setQuickSettingsTileLabel(nextLabel);
   }
 
   String _buildVpnNotificationTitle() {
@@ -1816,7 +1814,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     }
     _lastVpnNotificationPresentationSignature = signature;
     try {
-      await SingboxRuntime.instance.updateVpnNotificationPresentation(
+      await _singboxRuntime.updateVpnNotificationPresentation(
         detailed: _statusNotificationEnabled,
         trafficDisplayMode: _notificationTrafficDisplayMode.name,
         trafficRefreshSeconds: _notificationTrafficRefreshSeconds,
@@ -1856,7 +1854,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _notificationPermissionPromptAttempted = true;
     _notificationPermissionRequestInFlight = true;
     try {
-      await SingboxRuntime.instance.ensureNotificationPermission();
+      await _singboxRuntime.ensureNotificationPermission();
     } catch (error) {
       AppLogStore.warning('notification', 'permission request failed: $error');
     } finally {
@@ -1867,15 +1865,24 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _settings = ref.read(appSettingsControllerProvider);
+    _singboxRuntime = ref.read(singboxRuntimeProvider);
+    _appUpdateService = ref.read(appUpdateServiceProvider);
+    _russiaRouteDataService = ref.read(russiaRouteDataServiceProvider);
+    _subscriptionCoordinator = SubscriptionCoordinator(
+      runtime: ref.read(subscriptionRuntimeControllerProvider),
+    );
     _bootstrapController = AppBootstrapController(
       fallbackClientVersionLabel: _fallbackClientVersionLabel,
     );
     _runtimeCommands = RuntimeCommandCoordinator(
-      selectOutbound: (groupTag, outboundTag) => SingboxRuntime.instance
-          .selectOutbound(groupTag: groupTag, outboundTag: outboundTag),
+      selectOutbound: (groupTag, outboundTag) => _singboxRuntime.selectOutbound(
+        groupTag: groupTag,
+        outboundTag: outboundTag,
+      ),
     );
     _latencyCoordinator = LatencyCoordinator(
-      runTest: (request) => SingboxRuntime.instance.urlTest(
+      runTest: (request) => _singboxRuntime.urlTest(
         groupTag: request.groupTag,
         targetOutboundTag: request.targetOutboundTag,
         priorityOutboundTag: request.priorityOutboundTag,
@@ -1921,7 +1928,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       syncRuntimeState: _syncRuntimeState,
     );
     _runtimeEvents = RuntimeEventController(
-      events: SingboxRuntime.instance.events,
+      events: _singboxRuntime.events,
       onState: _handleRuntimeStateEvent,
       onStatus: _handleTrafficStatusEvent,
       onNetwork: _handleRuntimeNetworkEvent,
@@ -2318,7 +2325,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   Future<void> _checkForClientUpdatesIfDue() async {
     await _refreshAppVersionInfo();
     await _cleanupInstalledUpdateArtifactsIfNeeded(showSnackBar: true);
-    final result = await AppUpdateService.instance.checkForUpdates(
+    final result = await _appUpdateService.checkForUpdates(
       currentVersion: _clientVersionLabel,
       currentBuildNumber: _clientVersionCode,
     );
@@ -2341,11 +2348,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     }
     _updateCleanupInFlight = true;
     try {
-      final result = await AppUpdateService.instance
-          .cleanupInstalledUpdateArtifacts(
-            currentVersion: _clientVersionLabel,
-            currentBuildNumber: _clientVersionCode,
-          );
+      final result = await _appUpdateService.cleanupInstalledUpdateArtifacts(
+        currentVersion: _clientVersionLabel,
+        currentBuildNumber: _clientVersionCode,
+      );
       if (!result.changed) {
         return;
       }
@@ -3158,7 +3164,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
 
   Future<void> _syncRuntimeUiForeground(bool foreground) async {
     try {
-      await SingboxRuntime.instance.setRuntimeUiForeground(foreground);
+      await _singboxRuntime.setRuntimeUiForeground(foreground);
     } catch (error) {
       AppLogStore.warning(
         'runtime',
@@ -3220,7 +3226,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   }
 
   Future<void> _syncRuntimePerformanceFlags() {
-    return SingboxRuntime.instance.setRuntimeFlags(
+    return _singboxRuntime.setRuntimeFlags(
       wakeLockEnabled: _balancedMode ? false : null,
       networkHeartbeatEnabled: true,
       networkHeartbeatIntervalSeconds: _networkHeartbeatIntervalSeconds,
@@ -3495,7 +3501,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
         _setConnectionPhase(AppConnectionPhase.preparing);
       });
 
-      final granted = await SingboxRuntime.instance.prepareVpn(
+      final granted = await _singboxRuntime.prepareVpn(
         requiresVpn: _vpnInboundEnabled,
       );
       if (!_manualRuntimeStartCurrent(startGeneration)) {
@@ -4660,7 +4666,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       return inFlight;
     }
     final generation = _installedAppsCacheGeneration;
-    final future = SingboxRuntime.instance
+    final future = _singboxRuntime
         .getInstalledApps()
         .then((items) {
           if (generation == _installedAppsCacheGeneration) {
@@ -4965,8 +4971,8 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
   Future<RussiaRouteDataStatus> _installRussiaRouteData() async {
     final hadInstalledData = _russiaRouteDataStatus.available;
     final status = hadInstalledData
-        ? await RussiaRouteDataService.instance.ensureUpdated(force: true)
-        : await RussiaRouteDataService.instance.ensureBundledInstalled();
+        ? await _russiaRouteDataService.ensureUpdated(force: true)
+        : await _russiaRouteDataService.ensureBundledInstalled();
     if (!mounted) {
       return status;
     }
@@ -4983,12 +4989,12 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     var status = _russiaRouteDataStatus;
     final hadPreparedData = status.available;
     if (!status.available) {
-      status = await RussiaRouteDataService.instance.ensureBundledInstalled();
+      status = await _russiaRouteDataService.ensureBundledInstalled();
     }
     if (preset == TrafficRulePreset.aiViaVpn ||
         preset == TrafficRulePreset.socialViaVpn ||
         hadPreparedData) {
-      status = await RussiaRouteDataService.instance.ensureUpdated(force: true);
+      status = await _russiaRouteDataService.ensureUpdated(force: true);
     }
     if (!mounted) {
       return status;
@@ -5263,7 +5269,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     );
     if (disposition == RuntimeStartDisposition.cancelledNeedsCleanup) {
       try {
-        await SingboxRuntime.instance
+        await _singboxRuntime
             .stop(reason: 'cancelled_runtime_start_completed')
             .timeout(const Duration(seconds: 7));
       } catch (error, stackTrace) {
@@ -5740,7 +5746,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
 
   Future<void> _syncRuntimeState() async {
     try {
-      final status = await SingboxRuntime.instance.status();
+      final status = await _singboxRuntime.status();
       if (!mounted || !_foregroundLifecycleActive) return;
       final running = status['running'] == true;
       _runtimeOperations.updateRuntimeState(
@@ -6002,7 +6008,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     AppLogStore.info('sing-box', reason);
     try {
       try {
-        await SingboxRuntime.instance.stop(reason: 'invalid_outbound_retry');
+        await _singboxRuntime.stop(reason: 'invalid_outbound_retry');
       } catch (_) {}
       if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
         return;
@@ -6574,11 +6580,10 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       return literal.address;
     }
     try {
-      final addresses = await SingboxRuntime.instance
-          .resolveHostOnUnderlyingNetwork(
-            host: normalizedHost,
-            timeout: const Duration(seconds: 3),
-          );
+      final addresses = await _singboxRuntime.resolveHostOnUnderlyingNetwork(
+        host: normalizedHost,
+        timeout: const Duration(seconds: 3),
+      );
       return addresses.firstOrNull;
     } catch (error) {
       AppLogStore.debug('proxy', 'endpoint DNS lookup failed: $error');
@@ -6673,7 +6678,7 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     if (existing != null) {
       return existing;
     }
-    final lookup = SingboxRuntime.instance.lookupOutboundExternalInfo(
+    final lookup = _singboxRuntime.lookupOutboundExternalInfo(
       outboundTag: normalizedTag,
     );
     _externalInfoLookups[key] = lookup;

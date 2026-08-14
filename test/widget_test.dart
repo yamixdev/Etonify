@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -18,7 +19,7 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 void main() {
   testWidgets('renders cloned mobile shell', (tester) async {
     await tester.pumpWidget(
-      MeowClient(
+      _TestMeowClient(
         store: MemoryAppSettingsStore(
           const AppSettingsState(
             onboardingCompleted: true,
@@ -80,7 +81,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MeowClient(
+      _TestMeowClient(
         store: MemoryAppSettingsStore(
           const AppSettingsState(
             onboardingCompleted: false,
@@ -137,7 +138,7 @@ void main() {
 
   testWidgets('opens settings page from home header', (tester) async {
     await tester.pumpWidget(
-      MeowClient(
+      _TestMeowClient(
         store: MemoryAppSettingsStore(
           const AppSettingsState(
             onboardingCompleted: true,
@@ -1618,4 +1619,15 @@ AppProxySummary _proxy(String tag, String name, {int? latency}) {
     protocolLabel: 'VLESS',
     endpointLabel: '$tag.example.com',
   );
+}
+
+class _TestMeowClient extends StatelessWidget {
+  const _TestMeowClient({required this.store});
+
+  final AppSettingsStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(child: MeowClient(store: store));
+  }
 }
