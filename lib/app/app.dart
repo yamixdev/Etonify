@@ -238,11 +238,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
   static const _maximumPreloadedProxyFlags = 24;
   AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
 
-  AppConnectionPhase get _connectionPhase => _runtimeConnection.phase;
-  bool get _connected => _runtimeConnection.connected;
-  bool get _starting => _runtimeConnection.starting;
+  VpnRuntimeState get _vpnRuntimeState => ref.read(vpnRuntimeStateProvider);
+  AppConnectionPhase get _connectionPhase => _vpnRuntimeState.phase;
+  bool get _connected => _vpnRuntimeState.connected;
+  bool get _starting => _vpnRuntimeState.starting;
   bool get _runtimeTransitionInProgress =>
-      _runtimeConnection.transitionInProgress;
+      _vpnRuntimeState.transitionInProgress;
   bool get _runtimeDesiredByUser => _runtimeIntent.desiredByUser;
   bool get _retryRuntimeOnResume => _runtimeIntent.retryOnResume;
   bool get _invalidOutboundRetryScheduled => _runtimeRecovery.retryScheduled;
