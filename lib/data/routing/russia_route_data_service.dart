@@ -10,6 +10,17 @@ import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
 import 'package:meow_client/core/network/remote_download_timeout.dart';
 
+@visibleForTesting
+bool shouldRebuildRussiaRouteDomainLists({
+  required bool currentDataAvailable,
+  required bool downloadedContentChanged,
+  required bool compiledFilesAvailable,
+}) {
+  return !currentDataAvailable ||
+      downloadedContentChanged ||
+      !compiledFilesAvailable;
+}
+
 class RussiaRouteDataStatus {
   const RussiaRouteDataStatus({
     required this.available,
@@ -614,13 +625,15 @@ class RussiaRouteDataService {
         previousMetadata: current.domainListCommunityMetadata,
         force: force,
       );
-      final shouldRebuildDomainLists =
-          force ||
-          !current.available ||
-          downloaded.changed ||
-          !File(paths.curatedDirectServicesPath).existsSync() ||
-          !File(paths.aiServicesPath).existsSync() ||
-          !File(paths.socialServicesPath).existsSync();
+      final compiledFilesAvailable =
+          File(paths.curatedDirectServicesPath).existsSync() &&
+          File(paths.aiServicesPath).existsSync() &&
+          File(paths.socialServicesPath).existsSync();
+      final shouldRebuildDomainLists = shouldRebuildRussiaRouteDomainLists(
+        currentDataAvailable: current.available,
+        downloadedContentChanged: downloaded.changed,
+        compiledFilesAvailable: compiledFilesAvailable,
+      );
       var downloadedCategoryCount = current.domainListCommunityCategoryCount;
       var compiledDomainCount = current.domainListCommunityDomainCount;
       var domainListCommunityUpdatedAtMillis =
@@ -654,7 +667,8 @@ class RussiaRouteDataService {
             compiledCuratedDirectServices.domainCount +
             compiledAiServices.domainCount +
             compiledSocialServices.domainCount;
-        domainListCommunityUpdatedAtMillis = nowMillis;
+        domainListCommunityUpdatedAtMillis =
+            DateTime.now().millisecondsSinceEpoch;
       }
       final installedAtMillis = current.installedAtMillis ?? nowMillis;
       _emitProgress(RussiaRouteUpdateStage.activating);

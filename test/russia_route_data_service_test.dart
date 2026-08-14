@@ -27,6 +27,52 @@ void main() {
     expect(stale.needsDailyUpdate, isTrue);
   });
 
+  group('domain-list rebuild policy', () {
+    test('keeps installed files when downloaded content is unchanged', () {
+      expect(
+        shouldRebuildRussiaRouteDomainLists(
+          currentDataAvailable: true,
+          downloadedContentChanged: false,
+          compiledFilesAvailable: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rebuilds when downloaded content changed', () {
+      expect(
+        shouldRebuildRussiaRouteDomainLists(
+          currentDataAvailable: true,
+          downloadedContentChanged: true,
+          compiledFilesAvailable: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rebuilds when compiled output is missing', () {
+      expect(
+        shouldRebuildRussiaRouteDomainLists(
+          currentDataAvailable: true,
+          downloadedContentChanged: false,
+          compiledFilesAvailable: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('builds files for a fresh installation', () {
+      expect(
+        shouldRebuildRussiaRouteDomainLists(
+          currentDataAvailable: false,
+          downloadedContentChanged: false,
+          compiledFilesAvailable: false,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   test(
     'bundled smart routing installs offline and remains due for refresh',
     () async {

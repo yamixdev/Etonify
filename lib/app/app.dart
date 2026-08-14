@@ -2733,7 +2733,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     _startSingboxEvents();
     if (_foregroundLifecycleActive) {
       _startSubscriptionAutoRefresh();
-      unawaited(_updateRussiaRouteDataIfDue());
       if (!useInMemoryBootstrap) {
         unawaited(_checkForClientUpdatesIfDue());
       }
@@ -4975,9 +4974,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
       _russiaRouteDataStatus = status;
     });
     _configCoordinator.emitCurrentConfigLog('russia route data prepared');
-    if (!hadInstalledData) {
-      unawaited(_updateRussiaRouteDataIfDue());
-    }
     return status;
   }
 
@@ -5000,31 +4996,6 @@ class _MeowClientState extends State<MeowClient> with WidgetsBindingObserver {
     setState(() => _russiaRouteDataStatus = status);
     _configCoordinator.emitCurrentConfigLog('traffic rule data prepared');
     return status;
-  }
-
-  Future<void> _updateRussiaRouteDataIfDue() async {
-    final current = _russiaRouteDataStatus;
-    if (!current.available || !current.needsDailyUpdate) {
-      return;
-    }
-    try {
-      final status = await RussiaRouteDataService.instance.ensureUpdated();
-      if (!mounted) {
-        return;
-      }
-      final changed =
-          status.versionTag != current.versionTag ||
-          status.domainListCommunityUpdatedAtMillis !=
-              current.domainListCommunityUpdatedAtMillis;
-      setState(() {
-        _russiaRouteDataStatus = status;
-      });
-      if (changed && _trafficRulePreset != TrafficRulePreset.none) {
-        _configCoordinator.emitCurrentConfigLog('russia route data updated');
-      }
-    } catch (error) {
-      AppLogStore.warning('routes', 'russia route update check failed: $error');
-    }
   }
 
   void _setBypassLocalNetwork(bool value) {
