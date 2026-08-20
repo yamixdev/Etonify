@@ -78,7 +78,7 @@ jobs:
           fi
 
           source_commit="$(git rev-parse HEAD)"
-          source_version="$(git describe --tags --always --dirty)"
+          source_version="$core_version"
           echo "version=$core_version" >> "$GITHUB_OUTPUT"
           echo "commit=$source_commit" >> "$GITHUB_OUTPUT"
           echo "source_version=$source_version" >> "$GITHUB_OUTPUT"
@@ -104,6 +104,7 @@ jobs:
         working-directory: etonify-core
         env:
           ANDROID_NDK_HOME: ${{ steps.setup_ndk.outputs.ndk-path }}
+          ETONIFY_CORE_VERSION: ${{ steps.core_metadata.outputs.version }}
         run: |
           set -euo pipefail
           make lib_install
