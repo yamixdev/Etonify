@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
-import 'package:meow_client/core/network/remote_download_timeout.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 enum AdBlockUpdateStage {
   connecting,
@@ -259,74 +259,39 @@ class AdBlockRuleSetService {
   }
 
   Future<List<int>> _downloadSourceBytes(Stopwatch stopwatch) async {
-    final client = HttpClient();
     final uri = Uri.parse(sourceUrl);
-    try {
-      client.connectionTimeout = remoteDownloadIdleTimeout;
-      client.idleTimeout = remoteDownloadIdleTimeout;
-      final request = await awaitRemoteDownload(
-        client.getUrl(uri),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.connecting,
-      );
-      request.headers.set(HttpHeaders.acceptHeader, 'text/plain,*/*');
-      final response = await awaitRemoteDownload(
-        request.close(),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          'Failed to download adblock list: HTTP ${response.statusCode}',
-          uri: Uri.parse(sourceUrl),
-        );
-      }
-      final declaredLength = response.contentLength;
-      if (declaredLength > _maxSourceBytes) {
-        throw HttpException(
-          'Adblock source is larger than $_maxSourceBytes bytes',
-          uri: Uri.parse(sourceUrl),
-        );
-      }
-      final builder = BytesBuilder(copy: false);
-      var totalBytes = 0;
-      var lastProgressAt = -1;
-      _emitProgress(
-        AdBlockUpdateStage.downloading,
-        totalBytes: declaredLength > 0 ? declaredLength : 0,
-        elapsedMilliseconds: stopwatch.elapsedMilliseconds,
-      );
-      await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
-        totalBytes += chunk.length;
-        if (totalBytes > _maxSourceBytes) {
-          throw HttpException(
-            'Adblock source is larger than $_maxSourceBytes bytes',
-            uri: Uri.parse(sourceUrl),
-          );
-        }
-        builder.add(chunk);
+    var lastProgressAt = -1;
+    _emitProgress(
+      AdBlockUpdateStage.downloading,
+      elapsedMilliseconds: stopwatch.elapsedMilliseconds,
+    );
+    final result = await VpnAwareRemoteDownloader.instance.fetchBytes(
+      uri: uri,
+      maximumBytes: _maxSourceBytes,
+      headers: const <String, String>{'Accept': 'text/plain,*/*'},
+      onProgress: (completed, total) {
         final elapsed = stopwatch.elapsedMilliseconds;
-        if (elapsed - lastProgressAt >= 250 ||
-            (declaredLength > 0 && totalBytes >= declaredLength)) {
-          lastProgressAt = elapsed;
-          _emitProgress(
-            AdBlockUpdateStage.downloading,
-            completedBytes: totalBytes,
-            totalBytes: declaredLength > 0 ? declaredLength : 0,
-            elapsedMilliseconds: elapsed,
-          );
+        if (elapsed - lastProgressAt < 250 &&
+            (total <= 0 || completed < total)) {
+          return;
         }
-      }
-      _emitProgress(
-        AdBlockUpdateStage.downloading,
-        completedBytes: totalBytes,
-        totalBytes: declaredLength > 0 ? declaredLength : totalBytes,
-        elapsedMilliseconds: stopwatch.elapsedMilliseconds,
-      );
-      return builder.takeBytes();
-    } finally {
-      client.close(force: true);
-    }
+        lastProgressAt = elapsed;
+        _emitProgress(
+          AdBlockUpdateStage.downloading,
+          completedBytes: completed,
+          totalBytes: total,
+          elapsedMilliseconds: elapsed,
+        );
+      },
+    );
+    final bytes = result.bytes ?? Uint8List(0);
+    _emitProgress(
+      AdBlockUpdateStage.downloading,
+      completedBytes: bytes.length,
+      totalBytes: bytes.length,
+      elapsedMilliseconds: stopwatch.elapsedMilliseconds,
+    );
+    return bytes;
   }
 
   Future<void> _writeAtomically(String path, List<int> bytes) async {

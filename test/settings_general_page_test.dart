@@ -23,7 +23,6 @@ Widget _generalSettingsApp({
           NotificationTrafficDisplayMode.speed,
       currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
-      currentPerformanceMode: AppPerformanceMode.standard,
       currentMemoryLimitEnabled: true,
       currentMemoryLimitWarningDismissed: false,
       currentUpdateInstallMode: AppUpdateInstallMode.ask,
@@ -37,7 +36,6 @@ Widget _generalSettingsApp({
       onNotificationTrafficRefreshSecondsChanged:
           onTrafficRefreshChanged ?? (_) {},
       onHideServerIpChanged: (_) {},
-      onPerformanceModeChanged: (_) {},
       onMemoryLimitChanged: (_, {warningDismissed = false}) {},
       onUpdateInstallModeChanged: (_) {},
     ),

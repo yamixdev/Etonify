@@ -6,6 +6,7 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/settings/developer_profile_sheet.dart';
+import 'package:meow_client/features/settings/settings_documentation_page.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -36,10 +37,7 @@ class SettingsAboutPage extends StatefulWidget {
 }
 
 class _SettingsAboutPageState extends State<SettingsAboutPage> {
-  bool _debugVisible = false;
   String? _coreVersion;
-  Map<String, dynamic>? _performanceSnapshot;
-  bool _performanceBusy = false;
 
   @override
   void initState() {
@@ -51,13 +49,6 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
     final version = await SingboxRuntime.instance.getCoreVersion();
     if (!mounted) return;
     setState(() => _coreVersion = version);
-  }
-
-  void _toggleDebugVisible() {
-    if (AppVisualEffects.of(context).hapticEnabled) {
-      HapticFeedback.selectionClick();
-    }
-    setState(() => _debugVisible = !_debugVisible);
   }
 
   Future<void> _openUri(Uri uri) async {
@@ -82,6 +73,23 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
     );
   }
 
+  void _openDiagnosticsPage() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) =>
+            SettingsDiagnosticsPage(onShowOnboarding: widget.onShowOnboarding),
+      ),
+    );
+  }
+
+  void _openDocumentationPage() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => const SettingsDocumentationPage(),
+      ),
+    );
+  }
+
   void _openLegalDocument({required bool privacy}) {
     final l10n = AppLocalizations.of(context);
     Navigator.of(context).push<void>(
@@ -92,22 +100,6 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
         ),
       ),
     );
-  }
-
-  Future<void> _refreshPerformanceSnapshot() async {
-    if (_performanceBusy) return;
-    setState(() => _performanceBusy = true);
-    try {
-      final snapshot = _withFlutterMemoryStats(
-        await SingboxRuntime.instance.getPerformanceSnapshot(),
-      );
-      if (!mounted) return;
-      setState(() => _performanceSnapshot = snapshot);
-    } finally {
-      if (mounted) {
-        setState(() => _performanceBusy = false);
-      }
-    }
   }
 
   @override
@@ -142,14 +134,84 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
                   onOpenTeam: _openTeamPage,
                 ),
                 const Gap(12),
+                _AboutDocumentationCard(
+                  onOpenDocumentation: _openDocumentationPage,
+                ),
+                const Gap(12),
+                _AboutDiagnosticsCard(onOpenDiagnostics: _openDiagnosticsPage),
+                const Gap(12),
+                _AboutUpdatesCard(onOpenUpdates: _openUpdatePage),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SettingsDiagnosticsPage extends StatefulWidget {
+  const SettingsDiagnosticsPage({super.key, required this.onShowOnboarding});
+
+  final VoidCallback onShowOnboarding;
+
+  @override
+  State<SettingsDiagnosticsPage> createState() =>
+      _SettingsDiagnosticsPageState();
+}
+
+class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
+  bool _debugVisible = false;
+  Map<String, dynamic>? _performanceSnapshot;
+  bool _performanceBusy = false;
+
+  void _toggleDebugVisible() {
+    if (AppVisualEffects.of(context).hapticEnabled) {
+      HapticFeedback.selectionClick();
+    }
+    setState(() => _debugVisible = !_debugVisible);
+  }
+
+  Future<void> _refreshPerformanceSnapshot() async {
+    if (_performanceBusy) return;
+    setState(() => _performanceBusy = true);
+    try {
+      final snapshot = _withFlutterMemoryStats(
+        await SingboxRuntime.instance.getPerformanceSnapshot(),
+      );
+      if (!mounted) return;
+      setState(() => _performanceSnapshot = snapshot);
+    } finally {
+      if (mounted) {
+        setState(() => _performanceBusy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return ProgressiveBlurScaffold(
+      appBar: AppBar(title: Text(l10n.diagnosticsTitle)),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          0,
+          progressiveHeaderTopPadding(context, 20),
+          0,
+          appBottomSafePadding(context, 24),
+        ),
+        children: [
+          Padding(
+            padding: settingsScreenPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 _AboutResourcesCard(
                   snapshot: _performanceSnapshot,
                   busy: _performanceBusy,
                   onRefresh: _refreshPerformanceSnapshot,
                   onDebugToggle: _toggleDebugVisible,
                 ),
-                const Gap(12),
-                _AboutUpdatesCard(onOpenUpdates: _openUpdatePage),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
                   switchInCurve: Curves.easeOutCubic,
@@ -275,6 +337,46 @@ class _AboutInfoCard extends StatelessWidget {
   }
 }
 
+class _AboutDocumentationCard extends StatelessWidget {
+  const _AboutDocumentationCard({required this.onOpenDocumentation});
+
+  final VoidCallback onOpenDocumentation;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        onTap: onOpenDocumentation,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: cs.tertiaryContainer,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(Icons.menu_book_rounded, color: cs.onTertiaryContainer),
+        ),
+        title: Text(
+          l10n.aboutDocumentationTitle,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(l10n.aboutDocumentationSubtitle),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      ),
+    );
+  }
+}
+
 class _AboutUpdatesCard extends StatelessWidget {
   const _AboutUpdatesCard({required this.onOpenUpdates});
 
@@ -311,6 +413,46 @@ class _AboutUpdatesCard extends StatelessWidget {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(l10n.updatesSubtitle),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      ),
+    );
+  }
+}
+
+class _AboutDiagnosticsCard extends StatelessWidget {
+  const _AboutDiagnosticsCard({required this.onOpenDiagnostics});
+
+  final VoidCallback onOpenDiagnostics;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        onTap: onOpenDiagnostics,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: cs.secondaryContainer,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(Icons.memory_rounded, color: cs.onSecondaryContainer),
+        ),
+        title: Text(
+          l10n.diagnosticsTitle,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(l10n.diagnosticsSubtitle),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
       ),
@@ -399,6 +541,21 @@ class _AboutResourcesCard extends StatelessWidget {
             _AboutInfoRow(
               label: l10n.aboutResourcePss,
               value: _formatKb(data?['totalPssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceRss,
+              value: _formatKb(data?['totalRssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourceSwapPss,
+              value: _formatKb(data?['totalSwapPssKb']),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.aboutResourcePrivateDirty,
+              value: _formatKb(data?['totalPrivateDirtyKb']),
             ),
             const Gap(8),
             _AboutInfoRow(
@@ -500,14 +657,14 @@ class _AboutResourcesCard extends StatelessWidget {
 
   static String _formatKb(Object? value) {
     final kb = _numValue(value);
-    if (kb == null || kb <= 0) return '—';
+    if (kb == null || kb < 0) return '—';
     final mb = kb / 1024;
     return '${mb.toStringAsFixed(mb >= 100 ? 0 : 1)} MB';
   }
 
   static String _formatBytes(Object? value) {
     final bytes = _numValue(value);
-    if (bytes == null || bytes <= 0) return '—';
+    if (bytes == null || bytes < 0) return '—';
     return _formatKb(bytes / 1024);
   }
 
@@ -966,7 +1123,7 @@ class _RuntimeFlagsTogglesState extends State<_RuntimeFlagsToggles> {
         networkHeartbeatEnabled: _flags!.networkHeartbeatEnabled,
         networkHeartbeatIntervalSeconds:
             _flags!.networkHeartbeatIntervalSeconds,
-        performanceMode: _flags!.performanceMode,
+        memoryLimitEnabled: _flags!.memoryLimitEnabled,
       );
     });
     await SingboxRuntime.instance.setRuntimeFlags(wakeLockEnabled: value);
@@ -982,7 +1139,7 @@ class _RuntimeFlagsTogglesState extends State<_RuntimeFlagsToggles> {
         networkHeartbeatEnabled: value,
         networkHeartbeatIntervalSeconds:
             _flags!.networkHeartbeatIntervalSeconds,
-        performanceMode: _flags!.performanceMode,
+        memoryLimitEnabled: _flags!.memoryLimitEnabled,
       );
     });
     await SingboxRuntime.instance.setRuntimeFlags(

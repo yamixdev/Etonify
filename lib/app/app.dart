@@ -66,6 +66,7 @@ import 'package:meow_client/features/settings/settings_logs_page.dart';
 import 'package:meow_client/features/settings/settings_page.dart';
 import 'package:meow_client/features/settings/settings_presentation_builder.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
+import 'package:meow_client/features/settings/settings_security_page.dart';
 import 'package:meow_client/features/settings/settings_subscriptions_page.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
@@ -98,10 +99,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
   static const _lowestProxyTag = lowestProxyTag;
   static const _derivedCacheBuildDebounce = Duration(milliseconds: 160);
-  static const _coolNetworkHeartbeatIntervalSeconds = 240;
-  static const _economyNetworkHeartbeatIntervalSeconds = 300;
-  static const _responsiveTrafficUiUpdateInterval = Duration(milliseconds: 250);
-  static const _balancedTrafficUiUpdateInterval = Duration(seconds: 1);
+  static const _networkHeartbeatIntervalSeconds = 240;
+  static const _trafficUiUpdateInterval = Duration(seconds: 1);
   static const _runtimeRecoveryStatusLogInterval = Duration(seconds: 5);
   static const _subscriptionOperationSoftWarningDelay = Duration(seconds: 15);
   static const _subscriptionOperationTimeout = Duration(seconds: 30);
@@ -287,13 +286,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
   ThemeMode get _themeMode => _settings.themeMode;
   AppThemePreference get _themePreference => _settings.themePreference;
   String get _accentColorHex => _settings.accentColorHex;
-  AppPerformanceMode get _performanceMode => _settings.performanceMode;
   bool get _memoryLimitEnabled => _settings.memoryLimitEnabled;
   bool get _memoryLimitWarningDismissed =>
       _settings.memoryLimitWarningDismissed;
   AppUpdateInstallMode get _updateInstallMode => _settings.updateInstallMode;
   TlsFragmentationMode get _tlsFragmentationMode =>
       _settings.tlsFragmentationMode;
+  bool get _allowUntrustedProxyCertificates =>
+      _settings.allowUntrustedProxyCertificates;
+  bool get _allowUntrustedSubscriptionCertificates =>
+      _settings.allowUntrustedSubscriptionCertificates;
   bool get _hapticEnabled => _settings.hapticEnabled;
   bool get _statusNotificationEnabled => _settings.statusNotificationEnabled;
   NotificationTrafficDisplayMode get _notificationTrafficDisplayMode =>
@@ -1665,32 +1667,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return false;
   }
 
-  /// Current-session URLTest summary for the active subscription. A row only
-  /// enters the denominator once this runtime has a terminal result for it;
-  /// old pings from a subscription payload must not be presented as a fresh
-  /// health check.
-  ({int working, int checked})? get _activeServerHealthSummary {
-    _ensureActiveLookupCaches();
-    var working = 0;
-    var checked = 0;
-    for (final outbound in _activeVisibleOutboundsLookup) {
-      final tag = outbound.tag.trim();
-      if (tag.isEmpty || _proxyRuntime.isLatencyInvalidated(tag)) {
-        continue;
-      }
-      final unavailable = _unavailableLatencyTags.contains(tag);
-      final hasLatency = _runtimeLatencies.containsKey(tag);
-      if (!unavailable && !hasLatency) {
-        continue;
-      }
-      checked++;
-      if (hasLatency && !unavailable) {
-        working++;
-      }
-    }
-    return checked == 0 ? null : (working: working, checked: checked);
-  }
-
   void _ensureActiveLookupCaches() {
     final subscription = _activeSubscription;
     if (identical(subscription, _activeLookupSubscription)) {
@@ -1896,6 +1872,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
       runtime: ref.read(subscriptionRuntimeControllerProvider),
+      refreshSubscription: (id) => SubscriptionStore.refresh(
+        id,
+        allowInsecureTls: _allowUntrustedSubscriptionCertificates,
+      ),
     );
     _bootstrapController = AppBootstrapController(
       fallbackClientVersionLabel: _fallbackClientVersionLabel,
@@ -2232,6 +2212,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           customName: request.name,
           requestInfo: requestInfo,
           operationTimeout: _subscriptionOperationTimeout,
+          allowInsecureTls: _allowUntrustedSubscriptionCertificates,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,
         timeoutMessage: l10n.subscriptionOperationTimeout,
@@ -2495,6 +2476,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         SubscriptionStore.refresh(
           subscription.id,
           operationTimeout: _subscriptionOperationTimeout,
+          allowInsecureTls: _allowUntrustedSubscriptionCertificates,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,
         timeoutMessage: l10n.subscriptionOperationTimeout,
@@ -2633,6 +2615,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       SubscriptionStore.refresh(
         subscriptionId,
         operationTimeout: _subscriptionOperationTimeout,
+        allowInsecureTls: _allowUntrustedSubscriptionCertificates,
       ),
       slowMessage: l10n.subscriptionOperationSlowWarning,
       timeoutMessage: l10n.subscriptionOperationTimeout,
@@ -2774,7 +2757,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     unawaited(_syncQuickSettingsTileLabel());
     AppLogStore.info('sing-box', 'startup');
-    unawaited(_syncRuntimePerformanceFlags());
+    unawaited(_syncRuntimeFlags());
     _startSingboxEvents();
     if (_foregroundLifecycleActive) {
       _startSubscriptionAutoRefresh();
@@ -2873,7 +2856,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _refreshThemeCache();
     });
     await _persistState();
-    await _syncRuntimePerformanceFlags();
+    await _syncRuntimeFlags();
     _configCoordinator.emitCurrentConfigLog(
       configReason,
       restartRuntime: _connected,
@@ -2937,23 +2920,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (change.scheduleLocationRefresh) {
       _scheduleBestOutboundLocationRefresh();
     }
-    if (change.syncRuntimePerformanceFlags) {
-      unawaited(_syncRuntimePerformanceFlags());
+    if (change.syncRuntimeFlags) {
+      unawaited(_syncRuntimeFlags());
     }
   }
 
-  bool get _coolMode => _settings.coolMode;
-
-  bool get _economyMode => _settings.economyMode;
-
   bool get _foregroundLifecycleActive =>
       _appLifecycleState == AppLifecycleState.resumed;
-
-  bool get _balancedMode => _settings.balancedMode;
-
-  Duration get _trafficUiUpdateInterval => _balancedMode
-      ? _balancedTrafficUiUpdateInterval
-      : _responsiveTrafficUiUpdateInterval;
 
   bool get _connectionBusy => switch (_connectionPhase) {
     AppConnectionPhase.preparing ||
@@ -2983,10 +2956,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   bool get _effectiveProgressiveBlurEnabled => false;
-
-  int get _networkHeartbeatIntervalSeconds => _economyMode
-      ? _economyNetworkHeartbeatIntervalSeconds
-      : _coolNetworkHeartbeatIntervalSeconds;
 
   RuntimeTrafficStatus _currentTrafficStatus() {
     return RuntimeTrafficStatus(
@@ -3196,9 +3165,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         );
         if (_locationLookupLimit > 0) {
           _scheduleBestOutboundLocationRefresh(
-            delay: _coolMode
-                ? const Duration(seconds: 1)
-                : const Duration(seconds: 8),
+            delay: const Duration(seconds: 1),
           );
         }
       }
@@ -3221,7 +3188,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   Future<void> _reconcileRuntimeAfterResume() async {
     AppLogStore.info('runtime', 'resume reconcile start');
-    await _syncRuntimePerformanceFlags();
+    await _syncRuntimeFlags();
     await _syncRuntimeState();
     if (!_connected || !_foregroundLifecycleActive) {
       return;
@@ -3241,10 +3208,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       'runtime',
       'resume reconcile completed without scheduling URLTest',
     );
-  }
-
-  void _setPerformanceMode(AppPerformanceMode mode) {
-    _applySettingsChange(() => _settings.setPerformanceMode(mode));
   }
 
   void _setMemoryLimitEnabled(bool value, {bool warningDismissed = false}) {
@@ -3271,12 +3234,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setUpdateInstallMode(mode));
   }
 
-  Future<void> _syncRuntimePerformanceFlags() {
+  Future<void> _syncRuntimeFlags() {
     return _singboxRuntime.setRuntimeFlags(
-      wakeLockEnabled: _balancedMode ? false : null,
+      wakeLockEnabled: false,
       networkHeartbeatEnabled: true,
       networkHeartbeatIntervalSeconds: _networkHeartbeatIntervalSeconds,
-      performanceMode: _performanceMode.name,
       memoryLimitEnabled: _memoryLimitEnabled,
     );
   }
@@ -3314,11 +3276,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _autoRefreshInFlight = true;
     try {
       final activeBefore = _activeSubscription;
-      final refreshLimit = _coolMode
-          ? 1
-          : _balancedMode
-          ? 2
-          : _subscriptions.length;
+      const refreshLimit = 1;
       final result = await _subscriptionCoordinator.refreshDue(
         subscriptions: _subscriptions,
         activeSubscription: activeBefore,
@@ -3518,6 +3476,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_runtimeTransitionInProgress ||
         _starting ||
         _invalidOutboundRetryScheduled) {
+      return;
+    }
+    // A foreground VPN can outlive Flutter. Reconcile with the native owner
+    // before showing "Building config" or rebuilding an already running
+    // runtime after the Activity has been recreated.
+    await _syncRuntimeState();
+    if (!mounted || _runtimeActiveOrRequested) {
+      if (_connected) {
+        AppLogStore.info(
+          'runtime',
+          'manual start reattached to existing runtime source=$source',
+        );
+      }
       return;
     }
     final startGeneration = _runtimeIntent.beginManualStart();
@@ -4053,6 +4024,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       tcpFastOpenEnabled: _experimentalTcpFastOpen,
       tcpMultiPathEnabled: _experimentalTcpMultiPath,
       tlsFragmentationMode: _tlsFragmentationMode,
+      allowUntrustedProxyCertificates: _allowUntrustedProxyCertificates,
       supportsRealitySpiderX:
           !_latencyCoordinator.capabilities.hasVersionedContract ||
           _latencyCoordinator.capabilities.supportsRealitySpiderX,
@@ -4198,6 +4170,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _setHideServerIp(bool value) {
     _applySettingsChange(() => _settings.setHideServerIp(value));
+  }
+
+  void _setAllowUntrustedProxyCertificates(bool value) {
+    _applySettingsChange(
+      () => _settings.setAllowUntrustedProxyCertificates(value),
+    );
+  }
+
+  void _setAllowUntrustedSubscriptionCertificates(bool value) {
+    _applySettingsChange(
+      () => _settings.setAllowUntrustedSubscriptionCertificates(value),
+    );
   }
 
   void _setProxySort(ProxySort value) {
@@ -4590,7 +4574,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _showSubscriptionsPage({bool openAddOnStart = false}) async {
     if (_navigatorKey.currentContext == null) return;
 
-    final activeServerHealth = _activeServerHealthSummary;
     final session = SubscriptionProfilePageSession(
       activeProfileId: _activeProfileId,
       selectedProxyTag: _selectedProxyTag,
@@ -4608,10 +4591,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       backgroundColor: Colors.transparent,
       builder: (context) => SubscriptionsPage(
         activeSubscriptionId: _activeProfileId,
-        activeWorkingServerCount: activeServerHealth?.working,
-        activeCheckedServerCount: activeServerHealth?.checked,
         openAddOnStart: openAddOnStart,
         hapticEnabled: _hapticEnabled,
+        allowUntrustedSubscriptionCertificates:
+            _allowUntrustedSubscriptionCertificates,
       ),
     );
     final selectedProfileId = subscriptionPageResult is String
@@ -4694,6 +4677,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         openSubscriptions: _showSubscriptionsSettingsPage,
         openInbound: _showInboundSettingsPage,
         openRouting: _showRoutingSettingsPage,
+        openSecurity: _showSecuritySettingsPage,
         importBackup: () => unawaited(
           _runSettingsBackupAction(SettingsBackupAction.importFile),
         ),
@@ -4787,7 +4771,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentNotificationTrafficRefreshSeconds:
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
-          currentPerformanceMode: _performanceMode,
           currentMemoryLimitEnabled: _memoryLimitEnabled,
           currentMemoryLimitWarningDismissed: _memoryLimitWarningDismissed,
           currentUpdateInstallMode: _updateInstallMode,
@@ -4799,7 +4782,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           onNotificationTrafficRefreshSecondsChanged:
               _setNotificationTrafficRefreshSeconds,
           onHideServerIpChanged: _setHideServerIp,
-          onPerformanceModeChanged: _setPerformanceMode,
           onMemoryLimitChanged: _setMemoryLimitEnabled,
           onUpdateInstallModeChanged: _setUpdateInstallMode,
         ),
@@ -4991,6 +4973,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<AdBlockRuleSetStatus> _downloadAdBlockRuleSet() async {
+    final affectsActiveRuntime = _adBlockEnabled;
     final status = await AdBlockRuleSetService.instance.downloadLatest();
     if (!mounted) {
       return status;
@@ -4998,11 +4981,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     setState(() {
       _adBlockStatus = status;
     });
-    _configCoordinator.emitCurrentConfigLog('adblock rule-set updated');
+    if (affectsActiveRuntime) {
+      await _configCoordinator.emitCurrentConfigLogAsync(
+        'adblock rule-set updated',
+        restartRuntime: true,
+        applyWhenNativeRunning: true,
+        forceFullServiceRestart: true,
+      );
+    }
     return status;
   }
 
   Future<AdBlockRuleSetStatus> _deleteAdBlockRuleSet() async {
+    final affectsActiveRuntime = _adBlockEnabled;
     final status = await AdBlockRuleSetService.instance.deleteRuleSet();
     if (!mounted) {
       return status;
@@ -5013,7 +5004,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _adBlockEnabled = false;
       }
     });
-    _configCoordinator.emitCurrentConfigLog('adblock rule-set deleted');
+    if (affectsActiveRuntime) {
+      await _configCoordinator.emitCurrentConfigLogAsync(
+        'adblock rule-set deleted',
+        restartRuntime: true,
+        applyWhenNativeRunning: true,
+        forceFullServiceRestart: true,
+      );
+    }
     _saveStateSoon();
     return status;
   }
@@ -5023,6 +5021,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<RussiaRouteDataStatus> _installRussiaRouteData() async {
+    final affectsActiveRuntime = _trafficRulePreset != TrafficRulePreset.none;
     final hadInstalledData = _russiaRouteDataStatus.available;
     final status = hadInstalledData
         ? await _russiaRouteDataService.ensureUpdated(force: true)
@@ -5033,13 +5032,23 @@ class _MeowClientState extends ConsumerState<MeowClient>
     setState(() {
       _russiaRouteDataStatus = status;
     });
-    _configCoordinator.emitCurrentConfigLog('russia route data prepared');
+    if (affectsActiveRuntime) {
+      await _configCoordinator.emitCurrentConfigLogAsync(
+        'russia route data prepared',
+        restartRuntime: true,
+        applyWhenNativeRunning: true,
+        forceFullServiceRestart: true,
+      );
+    }
     return status;
   }
 
   Future<RussiaRouteDataStatus> _prepareTrafficRuleData(
     TrafficRulePreset preset,
   ) async {
+    final affectsActiveRuntime =
+        _trafficRulePreset != TrafficRulePreset.none &&
+        (preset == TrafficRulePreset.none || preset == _trafficRulePreset);
     var status = _russiaRouteDataStatus;
     final hadPreparedData = status.available;
     if (!status.available) {
@@ -5054,7 +5063,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return status;
     }
     setState(() => _russiaRouteDataStatus = status);
-    _configCoordinator.emitCurrentConfigLog('traffic rule data prepared');
+    if (affectsActiveRuntime) {
+      await _configCoordinator.emitCurrentConfigLogAsync(
+        'traffic rule data prepared',
+        restartRuntime: true,
+        applyWhenNativeRunning: true,
+        forceFullServiceRestart: true,
+      );
+    }
     return status;
   }
 
@@ -5217,6 +5233,24 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _setExperimentalUrlTestStrictTolerance,
           onFakeIpEnabledChanged: _setExperimentalFakeIpEnabled,
           onTlsFragmentationModeChanged: _setTlsFragmentationMode,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSecuritySettingsPage() async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (context) => SettingsSecurityPage(
+          allowUntrustedProxyCertificates: _allowUntrustedProxyCertificates,
+          allowUntrustedSubscriptionCertificates:
+              _allowUntrustedSubscriptionCertificates,
+          onAllowUntrustedProxyCertificatesChanged:
+              _setAllowUntrustedProxyCertificates,
+          onAllowUntrustedSubscriptionCertificatesChanged:
+              _setAllowUntrustedSubscriptionCertificates,
         ),
       ),
     );
@@ -5558,6 +5592,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       tcpFastOpenEnabled: _experimentalTcpFastOpen,
       tcpMultiPathEnabled: _experimentalTcpMultiPath,
       tlsFragmentationMode: _tlsFragmentationMode,
+      allowUntrustedProxyCertificates: _allowUntrustedProxyCertificates,
       interruptExistingConnections: _experimentalInterruptExistingConnections,
       urlTestStrictTolerance: _experimentalUrlTestStrictTolerance,
       experimentalFakeIpEnabled: _experimentalFakeIpEnabled,
@@ -5650,13 +5685,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       unawaited(_requestNotificationPermissionIfNeeded());
       unawaited(_refreshRuntimeDiagnosticsNetworkState());
       _scheduleActiveOutboundIpRefresh();
-      if (!_coolMode) {
-        _scheduleBestOutboundLocationRefresh(
-          delay: _balancedMode
-              ? const Duration(seconds: 8)
-              : const Duration(seconds: 3),
-        );
-      }
     }
   }
 
@@ -7272,9 +7300,47 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(appSettingsProvider.select((snapshot) => snapshot.revision));
-    ref.watch(subscriptionCatalogProvider);
-    ref.watch(vpnRuntimeStateProvider);
+    // Keep the root subscription surface deliberately narrow. High-frequency
+    // traffic and proxy visual updates are handled by ValueNotifier-based
+    // stores below, so the whole app shell should only rebuild for values that
+    // actually affect its configuration or the currently selected runtime.
+    ref.watch(
+      appSettingsProvider.select(
+        (snapshot) => snapshot.controller.themePreference,
+      ),
+    );
+    ref.watch(
+      appSettingsProvider.select((snapshot) => snapshot.controller.localeCode),
+    );
+    ref.watch(
+      appSettingsProvider.select(
+        (snapshot) => snapshot.controller.hapticEnabled,
+      ),
+    );
+    ref.watch(
+      subscriptionCatalogProvider.select((state) => state.subscriptions),
+    );
+    ref.watch(
+      subscriptionCatalogProvider.select((state) => state.activeProfileId),
+    );
+    ref.watch(
+      subscriptionCatalogProvider.select((state) => state.selectedProxyTag),
+    );
+    ref.watch(
+      subscriptionCatalogProvider.select(
+        (state) => state.activeProfileRefreshing,
+      ),
+    );
+    ref.watch(
+      vpnRuntimeStateProvider.select(
+        (state) => (
+          state.phase,
+          state.retryScheduled,
+          state.networkUsable,
+          state.networkGeneration,
+        ),
+      ),
+    );
     return AppRootShell(
       navigatorKey: _navigatorKey,
       lightTheme: _lightTheme,

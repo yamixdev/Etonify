@@ -193,8 +193,6 @@ class _SubscriptionCard extends StatelessWidget {
   const _SubscriptionCard({
     required this.subscription,
     required this.serverCount,
-    this.workingServerCount,
-    this.checkedServerCount,
     required this.rawLooksNonEmpty,
     required this.active,
     required this.multiSelected,
@@ -212,8 +210,6 @@ class _SubscriptionCard extends StatelessWidget {
 
   final Subscription subscription;
   final int serverCount;
-  final int? workingServerCount;
-  final int? checkedServerCount;
   final bool rawLooksNonEmpty;
   final bool active;
   final bool multiSelected;
@@ -262,21 +258,10 @@ class _SubscriptionCard extends StatelessWidget {
       subscription.url,
     );
     final lastUpdatedText = subscription.lastUpdated > 0
-        ? l10n.lastUpdated(
-            formatTime(
-              DateTime.fromMillisecondsSinceEpoch(subscription.lastUpdated),
-            ),
-          )
+        ? _subscriptionLastUpdatedText(context, subscription.lastUpdated)
         : null;
     final metaParts = <String>[
       l10n.subscriptionServersCount(serverCount),
-      if (workingServerCount != null &&
-          checkedServerCount != null &&
-          checkedServerCount! > 0)
-        l10n.subscriptionWorkingServersCount(
-          workingServerCount!,
-          checkedServerCount!,
-        ),
       ...?(lastUpdatedText == null ? null : <String>[lastUpdatedText]),
       if (serverCount == 0 && rawLooksNonEmpty)
         l10n.subscriptionReparseRecommended,

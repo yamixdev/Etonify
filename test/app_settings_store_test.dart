@@ -3,10 +3,9 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 
 void main() {
-  test('defaults to standard performance mode and cold runtime values', () {
+  test('defaults to stable runtime values', () {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{});
 
-    expect(state.performanceMode, AppPerformanceMode.standard);
     expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
     expect(state.urlTestConcurrency, 8);
@@ -24,6 +23,28 @@ void main() {
       NotificationTrafficDisplayMode.speed,
     );
     expect(state.notificationTrafficRefreshSeconds, 2);
+    expect(state.allowUntrustedProxyCertificates, isFalse);
+    expect(state.allowUntrustedSubscriptionCertificates, isFalse);
+  });
+
+  test('persists TLS exceptions but never includes them in safe exports', () {
+    final store = _TestSettingsStore();
+    final state = store.mapState(const <String, dynamic>{
+      'allow_untrusted_proxy_certificates': '1',
+      'allow_untrusted_subscription_certificates': '1',
+    });
+    final persisted = store.stateToMap(state);
+    final exported = store.stateToSafeExportMap(state);
+
+    expect(state.allowUntrustedProxyCertificates, isTrue);
+    expect(state.allowUntrustedSubscriptionCertificates, isTrue);
+    expect(persisted['allow_untrusted_proxy_certificates'], '1');
+    expect(persisted['allow_untrusted_subscription_certificates'], '1');
+    expect(exported, isNot(contains('allow_untrusted_proxy_certificates')));
+    expect(
+      exported,
+      isNot(contains('allow_untrusted_subscription_certificates')),
+    );
   });
 
   test('persists the selected notification traffic display mode', () {
@@ -78,37 +99,35 @@ void main() {
     );
   });
 
-  test('migrates legacy aggressive performance mode to standard', () {
-    final store = _TestSettingsStore();
-    final state = store.mapState(const <String, dynamic>{
-      'performance_mode': 'performance',
-    });
-    final map = store.stateToMap(state);
+  test(
+    'drops removed performance mode from persisted and exported settings',
+    () {
+      final store = _TestSettingsStore();
+      final state = store.mapState(const <String, dynamic>{
+        'performance_mode': 'performance',
+      });
+      final map = store.stateToMap(state);
+      final exported = store.stateToSafeExportMap(state);
 
-    expect(state.performanceMode, AppPerformanceMode.standard);
-    expect(map['performance_mode'], 'standard');
-  });
+      expect(map, isNot(contains('performance_mode')));
+      expect(exported, isNot(contains('performance_mode')));
+    },
+  );
 
-  test('migrates legacy cool performance mode to standard', () {
-    final store = _TestSettingsStore();
-    final state = store.mapState(const <String, dynamic>{
-      'performance_mode': 'cool',
-    });
-
-    expect(state.performanceMode, AppPerformanceMode.standard);
-  });
-
-  test('economy performance mode uses colder runtime values', () {
+  test('migrates the removed economy preset to stable runtime values', () {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{
       'performance_mode': 'economy',
+      'urltest_interval_seconds': '3600',
+      'urltest_concurrency': '4',
+      'urltest_unavailable_check_interval_seconds': '300',
+      'location_lookup_limit': '0',
     });
 
-    expect(state.performanceMode, AppPerformanceMode.economy);
-    expect(state.urlTestIntervalSeconds, 3600);
+    expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
-    expect(state.urlTestConcurrency, 4);
-    expect(state.urlTestUnavailableCheckIntervalSeconds, 300);
-    expect(state.locationLookupLimit, 0);
+    expect(state.urlTestConcurrency, 8);
+    expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
+    expect(state.locationLookupLimit, 1);
     expect(state.locationLookupTimeoutSeconds, 3);
     expect(state.locationLookupConcurrency, 1);
   });
@@ -147,10 +166,10 @@ void main() {
       'url_test_concurrency': '2',
       'urltest_unavailable_check_interval_seconds': '120',
     });
-    expect(economy.urlTestIntervalSeconds, 3600);
+    expect(economy.urlTestIntervalSeconds, 1800);
     expect(economy.urlTestTimeoutSeconds, 15);
-    expect(economy.urlTestConcurrency, 4);
-    expect(economy.urlTestUnavailableCheckIntervalSeconds, 300);
+    expect(economy.urlTestConcurrency, 8);
+    expect(economy.urlTestUnavailableCheckIntervalSeconds, 120);
   });
 
   test('normalizes Russia route DNS resolver', () {

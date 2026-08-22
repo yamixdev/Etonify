@@ -259,7 +259,6 @@ class AppBootstrapController {
       hapticEnabled: true,
       hideServerIp: false,
       progressiveBlurEnabled: false,
-      performanceMode: AppPerformanceMode.standard,
       tlsFragmentationMode: TlsFragmentationMode.disabled,
       vpnInboundEnabled: true,
       vpnMtu: 1500,

@@ -35,6 +35,7 @@ class SettingsPresentationCallbacks {
     required this.openSubscriptions,
     required this.openInbound,
     required this.openRouting,
+    required this.openSecurity,
     required this.importBackup,
     required this.exportSettings,
     required this.exportEncryptedProfile,
@@ -50,6 +51,7 @@ class SettingsPresentationCallbacks {
   final VoidCallback openSubscriptions;
   final VoidCallback openInbound;
   final VoidCallback openRouting;
+  final VoidCallback openSecurity;
   final VoidCallback importBackup;
   final VoidCallback exportSettings;
   final VoidCallback exportEncryptedProfile;
@@ -79,6 +81,7 @@ class SettingsPresentationBuilder {
       onOpenSubscriptions: callbacks.openSubscriptions,
       onOpenInbound: callbacks.openInbound,
       onOpenRouting: callbacks.openRouting,
+      onOpenSecurity: callbacks.openSecurity,
       onImportBackup: callbacks.importBackup,
       onExportSettings: callbacks.exportSettings,
       onExportEncryptedProfile: callbacks.exportEncryptedProfile,

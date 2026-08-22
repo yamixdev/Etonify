@@ -56,7 +56,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('DNS ДЛЯ .RU БЕЗ VPN'), findsOneWidget);
-    expect(find.text('Использовать пресет'), findsOneWidget);
+    expect(find.text('Применить правило'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('yamixdev'),
@@ -72,10 +72,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Проверено'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Участник команды MeowTeam.'),
-      findsOneWidget,
-    );
+    expect(find.text('Участник команды MeowTeam.'), findsOneWidget);
   });
 
   testWidgets('selected split app keeps name and package on separate rows', (

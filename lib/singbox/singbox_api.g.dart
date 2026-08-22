@@ -115,7 +115,6 @@ class RuntimeFlagsMessage {
     this.wakeLockEnabled,
     this.networkHeartbeatEnabled,
     this.networkHeartbeatIntervalSeconds,
-    this.performanceMode,
     this.memoryLimitEnabled,
   });
 
@@ -125,8 +124,6 @@ class RuntimeFlagsMessage {
 
   int? networkHeartbeatIntervalSeconds;
 
-  String? performanceMode;
-
   bool? memoryLimitEnabled;
 
   List<Object?> _toList() {
@@ -134,7 +131,6 @@ class RuntimeFlagsMessage {
       wakeLockEnabled,
       networkHeartbeatEnabled,
       networkHeartbeatIntervalSeconds,
-      performanceMode,
       memoryLimitEnabled,
     ];
   }
@@ -148,8 +144,7 @@ class RuntimeFlagsMessage {
       wakeLockEnabled: result[0] as bool?,
       networkHeartbeatEnabled: result[1] as bool?,
       networkHeartbeatIntervalSeconds: result[2] as int?,
-      performanceMode: result[3] as String?,
-      memoryLimitEnabled: result[4] as bool?,
+      memoryLimitEnabled: result[3] as bool?,
     );
   }
 
@@ -162,7 +157,7 @@ class RuntimeFlagsMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(wakeLockEnabled, other.wakeLockEnabled) && _deepEquals(networkHeartbeatEnabled, other.networkHeartbeatEnabled) && _deepEquals(networkHeartbeatIntervalSeconds, other.networkHeartbeatIntervalSeconds) && _deepEquals(performanceMode, other.performanceMode) && _deepEquals(memoryLimitEnabled, other.memoryLimitEnabled);
+    return _deepEquals(wakeLockEnabled, other.wakeLockEnabled) && _deepEquals(networkHeartbeatEnabled, other.networkHeartbeatEnabled) && _deepEquals(networkHeartbeatIntervalSeconds, other.networkHeartbeatIntervalSeconds) && _deepEquals(memoryLimitEnabled, other.memoryLimitEnabled);
   }
 
   @override
@@ -171,7 +166,7 @@ class RuntimeFlagsMessage {
 
   @override
   String toString() {
-    return 'RuntimeFlagsMessage(wakeLockEnabled: $wakeLockEnabled, networkHeartbeatEnabled: $networkHeartbeatEnabled, networkHeartbeatIntervalSeconds: $networkHeartbeatIntervalSeconds, performanceMode: $performanceMode, memoryLimitEnabled: $memoryLimitEnabled)';
+    return 'RuntimeFlagsMessage(wakeLockEnabled: $wakeLockEnabled, networkHeartbeatEnabled: $networkHeartbeatEnabled, networkHeartbeatIntervalSeconds: $networkHeartbeatIntervalSeconds, memoryLimitEnabled: $memoryLimitEnabled)';
   }
 }
 
@@ -635,6 +630,141 @@ class UnderlyingNetworkFetchResponseMessage {
   }
 }
 
+class UnderlyingNetworkDownloadRequestMessage {
+  UnderlyingNetworkDownloadRequestMessage({
+    required this.url,
+    required this.headers,
+    required this.destinationPath,
+    required this.maxBytes,
+    required this.responseStartTimeoutMillis,
+    required this.idleTimeoutMillis,
+  });
+
+  String url;
+
+  List<HttpHeaderMessage?> headers;
+
+  String destinationPath;
+
+  int maxBytes;
+
+  int responseStartTimeoutMillis;
+
+  int idleTimeoutMillis;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      url,
+      headers,
+      destinationPath,
+      maxBytes,
+      responseStartTimeoutMillis,
+      idleTimeoutMillis,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static UnderlyingNetworkDownloadRequestMessage decode(Object result) {
+    result as List<Object?>;
+    return UnderlyingNetworkDownloadRequestMessage(
+      url: result[0]! as String,
+      headers: (result[1]! as List<Object?>).cast<HttpHeaderMessage?>(),
+      destinationPath: result[2]! as String,
+      maxBytes: result[3]! as int,
+      responseStartTimeoutMillis: result[4]! as int,
+      idleTimeoutMillis: result[5]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! UnderlyingNetworkDownloadRequestMessage || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(url, other.url) && _deepEquals(headers, other.headers) && _deepEquals(destinationPath, other.destinationPath) && _deepEquals(maxBytes, other.maxBytes) && _deepEquals(responseStartTimeoutMillis, other.responseStartTimeoutMillis) && _deepEquals(idleTimeoutMillis, other.idleTimeoutMillis);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'UnderlyingNetworkDownloadRequestMessage(url: $url, headers: $headers, destinationPath: $destinationPath, maxBytes: $maxBytes, responseStartTimeoutMillis: $responseStartTimeoutMillis, idleTimeoutMillis: $idleTimeoutMillis)';
+  }
+}
+
+class UnderlyingNetworkDownloadResponseMessage {
+  UnderlyingNetworkDownloadResponseMessage({
+    required this.statusCode,
+    required this.downloadedBytes,
+    required this.headers,
+    required this.finalUrl,
+    required this.network,
+  });
+
+  int statusCode;
+
+  int downloadedBytes;
+
+  List<HttpHeaderMessage?> headers;
+
+  String finalUrl;
+
+  String network;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      statusCode,
+      downloadedBytes,
+      headers,
+      finalUrl,
+      network,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static UnderlyingNetworkDownloadResponseMessage decode(Object result) {
+    result as List<Object?>;
+    return UnderlyingNetworkDownloadResponseMessage(
+      statusCode: result[0]! as int,
+      downloadedBytes: result[1]! as int,
+      headers: (result[2]! as List<Object?>).cast<HttpHeaderMessage?>(),
+      finalUrl: result[3]! as String,
+      network: result[4]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! UnderlyingNetworkDownloadResponseMessage || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(statusCode, other.statusCode) && _deepEquals(downloadedBytes, other.downloadedBytes) && _deepEquals(headers, other.headers) && _deepEquals(finalUrl, other.finalUrl) && _deepEquals(network, other.network);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'UnderlyingNetworkDownloadResponseMessage(statusCode: $statusCode, downloadedBytes: $downloadedBytes, headers: $headers, finalUrl: $finalUrl, network: $network)';
+  }
+}
+
 class ApkInspectionMessage {
   ApkInspectionMessage({
     required this.valid,
@@ -814,11 +944,17 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is UnderlyingNetworkFetchResponseMessage) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is ApkInspectionMessage) {
+    }    else if (value is UnderlyingNetworkDownloadRequestMessage) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is InstalledAppMessage) {
+    }    else if (value is UnderlyingNetworkDownloadResponseMessage) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is ApkInspectionMessage) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is InstalledAppMessage) {
+      buffer.putUint8(139);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -843,8 +979,12 @@ class _PigeonCodec extends StandardMessageCodec {
       case 135:
         return UnderlyingNetworkFetchResponseMessage.decode(readValue(buffer)!);
       case 136:
-        return ApkInspectionMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkDownloadRequestMessage.decode(readValue(buffer)!);
       case 137:
+        return UnderlyingNetworkDownloadResponseMessage.decode(readValue(buffer)!);
+      case 138:
+        return ApkInspectionMessage.decode(readValue(buffer)!);
+      case 139:
         return InstalledAppMessage.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1380,6 +1520,25 @@ class SingboxHostApi {
     )
     ;
     return pigeonVar_replyValue! as UnderlyingNetworkFetchResponseMessage;
+  }
+
+  Future<UnderlyingNetworkDownloadResponseMessage> downloadUrlOnUnderlyingNetwork(UnderlyingNetworkDownloadRequestMessage request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.downloadUrlOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as UnderlyingNetworkDownloadResponseMessage;
   }
 
   Future<List<String?>> resolveHostOnUnderlyingNetwork(String host) async {

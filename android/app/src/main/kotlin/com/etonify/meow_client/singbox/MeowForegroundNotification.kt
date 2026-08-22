@@ -132,24 +132,30 @@ internal class MeowForegroundNotification(
     )
 
     private var foregroundStarted = false
+    private var notificationGeneration = 0L
     private var lifecycleStatus = "Starting"
     private var presentation = restorePresentation()
-    private var uplink = 0L
-    private var downlink = 0L
     private var uplinkTotal = 0L
     private var downlinkTotal = 0L
     private var trafficAvailable = false
     private var displayedUplink = 0L
     private var displayedDownlink = 0L
-    private var lastTrafficRefreshAt = 0L
+    private val trafficRateWindow = NotificationTrafficRateWindow()
     private var refreshPending = false
     private var latencyChecking = false
     private var latencyActionGeneration = 0L
     private var latencyActionInFlight = false
+    private var latencyTimeoutRunnable: Runnable? = null
 
     fun buildForForeground(status: String): Notification {
         synchronized(this) {
             lifecycleStatus = status
+            if (!foregroundStarted) {
+                notificationGeneration++
+                trafficRateWindow.reset()
+                displayedUplink = 0L
+                displayedDownlink = 0L
+            }
             foregroundStarted = true
             ensureChannel()
             return buildNotification()
@@ -187,7 +193,7 @@ internal class MeowForegroundNotification(
                 urlTestRequest = UrlTestRequest.fromArguments(arguments),
             )
             persistPresentation(presentation)
-            lastTrafficRefreshAt = 0L
+            trafficRateWindow.requestImmediateEmission()
             if (!latencyChecking) {
                 // Flutter delivers the last known successful result on every
                 // selected-outbound update. Do not leave an old action result
@@ -199,6 +205,7 @@ internal class MeowForegroundNotification(
         return true
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun updateTraffic(
         uplink: Long,
         downlink: Long,
@@ -207,44 +214,55 @@ internal class MeowForegroundNotification(
         trafficAvailable: Boolean,
     ) {
         synchronized(this) {
-            val availabilityChanged = this.trafficAvailable != trafficAvailable
-            val changed = this.uplink != uplink ||
-                this.downlink != downlink ||
-                this.uplinkTotal != uplinkTotal ||
-                this.downlinkTotal != downlinkTotal ||
-                this.trafficAvailable != trafficAvailable
-            this.uplink = uplink
-            this.downlink = downlink
             this.uplinkTotal = uplinkTotal
             this.downlinkTotal = downlinkTotal
             this.trafficAvailable = trafficAvailable
-            val now = SystemClock.elapsedRealtime()
-            val refreshDue = lastTrafficRefreshAt == 0L ||
-                now - lastTrafficRefreshAt >= presentation.trafficRefreshSeconds * 1_000L
-            if (changed && (availabilityChanged || refreshDue)) {
-                // `uplink` and `downlink` are already one-second samples from
-                // the core status stream. Averaging them again made short
-                // downloads appear far slower than their actual rate (for
-                // example, a 1 MiB/s Telegram download could remain in KiB/s
-                // after an idle sample). The refresh preference controls only
-                // how often Android redraws the notification, not the value
-                // of the latest sample.
-                displayedUplink = currentTrafficRate(uplink, trafficAvailable)
-                displayedDownlink = currentTrafficRate(downlink, trafficAvailable)
-                lastTrafficRefreshAt = now
+            val rate = trafficRateWindow.update(
+                uplinkTotal = uplinkTotal,
+                downlinkTotal = downlinkTotal,
+                trafficAvailable = trafficAvailable,
+                nowMillis = SystemClock.elapsedRealtime(),
+                refreshIntervalMillis = presentation.trafficRefreshSeconds * 1_000L,
+            )
+            if (rate != null) {
+                displayedUplink = rate.uplinkBytesPerSecond
+                displayedDownlink = rate.downlinkBytesPerSecond
                 refreshLocked()
             }
         }
     }
 
-    fun clearSavedPresentation() {
+    fun stopAndClear() {
+        stopPublishing()
         synchronized(this) {
-            clearPersistedState(service, notificationId)
             presentation = Presentation()
-            displayedUplink = 0L
-            displayedDownlink = 0L
-            lastTrafficRefreshAt = 0L
         }
+        clearPersistedState(service, notificationId)
+    }
+
+    fun stopPublishing() {
+        val timeoutCallback = synchronized(this) { deactivateLocked() }
+        if (timeoutCallback != null) {
+            mainHandler.removeCallbacks(timeoutCallback)
+        }
+    }
+
+    private fun deactivateLocked(): Runnable? {
+        foregroundStarted = false
+        notificationGeneration++
+        refreshPending = false
+        latencyChecking = false
+        latencyActionInFlight = false
+        latencyActionGeneration++
+        val pendingTimeout = latencyTimeoutRunnable
+        latencyTimeoutRunnable = null
+        uplinkTotal = 0L
+        downlinkTotal = 0L
+        trafficAvailable = false
+        displayedUplink = 0L
+        displayedDownlink = 0L
+        trafficRateWindow.reset()
+        return pendingTimeout
     }
 
     fun onUrlTestResult(
@@ -269,6 +287,8 @@ internal class MeowForegroundNotification(
             }
             latencyActionInFlight = false
             latencyChecking = false
+            latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+            latencyTimeoutRunnable = null
             presentation = presentation.copy(
                 latencyMillis = delayMillis.takeIf { it > 0L },
             )
@@ -280,6 +300,7 @@ internal class MeowForegroundNotification(
     fun requestLatencyRefresh(): Boolean {
         val request: UrlTestRequest
         val actionGeneration: Long
+        val timeoutCallback: Runnable
         synchronized(this) {
             request = presentation.urlTestRequest ?: return false
             if (lifecycleStatus != "Connected" || latencyActionInFlight) {
@@ -289,8 +310,15 @@ internal class MeowForegroundNotification(
             latencyChecking = true
             actionGeneration = System.currentTimeMillis() / 1_000L
             latencyActionGeneration = actionGeneration
+            latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+            timeoutCallback = Runnable { completeLatencyAction(actionGeneration, null) }
+            latencyTimeoutRunnable = timeoutCallback
             refreshLocked()
         }
+        mainHandler.postDelayed(
+            timeoutCallback,
+            max(request.deadlineMillis.toLong(), DEFAULT_LATENCY_TIMEOUT_MS) + 1_000L,
+        )
         SingboxController.urlTest(
             groupTag = request.groupTag,
             targetOutboundTag = request.targetOutboundTag,
@@ -306,10 +334,6 @@ internal class MeowForegroundNotification(
                 completeLatencyAction(actionGeneration, null)
             }
         }
-        mainHandler.postDelayed(
-            { completeLatencyAction(actionGeneration, null) },
-            max(request.deadlineMillis.toLong(), DEFAULT_LATENCY_TIMEOUT_MS) + 1_000L,
-        )
         return true
     }
 
@@ -323,6 +347,8 @@ internal class MeowForegroundNotification(
             }
             latencyActionInFlight = false
             latencyChecking = false
+            latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+            latencyTimeoutRunnable = null
             if (latencyMillis != null) {
                 presentation = presentation.copy(latencyMillis = latencyMillis)
                 persistPresentation(presentation)
@@ -446,11 +472,18 @@ internal class MeowForegroundNotification(
         // them prevents Android from seeing a burst of foreground-notification
         // reposts, which can make an ongoing VPN notification jump around the
         // shade relative to navigation and media notifications.
+        val queuedGeneration = notificationGeneration
         refreshPending = true
         mainHandler.post {
             synchronized(this) {
-                refreshPending = false
-                if (foregroundStarted) {
+                if (
+                    foregroundRefreshCanDeliver(
+                        foregroundStarted = foregroundStarted,
+                        queuedGeneration = queuedGeneration,
+                        currentGeneration = notificationGeneration,
+                    )
+                ) {
+                    refreshPending = false
                     notificationManager.notify(notificationId, buildNotification())
                 }
             }
@@ -585,3 +618,9 @@ internal class MeowForegroundNotification(
  */
 internal fun foregroundPresentationNeedsImmediateDelivery(status: String): Boolean =
     status == "Starting" || status == "Restarting"
+
+internal fun foregroundRefreshCanDeliver(
+    foregroundStarted: Boolean,
+    queuedGeneration: Long,
+    currentGeneration: Long,
+): Boolean = foregroundStarted && queuedGeneration == currentGeneration

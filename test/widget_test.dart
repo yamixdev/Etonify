@@ -443,34 +443,31 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Russian proxy labels describe lowest without calling it fastest',
-    (tester) async {
-      final lowest = _proxy(lowestProxyTag, 'lowest · Finland', latency: 73)
-          .copyWith(
-            selectedChildName: 'Финляндия',
-            protocolLabel: 'URLTest · VLESS · TLS',
-          );
+  testWidgets('Russian proxy labels describe the fastest automatic selection', (
+    tester,
+  ) async {
+    final lowest = _proxy(lowestProxyTag, 'lowest · Finland', latency: 73)
+        .copyWith(
+          selectedChildName: 'Финляндия',
+          protocolLabel: 'URLTest · VLESS · TLS',
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('ru'),
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: Column(
-              children: [
-                ProxyTile(proxy: lowest, selected: false, onTap: () {}),
-              ],
-            ),
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: Column(
+            children: [ProxyTile(proxy: lowest, selected: false, onTap: () {})],
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('Lowest · Финляндия'), findsOneWidget);
-      expect(find.text('Автовыбор · VLESS · TLS'), findsOneWidget);
-    },
-  );
+    expect(find.text('Самый быстрый · Финляндия'), findsOneWidget);
+    expect(find.text('Автовыбор · VLESS · TLS'), findsOneWidget);
+  });
 
   testWidgets('large proxy list exposes every server through lazy scrolling', (
     tester,
@@ -1563,6 +1560,30 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('© 2026 MeowTeam™'), 500);
     expect(find.text('© 2026 MeowTeam™'), findsOneWidget);
+  });
+
+  testWidgets('about page opens resources and diagnostics separately', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsAboutPage(versionLabel: '0.1.1', onShowOnboarding: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsDiagnosticsPage), findsNothing);
+    expect(find.text('Resources & diagnostics'), findsOneWidget);
+    expect(find.text('Etonify documentation'), findsOneWidget);
+    expect(find.text('Process memory'), findsNothing);
+
+    await tester.tap(find.text('Resources & diagnostics'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsDiagnosticsPage), findsOneWidget);
+    expect(find.text('Process memory'), findsOneWidget);
   });
 
   testWidgets('unsupported system locale falls back to English', (

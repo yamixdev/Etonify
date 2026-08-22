@@ -296,12 +296,6 @@ abstract class AppLocalizations {
   /// **'By country'**
   String get sortByCountry;
 
-  /// No description provided for @subscriptionWorkingServersCount.
-  ///
-  /// In en, this message translates to:
-  /// **'Working: {working} of {checked} checked'**
-  String subscriptionWorkingServersCount(int working, int checked);
-
   /// No description provided for @settingsTitle.
   ///
   /// In en, this message translates to:
@@ -343,6 +337,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Experimental'**
   String get experimentalTitle;
+
+  /// No description provided for @securityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get securityTitle;
+
+  /// No description provided for @securitySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS certificates and connection verification'**
+  String get securitySubtitle;
+
+  /// No description provided for @securityTlsSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS certificates'**
+  String get securityTlsSectionTitle;
+
+  /// No description provided for @securityUntrustedProxyCertificatesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow untrusted proxy certificates'**
+  String get securityUntrustedProxyCertificatesTitle;
+
+  /// No description provided for @securityUntrustedProxyCertificatesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to proxy servers with self-signed, expired, or otherwise untrusted certificates. This weakens protection against connection interception.'**
+  String get securityUntrustedProxyCertificatesSubtitle;
+
+  /// No description provided for @securityUntrustedSubscriptionCertificatesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow untrusted subscription certificates'**
+  String get securityUntrustedSubscriptionCertificatesTitle;
+
+  /// No description provided for @securityUntrustedSubscriptionCertificatesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update HTTPS subscriptions even when the website certificate cannot be verified. The subscription URL and content may be intercepted or replaced.'**
+  String get securityUntrustedSubscriptionCertificatesSubtitle;
+
+  /// No description provided for @securityConfirmProxyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow untrusted proxy certificates?'**
+  String get securityConfirmProxyTitle;
+
+  /// No description provided for @securityConfirmProxyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate verification will be disabled for every TLS proxy connection. Enable this only for configurations you trust.'**
+  String get securityConfirmProxyMessage;
+
+  /// No description provided for @securityConfirmSubscriptionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow untrusted subscription certificates?'**
+  String get securityConfirmSubscriptionTitle;
+
+  /// No description provided for @securityConfirmSubscriptionMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate verification will be disabled while updating HTTPS subscriptions. The subscription URL and content may be intercepted or replaced.'**
+  String get securityConfirmSubscriptionMessage;
+
+  /// No description provided for @securityAllowAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get securityAllowAction;
 
   /// No description provided for @experimentalSubtitle.
   ///
@@ -439,6 +505,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'core source code'**
   String get aboutCoreSourceLabel;
+
+  /// No description provided for @aboutDocumentationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify documentation'**
+  String get aboutDocumentationTitle;
+
+  /// No description provided for @aboutDocumentationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Step-by-step guides for subscriptions, VPN, routing, and diagnostics.'**
+  String get aboutDocumentationSubtitle;
+
+  /// No description provided for @documentationPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify guide'**
+  String get documentationPageTitle;
+
+  /// No description provided for @documentationPageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A concise reference to the client, its modes, and the checks that help explain connection problems.'**
+  String get documentationPageSubtitle;
+
+  /// No description provided for @documentationWhatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What Etonify is'**
+  String get documentationWhatTitle;
+
+  /// No description provided for @documentationWhatBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify is an Android client for sing-box. It does not provide VPN servers: you add a subscription or profile from your provider. Android 8.0 and newer are supported.'**
+  String get documentationWhatBody;
+
+  /// No description provided for @documentationModesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'VPN and local proxy'**
+  String get documentationModesTitle;
+
+  /// No description provided for @documentationModesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'VPN TUN routes device traffic through the selected profile. The local HTTP/SOCKS proxy is an inbound for apps that can use a proxy manually. Both can run together; TUN remains the primary system-wide mode.'**
+  String get documentationModesBody;
+
+  /// No description provided for @documentationProtocolsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Formats and protocols'**
+  String get documentationProtocolsTitle;
+
+  /// No description provided for @documentationProtocolsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The client imports sing-box, Xray, and Happ representations. The bundled sing-box core can handle VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard, AnyTLS, and other protocols when all required fields are present. Importing a link does not guarantee that its endpoint is reachable.'**
+  String get documentationProtocolsBody;
+
+  /// No description provided for @documentationChainsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy chains'**
+  String get documentationChainsTitle;
+
+  /// No description provided for @documentationChainsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A chain sends traffic through a first hop and then an exit proxy. This adds latency and another possible failure point; it is not automatic failover. Use it only when the provider supports the combination. Lowest selects individual working outbounds, not a chain as a whole.'**
+  String get documentationChainsBody;
+
+  /// No description provided for @documentationSubscriptionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions and profiles'**
+  String get documentationSubscriptionsTitle;
+
+  /// No description provided for @documentationSubscriptionsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a URL, file, QR code, sing-box or Xray JSON, or a Happ link. One profile can contain several source URLs; refresh keeps those sources grouped. If import fails, check the HTTP status, UTF-8 encoding, and the provider format before changing the client settings.'**
+  String get documentationSubscriptionsBody;
+
+  /// No description provided for @documentationChecksTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Servers and URLTest'**
+  String get documentationChecksTitle;
+
+  /// No description provided for @documentationChecksBody.
+  ///
+  /// In en, this message translates to:
+  /// **'URLTest sends a real HTTP request through a proxy; it is not an ICMP ping. Results depend on the current network and may change between Wi-Fi and mobile data. Lowest chooses the best currently working result. A red warning icon means the last check failed; detailed errors remain in Logs.'**
+  String get documentationChecksBody;
+
+  /// No description provided for @documentationRoutingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic rules and split tunneling'**
+  String get documentationRoutingTitle;
+
+  /// No description provided for @documentationRoutingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic rules decide which domains, IP ranges, or apps use the VPN. Only one verified traffic preset can be active at a time. Split tunneling controls selected Android apps separately. Mixed can be incompatible with split tunneling on some devices; try system or gVisor if the provider recommends it.'**
+  String get documentationRoutingBody;
+
+  /// No description provided for @documentationDnsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS'**
+  String get documentationDnsTitle;
+
+  /// No description provided for @documentationDnsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify supports device DNS, UDP, TCP, DoT, and DoH. A hostname-based DoH or DoT server needs a bootstrap resolver. For a simple direct resolver, enter a literal address such as 1.1.1.1 or 8.8.8.8 and select UDP or TCP. The chosen DNS route should match the traffic rule to avoid leaks.'**
+  String get documentationDnsBody;
+
+  /// No description provided for @documentationRuleFilesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Geo-resource files'**
+  String get documentationRuleFilesTitle;
+
+  /// No description provided for @documentationRuleFilesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Traffic presets use local .srs GeoIP and Geosite rule files. Bundled files are prepared on the device and can be used offline. Updating them requires a working network path; the old files stay in place if an update fails.'**
+  String get documentationRuleFilesBody;
+
+  /// No description provided for @documentationExperimentalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental options'**
+  String get documentationExperimentalTitle;
+
+  /// No description provided for @documentationExperimentalBody.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS fragmentation, TCP Fast Open, multipath, and Fake IP can change compatibility. They are not required for ordinary subscriptions. Enable one option at a time, keep the provider\'s SNI and ALPN values, and turn an option back off if a previously working server stops connecting.'**
+  String get documentationExperimentalBody;
+
+  /// No description provided for @documentationDiagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resources, logs, and versions'**
+  String get documentationDiagnosticsTitle;
+
+  /// No description provided for @documentationDiagnosticsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Resources and diagnostics show process memory and service state. PSS, RSS, Swap, heap, code, and graphics are different views and must not be added together. When reporting a problem, include the app version, core version, Android device and network, reproduction steps, and an exported log with private keys removed.'**
+  String get documentationDiagnosticsBody;
+
+  /// No description provided for @documentationLimitsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Important limits'**
+  String get documentationLimitsTitle;
+
+  /// No description provided for @documentationLimitsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify is Android-only and does not include free VPN servers. Reliability depends on the provider, endpoint, DNS, carrier, and Android firmware. URLTest cannot guarantee that every website will work. Very large subscriptions and repeated full checks use more memory, CPU, battery, and data.'**
+  String get documentationLimitsBody;
+
+  /// No description provided for @documentationSupportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Need help?'**
+  String get documentationSupportTitle;
+
+  /// No description provided for @documentationSupportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'First try the selected server without changing several settings at once. Then send the exact error, app and core versions, connection mode, network type, and a redacted exported log to the Etonify support chat.'**
+  String get documentationSupportBody;
 
   /// No description provided for @telegramChannelLabel.
   ///
@@ -842,6 +1088,18 @@ abstract class AppLocalizations {
   /// **'AMOLED'**
   String get themeAmoled;
 
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resources & diagnostics'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Process memory, core state and tools for investigating problems.'**
+  String get diagnosticsSubtitle;
+
   /// No description provided for @aboutResourcesTitle.
   ///
   /// In en, this message translates to:
@@ -863,7 +1121,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutResourcesPssSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'PSS is the primary memory estimate for the app, including its share of common pages. Do not add the rows below to PSS: they are a breakdown and separate metrics.'**
+  /// **'PSS is the primary memory estimate including a share of common pages. RSS counts every resident page, Private Dirty covers modified pages owned only by this process, and Swap PSS is its proportional swap share. Do not add these values together.'**
   String get aboutResourcesPssSubtitle;
 
   /// No description provided for @aboutResourcePss.
@@ -871,6 +1129,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Total PSS'**
   String get aboutResourcePss;
+
+  /// No description provided for @aboutResourceRss.
+  ///
+  /// In en, this message translates to:
+  /// **'Total RSS'**
+  String get aboutResourceRss;
+
+  /// No description provided for @aboutResourceSwapPss.
+  ///
+  /// In en, this message translates to:
+  /// **'Swap PSS'**
+  String get aboutResourceSwapPss;
+
+  /// No description provided for @aboutResourcePrivateDirty.
+  ///
+  /// In en, this message translates to:
+  /// **'Private Dirty'**
+  String get aboutResourcePrivateDirty;
 
   /// No description provided for @aboutResourceNativePss.
   ///
@@ -1754,78 +2030,6 @@ abstract class AppLocalizations {
   /// **'Masks last two octets of the IP address'**
   String get hideServerIpSubtitle;
 
-  /// No description provided for @performanceModeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Performance mode'**
-  String get performanceModeTitle;
-
-  /// No description provided for @performanceModeCool.
-  ///
-  /// In en, this message translates to:
-  /// **'Cool'**
-  String get performanceModeCool;
-
-  /// No description provided for @performanceModeStandard.
-  ///
-  /// In en, this message translates to:
-  /// **'Standard'**
-  String get performanceModeStandard;
-
-  /// No description provided for @performanceModeEconomy.
-  ///
-  /// In en, this message translates to:
-  /// **'Economy'**
-  String get performanceModeEconomy;
-
-  /// No description provided for @performanceModeBalanced.
-  ///
-  /// In en, this message translates to:
-  /// **'Balanced'**
-  String get performanceModeBalanced;
-
-  /// No description provided for @performanceModePerformance.
-  ///
-  /// In en, this message translates to:
-  /// **'Performance'**
-  String get performanceModePerformance;
-
-  /// No description provided for @performanceModeCoolSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Lowest heat and background load for daily Android use.'**
-  String get performanceModeCoolSubtitle;
-
-  /// No description provided for @performanceModeStandardSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Stable daily mode: automatic ping every 5 minutes, moderate concurrency, and less background load.'**
-  String get performanceModeStandardSubtitle;
-
-  /// No description provided for @performanceModeEconomySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Minimum extra background work: automatic ping every 5 minutes, fewer parallel checks, and no automatic server geolocation.'**
-  String get performanceModeEconomySubtitle;
-
-  /// No description provided for @performanceModeBalancedSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Moderate checks and battery use.'**
-  String get performanceModeBalancedSubtitle;
-
-  /// No description provided for @performanceModePerformanceSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Faster checks with more CPU, traffic, and heat.'**
-  String get performanceModePerformanceSubtitle;
-
-  /// No description provided for @performanceModeRecommendation.
-  ///
-  /// In en, this message translates to:
-  /// **'Recommended: keep Standard. Use Economy when battery life matters more than fast background checks.'**
-  String get performanceModeRecommendation;
-
   /// No description provided for @memoryLimitTitle.
   ///
   /// In en, this message translates to:
@@ -1913,37 +2117,37 @@ abstract class AppLocalizations {
   /// No description provided for @tunImplementationTitle.
   ///
   /// In en, this message translates to:
-  /// **'TUN implementation'**
+  /// **'TUN network stack'**
   String get tunImplementationTitle;
 
   /// No description provided for @tunImplementationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'How the client handles the TUN stack'**
+  /// **'Controls how the client handles TCP and UDP traffic inside the VPN'**
   String get tunImplementationSubtitle;
 
   /// No description provided for @tunImplementationMixed.
   ///
   /// In en, this message translates to:
-  /// **'Mixed'**
+  /// **'Mixed (system TCP + gVisor UDP)'**
   String get tunImplementationMixed;
 
   /// No description provided for @tunImplementationMixedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Automatic mode. Uses the safer stack for the current device and config.'**
+  /// **'Uses the Android system stack for TCP and gVisor for UDP. This is sing-box\'s default when gVisor is available.'**
   String get tunImplementationMixedSubtitle;
 
   /// No description provided for @tunImplementationSystem.
   ///
   /// In en, this message translates to:
-  /// **'System'**
+  /// **'System (Android)'**
   String get tunImplementationSystem;
 
   /// No description provided for @tunImplementationSystemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Android system stack. Usually lighter, but may depend on device firmware.'**
+  /// **'Uses the Android system network stack for TCP and UDP. Compatibility depends on the device and its firmware.'**
   String get tunImplementationSystemSubtitle;
 
   /// No description provided for @tunImplementationGvisor.
@@ -1955,7 +2159,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunImplementationGvisorSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Userspace network stack. Can be more compatible, but may cost more CPU.'**
+  /// **'Uses the gVisor userspace network stack for TCP and UDP. It can help when the system stack is unstable.'**
   String get tunImplementationGvisorSubtitle;
 
   /// No description provided for @proxyInDescription.
@@ -3008,11 +3212,11 @@ abstract class AppLocalizations {
   /// **'…{count} more proxies'**
   String moreProxies(int count);
 
-  /// No description provided for @lastUpdated.
+  /// No description provided for @lastUpdatedDateTime.
   ///
   /// In en, this message translates to:
-  /// **'Updated {time}'**
-  String lastUpdated(String time);
+  /// **'Updated {date} at {time}'**
+  String lastUpdatedDateTime(String date, String time);
 
   /// No description provided for @trafficUsage.
   ///

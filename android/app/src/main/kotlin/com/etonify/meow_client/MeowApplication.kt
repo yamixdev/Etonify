@@ -15,6 +15,7 @@ class MeowApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         application = this
+        runtimeFlagsPrefs.edit().remove(LEGACY_FLAG_PERFORMANCE_MODE).apply()
         installUncaughtExceptionLogger()
         val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             Application.getProcessName()
@@ -51,7 +52,7 @@ class MeowApplication : Application() {
         private const val FLAG_WAKE_LOCK = "wake_lock_enabled"
         private const val FLAG_HEARTBEAT = "network_heartbeat_enabled"
         private const val FLAG_HEARTBEAT_INTERVAL_SECONDS = "network_heartbeat_interval_seconds"
-        private const val FLAG_PERFORMANCE_MODE = "performance_mode"
+        private const val LEGACY_FLAG_PERFORMANCE_MODE = "performance_mode"
         private const val FLAG_MEMORY_LIMIT_ENABLED = "memory_limit_enabled"
         @Volatile
         private var uncaughtExceptionLoggerInstalled = false
@@ -93,27 +94,6 @@ class MeowApplication : Application() {
             set(value) {
                 runtimeFlagsPrefs.edit()
                     .putLong(FLAG_HEARTBEAT_INTERVAL_SECONDS, value.coerceIn(15L, 300L))
-                    .apply()
-            }
-
-        var performanceMode: String
-            get() {
-                return when (runtimeFlagsPrefs.getString(FLAG_PERFORMANCE_MODE, "standard") ?: "standard") {
-                    "cool" -> "standard"
-                    "economy" -> "economy"
-                    "balanced", "performance" -> "standard"
-                    else -> "standard"
-                }
-            }
-            set(value) {
-                val normalized = when (value) {
-                    "cool", "standard" -> "standard"
-                    "economy" -> "economy"
-                    "performance", "balanced" -> "standard"
-                    else -> "standard"
-                }
-                runtimeFlagsPrefs.edit()
-                    .putString(FLAG_PERFORMANCE_MODE, normalized)
                     .apply()
             }
 
@@ -168,7 +148,7 @@ class MeowApplication : Application() {
                     basePath = baseDir.absolutePath
                     workingPath = workingDir.absolutePath
                     tempPath = tempDir.absolutePath
-                    logMaxLines = if (performanceMode == "performance") 3000 else 800
+                    logMaxLines = 800
                     debug = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
                 }
                 Libbox.setup(setupOptions)

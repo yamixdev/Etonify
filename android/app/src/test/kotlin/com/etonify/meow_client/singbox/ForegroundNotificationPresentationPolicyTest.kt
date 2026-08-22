@@ -17,4 +17,33 @@ class ForegroundNotificationPresentationPolicyTest {
         assertFalse(foregroundPresentationNeedsImmediateDelivery("Reloading"))
         assertFalse(foregroundPresentationNeedsImmediateDelivery("Stopping"))
     }
+
+    @Test
+    fun `queued refresh cannot resurrect a stopped notification`() {
+        assertFalse(
+            foregroundRefreshCanDeliver(
+                foregroundStarted = false,
+                queuedGeneration = 7L,
+                currentGeneration = 8L,
+            ),
+        )
+    }
+
+    @Test
+    fun `queued refresh from an older runtime cannot update a new notification`() {
+        assertFalse(
+            foregroundRefreshCanDeliver(
+                foregroundStarted = true,
+                queuedGeneration = 7L,
+                currentGeneration = 9L,
+            ),
+        )
+        assertTrue(
+            foregroundRefreshCanDeliver(
+                foregroundStarted = true,
+                queuedGeneration = 9L,
+                currentGeneration = 9L,
+            ),
+        )
+    }
 }

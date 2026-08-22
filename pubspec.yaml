@@ -37,8 +37,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   circle_flags:
     path: third_party/flutter_circle_flags
-  cupertino_icons: ^1.0.8
-  crypto: ^3.0.6
+  cupertino_icons: ^1.0.9
+  crypto: ^3.0.7
   fluentui_system_icons: ^1.1.229
   flutter_markdown_plus: ^1.0.12
   flutter_riverpod: ^3.4.2
@@ -46,7 +46,8 @@ dependencies:
   dynamic_color: ^1.9.0
   gap: ^3.0.1
   google_fonts: ^8.2.1
-  hive_ce: ^2.13.0
+  intl: ^0.20.3
+  hive_ce: ^2.19.3
   hive_ce_flutter: ^2.3.4
   asn1lib: ^1.6.5
   file_picker: ^11.0.3

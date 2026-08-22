@@ -61,6 +61,27 @@ void main() {
       expect(r['tls']['reality']['spider_x'], '/assets?ed=2560');
     });
 
+    test('uses interoperable ALPN defaults for VLESS XHTTP links', () {
+      const link =
+          'vless://uuid@server.com:443'
+          '?type=xhttp&security=tls&sni=example.com#XHTTP';
+
+      final r = LinkParser.tryParse(link)!;
+
+      expect(r['transport']['type'], 'xhttp');
+      expect(r['tls']['alpn'], ['h2', 'http/1.1']);
+    });
+
+    test('preserves explicit ALPN values for VLESS XHTTP links', () {
+      const link =
+          'vless://uuid@server.com:443'
+          '?type=xhttp&security=tls&sni=example.com&alpn=h3%2Ch2#XHTTP';
+
+      final r = LinkParser.tryParse(link)!;
+
+      expect(r['tls']['alpn'], ['h3', 'h2']);
+    });
+
     test('parses VLESS link encryption', () {
       const link =
           'vless://uuid@server.com:443'

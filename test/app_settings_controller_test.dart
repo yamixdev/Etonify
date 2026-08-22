@@ -5,18 +5,28 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 
 void main() {
-  test('performance preset updates URLTest and lookup defaults', () {
+  test('URLTest fallbacks use the stable runtime defaults', () {
     final controller = AppSettingsController();
 
-    final change = controller.setPerformanceMode(AppPerformanceMode.economy);
+    final intervalChange = controller.setUrlTestIntervalSeconds(0);
+    final concurrencyChange = controller.setUrlTestConcurrency(0);
+    final unavailableChange = controller
+        .setUrlTestUnavailableCheckIntervalSeconds(0);
 
-    expect(change.changed, isTrue);
-    expect(change.configReason, 'performance mode changed');
-    expect(change.syncRuntimePerformanceFlags, isTrue);
-    expect(controller.urlTestConcurrency, appSettingsEconomyUrlTestConcurrency);
+    expect(intervalChange.changed, isFalse);
+    expect(concurrencyChange.changed, isFalse);
+    expect(unavailableChange.changed, isFalse);
     expect(
-      controller.locationLookupLimit,
-      appSettingsEconomyLocationLookupLimit,
+      controller.urlTestIntervalSeconds,
+      appSettingsStandardUrlTestIntervalSeconds,
+    );
+    expect(
+      controller.urlTestConcurrency,
+      appSettingsStandardUrlTestConcurrency,
+    );
+    expect(
+      controller.urlTestUnavailableCheckIntervalSeconds,
+      appSettingsStandardUrlTestUnavailableCheckIntervalSeconds,
     );
   });
 
@@ -128,6 +138,20 @@ void main() {
     expect(packagesChange.forceFullServiceRestart, isTrue);
   });
 
+  test('dataplane routing changes require a full VPN service restart', () {
+    final controller = AppSettingsController();
+
+    final blockLeaks = controller.setBlockLeaks(!controller.blockLeaks);
+    final adBlock = controller.setAdBlockEnabled(true);
+    final bypassLan = controller.setBypassLocalNetwork(
+      !controller.bypassLocalNetwork,
+    );
+
+    expect(blockLeaks.forceFullServiceRestart, isTrue);
+    expect(adBlock.forceFullServiceRestart, isTrue);
+    expect(bypassLan.forceFullServiceRestart, isTrue);
+  });
+
   test('FakeIP is limited to full VPN TUN and restarts the service', () {
     final controller = AppSettingsController();
 
@@ -167,6 +191,23 @@ void main() {
     expect(state.localeCode, 'ru');
     expect(state.tlsFragmentationMode, TlsFragmentationMode.record);
     expect(state.experimentalFakeIpEnabled, isFalse);
+  });
+
+  test('TLS security overrides have separate runtime effects', () {
+    final controller = AppSettingsController();
+
+    final proxy = controller.setAllowUntrustedProxyCertificates(true);
+    final subscription = controller.setAllowUntrustedSubscriptionCertificates(
+      true,
+    );
+
+    expect(proxy.changed, isTrue);
+    expect(proxy.configReason, isNotNull);
+    expect(proxy.restartRuntime, isTrue);
+    expect(subscription.changed, isTrue);
+    expect(subscription.configReason, isNull);
+    expect(controller.allowUntrustedProxyCertificates, isTrue);
+    expect(controller.allowUntrustedSubscriptionCertificates, isTrue);
   });
 
   test('connection mode never leaves the runtime without an inbound', () {

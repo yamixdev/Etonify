@@ -22,6 +22,7 @@ Widget _settingsApp({
       onOpenSubscriptions: () {},
       onOpenInbound: () {},
       onOpenRouting: () {},
+      onOpenSecurity: () {},
       onImportBackup: onImportBackup ?? () {},
       onExportSettings: onExportSettings ?? () {},
       onExportEncryptedProfile: onExportEncryptedProfile ?? () {},

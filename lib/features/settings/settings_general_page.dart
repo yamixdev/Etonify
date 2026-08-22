@@ -67,7 +67,6 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentNotificationTrafficDisplayMode,
     required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
-    required this.currentPerformanceMode,
     required this.currentMemoryLimitEnabled,
     required this.currentMemoryLimitWarningDismissed,
     required this.currentUpdateInstallMode,
@@ -79,7 +78,6 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.onNotificationTrafficDisplayModeChanged,
     required this.onNotificationTrafficRefreshSecondsChanged,
     required this.onHideServerIpChanged,
-    required this.onPerformanceModeChanged,
     required this.onMemoryLimitChanged,
     required this.onUpdateInstallModeChanged,
   });
@@ -93,7 +91,6 @@ class SettingsGeneralPage extends StatelessWidget {
   final NotificationTrafficDisplayMode currentNotificationTrafficDisplayMode;
   final int currentNotificationTrafficRefreshSeconds;
   final bool currentHideServerIp;
-  final AppPerformanceMode currentPerformanceMode;
   final bool currentMemoryLimitEnabled;
   final bool currentMemoryLimitWarningDismissed;
   final AppUpdateInstallMode currentUpdateInstallMode;
@@ -106,7 +103,6 @@ class SettingsGeneralPage extends StatelessWidget {
   onNotificationTrafficDisplayModeChanged;
   final ValueChanged<int> onNotificationTrafficRefreshSecondsChanged;
   final ValueChanged<bool> onHideServerIpChanged;
-  final ValueChanged<AppPerformanceMode> onPerformanceModeChanged;
   final void Function(bool value, {bool warningDismissed}) onMemoryLimitChanged;
   final ValueChanged<AppUpdateInstallMode> onUpdateInstallModeChanged;
 
@@ -246,11 +242,6 @@ class SettingsGeneralPage extends StatelessWidget {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     final cs = theme.colorScheme;
-    final visiblePerformanceMode =
-        currentPerformanceMode == AppPerformanceMode.economy
-        ? AppPerformanceMode.economy
-        : AppPerformanceMode.standard;
-
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.generalSectionTitle)),
       body: Theme(
@@ -468,82 +459,6 @@ class SettingsGeneralPage extends StatelessWidget {
                   value: currentMemoryLimitEnabled,
                   onChanged: (value) =>
                       unawaited(_setMemoryLimitEnabled(context, value)),
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                  child: Row(
-                    children: [
-                      SettingsLeadingIcon(
-                        icon: Icons.speed_rounded,
-                        color: cs.primary,
-                      ),
-                      const Gap(16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.performanceModeTitle,
-                              style: theme.textTheme.titleMedium,
-                            ),
-                            const Gap(4),
-                            Text(
-                              switch (visiblePerformanceMode) {
-                                AppPerformanceMode.standard =>
-                                  l10n.performanceModeStandardSubtitle,
-                                AppPerformanceMode.economy =>
-                                  l10n.performanceModeEconomySubtitle,
-                                AppPerformanceMode.balanced ||
-                                AppPerformanceMode.performance =>
-                                  l10n.performanceModeStandardSubtitle,
-                              },
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                            const Gap(6),
-                            Text(
-                              l10n.performanceModeRecommendation,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                height: 1.3,
-                              ),
-                            ),
-                            const Gap(12),
-                            SegmentedButton<AppPerformanceMode>(
-                              showSelectedIcon: false,
-                              expandedInsets: EdgeInsets.zero,
-                              segments: [
-                                ButtonSegment(
-                                  value: AppPerformanceMode.standard,
-                                  icon: const Icon(Icons.check_circle_rounded),
-                                  label: Text(l10n.performanceModeStandard),
-                                ),
-                                ButtonSegment(
-                                  value: AppPerformanceMode.economy,
-                                  icon: const Icon(Icons.eco_rounded),
-                                  label: Text(l10n.performanceModeEconomy),
-                                ),
-                              ],
-                              selected: {visiblePerformanceMode},
-                              onSelectionChanged: (selection) {
-                                onPerformanceModeChanged(selection.first);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),

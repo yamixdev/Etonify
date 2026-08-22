@@ -210,7 +210,6 @@ data class RuntimeFlagsMessage (
   val wakeLockEnabled: Boolean? = null,
   val networkHeartbeatEnabled: Boolean? = null,
   val networkHeartbeatIntervalSeconds: Long? = null,
-  val performanceMode: String? = null,
   val memoryLimitEnabled: Boolean? = null
 )
  {
@@ -219,9 +218,8 @@ data class RuntimeFlagsMessage (
       val wakeLockEnabled = pigeonVar_list[0] as Boolean?
       val networkHeartbeatEnabled = pigeonVar_list[1] as Boolean?
       val networkHeartbeatIntervalSeconds = pigeonVar_list[2] as Long?
-      val performanceMode = pigeonVar_list[3] as String?
-      val memoryLimitEnabled = pigeonVar_list[4] as Boolean?
-      return RuntimeFlagsMessage(wakeLockEnabled, networkHeartbeatEnabled, networkHeartbeatIntervalSeconds, performanceMode, memoryLimitEnabled)
+      val memoryLimitEnabled = pigeonVar_list[3] as Boolean?
+      return RuntimeFlagsMessage(wakeLockEnabled, networkHeartbeatEnabled, networkHeartbeatIntervalSeconds, memoryLimitEnabled)
     }
   }
   fun toList(): List<Any?> {
@@ -229,7 +227,6 @@ data class RuntimeFlagsMessage (
       wakeLockEnabled,
       networkHeartbeatEnabled,
       networkHeartbeatIntervalSeconds,
-      performanceMode,
       memoryLimitEnabled,
     )
   }
@@ -241,7 +238,7 @@ data class RuntimeFlagsMessage (
       return true
     }
     val other = other as RuntimeFlagsMessage
-    return SingboxApiPigeonUtils.deepEquals(this.wakeLockEnabled, other.wakeLockEnabled) && SingboxApiPigeonUtils.deepEquals(this.networkHeartbeatEnabled, other.networkHeartbeatEnabled) && SingboxApiPigeonUtils.deepEquals(this.networkHeartbeatIntervalSeconds, other.networkHeartbeatIntervalSeconds) && SingboxApiPigeonUtils.deepEquals(this.performanceMode, other.performanceMode) && SingboxApiPigeonUtils.deepEquals(this.memoryLimitEnabled, other.memoryLimitEnabled)
+    return SingboxApiPigeonUtils.deepEquals(this.wakeLockEnabled, other.wakeLockEnabled) && SingboxApiPigeonUtils.deepEquals(this.networkHeartbeatEnabled, other.networkHeartbeatEnabled) && SingboxApiPigeonUtils.deepEquals(this.networkHeartbeatIntervalSeconds, other.networkHeartbeatIntervalSeconds) && SingboxApiPigeonUtils.deepEquals(this.memoryLimitEnabled, other.memoryLimitEnabled)
   }
 
   override fun hashCode(): Int {
@@ -249,12 +246,11 @@ data class RuntimeFlagsMessage (
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.wakeLockEnabled)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.networkHeartbeatEnabled)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.networkHeartbeatIntervalSeconds)
-    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.performanceMode)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.memoryLimitEnabled)
     return result
   }
   override fun toString(): String {
-    return "RuntimeFlagsMessage(wakeLockEnabled=$wakeLockEnabled, networkHeartbeatEnabled=$networkHeartbeatEnabled, networkHeartbeatIntervalSeconds=$networkHeartbeatIntervalSeconds, performanceMode=$performanceMode, memoryLimitEnabled=$memoryLimitEnabled)"
+    return "RuntimeFlagsMessage(wakeLockEnabled=$wakeLockEnabled, networkHeartbeatEnabled=$networkHeartbeatEnabled, networkHeartbeatIntervalSeconds=$networkHeartbeatIntervalSeconds, memoryLimitEnabled=$memoryLimitEnabled)"
   }
 }
 
@@ -633,6 +629,116 @@ data class UnderlyingNetworkFetchResponseMessage (
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
+data class UnderlyingNetworkDownloadRequestMessage (
+  val url: String,
+  val headers: List<HttpHeaderMessage?>,
+  val destinationPath: String,
+  val maxBytes: Long,
+  val responseStartTimeoutMillis: Long,
+  val idleTimeoutMillis: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UnderlyingNetworkDownloadRequestMessage {
+      val url = pigeonVar_list[0] as String
+      val headers = pigeonVar_list[1] as List<HttpHeaderMessage?>
+      val destinationPath = pigeonVar_list[2] as String
+      val maxBytes = pigeonVar_list[3] as Long
+      val responseStartTimeoutMillis = pigeonVar_list[4] as Long
+      val idleTimeoutMillis = pigeonVar_list[5] as Long
+      return UnderlyingNetworkDownloadRequestMessage(url, headers, destinationPath, maxBytes, responseStartTimeoutMillis, idleTimeoutMillis)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      url,
+      headers,
+      destinationPath,
+      maxBytes,
+      responseStartTimeoutMillis,
+      idleTimeoutMillis,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as UnderlyingNetworkDownloadRequestMessage
+    return SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.headers, other.headers) && SingboxApiPigeonUtils.deepEquals(this.destinationPath, other.destinationPath) && SingboxApiPigeonUtils.deepEquals(this.maxBytes, other.maxBytes) && SingboxApiPigeonUtils.deepEquals(this.responseStartTimeoutMillis, other.responseStartTimeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.idleTimeoutMillis, other.idleTimeoutMillis)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.url)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.headers)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.destinationPath)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.maxBytes)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.responseStartTimeoutMillis)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.idleTimeoutMillis)
+    return result
+  }
+  override fun toString(): String {
+    return "UnderlyingNetworkDownloadRequestMessage(url=$url, headers=$headers, destinationPath=$destinationPath, maxBytes=$maxBytes, responseStartTimeoutMillis=$responseStartTimeoutMillis, idleTimeoutMillis=$idleTimeoutMillis)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class UnderlyingNetworkDownloadResponseMessage (
+  val statusCode: Long,
+  val downloadedBytes: Long,
+  val headers: List<HttpHeaderMessage?>,
+  val finalUrl: String,
+  val network: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UnderlyingNetworkDownloadResponseMessage {
+      val statusCode = pigeonVar_list[0] as Long
+      val downloadedBytes = pigeonVar_list[1] as Long
+      val headers = pigeonVar_list[2] as List<HttpHeaderMessage?>
+      val finalUrl = pigeonVar_list[3] as String
+      val network = pigeonVar_list[4] as String
+      return UnderlyingNetworkDownloadResponseMessage(statusCode, downloadedBytes, headers, finalUrl, network)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      statusCode,
+      downloadedBytes,
+      headers,
+      finalUrl,
+      network,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as UnderlyingNetworkDownloadResponseMessage
+    return SingboxApiPigeonUtils.deepEquals(this.statusCode, other.statusCode) && SingboxApiPigeonUtils.deepEquals(this.downloadedBytes, other.downloadedBytes) && SingboxApiPigeonUtils.deepEquals(this.headers, other.headers) && SingboxApiPigeonUtils.deepEquals(this.finalUrl, other.finalUrl) && SingboxApiPigeonUtils.deepEquals(this.network, other.network)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.statusCode)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.downloadedBytes)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.headers)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.finalUrl)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.network)
+    return result
+  }
+  override fun toString(): String {
+    return "UnderlyingNetworkDownloadResponseMessage(statusCode=$statusCode, downloadedBytes=$downloadedBytes, headers=$headers, finalUrl=$finalUrl, network=$network)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
 data class ApkInspectionMessage (
   val valid: Boolean,
   val packageName: String,
@@ -793,10 +899,20 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ApkInspectionMessage.fromList(it)
+          UnderlyingNetworkDownloadRequestMessage.fromList(it)
         }
       }
       137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          UnderlyingNetworkDownloadResponseMessage.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ApkInspectionMessage.fromList(it)
+        }
+      }
+      139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           InstalledAppMessage.fromList(it)
         }
@@ -834,12 +950,20 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is ApkInspectionMessage -> {
+      is UnderlyingNetworkDownloadRequestMessage -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is InstalledAppMessage -> {
+      is UnderlyingNetworkDownloadResponseMessage -> {
         stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is ApkInspectionMessage -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is InstalledAppMessage -> {
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -878,6 +1002,7 @@ interface SingboxHostApi {
   fun installDownloadedApk(callback: (Result<Unit>) -> Unit)
   fun inspectDownloadedApk(path: String, callback: (Result<ApkInspectionMessage>) -> Unit)
   fun fetchUrlOnUnderlyingNetwork(request: UnderlyingNetworkFetchRequestMessage, callback: (Result<UnderlyingNetworkFetchResponseMessage>) -> Unit)
+  fun downloadUrlOnUnderlyingNetwork(request: UnderlyingNetworkDownloadRequestMessage, callback: (Result<UnderlyingNetworkDownloadResponseMessage>) -> Unit)
   fun resolveHostOnUnderlyingNetwork(host: String, callback: (Result<List<String?>>) -> Unit)
   fun getAndroidId(callback: (Result<String>) -> Unit)
   fun getSubscriptionRequestDeviceInfo(callback: (Result<Map<String?, Any?>>) -> Unit)
@@ -1426,6 +1551,26 @@ interface SingboxHostApi {
             val args = message as List<Any?>
             val requestArg = args[0] as UnderlyingNetworkFetchRequestMessage
             api.fetchUrlOnUnderlyingNetwork(requestArg) { result: Result<UnderlyingNetworkFetchResponseMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.downloadUrlOnUnderlyingNetwork$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val requestArg = args[0] as UnderlyingNetworkDownloadRequestMessage
+            api.downloadUrlOnUnderlyingNetwork(requestArg) { result: Result<UnderlyingNetworkDownloadResponseMessage> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))

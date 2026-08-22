@@ -26,6 +26,13 @@ internal data class RuntimeMeasurementSample(
     val connectionsIn: Int,
     val connectionsOut: Int,
     val trafficBytesPerSecond: Long,
+    val totalRssKb: Long? = null,
+    val totalSwapPssKb: Long? = null,
+    val totalPrivateDirtyKb: Long? = null,
+    val dalvikPssKb: Long? = null,
+    val nativePssKb: Long? = null,
+    val graphicsPssKb: Long? = null,
+    val codePssKb: Long? = null,
 )
 
 internal data class RuntimeMeasurementAssessment(

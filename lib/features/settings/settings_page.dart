@@ -13,6 +13,7 @@ class SettingsPage extends StatelessWidget {
     required this.onOpenSubscriptions,
     required this.onOpenInbound,
     required this.onOpenRouting,
+    required this.onOpenSecurity,
     required this.onImportBackup,
     required this.onExportSettings,
     required this.onExportEncryptedProfile,
@@ -30,6 +31,7 @@ class SettingsPage extends StatelessWidget {
   final VoidCallback onOpenSubscriptions;
   final VoidCallback onOpenInbound;
   final VoidCallback onOpenRouting;
+  final VoidCallback onOpenSecurity;
   final VoidCallback onImportBackup;
   final VoidCallback onExportSettings;
   final VoidCallback onExportEncryptedProfile;
@@ -175,6 +177,13 @@ class SettingsPage extends StatelessWidget {
             title: l10n.dnsTitle,
             subtitle: '${l10n.dnsDirectTitle} · ${l10n.dnsProxyTitle}',
             onTap: onOpenDns,
+          ),
+          const SizedBox(height: settingsIslandGap),
+          _SettingsEntryTile(
+            icon: Icons.security_rounded,
+            title: l10n.securityTitle,
+            subtitle: l10n.securitySubtitle,
+            onTap: onOpenSecurity,
           ),
           const SizedBox(height: settingsIslandGap),
           _SettingsEntryTile(

@@ -1,8 +1,6 @@
 package com.etonify.meow_client.singbox
 
-import android.app.ActivityManager
 import android.content.Context
-import android.os.Debug
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
@@ -48,7 +46,7 @@ internal object RuntimeMeasurement {
         )
         session = created
         sampleLocked(created)
-        ticker = executor.scheduleAtFixedRate(
+        ticker = executor.scheduleWithFixedDelay(
             {
                 synchronized(lock) {
                     val active = session ?: return@synchronized
@@ -102,23 +100,27 @@ internal object RuntimeMeasurement {
                 null
             }
         }
-        val processMemory = active.applicationContext
-            .getSystemService(ActivityManager::class.java)
-            .getProcessMemoryInfo(intArrayOf(Process.myPid()))
-            .firstOrNull()
+        val processMemory = OwnProcessMemory.capture()
         active.samples += RuntimeMeasurementSample(
             elapsedRealtimeMs = nowElapsed,
             elapsedSeconds = elapsedSeconds(active, nowElapsed),
             processCpuMs = cpuMs,
             cpuPercent = cpuPercent,
-            totalPssKb = processMemory?.totalPss?.toLong() ?: 0L,
-            nativeHeapKb = Debug.getNativeHeapAllocatedSize() / 1024L,
+            totalPssKb = processMemory.totalPssKb,
+            nativeHeapKb = processMemory.nativeHeapAllocatedKb,
             coreMemoryBytes = SingboxController.coreMemoryBytes,
             coreGoroutines = SingboxController.coreGoroutines,
             connectionsIn = SingboxController.connectionsIn,
             connectionsOut = SingboxController.connectionsOut,
             trafficBytesPerSecond = max(0L, SingboxController.uplink) +
                 max(0L, SingboxController.downlink),
+            totalRssKb = processMemory.totalRssKb,
+            totalSwapPssKb = processMemory.totalSwapPssKb,
+            totalPrivateDirtyKb = processMemory.totalPrivateDirtyKb,
+            dalvikPssKb = processMemory.dalvikPssKb,
+            nativePssKb = processMemory.nativePssKb,
+            graphicsPssKb = processMemory.graphicsPssKb,
+            codePssKb = processMemory.codePssKb,
         )
     }
 
@@ -138,6 +140,9 @@ internal object RuntimeMeasurement {
         val samples = active.samples
         val cpuValues = samples.mapNotNull { it.cpuPercent }
         val pssValues = samples.map { it.totalPssKb }.filter { it > 0L }
+        val rssValues = samples.mapNotNull { it.totalRssKb }.filter { it > 0L }
+        val swapPssValues = samples.mapNotNull { it.totalSwapPssKb }
+        val privateDirtyValues = samples.mapNotNull { it.totalPrivateDirtyKb }
         val goroutineValues = samples.map { it.coreGoroutines }
         val connectionValues = samples.map { it.connectionsIn + it.connectionsOut }
         val trafficValues = samples.map { it.trafficBytesPerSecond }
@@ -156,6 +161,9 @@ internal object RuntimeMeasurement {
             "pssStartKb" to pssValues.firstOrNull(),
             "pssEndKb" to pssValues.lastOrNull(),
             "pssPeakKb" to pssValues.maxOrNull(),
+            "rssPeakKb" to rssValues.maxOrNull(),
+            "swapPssPeakKb" to swapPssValues.maxOrNull(),
+            "privateDirtyPeakKb" to privateDirtyValues.maxOrNull(),
             "coreGoroutinesStart" to goroutineValues.firstOrNull(),
             "coreGoroutinesEnd" to goroutineValues.lastOrNull(),
             "coreGoroutinesPeak" to goroutineValues.maxOrNull(),
@@ -201,6 +209,9 @@ internal object RuntimeMeasurement {
             appendLine("pss_start_kb: ${snapshot["pssStartKb"] ?: "n/a"}")
             appendLine("pss_end_kb: ${snapshot["pssEndKb"] ?: "n/a"}")
             appendLine("pss_peak_kb: ${snapshot["pssPeakKb"] ?: "n/a"}")
+            appendLine("rss_peak_kb: ${snapshot["rssPeakKb"] ?: "n/a"}")
+            appendLine("swap_pss_peak_kb: ${snapshot["swapPssPeakKb"] ?: "n/a"}")
+            appendLine("private_dirty_peak_kb: ${snapshot["privateDirtyPeakKb"] ?: "n/a"}")
             appendLine("core_goroutines_start: ${snapshot["coreGoroutinesStart"] ?: "n/a"}")
             appendLine("core_goroutines_end: ${snapshot["coreGoroutinesEnd"] ?: "n/a"}")
             appendLine("core_goroutines_peak: ${snapshot["coreGoroutinesPeak"] ?: "n/a"}")
@@ -209,13 +220,25 @@ internal object RuntimeMeasurement {
             appendLine("assessment_detail: ${snapshot["assessmentDetail"]}")
             appendLine()
             appendLine("samples:")
-            appendLine("elapsed_s,cpu_percent,pss_kb,native_heap_kb,core_memory_bytes,goroutines,connections_in,connections_out,traffic_bps")
+            appendLine(
+                "elapsed_s,cpu_percent,pss_kb,rss_kb,swap_pss_kb,private_dirty_kb," +
+                    "dalvik_pss_kb,native_pss_kb,graphics_pss_kb,code_pss_kb," +
+                    "native_heap_kb,core_memory_bytes,goroutines,connections_in," +
+                    "connections_out,traffic_bps",
+            )
             active.samples.forEach { sample ->
                 appendLine(
                     listOf(
                         sample.elapsedSeconds,
                         formatNumber(sample.cpuPercent),
                         sample.totalPssKb,
+                        sample.totalRssKb ?: "n/a",
+                        sample.totalSwapPssKb ?: "n/a",
+                        sample.totalPrivateDirtyKb ?: "n/a",
+                        sample.dalvikPssKb ?: "n/a",
+                        sample.nativePssKb ?: "n/a",
+                        sample.graphicsPssKb ?: "n/a",
+                        sample.codePssKb ?: "n/a",
                         sample.nativeHeapKb,
                         sample.coreMemoryBytes,
                         sample.coreGoroutines,

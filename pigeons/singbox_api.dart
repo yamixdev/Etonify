@@ -32,14 +32,12 @@ class RuntimeFlagsMessage {
     this.wakeLockEnabled,
     this.networkHeartbeatEnabled,
     this.networkHeartbeatIntervalSeconds,
-    this.performanceMode,
     this.memoryLimitEnabled,
   });
 
   bool? wakeLockEnabled;
   bool? networkHeartbeatEnabled;
   int? networkHeartbeatIntervalSeconds;
-  String? performanceMode;
   bool? memoryLimitEnabled;
 }
 
@@ -159,6 +157,40 @@ class UnderlyingNetworkFetchResponseMessage {
 
   int statusCode;
   String body;
+  List<HttpHeaderMessage?> headers;
+  String finalUrl;
+  String network;
+}
+
+class UnderlyingNetworkDownloadRequestMessage {
+  UnderlyingNetworkDownloadRequestMessage({
+    required this.url,
+    required this.headers,
+    required this.destinationPath,
+    required this.maxBytes,
+    required this.responseStartTimeoutMillis,
+    required this.idleTimeoutMillis,
+  });
+
+  String url;
+  List<HttpHeaderMessage?> headers;
+  String destinationPath;
+  int maxBytes;
+  int responseStartTimeoutMillis;
+  int idleTimeoutMillis;
+}
+
+class UnderlyingNetworkDownloadResponseMessage {
+  UnderlyingNetworkDownloadResponseMessage({
+    required this.statusCode,
+    required this.downloadedBytes,
+    required this.headers,
+    required this.finalUrl,
+    required this.network,
+  });
+
+  int statusCode;
+  int downloadedBytes;
   List<HttpHeaderMessage?> headers;
   String finalUrl;
   String network;
@@ -292,6 +324,11 @@ abstract class SingboxHostApi {
   @async
   UnderlyingNetworkFetchResponseMessage fetchUrlOnUnderlyingNetwork(
     UnderlyingNetworkFetchRequestMessage request,
+  );
+
+  @async
+  UnderlyingNetworkDownloadResponseMessage downloadUrlOnUnderlyingNetwork(
+    UnderlyingNetworkDownloadRequestMessage request,
   );
 
   @async

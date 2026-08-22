@@ -13,7 +13,7 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission"/>
-    <!-- Default performance mode keeps wake lock off; this backs the explicit performance path. -->
+    <!-- Used only when the optional runtime wake lock is enabled from diagnostics. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application

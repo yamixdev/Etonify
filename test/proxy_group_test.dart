@@ -1593,6 +1593,88 @@ void main() {
     expect(chain.containsKey('domain_resolver'), isFalse);
   });
 
+  test('global proxy TLS override is scoped to TLS outbounds', () {
+    final tls = <String, dynamic>{
+      'enabled': true,
+      'server_name': 'secure.example.com',
+    };
+    final subscription = Subscription(
+      id: 'tls-policy',
+      name: 'TLS policy',
+      url: 'file:///tls-policy.json',
+      outbounds: [
+        Outbound(
+          tag: 'secure',
+          name: 'Secure',
+          config: {
+            'type': 'vless',
+            'tag': 'secure',
+            'server': 'secure.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'tls': tls,
+          },
+        ),
+        const Outbound(
+          tag: 'plain',
+          name: 'Plain',
+          config: {
+            'type': 'socks',
+            'tag': 'plain',
+            'server': 'plain.example.com',
+            'server_port': 1080,
+          },
+        ),
+      ],
+    );
+
+    final plan = _defaultBuilder(
+      subscription,
+      selectedProxyTag: 'secure',
+      allowUntrustedProxyCertificates: true,
+    ).buildPlan();
+    final outbounds = (plan.config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final secure = outbounds.firstWhere((entry) => entry['tag'] == 'secure');
+    final plain = outbounds.firstWhere((entry) => entry['tag'] == 'plain');
+
+    expect((secure['tls'] as Map)['insecure'], isTrue);
+    expect(plain, isNot(contains('tls')));
+    expect(tls, isNot(contains('insecure')));
+  });
+
+  test('disabled global TLS override preserves profile policy', () {
+    const subscription = Subscription(
+      id: 'profile-tls-policy',
+      name: 'Profile TLS policy',
+      url: 'file:///profile-tls-policy.json',
+      outbounds: [
+        Outbound(
+          tag: 'secure',
+          name: 'Secure',
+          config: {
+            'type': 'vless',
+            'tag': 'secure',
+            'server': 'secure.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'tls': {'enabled': true, 'insecure': true},
+          },
+        ),
+      ],
+    );
+
+    final plan = _defaultBuilder(
+      subscription,
+      selectedProxyTag: 'secure',
+    ).buildPlan();
+    final secure = (plan.config['outbounds'] as List)
+        .cast<Map<String, dynamic>>()
+        .firstWhere((entry) => entry['tag'] == 'secure');
+
+    expect((secure['tls'] as Map)['insecure'], isTrue);
+  });
+
   test('proxy chain uses cross subscription snapshot on tag collision', () {
     const subscription = Subscription(
       id: 'active',
@@ -2602,6 +2684,7 @@ SingboxConfigBuilder _defaultBuilder(
   bool urlTestStrictTolerance = true,
   bool experimentalFakeIpEnabled = false,
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled,
+  bool allowUntrustedProxyCertificates = false,
   bool vpnInboundEnabled = false,
   bool proxyInboundEnabled = false,
   String proxyMixedListen = '127.0.0.1',
@@ -2679,6 +2762,7 @@ SingboxConfigBuilder _defaultBuilder(
     tcpFastOpenEnabled: true,
     tcpMultiPathEnabled: false,
     tlsFragmentationMode: tlsFragmentationMode,
+    allowUntrustedProxyCertificates: allowUntrustedProxyCertificates,
     interruptExistingConnections: true,
     urlTestStrictTolerance: urlTestStrictTolerance,
     experimentalFakeIpEnabled: experimentalFakeIpEnabled,

@@ -39,3 +39,21 @@ internal class RuntimeRecoveryGate(
         const val NO_TIMESTAMP = Long.MIN_VALUE
     }
 }
+
+/** Keeps only the newest delayed probe after a physical network handover. */
+internal class NetworkHandoverProbeGate {
+    private val generation = AtomicLong(0L)
+
+    fun replace(): Long = generation.incrementAndGet()
+
+    fun isCurrent(token: Long): Boolean = generation.get() == token
+
+    fun tryConsume(token: Long): Boolean = generation.compareAndSet(token, token + 1L)
+
+    fun invalidate() {
+        generation.incrementAndGet()
+    }
+}
+
+internal fun isNetworkHandoverRecoverySource(source: String): Boolean =
+    source.startsWith("network_change:")

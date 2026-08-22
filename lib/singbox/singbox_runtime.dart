@@ -16,14 +16,12 @@ class RuntimeFlags {
     this.wakeLockEnabled = false,
     this.networkHeartbeatEnabled = true,
     this.networkHeartbeatIntervalSeconds = 180,
-    this.performanceMode = 'cool',
     this.memoryLimitEnabled = true,
   });
 
   final bool wakeLockEnabled;
   final bool networkHeartbeatEnabled;
   final int networkHeartbeatIntervalSeconds;
-  final String performanceMode;
   final bool memoryLimitEnabled;
 }
 
@@ -242,10 +240,6 @@ class SingboxRuntime {
         networkHeartbeatEnabled: value['networkHeartbeatEnabled'] != false,
         networkHeartbeatIntervalSeconds:
             (value['networkHeartbeatIntervalSeconds'] as num?)?.toInt() ?? 180,
-        performanceMode:
-            value['performanceMode']?.toString().trim().isNotEmpty == true
-            ? value['performanceMode'].toString()
-            : 'cool',
         memoryLimitEnabled: value['memoryLimitEnabled'] != false,
       );
     } on MissingPluginException {
@@ -257,7 +251,6 @@ class SingboxRuntime {
     bool? wakeLockEnabled,
     bool? networkHeartbeatEnabled,
     int? networkHeartbeatIntervalSeconds,
-    String? performanceMode,
     bool? memoryLimitEnabled,
   }) async {
     if (!Platform.isAndroid) {
@@ -270,7 +263,6 @@ class SingboxRuntime {
             wakeLockEnabled: wakeLockEnabled,
             networkHeartbeatEnabled: networkHeartbeatEnabled,
             networkHeartbeatIntervalSeconds: networkHeartbeatIntervalSeconds,
-            performanceMode: performanceMode,
             memoryLimitEnabled: memoryLimitEnabled,
           ),
         ),
@@ -285,9 +277,6 @@ class SingboxRuntime {
           if (networkHeartbeatIntervalSeconds != null) {
             args['networkHeartbeatIntervalSeconds'] =
                 networkHeartbeatIntervalSeconds;
-          }
-          if (performanceMode != null) {
-            args['performanceMode'] = performanceMode;
           }
           if (memoryLimitEnabled != null) {
             args['memoryLimitEnabled'] = memoryLimitEnabled;
@@ -672,6 +661,55 @@ class SingboxRuntime {
     return <String, dynamic>{
       'statusCode': response.statusCode,
       'body': response.body,
+      'headers': <String, String>{
+        for (final header in response.headers)
+          if (header != null && header.name.trim().isNotEmpty)
+            header.name.toLowerCase(): header.value,
+      },
+      'finalUrl': response.finalUrl,
+      'network': response.network,
+    };
+  }
+
+  Future<Map<String, dynamic>> downloadUrlOnUnderlyingNetwork({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String destinationPath,
+    required int maxBytes,
+    required Duration responseStartTimeout,
+    required Duration idleTimeout,
+  }) async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError(
+        'Underlying-network downloads are only available on Android.',
+      );
+    }
+    final normalizedDestination = destinationPath.trim();
+    if (normalizedDestination.isEmpty) {
+      throw ArgumentError.value(
+        destinationPath,
+        'destinationPath',
+        'Destination path is empty',
+      );
+    }
+    final response = await _hostApi.downloadUrlOnUnderlyingNetwork(
+      pigeon.UnderlyingNetworkDownloadRequestMessage(
+        url: uri.toString(),
+        headers: headers.entries
+            .map(
+              (entry) =>
+                  pigeon.HttpHeaderMessage(name: entry.key, value: entry.value),
+            )
+            .toList(growable: false),
+        destinationPath: normalizedDestination,
+        maxBytes: maxBytes,
+        responseStartTimeoutMillis: responseStartTimeout.inMilliseconds,
+        idleTimeoutMillis: idleTimeout.inMilliseconds,
+      ),
+    );
+    return <String, dynamic>{
+      'statusCode': response.statusCode,
+      'downloadedBytes': response.downloadedBytes,
       'headers': <String, String>{
         for (final header in response.headers)
           if (header != null && header.name.trim().isNotEmpty)

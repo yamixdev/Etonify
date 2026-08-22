@@ -68,6 +68,7 @@ class SingboxConfigCoordinatorSnapshot {
     required this.tcpFastOpenEnabled,
     required this.tcpMultiPathEnabled,
     required this.tlsFragmentationMode,
+    this.allowUntrustedProxyCertificates = false,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
     this.experimentalFakeIpEnabled = false,
@@ -125,6 +126,7 @@ class SingboxConfigCoordinatorSnapshot {
   final bool tcpFastOpenEnabled;
   final bool tcpMultiPathEnabled;
   final TlsFragmentationMode tlsFragmentationMode;
+  final bool allowUntrustedProxyCertificates;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
   final bool experimentalFakeIpEnabled;
@@ -151,6 +153,7 @@ typedef SingboxConfigPhaseSetter =
     void Function(SingboxConfigCoordinatorPhase phase);
 typedef SingboxConfigRuntimeFailureNotifier =
     void Function({required bool timedOut});
+typedef SingboxRuntimeStatusReader = Future<Map<String, dynamic>> Function();
 
 class SingboxConfigCoordinator {
   SingboxConfigCoordinator({
@@ -167,6 +170,7 @@ class SingboxConfigCoordinator {
     required RuntimeTimeoutHook onRuntimeLifecycleTimeout,
     required RuntimeVoidHook cacheStartedBuild,
     required Future<void> Function() syncRuntimeState,
+    SingboxRuntimeStatusReader? readRuntimeStatus,
     this.fullServiceRestartDebounce = const Duration(milliseconds: 450),
   }) : _readSnapshot = readSnapshot,
        _isMounted = isMounted,
@@ -180,7 +184,8 @@ class SingboxConfigCoordinator {
        _trimRuntimeStartMemory = trimRuntimeStartMemory,
        _onRuntimeLifecycleTimeout = onRuntimeLifecycleTimeout,
        _cacheStartedBuild = cacheStartedBuild,
-       _syncRuntimeState = syncRuntimeState;
+       _syncRuntimeState = syncRuntimeState,
+       _readRuntimeStatus = readRuntimeStatus ?? SingboxRuntime.instance.status;
 
   final Duration fullServiceRestartDebounce;
 
@@ -197,6 +202,7 @@ class SingboxConfigCoordinator {
   final RuntimeTimeoutHook _onRuntimeLifecycleTimeout;
   final RuntimeVoidHook _cacheStartedBuild;
   final Future<void> Function() _syncRuntimeState;
+  final SingboxRuntimeStatusReader _readRuntimeStatus;
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
@@ -262,7 +268,8 @@ class SingboxConfigCoordinator {
     var snapshot = _readSnapshot();
     var applyToRuntime =
         snapshot.connected || snapshot.runtimeTransitionInProgress;
-    if (!applyToRuntime && applyWhenNativeRunning) {
+    if (!applyToRuntime &&
+        (applyWhenNativeRunning || forceFullServiceRestart)) {
       final status = await _runtimeStatusSnapshot(
         reason: 'config_emit_native_running',
       );
@@ -629,9 +636,7 @@ class SingboxConfigCoordinator {
     required String reason,
   }) async {
     try {
-      return await SingboxRuntime.instance.status().timeout(
-        const Duration(seconds: 2),
-      );
+      return await _readRuntimeStatus().timeout(const Duration(seconds: 2));
     } catch (error) {
       AppLogStore.warning(
         'runtime',
@@ -696,6 +701,7 @@ class SingboxConfigCoordinator {
       tcpFastOpenEnabled: snapshot.tcpFastOpenEnabled,
       tcpMultiPathEnabled: snapshot.tcpMultiPathEnabled,
       tlsFragmentationMode: snapshot.tlsFragmentationMode,
+      allowUntrustedProxyCertificates: snapshot.allowUntrustedProxyCertificates,
       interruptExistingConnections: snapshot.interruptExistingConnections,
       urlTestStrictTolerance: snapshot.urlTestStrictTolerance,
       experimentalFakeIpEnabled: snapshot.experimentalFakeIpEnabled,

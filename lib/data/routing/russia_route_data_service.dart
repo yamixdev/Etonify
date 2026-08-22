@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
-import 'package:meow_client/core/network/remote_download_timeout.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 @visibleForTesting
 bool shouldRebuildRussiaRouteDomainLists({
@@ -236,8 +236,6 @@ class RussiaRouteDataService {
   static const _latestReleaseUrl =
       'https://api.github.com/repos/runetfreedom/russia-v2ray-rules-dat/releases/latest';
   static const _maxSingboxZipBytes = 80 * 1024 * 1024;
-  static const _connectTimeout = remoteDownloadIdleTimeout;
-  static const _responseTimeout = remoteDownloadIdleTimeout;
   static const domainListCommunitySourceName = 'v2fly/domain-list-community';
   static const _domainListCommunityRawBaseUrl =
       'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data';
@@ -896,45 +894,18 @@ class RussiaRouteDataService {
     int? expectedBytes,
     void Function(int completed, int total)? onProgress,
   }) async {
-    final client = HttpClient();
-    client.connectionTimeout = _connectTimeout;
-    client.idleTimeout = _responseTimeout;
-    try {
-      final request = await awaitRemoteDownload(
-        client.getUrl(uri),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.connecting,
-      );
-      request.headers.set(HttpHeaders.userAgentHeader, 'EtonifyRouteData/1');
-      request.headers.set(HttpHeaders.acceptHeader, accept);
-      final response = await awaitRemoteDownload(
-        request.close(),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException(
-          'Failed to download route data: HTTP ${response.statusCode}',
-          uri: uri,
-        );
-      }
-      final builder = BytesBuilder(copy: false);
-      var length = 0;
-      final total = response.contentLength > 0
-          ? response.contentLength
-          : expectedBytes ?? 0;
-      await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
-        length += chunk.length;
-        if (length > maxBytes) {
-          throw HttpException('Route data download is too large', uri: uri);
-        }
-        builder.add(chunk);
-        onProgress?.call(length, total);
-      }
-      return builder.takeBytes();
-    } finally {
-      client.close(force: true);
-    }
+    final result = await VpnAwareRemoteDownloader.instance.fetchBytes(
+      uri: uri,
+      maximumBytes: maxBytes,
+      headers: <String, String>{
+        'User-Agent': 'EtonifyRouteData/1',
+        'Accept': accept,
+      },
+      onProgress: (completed, total) {
+        onProgress?.call(completed, total > 0 ? total : expectedBytes ?? 0);
+      },
+    );
+    return result.bytes ?? Uint8List(0);
   }
 
   Map<String, Uint8List> _extractRequiredRuleSetsFromZip(Uint8List zipBytes) {
@@ -1099,9 +1070,6 @@ class RussiaRouteDataService {
     required Map<String, RussiaRouteCategoryMetadata> previousMetadata,
     required bool force,
   }) async {
-    final client = HttpClient();
-    client.connectionTimeout = _connectTimeout;
-    client.idleTimeout = _responseTimeout;
     final categoryFiles = <String, String>{};
     final metadata = <String, RussiaRouteCategoryMetadata>{};
     final pending = <String>[
@@ -1111,52 +1079,46 @@ class RussiaRouteDataService {
     ];
     var changed = false;
     var completed = 0;
-    try {
+    _emitProgress(
+      RussiaRouteUpdateStage.downloadingCategories,
+      completedItems: 0,
+      totalItems: pending.length,
+    );
+    while (pending.isNotEmpty) {
+      final category = pending.removeLast();
+      if (categoryFiles.containsKey(category)) {
+        continue;
+      }
+      final downloaded = await _downloadDomainListCommunityCategory(
+        category: category,
+        sourceDirectoryPath: sourceDirectoryPath,
+        previousMetadata: previousMetadata[category],
+        force: force,
+      );
+      final content = downloaded.content;
+      categoryFiles[category] = content;
+      metadata[category] = downloaded.metadata;
+      changed = changed || downloaded.changed;
+      completed++;
+      for (final include in _extractIncludedCategories(content)) {
+        if (!categoryFiles.containsKey(include)) {
+          pending.add(include);
+        }
+      }
       _emitProgress(
         RussiaRouteUpdateStage.downloadingCategories,
-        completedItems: 0,
-        totalItems: pending.length,
+        completedItems: completed,
+        totalItems: completed + pending.length,
       );
-      while (pending.isNotEmpty) {
-        final category = pending.removeLast();
-        if (categoryFiles.containsKey(category)) {
-          continue;
-        }
-        final downloaded = await _downloadDomainListCommunityCategory(
-          client,
-          category: category,
-          sourceDirectoryPath: sourceDirectoryPath,
-          previousMetadata: previousMetadata[category],
-          force: force,
-        );
-        final content = downloaded.content;
-        categoryFiles[category] = content;
-        metadata[category] = downloaded.metadata;
-        changed = changed || downloaded.changed;
-        completed++;
-        for (final include in _extractIncludedCategories(content)) {
-          if (!categoryFiles.containsKey(include)) {
-            pending.add(include);
-          }
-        }
-        _emitProgress(
-          RussiaRouteUpdateStage.downloadingCategories,
-          completedItems: completed,
-          totalItems: completed + pending.length,
-        );
-      }
-      return _DownloadedDomainListCommunity(
-        categoryFiles: categoryFiles,
-        metadata: metadata,
-        changed: changed,
-      );
-    } finally {
-      client.close(force: true);
     }
+    return _DownloadedDomainListCommunity(
+      categoryFiles: categoryFiles,
+      metadata: metadata,
+      changed: changed,
+    );
   }
 
-  Future<_DownloadedCategory> _downloadDomainListCommunityCategory(
-    HttpClient client, {
+  Future<_DownloadedCategory> _downloadDomainListCommunityCategory({
     required String category,
     required String sourceDirectoryPath,
     required RussiaRouteCategoryMetadata? previousMetadata,
@@ -1166,26 +1128,22 @@ class RussiaRouteDataService {
     final cacheFile = File(
       '$sourceDirectoryPath/${Uri.encodeComponent(category)}.txt',
     );
-    final request = await awaitRemoteDownload(
-      client.getUrl(uri),
-      uri: uri,
-      phase: RemoteDownloadTimeoutPhase.connecting,
-    );
-    request.headers.set(HttpHeaders.acceptHeader, 'text/plain,*/*');
+    final headers = <String, String>{'Accept': 'text/plain,*/*'};
     if (!force && cacheFile.existsSync()) {
       final etag = previousMetadata?.etag;
       if (etag != null && etag.isNotEmpty) {
-        request.headers.set(HttpHeaders.ifNoneMatchHeader, etag);
+        headers['If-None-Match'] = etag;
       }
       final lastModified = previousMetadata?.lastModified;
       if (lastModified != null && lastModified.isNotEmpty) {
-        request.headers.set(HttpHeaders.ifModifiedSinceHeader, lastModified);
+        headers['If-Modified-Since'] = lastModified;
       }
     }
-    final response = await awaitRemoteDownload(
-      request.close(),
+    final response = await VpnAwareRemoteDownloader.instance.fetchBytes(
       uri: uri,
-      phase: RemoteDownloadTimeoutPhase.awaitingResponse,
+      maximumBytes: _maxDomainListCategoryBytes,
+      headers: headers,
+      acceptedStatusCodes: const <int>{HttpStatus.ok, HttpStatus.notModified},
     );
     if (response.statusCode == HttpStatus.notModified &&
         cacheFile.existsSync()) {
@@ -1195,22 +1153,7 @@ class RussiaRouteDataService {
         changed: false,
       );
     }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw HttpException(
-        'Failed to download route category: HTTP ${response.statusCode}',
-        uri: uri,
-      );
-    }
-    final builder = BytesBuilder(copy: false);
-    var length = 0;
-    await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
-      length += chunk.length;
-      if (length > _maxDomainListCategoryBytes) {
-        throw HttpException('Route category is too large', uri: uri);
-      }
-      builder.add(chunk);
-    }
-    final bytes = builder.takeBytes();
+    final bytes = response.bytes ?? Uint8List(0);
     final content = utf8.decode(bytes, allowMalformed: true);
     final previousContent = cacheFile.existsSync()
         ? await cacheFile.readAsString()
@@ -1221,8 +1164,8 @@ class RussiaRouteDataService {
     return _DownloadedCategory(
       content: content,
       metadata: RussiaRouteCategoryMetadata(
-        etag: response.headers.value(HttpHeaders.etagHeader),
-        lastModified: response.headers.value(HttpHeaders.lastModifiedHeader),
+        etag: response.headers[HttpHeaders.etagHeader],
+        lastModified: response.headers[HttpHeaders.lastModifiedHeader],
         updatedAtMillis: changed
             ? nowMillis
             : previousMetadata?.updatedAtMillis ?? nowMillis,

@@ -9,11 +9,6 @@ const int appSettingsStandardUrlTestConcurrency = 8;
 const int appSettingsStandardUrlTestUnavailableCheckIntervalSeconds = 120;
 const int appSettingsStandardLocationLookupLimit = 1;
 const int appSettingsStandardLocationLookupConcurrency = 1;
-const int appSettingsEconomyUrlTestIntervalSeconds = 3600;
-const int appSettingsEconomyUrlTestConcurrency = 4;
-const int appSettingsEconomyUrlTestUnavailableCheckIntervalSeconds = 300;
-const int appSettingsEconomyLocationLookupLimit = 0;
-const int appSettingsEconomyLocationLookupConcurrency = 1;
 
 class AppSettingsChange {
   const AppSettingsChange({
@@ -23,7 +18,7 @@ class AppSettingsChange {
     this.forceFullServiceRestart = false,
     this.refreshTheme = false,
     this.publishTraffic = false,
-    this.syncRuntimePerformanceFlags = false,
+    this.syncRuntimeFlags = false,
     this.scheduleLocationRefresh = false,
     this.pumpLocationLookupWaiters = false,
   });
@@ -36,7 +31,7 @@ class AppSettingsChange {
   final bool forceFullServiceRestart;
   final bool refreshTheme;
   final bool publishTraffic;
-  final bool syncRuntimePerformanceFlags;
+  final bool syncRuntimeFlags;
   final bool scheduleLocationRefresh;
   final bool pumpLocationLookupWaiters;
 }
@@ -46,11 +41,12 @@ class AppSettingsController {
   String localeCode = 'system';
   AppThemePreference themePreference = AppThemePreference.system;
   String accentColorHex = 'default';
-  AppPerformanceMode performanceMode = AppPerformanceMode.standard;
   bool memoryLimitEnabled = true;
   bool memoryLimitWarningDismissed = false;
   AppUpdateInstallMode updateInstallMode = AppUpdateInstallMode.ask;
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled;
+  bool allowUntrustedProxyCertificates = false;
+  bool allowUntrustedSubscriptionCertificates = false;
   bool hapticEnabled = true;
   bool statusNotificationEnabled = true;
   NotificationTrafficDisplayMode notificationTrafficDisplayMode =
@@ -107,17 +103,6 @@ class AppSettingsController {
     AppThemePreference.light => ThemeMode.light,
   };
 
-  bool get economyMode => performanceMode == AppPerformanceMode.economy;
-
-  bool get coolMode =>
-      performanceMode == AppPerformanceMode.standard ||
-      performanceMode == AppPerformanceMode.economy;
-
-  bool get balancedMode =>
-      performanceMode == AppPerformanceMode.standard ||
-      performanceMode == AppPerformanceMode.economy ||
-      performanceMode == AppPerformanceMode.balanced;
-
   InboundConnectionMode get inboundConnectionMode => vpnInboundEnabled
       ? InboundConnectionMode.vpn
       : InboundConnectionMode.proxy;
@@ -147,11 +132,13 @@ class AppSettingsController {
       hideServerIp: hideServerIp,
       progressiveBlurEnabled: progressiveBlurEnabled,
       progressiveBlurConfigured: true,
-      performanceMode: performanceMode,
       memoryLimitEnabled: memoryLimitEnabled,
       memoryLimitWarningDismissed: memoryLimitWarningDismissed,
       updateInstallMode: updateInstallMode,
       tlsFragmentationMode: tlsFragmentationMode,
+      allowUntrustedProxyCertificates: allowUntrustedProxyCertificates,
+      allowUntrustedSubscriptionCertificates:
+          allowUntrustedSubscriptionCertificates,
       vpnInboundEnabled: vpnInboundEnabled,
       vpnMtu: vpnMtu,
       vpnStrictRoute: vpnStrictRoute,
@@ -212,11 +199,13 @@ class AppSettingsController {
         ? state.proxySort
         : 'source';
     progressiveBlurEnabled = progressiveBlurEnabledOverride;
-    performanceMode = state.performanceMode;
     memoryLimitEnabled = state.memoryLimitEnabled;
     memoryLimitWarningDismissed = state.memoryLimitWarningDismissed;
     updateInstallMode = state.updateInstallMode;
     tlsFragmentationMode = state.tlsFragmentationMode;
+    allowUntrustedProxyCertificates = state.allowUntrustedProxyCertificates;
+    allowUntrustedSubscriptionCertificates =
+        state.allowUntrustedSubscriptionCertificates;
     vpnInboundEnabled = state.vpnInboundEnabled;
     vpnMtu = state.vpnMtu;
     vpnStrictRoute = state.vpnStrictRoute;
@@ -279,7 +268,6 @@ class AppSettingsController {
         state.experimentalFakeIpEnabled &&
         vpnInboundEnabled &&
         splitRoutingMode == SplitRoutingMode.disabled;
-    applyPerformanceModePreset(performanceMode);
   }
 
   AppSettingsChange setLocale(String value) {
@@ -369,20 +357,6 @@ class AppSettingsController {
     return const AppSettingsChange(changed: true, refreshTheme: true);
   }
 
-  AppSettingsChange setPerformanceMode(AppPerformanceMode value) {
-    if (performanceMode == value) {
-      return const AppSettingsChange.none();
-    }
-    performanceMode = value;
-    applyPerformanceModePreset(value);
-    return const AppSettingsChange(
-      changed: true,
-      configReason: 'performance mode changed',
-      scheduleLocationRefresh: true,
-      syncRuntimePerformanceFlags: true,
-    );
-  }
-
   AppSettingsChange setMemoryLimitEnabled(
     bool value, {
     bool warningDismissed = false,
@@ -395,10 +369,7 @@ class AppSettingsController {
     if (warningDismissed) {
       memoryLimitWarningDismissed = true;
     }
-    return const AppSettingsChange(
-      changed: true,
-      syncRuntimePerformanceFlags: true,
-    );
+    return const AppSettingsChange(changed: true, syncRuntimeFlags: true);
   }
 
   AppSettingsChange setUpdateInstallMode(AppUpdateInstallMode value) {
@@ -648,9 +619,7 @@ class AppSettingsController {
 
   AppSettingsChange setUrlTestIntervalSeconds(int value) {
     final normalized = value <= 0
-        ? (economyMode
-              ? appSettingsEconomyUrlTestIntervalSeconds
-              : appSettingsStandardUrlTestIntervalSeconds)
+        ? appSettingsStandardUrlTestIntervalSeconds
         : value;
     if (urlTestIntervalSeconds == normalized) {
       return const AppSettingsChange.none();
@@ -677,9 +646,7 @@ class AppSettingsController {
   }
 
   AppSettingsChange setUrlTestConcurrency(int value) {
-    final fallback = economyMode
-        ? appSettingsEconomyUrlTestConcurrency
-        : appSettingsStandardUrlTestConcurrency;
+    const fallback = appSettingsStandardUrlTestConcurrency;
     final normalized = (value <= 0 ? fallback : value).clamp(1, 8);
     if (urlTestConcurrency == normalized) {
       return const AppSettingsChange.none();
@@ -692,9 +659,7 @@ class AppSettingsController {
   }
 
   AppSettingsChange setUrlTestUnavailableCheckIntervalSeconds(int value) {
-    final fallback = economyMode
-        ? appSettingsEconomyUrlTestUnavailableCheckIntervalSeconds
-        : appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
+    const fallback = appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
     final normalized = (value <= 0 ? fallback : value).clamp(120, 3600);
     if (urlTestUnavailableCheckIntervalSeconds == normalized) {
       return const AppSettingsChange.none();
@@ -751,6 +716,7 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'block leaks changed',
+      forceFullServiceRestart: true,
     );
   }
 
@@ -762,6 +728,7 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'adblock changed',
+      forceFullServiceRestart: true,
     );
   }
 
@@ -792,6 +759,7 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'bypass local network changed',
+      forceFullServiceRestart: true,
     );
   }
 
@@ -905,45 +873,23 @@ class AppSettingsController {
     );
   }
 
-  void applyPerformanceModePreset(AppPerformanceMode mode) {
-    switch (mode) {
-      case AppPerformanceMode.standard:
-        urlTestIntervalSeconds = appSettingsStandardUrlTestIntervalSeconds;
-        urlTestTimeoutSeconds = appSettingsDefaultUrlTestTimeoutSeconds;
-        urlTestConcurrency = appSettingsStandardUrlTestConcurrency;
-        urlTestUnavailableCheckIntervalSeconds =
-            appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
-        locationLookupLimit = appSettingsStandardLocationLookupLimit;
-        locationLookupTimeoutSeconds =
-            appSettingsDefaultLocationLookupTimeoutSeconds;
-        locationLookupConcurrency =
-            appSettingsStandardLocationLookupConcurrency;
-        break;
-      case AppPerformanceMode.economy:
-        urlTestIntervalSeconds = appSettingsEconomyUrlTestIntervalSeconds;
-        urlTestTimeoutSeconds = appSettingsDefaultUrlTestTimeoutSeconds;
-        urlTestConcurrency = appSettingsEconomyUrlTestConcurrency;
-        urlTestUnavailableCheckIntervalSeconds =
-            appSettingsEconomyUrlTestUnavailableCheckIntervalSeconds;
-        locationLookupLimit = appSettingsEconomyLocationLookupLimit;
-        locationLookupTimeoutSeconds =
-            appSettingsDefaultLocationLookupTimeoutSeconds;
-        locationLookupConcurrency = appSettingsEconomyLocationLookupConcurrency;
-        break;
-      case AppPerformanceMode.balanced:
-      case AppPerformanceMode.performance:
-        urlTestIntervalSeconds = appSettingsStandardUrlTestIntervalSeconds;
-        urlTestTimeoutSeconds = appSettingsDefaultUrlTestTimeoutSeconds;
-        urlTestConcurrency = appSettingsStandardUrlTestConcurrency;
-        urlTestUnavailableCheckIntervalSeconds =
-            appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
-        locationLookupLimit = appSettingsStandardLocationLookupLimit;
-        locationLookupTimeoutSeconds =
-            appSettingsDefaultLocationLookupTimeoutSeconds;
-        locationLookupConcurrency =
-            appSettingsStandardLocationLookupConcurrency;
-        break;
+  AppSettingsChange setAllowUntrustedProxyCertificates(bool value) {
+    if (allowUntrustedProxyCertificates == value) {
+      return const AppSettingsChange.none();
     }
+    allowUntrustedProxyCertificates = value;
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'proxy TLS certificate verification changed',
+    );
+  }
+
+  AppSettingsChange setAllowUntrustedSubscriptionCertificates(bool value) {
+    if (allowUntrustedSubscriptionCertificates == value) {
+      return const AppSettingsChange.none();
+    }
+    allowUntrustedSubscriptionCertificates = value;
+    return const AppSettingsChange(changed: true);
   }
 
   void syncDnsPresetValue({required bool isDirect}) {

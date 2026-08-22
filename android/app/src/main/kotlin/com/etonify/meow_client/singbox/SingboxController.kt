@@ -37,8 +37,6 @@ object SingboxController {
     private const val TAG = "MeowSingbox"
     private const val STATUS_EVENT_THROTTLE_MS = 1_000L
     private const val GROUPS_EVENT_THROTTLE_COOL_MS = 1_500L
-    private const val GROUPS_EVENT_THROTTLE_BALANCED_MS = 750L
-    private const val GROUPS_EVENT_THROTTLE_PERFORMANCE_MS = 500L
     private const val GROUPS_DIAGNOSTIC_LOG_THROTTLE_MS = 2_000L
     private const val NO_INTERFACE_REASSERT_THROTTLE_MS = 2_000L
     private const val INTERFACE_DIAL_FAILURE_WINDOW_MS = 8_000L
@@ -783,7 +781,7 @@ object SingboxController {
                     // to sample status every microsecond, so the byte delta was
                     // displayed as a one-second rate and severely understated
                     // notification traffic while burning needless CPU.
-                    statusInterval = commandStatusIntervalNanos(MeowApplication.performanceMode)
+                    statusInterval = 1_000_000_000L
                 }
                 client = Libbox.newCommandClient(createCommandClientHandler(epoch), options)
                 commandClient = client
@@ -1087,11 +1085,7 @@ object SingboxController {
             return
         }
         val now = SystemClock.uptimeMillis()
-        val throttleMs = when (MeowApplication.performanceMode) {
-            "performance" -> GROUPS_EVENT_THROTTLE_PERFORMANCE_MS
-            "balanced" -> GROUPS_EVENT_THROTTLE_BALANCED_MS
-            else -> GROUPS_EVENT_THROTTLE_COOL_MS
-        }
+        val throttleMs = GROUPS_EVENT_THROTTLE_COOL_MS
         val remaining = throttleMs - (now - lastGroupsEventUptimeMs)
         if (remaining > 0) {
             mainHandler.postDelayed({ drainGroupsEvent() }, remaining)
@@ -1151,6 +1145,3 @@ object SingboxController {
         }
     }
 }
-
-internal fun commandStatusIntervalNanos(performanceMode: String): Long =
-    if (performanceMode == "economy") 2_000_000_000L else 1_000_000_000L

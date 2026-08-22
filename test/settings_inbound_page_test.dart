@@ -12,7 +12,7 @@ void main() {
     InboundConnectionMode? selectedMode;
     String? changedUsername;
 
-    await tester.binding.setSurfaceSize(const Size(420, 860));
+    await tester.binding.setSurfaceSize(const Size(420, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
@@ -50,6 +50,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Активно: VPN TUN'), findsOneWidget);
+    await tester.tap(find.text('Расширенные параметры TUN'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Смешанный (Mixed)'), findsOneWidget);
+    expect(
+      find.textContaining('TCP обрабатывает системный стек Android'),
+      findsOneWidget,
+    );
+
+    final mixedDescription = find.textContaining('Смешанный (Mixed)');
+    final mixedTile = find.ancestor(
+      of: mixedDescription,
+      matching: find.byType(ListTile),
+    );
+    await tester.ensureVisible(mixedTile);
+    await tester.tap(mixedTile);
+    await tester.pumpAndSettle();
+    expect(find.text('Системный (System)'), findsOneWidget);
+    expect(find.text('gVisor'), findsOneWidget);
+    await tester.tap(find.text('Системный (System)'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Прокси').first);
     await tester.pumpAndSettle();

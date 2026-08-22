@@ -34,6 +34,18 @@ class FetchResult {
   final String url;
 }
 
+enum SubscriptionFetchRoute { app, underlying }
+
+class _FetchedSubscriptionResponse {
+  const _FetchedSubscriptionResponse({
+    required this.rawContent,
+    required this.headerInfo,
+  });
+
+  final String rawContent;
+  final SubscriptionInfo headerInfo;
+}
+
 /// Fetches a subscription from a URL, parses HTTP response headers for
 /// metadata (subscription-userinfo, profile-title, support-url, etc.),
 /// and then parses the response body into sing-box outbound configs.
@@ -46,6 +58,9 @@ class SubscriptionFetcher {
   static const _maxSubscriptionResponseBytes = 16 * 1024 * 1024;
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
+  static const _defaultOperationTimeout = Duration(seconds: 20);
+  static const _firstRouteTimeout = Duration(seconds: 8);
+  static const _runtimeStatusTimeout = Duration(seconds: 1);
 
   static void configureAppVersion(String value) {
     final normalized = value.trim().replaceFirst(RegExp(r'^v'), '');
@@ -59,6 +74,7 @@ class SubscriptionFetcher {
     String url, {
     SubscriptionInfo? requestInfo,
     Duration? operationTimeout,
+    bool allowInsecureTls = false,
   }) async {
     final uri = parseRequestUri(url);
     _logFetchStart(uri, requestInfo);
@@ -66,86 +82,243 @@ class SubscriptionFetcher {
     try {
       final headers = await _requestHeaders(requestInfo);
       _validateRequestSecurity(uri);
-      if (Platform.isAndroid) {
-        try {
-          final native = await SingboxRuntime.instance
-              .fetchUrlOnUnderlyingNetwork(
-                uri: uri,
-                headers: headers,
-                maxBytes: _maxSubscriptionResponseBytes,
-                timeout: operationTimeout ?? const Duration(seconds: 20),
-              );
-          final statusCode =
-              int.tryParse(native['statusCode']?.toString() ?? '') ?? 0;
-          if (statusCode != HttpStatus.ok) {
-            throw SubscriptionHttpStatusException(statusCode, uri: uri);
-          }
-          final rawContent = native['body']?.toString() ?? '';
-          final responseHeaders = <String, String>{
-            for (final entry in (native['headers'] as Map? ?? const {}).entries)
-              entry.key.toString().toLowerCase(): entry.value.toString(),
-          };
-          AppLogStore.info(
-            'subscription',
-            'fetch complete path=underlying_network bytes=${utf8.encode(rawContent).length}',
-          );
-          return await _buildResult(
-            url: url,
-            rawContent: rawContent,
-            headerValue: (name) => responseHeaders[name.toLowerCase()],
-          );
-        } on SubscriptionContentException {
-          rethrow;
-        } on HttpException {
-          rethrow;
-        } catch (error) {
+      final totalTimeout =
+          operationTimeout != null && operationTimeout > Duration.zero
+          ? operationTimeout
+          : _defaultOperationTimeout;
+      final vpnRuntimeReady = await _isVpnRuntimeReady();
+      final routes = routeOrderForTest(
+        android: Platform.isAndroid,
+        vpnRuntimeReady: vpnRuntimeReady,
+        allowInsecureTls: allowInsecureTls,
+      );
+      AppLogStore.info(
+        'subscription',
+        'fetch route order=${routes.map((route) => route.name).join('->')} '
+            'vpnRuntimeReady=$vpnRuntimeReady',
+      );
+      return await runRouteAttemptsThenFinalizeForTest<
+        _FetchedSubscriptionResponse,
+        FetchResult
+      >(
+        routes: routes,
+        totalTimeout: totalTimeout,
+        attempt: (route, timeout) => switch (route) {
+          SubscriptionFetchRoute.app => _fetchViaAppRoute(
+            uri: uri,
+            headers: headers,
+            timeout: timeout,
+            allowInsecureTls: allowInsecureTls,
+          ),
+          SubscriptionFetchRoute.underlying => _fetchViaUnderlyingNetwork(
+            uri: uri,
+            headers: headers,
+            timeout: timeout,
+          ),
+        },
+        finalize: (response) => _buildResult(url: url, response: response),
+        onFailure: (route, error) {
           AppLogStore.warning(
             'subscription',
-            'underlying-network fetch unavailable, falling back to app route: $error',
+            'fetch path=${route.name} failed: $error',
           );
-        }
-      }
-
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
-      Timer? operationTimeoutTimer;
-      var operationTimedOut = false;
-      if (operationTimeout != null && operationTimeout > Duration.zero) {
-        operationTimeoutTimer = Timer(operationTimeout, () {
-          operationTimedOut = true;
-          client.close(force: true);
-        });
-      }
-      try {
-        final response = await _openWithSafeRedirects(client, uri, headers);
-
-        if (response.statusCode != 200) {
-          throw SubscriptionHttpStatusException(response.statusCode, uri: uri);
-        }
-
-        // Read body
-        final rawContent = await _readUtf8Body(response);
-        return await _buildResult(
-          url: url,
-          rawContent: rawContent,
-          headerValue: (name) {
-            final values = response.headers[name];
-            return values == null || values.isEmpty ? null : values.first;
-          },
-        );
-      } catch (error) {
-        if (operationTimedOut) {
-          throw TimeoutException('Subscription request timed out');
-        }
-        rethrow;
-      } finally {
-        operationTimeoutTimer?.cancel();
-        client.close(force: true);
-      }
+        },
+      );
     } catch (error, stackTrace) {
       await _logFetchFailure(uri: uri, error: error, stackTrace: stackTrace);
       rethrow;
     }
+  }
+
+  static Future<bool> _isVpnRuntimeReady() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    try {
+      final status = await SingboxRuntime.instance.status().timeout(
+        _runtimeStatusTimeout,
+      );
+      return status['running'] == true &&
+          status['mode']?.toString() == 'vpn' &&
+          status['nativeRecoveryPending'] != true;
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'runtime status unavailable before fetch: $error',
+      );
+      return false;
+    }
+  }
+
+  static Future<_FetchedSubscriptionResponse> _fetchViaUnderlyingNetwork({
+    required Uri uri,
+    required Map<String, String> headers,
+    required Duration timeout,
+  }) async {
+    final native = await SingboxRuntime.instance.fetchUrlOnUnderlyingNetwork(
+      uri: uri,
+      headers: headers,
+      maxBytes: _maxSubscriptionResponseBytes,
+      timeout: timeout,
+    );
+    final statusCode =
+        int.tryParse(native['statusCode']?.toString() ?? '') ?? 0;
+    if (statusCode != HttpStatus.ok) {
+      throw SubscriptionHttpStatusException(statusCode, uri: uri);
+    }
+    final rawContent = native['body']?.toString() ?? '';
+    final responseHeaders = <String, String>{
+      for (final entry in (native['headers'] as Map? ?? const {}).entries)
+        entry.key.toString().toLowerCase(): entry.value.toString(),
+    };
+    AppLogStore.info(
+      'subscription',
+      'fetch complete path=underlying bytes=${utf8.encode(rawContent).length}',
+    );
+    return _buildFetchedResponse(
+      rawContent: rawContent,
+      headerValue: (name) => responseHeaders[name.toLowerCase()],
+    );
+  }
+
+  static Future<_FetchedSubscriptionResponse> _fetchViaAppRoute({
+    required Uri uri,
+    required Map<String, String> headers,
+    required Duration timeout,
+    required bool allowInsecureTls,
+  }) async {
+    final client = HttpClient();
+    if (allowInsecureTls) {
+      // Keep this exception scoped to this short-lived subscription client.
+      // A global HttpOverrides would silently weaken unrelated HTTPS traffic.
+      client.badCertificateCallback = (_, _, _) => true;
+    }
+    client.connectionTimeout = timeout < const Duration(seconds: 15)
+        ? timeout
+        : const Duration(seconds: 15);
+    Timer? timeoutTimer;
+    var timedOut = false;
+    if (timeout > Duration.zero) {
+      timeoutTimer = Timer(timeout, () {
+        timedOut = true;
+        client.close(force: true);
+      });
+    }
+    try {
+      final response = await _openWithSafeRedirects(client, uri, headers);
+      if (response.statusCode != HttpStatus.ok) {
+        throw SubscriptionHttpStatusException(response.statusCode, uri: uri);
+      }
+      final rawContent = await _readUtf8Body(response);
+      final result = _buildFetchedResponse(
+        rawContent: rawContent,
+        headerValue: (name) {
+          final values = response.headers[name];
+          return values == null || values.isEmpty ? null : values.first;
+        },
+      );
+      AppLogStore.info(
+        'subscription',
+        'fetch complete path=app bytes=${utf8.encode(rawContent).length}',
+      );
+      return result;
+    } catch (error) {
+      if (timedOut) {
+        throw TimeoutException('Subscription request timed out via app route');
+      }
+      rethrow;
+    } finally {
+      timeoutTimer?.cancel();
+      client.close(force: true);
+    }
+  }
+
+  @visibleForTesting
+  static List<SubscriptionFetchRoute> routeOrderForTest({
+    required bool android,
+    required bool vpnRuntimeReady,
+    bool allowInsecureTls = false,
+  }) {
+    // The native underlying-network fetcher intentionally retains Android's
+    // certificate verification. A trust-all X509TrustManager would weaken a
+    // wider native surface and is commonly flagged by security scanners.
+    if (allowInsecureTls) {
+      return const [SubscriptionFetchRoute.app];
+    }
+    if (!android) {
+      return const [SubscriptionFetchRoute.app];
+    }
+    return vpnRuntimeReady
+        ? const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying]
+        : const [SubscriptionFetchRoute.underlying, SubscriptionFetchRoute.app];
+  }
+
+  @visibleForTesting
+  static Future<T> runRouteAttemptsForTest<T>({
+    required List<SubscriptionFetchRoute> routes,
+    required Duration totalTimeout,
+    required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
+    attempt,
+    void Function(SubscriptionFetchRoute route, Object error)? onFailure,
+  }) async {
+    if (routes.isEmpty) {
+      throw StateError('No subscription fetch routes are available');
+    }
+    final stopwatch = Stopwatch()..start();
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    for (var index = 0; index < routes.length; index++) {
+      final remaining = totalTimeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) {
+        break;
+      }
+      final routesAfterThis = routes.length - index - 1;
+      final timeout = routesAfterThis == 0
+          ? remaining
+          : _firstAttemptBudget(remaining, routesAfterThis);
+      final route = routes[index];
+      try {
+        return await attempt(route, timeout).timeout(timeout);
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+        onFailure?.call(route, error);
+      }
+    }
+    if (lastError != null && lastStackTrace != null) {
+      Error.throwWithStackTrace(lastError, lastStackTrace);
+    }
+    throw TimeoutException('Subscription request timed out');
+  }
+
+  @visibleForTesting
+  static Future<R> runRouteAttemptsThenFinalizeForTest<T, R>({
+    required List<SubscriptionFetchRoute> routes,
+    required Duration totalTimeout,
+    required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
+    attempt,
+    required Future<R> Function(T response) finalize,
+    void Function(SubscriptionFetchRoute route, Object error)? onFailure,
+  }) async {
+    final response = await runRouteAttemptsForTest<T>(
+      routes: routes,
+      totalTimeout: totalTimeout,
+      attempt: attempt,
+      onFailure: onFailure,
+    );
+    return finalize(response);
+  }
+
+  static Duration _firstAttemptBudget(Duration remaining, int routesAfterThis) {
+    const minimumFallbackBudget = Duration(seconds: 3);
+    final reserved = minimumFallbackBudget * routesAfterThis;
+    final available = remaining - reserved;
+    if (available <= Duration.zero) {
+      return Duration(
+        microseconds: max(1, remaining.inMicroseconds ~/ (routesAfterThis + 1)),
+      );
+    }
+    return available < _firstRouteTimeout ? available : _firstRouteTimeout;
   }
 
   static Future<Map<String, String>> _requestHeaders(
@@ -261,17 +434,27 @@ class SubscriptionFetcher {
     Map<String, String> headers,
   ) => _headersForCrossOriginRedirect(headers);
 
-  static Future<FetchResult> _buildResult({
-    required String url,
+  static _FetchedSubscriptionResponse _buildFetchedResponse({
     required String rawContent,
     required String? Function(String name) headerValue,
-  }) async {
+  }) {
     _validateResponseContent(rawContent);
-    final headerInfo = _parseHeaderValues(headerValue);
-    final parseResult = await SubscriptionParser.parseInBackground(rawContent);
-    return FetchResult(
+    return _FetchedSubscriptionResponse(
       rawContent: rawContent,
-      headerInfo: _mergeBodyMeta(headerInfo, parseResult.bodyMeta),
+      headerInfo: _parseHeaderValues(headerValue),
+    );
+  }
+
+  static Future<FetchResult> _buildResult({
+    required String url,
+    required _FetchedSubscriptionResponse response,
+  }) async {
+    final parseResult = await SubscriptionParser.parseInBackground(
+      response.rawContent,
+    );
+    return FetchResult(
+      rawContent: response.rawContent,
+      headerInfo: _mergeBodyMeta(response.headerInfo, parseResult.bodyMeta),
       parseResult: parseResult,
       url: url,
     );

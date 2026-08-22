@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
 import 'package:meow_client/app/bounded_task_runner.dart';
 import 'package:meow_client/core/demo_utils.dart';
 import 'package:meow_client/core/security/sensitive_clipboard.dart';
@@ -49,6 +50,18 @@ final _kSingleLineFormatter = FilteringTextInputFormatter.deny(
   RegExp(r'[\r\n]'),
 );
 
+String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
+  final locale = Localizations.localeOf(context);
+  final localeName = locale.toLanguageTag();
+  final updatedAt = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+  final datePattern = locale.languageCode == 'ru'
+      ? "d MMMM y 'года'"
+      : 'MMMM d, y';
+  final date = DateFormat(datePattern, localeName).format(updatedAt);
+  final time = DateFormat('HH:mm:ss', localeName).format(updatedAt);
+  return AppLocalizations.of(context).lastUpdatedDateTime(date, time);
+}
+
 int _visibleProxyCount(Iterable<Outbound> outbounds) {
   return outbounds
       .where((outbound) => !outbound.info.deleted)
@@ -75,17 +88,15 @@ class SubscriptionsPage extends StatefulWidget {
   const SubscriptionsPage({
     super.key,
     this.activeSubscriptionId,
-    this.activeWorkingServerCount,
-    this.activeCheckedServerCount,
     this.openAddOnStart = false,
     this.hapticEnabled = true,
+    this.allowUntrustedSubscriptionCertificates = false,
   });
 
   final String? activeSubscriptionId;
-  final int? activeWorkingServerCount;
-  final int? activeCheckedServerCount;
   final bool openAddOnStart;
   final bool hapticEnabled;
+  final bool allowUntrustedSubscriptionCertificates;
 
   @override
   State<SubscriptionsPage> createState() => _SubscriptionsPageState();
@@ -471,6 +482,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                 requestInfo: prepared.requestInfo,
                 operationTimeout: _kSubscriptionOperationTimeout,
                 isCancelled: result.isCancelled,
+                allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
               ),
       );
       final created = createdResult.subscription;
@@ -637,6 +649,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         SubscriptionStore.refresh(
           id,
           operationTimeout: _kSubscriptionOperationTimeout,
+          allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
         ),
       );
       if (mounted) {
@@ -703,6 +716,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         SubscriptionStore.refresh(
           id,
           operationTimeout: _kSubscriptionOperationTimeout,
+          allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
         ),
       );
       if (!mounted) {
@@ -750,6 +764,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                     () => SubscriptionStore.refresh(
                       sub.id,
                       operationTimeout: _kSubscriptionOperationTimeout,
+                      allowInsecureTls:
+                          widget.allowUntrustedSubscriptionCertificates,
                     ),
               )
               .toList(growable: false),
@@ -1134,18 +1150,6 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                                           return _SubscriptionCard(
                                             subscription: sub,
                                             serverCount: serverCount,
-                                            workingServerCount:
-                                                sub.id ==
-                                                    widget.activeSubscriptionId
-                                                ? widget
-                                                      .activeWorkingServerCount
-                                                : null,
-                                            checkedServerCount:
-                                                sub.id ==
-                                                    widget.activeSubscriptionId
-                                                ? widget
-                                                      .activeCheckedServerCount
-                                                : null,
                                             rawLooksNonEmpty: rawLooksNonEmpty,
                                             active:
                                                 sub.id ==

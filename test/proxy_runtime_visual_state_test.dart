@@ -48,10 +48,9 @@ void main() {
     });
     final revisionBefore = store.revision.value;
 
-    store.updateTags(
-      const {'active': ProxyRuntimeVisualState()},
-      notifyRevision: false,
-    );
+    store.updateTags(const {
+      'active': ProxyRuntimeVisualState(),
+    }, notifyRevision: false);
 
     expect(active.value?.latency, isNull);
     expect(store.valueFor('other')?.latency, 80);

@@ -33,4 +33,45 @@ class RuntimeRecoveryGateTest {
 
         assertTrue(gate.tryAcquire(100L))
     }
+
+    @Test
+    fun `only latest handover probe remains current`() {
+        val gate = NetworkHandoverProbeGate()
+
+        val wifiProbe = gate.replace()
+        val mobileProbe = gate.replace()
+
+        assertFalse(gate.isCurrent(wifiProbe))
+        assertTrue(gate.isCurrent(mobileProbe))
+    }
+
+    @Test
+    fun `only the latest handover probe can be consumed once`() {
+        val gate = NetworkHandoverProbeGate()
+
+        val wifiProbe = gate.replace()
+        val mobileProbe = gate.replace()
+
+        assertFalse(gate.tryConsume(wifiProbe))
+        assertTrue(gate.tryConsume(mobileProbe))
+        assertFalse(gate.tryConsume(mobileProbe))
+    }
+
+    @Test
+    fun `stopping runtime invalidates delayed handover probe`() {
+        val gate = NetworkHandoverProbeGate()
+        val probe = gate.replace()
+
+        gate.invalidate()
+
+        assertFalse(gate.isCurrent(probe))
+    }
+
+    @Test
+    fun `handover probe is limited to physical network events`() {
+        assertTrue(isNetworkHandoverRecoverySource("network_change:wifi_to_mobile"))
+        assertTrue(isNetworkHandoverRecoverySource("network_change:wifi_identity"))
+        assertFalse(isNetworkHandoverRecoverySource("screen_on"))
+        assertFalse(isNetworkHandoverRecoverySource("user_present"))
+    }
 }

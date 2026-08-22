@@ -69,11 +69,16 @@ class LinkParser {
       p['packet_encoding'] ?? p['packetEncoding'],
     );
 
-    final tls = _buildTls(p);
-    if (tls != null) result['tls'] = tls;
-
     final transport = _buildTransport(p);
     if (transport != null) result['transport'] = transport;
+
+    final tls = _buildTls(p);
+    if (tls != null) {
+      if (transport?['type'] == 'xhttp' && !tls.containsKey('alpn')) {
+        tls['alpn'] = const ['h2', 'http/1.1'];
+      }
+      result['tls'] = tls;
+    }
 
     result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
     return result;

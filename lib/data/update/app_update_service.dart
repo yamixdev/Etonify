@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-import 'package:meow_client/core/network/remote_download_timeout.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
 import 'package:meow_client/logging/app_log_store.dart';
@@ -332,6 +332,7 @@ class AppUpdateService {
   static const _assetTokens = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
   static const _manifestAssetName = 'etonify-update.json';
   static const _maxReleaseMetadataBytes = 1024 * 1024;
+  static const _maxUpdateApkBytes = 512 * 1024 * 1024;
   Future<AppUpdateCheckResult>? _checkInFlight;
 
   Future<Box<dynamic>> _openBox() async {
@@ -649,39 +650,22 @@ class AppUpdateService {
   }
 
   Future<Map<String, dynamic>> _fetchLatestRelease() async {
-    final client = HttpClient();
     final uri = Uri.parse(_latestReleaseUrl);
-    try {
-      client.connectionTimeout = remoteDownloadIdleTimeout;
-      client.idleTimeout = remoteDownloadIdleTimeout;
-      final request = await awaitRemoteDownload(
-        client.getUrl(uri),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.connecting,
-      );
-      request.headers.set('Accept', 'application/vnd.github+json');
-      request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await awaitRemoteDownload(
-        request.close(),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('GitHub returned HTTP ${response.statusCode}');
-      }
-      final bytes = await readRemoteDownloadBytes(
-        response,
-        uri: uri,
-        maximumBytes: _maxReleaseMetadataBytes,
-      );
-      final decoded = jsonDecode(utf8.decode(bytes, allowMalformed: false));
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('GitHub response is not an object.');
-      }
-      return decoded;
-    } finally {
-      client.close(force: true);
+    final result = await VpnAwareRemoteDownloader.instance.fetchBytes(
+      uri: uri,
+      maximumBytes: _maxReleaseMetadataBytes,
+      headers: const <String, String>{
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'Etonify-Android-Updater',
+      },
+    );
+    final decoded = jsonDecode(
+      utf8.decode(result.bytes ?? const <int>[], allowMalformed: false),
+    );
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('GitHub response is not an object.');
     }
+    return decoded;
   }
 
   Future<AppUpdateManifest?> _fetchReleaseManifest(Object? rawAssets) async {
@@ -697,36 +681,21 @@ class AppUpdateService {
       manifestAsset?['browser_download_url']?.toString().trim() ?? '',
     );
     if (url == null || !url.hasScheme) return null;
-    final client = HttpClient();
     try {
-      client.connectionTimeout = remoteDownloadIdleTimeout;
-      client.idleTimeout = remoteDownloadIdleTimeout;
-      final request = await awaitRemoteDownload(
-        client.getUrl(url),
+      final result = await VpnAwareRemoteDownloader.instance.fetchBytes(
         uri: url,
-        phase: RemoteDownloadTimeoutPhase.connecting,
+        maximumBytes: 256 * 1024,
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'User-Agent': 'Etonify-Android-Updater',
+        },
       );
-      request.headers.set('Accept', 'application/json');
-      request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await awaitRemoteDownload(
-        request.close(),
-        uri: url,
-        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
+      return AppUpdateManifest.fromJson(
+        jsonDecode(utf8.decode(result.bytes ?? const <int>[])),
       );
-      if (response.statusCode != HttpStatus.ok) return null;
-      final bytes = await limitRemoteDownloadIdle(response, uri: url)
-          .fold<List<int>>(<int>[], (all, chunk) {
-            if (all.length + chunk.length > 256 * 1024) {
-              throw const FormatException('Update manifest is too large.');
-            }
-            return all..addAll(chunk);
-          });
-      return AppUpdateManifest.fromJson(jsonDecode(utf8.decode(bytes)));
     } catch (error) {
       AppLogStore.warning('updates', 'Update manifest unavailable: $error');
       return null;
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -804,36 +773,24 @@ class AppUpdateService {
     if (temp.existsSync()) {
       await temp.delete();
     }
-    final client = HttpClient();
     final startedAt = DateTime.now();
     var downloaded = 0;
+    var totalBytes = info.asset.sizeBytes;
     var lastEmitAt = startedAt;
     try {
       final uri = Uri.parse(info.asset.downloadUrl);
-      client.connectionTimeout = remoteDownloadIdleTimeout;
-      client.idleTimeout = remoteDownloadIdleTimeout;
-      final request = await awaitRemoteDownload(
-        client.getUrl(uri),
+      final result = await VpnAwareRemoteDownloader.instance.downloadToFile(
         uri: uri,
-        phase: RemoteDownloadTimeoutPhase.connecting,
-      );
-      request.headers.set('User-Agent', 'Etonify-Android-Updater');
-      final response = await awaitRemoteDownload(
-        request.close(),
-        uri: uri,
-        phase: RemoteDownloadTimeoutPhase.awaitingResponse,
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('Download returned HTTP ${response.statusCode}');
-      }
-      final totalBytes = response.contentLength > 0
-          ? response.contentLength
-          : info.asset.sizeBytes;
-      final sink = temp.openWrite();
-      try {
-        await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
-          downloaded += chunk.length;
-          sink.add(chunk);
+        destinationPath: temp.path,
+        maximumBytes: _maxUpdateApkBytes,
+        headers: const <String, String>{
+          'User-Agent': 'Etonify-Android-Updater',
+        },
+        onProgress: (completed, total) {
+          downloaded = completed;
+          if (total > 0) {
+            totalBytes = total;
+          }
           final now = DateTime.now();
           if (now.difference(lastEmitAt) >= const Duration(milliseconds: 250)) {
             lastEmitAt = now;
@@ -846,10 +803,11 @@ class AppUpdateService {
               ),
             );
           }
-        }
-      } finally {
-        await sink.flush();
-        await sink.close();
+        },
+      );
+      downloaded = result.downloadedBytes;
+      if (totalBytes <= 0) {
+        totalBytes = downloaded;
       }
       if (target.existsSync()) {
         await target.delete();
@@ -903,7 +861,6 @@ class AppUpdateService {
       );
       await cleanupOldDownloads(keepPath: target.path);
     } finally {
-      client.close(force: true);
       if (temp.existsSync()) {
         await temp.delete();
       }

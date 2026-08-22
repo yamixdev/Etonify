@@ -13,7 +13,6 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
-import android.os.Debug
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -33,6 +32,7 @@ import com.etonify.meow_client.singbox.MeowLogSanitizer
 import com.etonify.meow_client.singbox.MeowProxyService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
+import com.etonify.meow_client.singbox.OwnProcessMemory
 import com.etonify.meow_client.singbox.RuntimeMeasurement
 import com.etonify.meow_client.singbox.SingboxController
 import com.etonify.meow_client.generated.ApkInspectionMessage
@@ -42,6 +42,8 @@ import com.etonify.meow_client.generated.InstalledAppMessage
 import com.etonify.meow_client.generated.NetworkInterfaceStateMessage
 import com.etonify.meow_client.generated.RuntimeFlagsMessage
 import com.etonify.meow_client.generated.SingboxHostApi
+import com.etonify.meow_client.generated.UnderlyingNetworkDownloadRequestMessage
+import com.etonify.meow_client.generated.UnderlyingNetworkDownloadResponseMessage
 import com.etonify.meow_client.generated.UnderlyingNetworkFetchRequestMessage
 import com.etonify.meow_client.generated.UnderlyingNetworkFetchResponseMessage
 import com.etonify.meow_client.generated.UrlTestRequestMessage
@@ -210,6 +212,28 @@ class MainActivity : FlutterFragmentActivity() {
         return UnderlyingNetworkFetchResponseMessage(
             statusCode = (response["statusCode"] as? Number)?.toLong() ?: 0L,
             body = response["body"]?.toString().orEmpty(),
+            headers = headers,
+            finalUrl = response["finalUrl"]?.toString().orEmpty(),
+            network = response["network"]?.toString().orEmpty(),
+        )
+    }
+
+    private fun underlyingNetworkDownloadResponse(
+        response: Map<String, Any>,
+    ): UnderlyingNetworkDownloadResponseMessage {
+        val headers = (response["headers"] as? Map<*, *>)
+            .orEmpty()
+            .mapNotNull { (name, value) ->
+                val normalizedName = name?.toString()?.trim().orEmpty()
+                if (normalizedName.isEmpty()) {
+                    null
+                } else {
+                    HttpHeaderMessage(normalizedName, value?.toString().orEmpty())
+                }
+            }
+        return UnderlyingNetworkDownloadResponseMessage(
+            statusCode = (response["statusCode"] as? Number)?.toLong() ?: 0L,
+            downloadedBytes = (response["downloadedBytes"] as? Number)?.toLong() ?: 0L,
             headers = headers,
             finalUrl = response["finalUrl"]?.toString().orEmpty(),
             network = response["network"]?.toString().orEmpty(),
@@ -615,6 +639,123 @@ class MainActivity : FlutterFragmentActivity() {
                 connection.disconnect()
             }
         }
+    }
+
+    private fun downloadUrlOnUnderlyingNetwork(
+        rawUrl: String,
+        headers: Map<String, String>,
+        destinationPath: String,
+        maxBytes: Long,
+        responseStartTimeoutMs: Int,
+        idleTimeoutMs: Int,
+    ): Map<String, Any> {
+        val network = MeowDefaultNetworkMonitor.require()
+        val destination = requirePrivateDownloadTarget(destinationPath)
+        val boundedResponseTimeout = responseStartTimeoutMs.coerceIn(1_000, 30_000)
+        val boundedIdleTimeout = idleTimeoutMs.coerceIn(1_000, 60_000)
+        var url = URL(rawUrl)
+        var requestHeaders = headers.toMap()
+        var redirectCount = 0
+        try {
+            while (true) {
+                validateSubscriptionRequest(url)
+                val connection = network.openConnection(url) as HttpURLConnection
+                val abortBeforeResponse = Runnable { connection.disconnect() }
+                try {
+                    connection.requestMethod = "GET"
+                    connection.instanceFollowRedirects = false
+                    connection.connectTimeout = boundedResponseTimeout
+                    // Before responseCode this timeout limits time to the first
+                    // response bytes. Once headers arrive, use the longer
+                    // per-read idle timeout for the actual file stream.
+                    connection.readTimeout = boundedResponseTimeout
+                    connection.useCaches = false
+                    for ((name, value) in requestHeaders) {
+                        if (name.isBlank() || name.any { it == '\r' || it == '\n' }) continue
+                        if (value.any { it == '\r' || it == '\n' }) continue
+                        connection.setRequestProperty(name, value)
+                    }
+                    mainHandler.postDelayed(
+                        abortBeforeResponse,
+                        boundedResponseTimeout.toLong(),
+                    )
+                    val statusCode = connection.responseCode
+                    mainHandler.removeCallbacks(abortBeforeResponse)
+                    if (statusCode in SUBSCRIPTION_REDIRECT_CODES) {
+                        require(redirectCount < MAX_SUBSCRIPTION_REDIRECTS) {
+                            "Too many remote download redirects."
+                        }
+                        val location = connection.getHeaderField("Location")?.trim().orEmpty()
+                        require(location.isNotEmpty()) { "Remote redirect has no Location header." }
+                        val redirectedUrl = URL(url, location)
+                        require(!(url.protocol == "https" && redirectedUrl.protocol == "http")) {
+                            "HTTPS to HTTP remote redirect is not allowed."
+                        }
+                        if (!sameOrigin(url, redirectedUrl)) {
+                            requestHeaders = requestHeaders.filterKeys(::isSafeCrossOriginHeader)
+                        }
+                        url = redirectedUrl
+                        redirectCount++
+                        continue
+                    }
+
+                    val declaredLength = connection.contentLengthLong
+                    require(declaredLength <= maxBytes || declaredLength < 0L) {
+                        "Response is larger than $maxBytes bytes."
+                    }
+                    var downloadedBytes = 0L
+                    if (statusCode in 200..299) {
+                        connection.readTimeout = boundedIdleTimeout
+                        destination.parentFile?.mkdirs()
+                        connection.inputStream.use { input ->
+                            FileOutputStream(destination, false).use { output ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    val read = input.read(buffer)
+                                    if (read < 0) break
+                                    downloadedBytes += read
+                                    require(downloadedBytes <= maxBytes) {
+                                        "Response is larger than $maxBytes bytes."
+                                    }
+                                    output.write(buffer, 0, read)
+                                }
+                                output.fd.sync()
+                            }
+                        }
+                    }
+                    val responseHeaders = linkedMapOf<String, String>()
+                    for ((name, values) in connection.headerFields) {
+                        if (name == null || values.isNullOrEmpty()) continue
+                        responseHeaders[name.lowercase()] = values.joinToString(", ")
+                    }
+                    return linkedMapOf(
+                        "statusCode" to statusCode,
+                        "downloadedBytes" to downloadedBytes,
+                        "headers" to responseHeaders,
+                        "finalUrl" to url.toString(),
+                        "network" to MeowDefaultNetworkMonitor.describeNetwork(network),
+                    )
+                } finally {
+                    mainHandler.removeCallbacks(abortBeforeResponse)
+                    connection.disconnect()
+                }
+            }
+        } catch (error: Throwable) {
+            runCatching { if (destination.exists()) destination.delete() }
+            throw error
+        }
+    }
+
+    private fun requirePrivateDownloadTarget(rawPath: String): File {
+        require(rawPath.isNotBlank()) { "Download destination is empty." }
+        val destination = File(rawPath).canonicalFile
+        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
+        val allowed = allowedRoots.any { root ->
+            destination.path.startsWith(root.path + File.separator)
+        }
+        require(allowed) { "Download destination must be inside private app storage." }
+        require(!destination.isDirectory) { "Download destination is a directory." }
+        return destination
     }
 
     private fun validateSubscriptionRequest(url: URL) {
@@ -1138,9 +1279,7 @@ class MainActivity : FlutterFragmentActivity() {
         val memoryInfo = ActivityManager.MemoryInfo()
         val activityManager = getSystemService(ActivityManager::class.java)
         activityManager.getMemoryInfo(memoryInfo)
-        val processMemory = activityManager.getProcessMemoryInfo(
-            intArrayOf(android.os.Process.myPid()),
-        ).firstOrNull()
+        val processMemory = OwnProcessMemory.capture()
         val runtime = Runtime.getRuntime()
         val snapshotUptimeMs = SystemClock.elapsedRealtime()
         val processCpuMs = android.os.Process.getElapsedCpuTime()
@@ -1164,30 +1303,29 @@ class MainActivity : FlutterFragmentActivity() {
         val batteryTemperatureTenths = batteryIntent
             ?.getIntExtra("temperature", Int.MIN_VALUE)
             ?: Int.MIN_VALUE
-        fun memoryStatKb(name: String): Long? {
-            return processMemory?.getMemoryStat(name)?.toLongOrNull()
-        }
         return linkedMapOf(
             "pid" to android.os.Process.myPid(),
-            "runtimeMode" to MeowApplication.performanceMode,
             "wakeLockEnabled" to MeowApplication.wakeLockEnabled,
             "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
             "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
             "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
             "serviceState" to MeowApplication.describeRecordedServiceState(),
             "runtimeIntent" to MeowApplication.describeRuntimeIntent(),
-            "totalPssKb" to processMemory?.totalPss,
-            "totalPrivateDirtyKb" to processMemory?.totalPrivateDirty,
-            "dalvikPssKb" to processMemory?.dalvikPss,
-            "nativePssKb" to processMemory?.nativePss,
-            "otherPssKb" to processMemory?.otherPss,
-            "graphicsPssKb" to memoryStatKb("summary.graphics"),
-            "codePssKb" to memoryStatKb("summary.code"),
-            "stackPssKb" to memoryStatKb("summary.stack"),
-            "privateOtherPssKb" to memoryStatKb("summary.private-other"),
-            "systemPssKb" to memoryStatKb("summary.system"),
-            "nativeHeapAllocatedKb" to (Debug.getNativeHeapAllocatedSize() / 1024L),
-            "nativeHeapSizeKb" to (Debug.getNativeHeapSize() / 1024L),
+            "totalPssKb" to processMemory.totalPssKb,
+            "totalRssKb" to processMemory.totalRssKb,
+            "totalSwapPssKb" to processMemory.totalSwapPssKb,
+            "totalSwapKb" to processMemory.totalSwapKb,
+            "totalPrivateDirtyKb" to processMemory.totalPrivateDirtyKb,
+            "dalvikPssKb" to processMemory.dalvikPssKb,
+            "nativePssKb" to processMemory.nativePssKb,
+            "otherPssKb" to processMemory.otherPssKb,
+            "graphicsPssKb" to processMemory.graphicsPssKb,
+            "codePssKb" to processMemory.codePssKb,
+            "stackPssKb" to processMemory.stackPssKb,
+            "privateOtherPssKb" to processMemory.privateOtherPssKb,
+            "systemPssKb" to processMemory.systemPssKb,
+            "nativeHeapAllocatedKb" to processMemory.nativeHeapAllocatedKb,
+            "nativeHeapSizeKb" to processMemory.nativeHeapSizeKb,
             "javaHeapUsedKb" to ((runtime.totalMemory() - runtime.freeMemory()) / 1024L),
             "javaHeapMaxKb" to (runtime.maxMemory() / 1024L),
             "coreMemoryBytes" to SingboxController.coreMemoryBytes,
@@ -1510,7 +1648,6 @@ class MainActivity : FlutterFragmentActivity() {
                                 "wakeLockEnabled" to MeowApplication.wakeLockEnabled,
                                 "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
                                 "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
-                                "performanceMode" to MeowApplication.performanceMode,
                                 "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
                             ),
                         ),
@@ -1531,7 +1668,6 @@ class MainActivity : FlutterFragmentActivity() {
                         MeowApplication.networkHeartbeatIntervalSeconds = it
                         heartbeatChanged = true
                     }
-                    flags.performanceMode?.let { MeowApplication.performanceMode = it }
                     flags.memoryLimitEnabled?.let { MeowApplication.memoryLimitEnabled = it }
                     if (heartbeatChanged) {
                         MeowDefaultNetworkMonitor.refreshHeartbeat()
@@ -1789,6 +1925,60 @@ class MainActivity : FlutterFragmentActivity() {
                         }.onFailure { error ->
                             mainHandler.post {
                                 callback(errorResult("underlying_http_failed", error.message ?: error.toString()))
+                            }
+                        }
+                    }
+                }
+
+                override fun downloadUrlOnUnderlyingNetwork(
+                    request: UnderlyingNetworkDownloadRequestMessage,
+                    callback: (Result<UnderlyingNetworkDownloadResponseMessage>) -> Unit,
+                ) {
+                    val url = request.url.trim()
+                    val destinationPath = request.destinationPath.trim()
+                    if (url.isEmpty()) {
+                        callback(errorResult("missing_url", "URL is empty"))
+                        return
+                    }
+                    if (destinationPath.isEmpty()) {
+                        callback(errorResult("missing_destination", "Destination path is empty"))
+                        return
+                    }
+                    val headers = request.headers
+                        .mapNotNull { header ->
+                            val name = header?.name?.trim().orEmpty()
+                            if (name.isEmpty()) null else name to header?.value.orEmpty()
+                        }
+                        .toMap()
+                    val maxBytes = request.maxBytes.coerceIn(1L, 512L * 1024L * 1024L)
+                    val responseStartTimeoutMs = request.responseStartTimeoutMillis
+                        .coerceIn(1_000L, 30_000L)
+                        .toInt()
+                    val idleTimeoutMs = request.idleTimeoutMillis
+                        .coerceIn(1_000L, 60_000L)
+                        .toInt()
+                    subscriptionNetworkExecutor.execute {
+                        runCatching {
+                            underlyingNetworkDownloadResponse(
+                                downloadUrlOnUnderlyingNetwork(
+                                    url,
+                                    headers,
+                                    destinationPath,
+                                    maxBytes,
+                                    responseStartTimeoutMs,
+                                    idleTimeoutMs,
+                                ),
+                            )
+                        }.onSuccess { response ->
+                            mainHandler.post { callback(Result.success(response)) }
+                        }.onFailure { error ->
+                            mainHandler.post {
+                                callback(
+                                    errorResult(
+                                        "underlying_download_failed",
+                                        error.message ?: error.toString(),
+                                    ),
+                                )
                             }
                         }
                     }
@@ -2114,7 +2304,6 @@ class MainActivity : FlutterFragmentActivity() {
                             "wakeLockEnabled" to MeowApplication.wakeLockEnabled,
                             "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
                             "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
-                            "performanceMode" to MeowApplication.performanceMode,
                             "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
                         ),
                     )
@@ -2124,7 +2313,6 @@ class MainActivity : FlutterFragmentActivity() {
                     val wakeLock = call.argument<Boolean>("wakeLockEnabled")
                     val heartbeat = call.argument<Boolean>("networkHeartbeatEnabled")
                     val heartbeatInterval = call.argument<Int>("networkHeartbeatIntervalSeconds")
-                    val performanceMode = call.argument<String>("performanceMode")
                     val memoryLimitEnabled = call.argument<Boolean>("memoryLimitEnabled")
                     var heartbeatChanged = false
                     if (wakeLock != null) {
@@ -2137,9 +2325,6 @@ class MainActivity : FlutterFragmentActivity() {
                     if (heartbeatInterval != null) {
                         MeowApplication.networkHeartbeatIntervalSeconds = heartbeatInterval.toLong()
                         heartbeatChanged = true
-                    }
-                    if (performanceMode != null) {
-                        MeowApplication.performanceMode = performanceMode
                     }
                     if (memoryLimitEnabled != null) {
                         MeowApplication.memoryLimitEnabled = memoryLimitEnabled

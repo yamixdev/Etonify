@@ -119,6 +119,11 @@ void main() {
 
       expect(find.text('Current profile'), findsNothing);
       expect(find.textContaining('2 proxies'), findsWidgets);
+      expect(
+        find.textContaining('Updated June 28, 2026 at 12:00:00'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Working:'), findsNothing);
       await tester.drag(find.text('Subscriptions'), const Offset(0, -520));
       await _pumpUi(tester, const Duration(milliseconds: 420));
       final headerTop = tester.getTopLeft(find.text('Subscriptions')).dy;
@@ -138,6 +143,44 @@ void main() {
       expect(find.byType(BottomSheet), findsOneWidget);
     },
   );
+
+  testWidgets('shows the complete localized Russian refresh date', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => SubscriptionStore.save(
+        Subscription(
+          id: 'dated-subscription',
+          name: 'Профиль',
+          url: 'https://example.com/sub',
+          lastUpdated: DateTime(2026, 8, 20, 17, 49).millisecondsSinceEpoch,
+          outbounds: const [
+            Outbound(
+              tag: 'proxy-one',
+              name: 'Прокси',
+              config: {'type': 'vless'},
+            ),
+          ],
+          cachedVisibleProxyCount: 1,
+          hasRawPayload: true,
+          rawContent: 'vless://payload',
+        ),
+      ),
+    );
+
+    await _openSheet(
+      tester,
+      activeSubscriptionId: 'dated-subscription',
+      locale: const Locale('ru'),
+    );
+    await _pumpUntilFound(tester, find.textContaining('1 прокси'));
+
+    expect(
+      find.textContaining('Обновлено 20 августа 2026 года в 17:49:00'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Работают:'), findsNothing);
+  });
 
   test('URL metadata repair preserves the subscription payload', () async {
     const subscriptionId = 'legacy-url-metadata';
@@ -228,12 +271,13 @@ Future<void> _openSheet(
   WidgetTester tester, {
   bool openAddOnStart = false,
   String? activeSubscriptionId,
+  Locale locale = const Locale('en'),
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
-      locale: const Locale('en'),
+      locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,

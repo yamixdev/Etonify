@@ -63,6 +63,7 @@ class SingboxConfigBuilder {
     required this.tcpFastOpenEnabled,
     required this.tcpMultiPathEnabled,
     required this.tlsFragmentationMode,
+    this.allowUntrustedProxyCertificates = false,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
     this.experimentalFakeIpEnabled = false,
@@ -115,6 +116,7 @@ class SingboxConfigBuilder {
   final bool tcpFastOpenEnabled;
   final bool tcpMultiPathEnabled;
   final TlsFragmentationMode tlsFragmentationMode;
+  final bool allowUntrustedProxyCertificates;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
   final bool experimentalFakeIpEnabled;
@@ -791,6 +793,7 @@ class SingboxConfigBuilder {
         capabilities.supportsRealitySpiderX,
       ),
     );
+    _applyGlobalTlsCertificatePolicy(config, allowUntrustedProxyCertificates);
     _applyTlsFragmentation(config, tlsFragmentationMode);
     config['tag'] = outbound.tag;
     config['tcp_fast_open'] = tcpFastOpenEnabled;
@@ -836,6 +839,7 @@ class SingboxConfigBuilder {
     required bool tcpFastOpenEnabled,
     required bool tcpMultiPathEnabled,
     required TlsFragmentationMode tlsFragmentationMode,
+    bool allowUntrustedProxyCertificates = false,
     bool supportsRealitySpiderX = true,
   }) {
     final tag = chain.tag.trim();
@@ -868,6 +872,7 @@ class SingboxConfigBuilder {
     }
     _normalizeServerAddress(config);
     _ensureRealityUtls(config, supportsSpiderX: supportsRealitySpiderX);
+    _applyGlobalTlsCertificatePolicy(config, allowUntrustedProxyCertificates);
     _applyTlsFragmentation(config, tlsFragmentationMode);
     config['tcp_fast_open'] = tcpFastOpenEnabled;
     config['tcp_multi_path'] = tcpMultiPathEnabled;
@@ -905,6 +910,7 @@ class SingboxConfigBuilder {
         tcpFastOpenEnabled: tcpFastOpenEnabled,
         tcpMultiPathEnabled: tcpMultiPathEnabled,
         tlsFragmentationMode: tlsFragmentationMode,
+        allowUntrustedProxyCertificates: allowUntrustedProxyCertificates,
         supportsRealitySpiderX: _supportsCoreConfigExtension(
           capabilities.supportsRealitySpiderX,
         ),
@@ -1277,6 +1283,22 @@ class SingboxConfigBuilder {
         tlsMap['fragment'] = true;
         tlsMap['fragment_fallback_delay'] = '300ms';
     }
+    config['tls'] = tlsMap;
+  }
+
+  static void _applyGlobalTlsCertificatePolicy(
+    Map<String, dynamic> config,
+    bool allowUntrustedCertificates,
+  ) {
+    if (!allowUntrustedCertificates) {
+      return;
+    }
+    final tls = config['tls'];
+    if (tls is! Map || tls['enabled'] != true) {
+      return;
+    }
+    final tlsMap = Map<String, dynamic>.from(tls);
+    tlsMap['insecure'] = true;
     config['tls'] = tlsMap;
   }
 

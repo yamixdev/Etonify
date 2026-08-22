@@ -110,11 +110,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortByCountry => 'By country';
 
   @override
-  String subscriptionWorkingServersCount(int working, int checked) {
-    return 'Working: $working of $checked checked';
-  }
-
-  @override
   String get settingsTitle => 'Settings';
 
   @override
@@ -134,6 +129,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get experimentalTitle => 'Experimental';
+
+  @override
+  String get securityTitle => 'Security';
+
+  @override
+  String get securitySubtitle => 'TLS certificates and connection verification';
+
+  @override
+  String get securityTlsSectionTitle => 'TLS certificates';
+
+  @override
+  String get securityUntrustedProxyCertificatesTitle =>
+      'Allow untrusted proxy certificates';
+
+  @override
+  String get securityUntrustedProxyCertificatesSubtitle =>
+      'Connect to proxy servers with self-signed, expired, or otherwise untrusted certificates. This weakens protection against connection interception.';
+
+  @override
+  String get securityUntrustedSubscriptionCertificatesTitle =>
+      'Allow untrusted subscription certificates';
+
+  @override
+  String get securityUntrustedSubscriptionCertificatesSubtitle =>
+      'Update HTTPS subscriptions even when the website certificate cannot be verified. The subscription URL and content may be intercepted or replaced.';
+
+  @override
+  String get securityConfirmProxyTitle => 'Allow untrusted proxy certificates?';
+
+  @override
+  String get securityConfirmProxyMessage =>
+      'Certificate verification will be disabled for every TLS proxy connection. Enable this only for configurations you trust.';
+
+  @override
+  String get securityConfirmSubscriptionTitle =>
+      'Allow untrusted subscription certificates?';
+
+  @override
+  String get securityConfirmSubscriptionMessage =>
+      'Certificate verification will be disabled while updating HTTPS subscriptions. The subscription URL and content may be intercepted or replaced.';
+
+  @override
+  String get securityAllowAction => 'Allow';
 
   @override
   String get experimentalSubtitle =>
@@ -186,6 +224,111 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutCoreSourceLabel => 'core source code';
+
+  @override
+  String get aboutDocumentationTitle => 'Etonify documentation';
+
+  @override
+  String get aboutDocumentationSubtitle =>
+      'Step-by-step guides for subscriptions, VPN, routing, and diagnostics.';
+
+  @override
+  String get documentationPageTitle => 'Etonify guide';
+
+  @override
+  String get documentationPageSubtitle =>
+      'A concise reference to the client, its modes, and the checks that help explain connection problems.';
+
+  @override
+  String get documentationWhatTitle => 'What Etonify is';
+
+  @override
+  String get documentationWhatBody =>
+      'Etonify is an Android client for sing-box. It does not provide VPN servers: you add a subscription or profile from your provider. Android 8.0 and newer are supported.';
+
+  @override
+  String get documentationModesTitle => 'VPN and local proxy';
+
+  @override
+  String get documentationModesBody =>
+      'VPN TUN routes device traffic through the selected profile. The local HTTP/SOCKS proxy is an inbound for apps that can use a proxy manually. Both can run together; TUN remains the primary system-wide mode.';
+
+  @override
+  String get documentationProtocolsTitle => 'Formats and protocols';
+
+  @override
+  String get documentationProtocolsBody =>
+      'The client imports sing-box, Xray, and Happ representations. The bundled sing-box core can handle VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard, AnyTLS, and other protocols when all required fields are present. Importing a link does not guarantee that its endpoint is reachable.';
+
+  @override
+  String get documentationChainsTitle => 'Proxy chains';
+
+  @override
+  String get documentationChainsBody =>
+      'A chain sends traffic through a first hop and then an exit proxy. This adds latency and another possible failure point; it is not automatic failover. Use it only when the provider supports the combination. Lowest selects individual working outbounds, not a chain as a whole.';
+
+  @override
+  String get documentationSubscriptionsTitle => 'Subscriptions and profiles';
+
+  @override
+  String get documentationSubscriptionsBody =>
+      'Add a URL, file, QR code, sing-box or Xray JSON, or a Happ link. One profile can contain several source URLs; refresh keeps those sources grouped. If import fails, check the HTTP status, UTF-8 encoding, and the provider format before changing the client settings.';
+
+  @override
+  String get documentationChecksTitle => 'Servers and URLTest';
+
+  @override
+  String get documentationChecksBody =>
+      'URLTest sends a real HTTP request through a proxy; it is not an ICMP ping. Results depend on the current network and may change between Wi-Fi and mobile data. Lowest chooses the best currently working result. A red warning icon means the last check failed; detailed errors remain in Logs.';
+
+  @override
+  String get documentationRoutingTitle => 'Traffic rules and split tunneling';
+
+  @override
+  String get documentationRoutingBody =>
+      'Traffic rules decide which domains, IP ranges, or apps use the VPN. Only one verified traffic preset can be active at a time. Split tunneling controls selected Android apps separately. Mixed can be incompatible with split tunneling on some devices; try system or gVisor if the provider recommends it.';
+
+  @override
+  String get documentationDnsTitle => 'DNS';
+
+  @override
+  String get documentationDnsBody =>
+      'Etonify supports device DNS, UDP, TCP, DoT, and DoH. A hostname-based DoH or DoT server needs a bootstrap resolver. For a simple direct resolver, enter a literal address such as 1.1.1.1 or 8.8.8.8 and select UDP or TCP. The chosen DNS route should match the traffic rule to avoid leaks.';
+
+  @override
+  String get documentationRuleFilesTitle => 'Geo-resource files';
+
+  @override
+  String get documentationRuleFilesBody =>
+      'Traffic presets use local .srs GeoIP and Geosite rule files. Bundled files are prepared on the device and can be used offline. Updating them requires a working network path; the old files stay in place if an update fails.';
+
+  @override
+  String get documentationExperimentalTitle => 'Experimental options';
+
+  @override
+  String get documentationExperimentalBody =>
+      'TLS fragmentation, TCP Fast Open, multipath, and Fake IP can change compatibility. They are not required for ordinary subscriptions. Enable one option at a time, keep the provider\'s SNI and ALPN values, and turn an option back off if a previously working server stops connecting.';
+
+  @override
+  String get documentationDiagnosticsTitle => 'Resources, logs, and versions';
+
+  @override
+  String get documentationDiagnosticsBody =>
+      'Resources and diagnostics show process memory and service state. PSS, RSS, Swap, heap, code, and graphics are different views and must not be added together. When reporting a problem, include the app version, core version, Android device and network, reproduction steps, and an exported log with private keys removed.';
+
+  @override
+  String get documentationLimitsTitle => 'Important limits';
+
+  @override
+  String get documentationLimitsBody =>
+      'Etonify is Android-only and does not include free VPN servers. Reliability depends on the provider, endpoint, DNS, carrier, and Android firmware. URLTest cannot guarantee that every website will work. Very large subscriptions and repeated full checks use more memory, CPU, battery, and data.';
+
+  @override
+  String get documentationSupportTitle => 'Need help?';
+
+  @override
+  String get documentationSupportBody =>
+      'First try the selected server without changing several settings at once. Then send the exact error, app and core versions, connection mode, network type, and a redacted exported log to the Etonify support chat.';
 
   @override
   String get telegramChannelLabel => 'Etonify Telegram';
@@ -419,6 +562,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeAmoled => 'AMOLED';
 
   @override
+  String get diagnosticsTitle => 'Resources & diagnostics';
+
+  @override
+  String get diagnosticsSubtitle =>
+      'Process memory, core state and tools for investigating problems.';
+
+  @override
   String get aboutResourcesTitle => 'Resources';
 
   @override
@@ -430,10 +580,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutResourcesPssSubtitle =>
-      'PSS is the primary memory estimate for the app, including its share of common pages. Do not add the rows below to PSS: they are a breakdown and separate metrics.';
+      'PSS is the primary memory estimate including a share of common pages. RSS counts every resident page, Private Dirty covers modified pages owned only by this process, and Swap PSS is its proportional swap share. Do not add these values together.';
 
   @override
   String get aboutResourcePss => 'Total PSS';
+
+  @override
+  String get aboutResourceRss => 'Total RSS';
+
+  @override
+  String get aboutResourceSwapPss => 'Swap PSS';
+
+  @override
+  String get aboutResourcePrivateDirty => 'Private Dirty';
 
   @override
   String get aboutResourceNativePss => 'Native PSS';
@@ -935,48 +1094,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hideServerIpSubtitle => 'Masks last two octets of the IP address';
 
   @override
-  String get performanceModeTitle => 'Performance mode';
-
-  @override
-  String get performanceModeCool => 'Cool';
-
-  @override
-  String get performanceModeStandard => 'Standard';
-
-  @override
-  String get performanceModeEconomy => 'Economy';
-
-  @override
-  String get performanceModeBalanced => 'Balanced';
-
-  @override
-  String get performanceModePerformance => 'Performance';
-
-  @override
-  String get performanceModeCoolSubtitle =>
-      'Lowest heat and background load for daily Android use.';
-
-  @override
-  String get performanceModeStandardSubtitle =>
-      'Stable daily mode: automatic ping every 5 minutes, moderate concurrency, and less background load.';
-
-  @override
-  String get performanceModeEconomySubtitle =>
-      'Minimum extra background work: automatic ping every 5 minutes, fewer parallel checks, and no automatic server geolocation.';
-
-  @override
-  String get performanceModeBalancedSubtitle =>
-      'Moderate checks and battery use.';
-
-  @override
-  String get performanceModePerformanceSubtitle =>
-      'Faster checks with more CPU, traffic, and heat.';
-
-  @override
-  String get performanceModeRecommendation =>
-      'Recommended: keep Standard. Use Economy when battery life matters more than fast background checks.';
-
-  @override
   String get memoryLimitTitle => 'Memory limit';
 
   @override
@@ -1026,32 +1143,32 @@ class AppLocalizationsEn extends AppLocalizations {
       'Forces traffic through VPN and reduces the chance of traffic escaping the tunnel';
 
   @override
-  String get tunImplementationTitle => 'TUN implementation';
+  String get tunImplementationTitle => 'TUN network stack';
 
   @override
   String get tunImplementationSubtitle =>
-      'How the client handles the TUN stack';
+      'Controls how the client handles TCP and UDP traffic inside the VPN';
 
   @override
-  String get tunImplementationMixed => 'Mixed';
+  String get tunImplementationMixed => 'Mixed (system TCP + gVisor UDP)';
 
   @override
   String get tunImplementationMixedSubtitle =>
-      'Automatic mode. Uses the safer stack for the current device and config.';
+      'Uses the Android system stack for TCP and gVisor for UDP. This is sing-box\'s default when gVisor is available.';
 
   @override
-  String get tunImplementationSystem => 'System';
+  String get tunImplementationSystem => 'System (Android)';
 
   @override
   String get tunImplementationSystemSubtitle =>
-      'Android system stack. Usually lighter, but may depend on device firmware.';
+      'Uses the Android system network stack for TCP and UDP. Compatibility depends on the device and its firmware.';
 
   @override
   String get tunImplementationGvisor => 'gVisor';
 
   @override
   String get tunImplementationGvisorSubtitle =>
-      'Userspace network stack. Can be more compatible, but may cost more CPU.';
+      'Uses the gVisor userspace network stack for TCP and UDP. It can help when the system stack is unstable.';
 
   @override
   String get proxyInDescription =>
@@ -1644,8 +1761,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String lastUpdated(String time) {
-    return 'Updated $time';
+  String lastUpdatedDateTime(String date, String time) {
+    return 'Updated $date at $time';
   }
 
   @override

@@ -17,8 +17,6 @@ enum InboundConnectionMode { vpn, proxy }
 
 enum SplitRoutingMode { disabled, proxySelected, bypassSelected }
 
-enum AppPerformanceMode { standard, economy, balanced, performance }
-
 enum AppUpdateInstallMode { ask, manual, auto }
 
 enum NotificationTrafficDisplayMode { speed, total, both }
@@ -149,11 +147,12 @@ class AppSettingsState {
     required this.hideServerIp,
     required this.progressiveBlurEnabled,
     this.progressiveBlurConfigured = false,
-    this.performanceMode = AppPerformanceMode.standard,
     this.memoryLimitEnabled = true,
     this.memoryLimitWarningDismissed = false,
     this.updateInstallMode = AppUpdateInstallMode.ask,
     this.tlsFragmentationMode = TlsFragmentationMode.disabled,
+    this.allowUntrustedProxyCertificates = false,
+    this.allowUntrustedSubscriptionCertificates = false,
     required this.vpnInboundEnabled,
     required this.vpnMtu,
     required this.vpnStrictRoute,
@@ -210,11 +209,12 @@ class AppSettingsState {
   final bool hideServerIp;
   final bool progressiveBlurEnabled;
   final bool progressiveBlurConfigured;
-  final AppPerformanceMode performanceMode;
   final bool memoryLimitEnabled;
   final bool memoryLimitWarningDismissed;
   final AppUpdateInstallMode updateInstallMode;
   final TlsFragmentationMode tlsFragmentationMode;
+  final bool allowUntrustedProxyCertificates;
+  final bool allowUntrustedSubscriptionCertificates;
   final bool vpnInboundEnabled;
   final int vpnMtu;
   final bool vpnStrictRoute;
@@ -271,11 +271,12 @@ class AppSettingsState {
     bool? hideServerIp,
     bool? progressiveBlurEnabled,
     bool? progressiveBlurConfigured,
-    AppPerformanceMode? performanceMode,
     bool? memoryLimitEnabled,
     bool? memoryLimitWarningDismissed,
     AppUpdateInstallMode? updateInstallMode,
     TlsFragmentationMode? tlsFragmentationMode,
+    bool? allowUntrustedProxyCertificates,
+    bool? allowUntrustedSubscriptionCertificates,
     bool? vpnInboundEnabled,
     int? vpnMtu,
     bool? vpnStrictRoute,
@@ -340,12 +341,17 @@ class AppSettingsState {
           progressiveBlurEnabled ?? this.progressiveBlurEnabled,
       progressiveBlurConfigured:
           progressiveBlurConfigured ?? this.progressiveBlurConfigured,
-      performanceMode: performanceMode ?? this.performanceMode,
       memoryLimitEnabled: memoryLimitEnabled ?? this.memoryLimitEnabled,
       memoryLimitWarningDismissed:
           memoryLimitWarningDismissed ?? this.memoryLimitWarningDismissed,
       updateInstallMode: updateInstallMode ?? this.updateInstallMode,
       tlsFragmentationMode: tlsFragmentationMode ?? this.tlsFragmentationMode,
+      allowUntrustedProxyCertificates:
+          allowUntrustedProxyCertificates ??
+          this.allowUntrustedProxyCertificates,
+      allowUntrustedSubscriptionCertificates:
+          allowUntrustedSubscriptionCertificates ??
+          this.allowUntrustedSubscriptionCertificates,
       vpnInboundEnabled: vpnInboundEnabled ?? this.vpnInboundEnabled,
       vpnMtu: vpnMtu ?? this.vpnMtu,
       vpnStrictRoute: vpnStrictRoute ?? this.vpnStrictRoute,
@@ -433,6 +439,10 @@ abstract class AppSettingsStore {
       'memory_limit_warning_dismissed';
   static const _updateInstallModeKey = 'update_install_mode';
   static const _tlsFragmentationModeKey = 'tls_fragmentation_mode';
+  static const _allowUntrustedProxyCertificatesKey =
+      'allow_untrusted_proxy_certificates';
+  static const _allowUntrustedSubscriptionCertificatesKey =
+      'allow_untrusted_subscription_certificates';
   static const _vpnInboundEnabledKey = 'vpn_inbound_enabled';
   static const _vpnMtuKey = 'vpn_mtu';
   static const _vpnStrictRouteKey = 'vpn_strict_route';
@@ -491,7 +501,6 @@ abstract class AppSettingsStore {
     _notificationTrafficRefreshSecondsKey,
     _hideServerIpKey,
     _proxySortKey,
-    _performanceModeKey,
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
     _updateInstallModeKey,
@@ -568,15 +577,11 @@ abstract class AppSettingsStore {
       return normalizeSplitRoutingPackages(raw.split(RegExp(r'[\n,;]')));
     }
 
-    final performanceMode = switch (map[_performanceModeKey]) {
-      'cool' ||
-      'standard' ||
-      'balanced' ||
-      'performance' => AppPerformanceMode.standard,
-      'economy' => AppPerformanceMode.economy,
-      _ => AppPerformanceMode.standard,
-    };
-    final economy = performanceMode == AppPerformanceMode.economy;
+    // Performance modes were removed in 0.3.0 because they only changed a
+    // handful of timers and made runtime behaviour harder to predict. Detect
+    // the old Economy preset once so its generated values can be migrated to
+    // the normal defaults instead of surviving as an invisible mode.
+    final legacyEconomy = map[_performanceModeKey] == 'economy';
     final urlTestInterval = int.tryParse(
       map[_urlTestIntervalSecondsKey]?.toString() ?? '',
     );
@@ -596,13 +601,13 @@ abstract class AppSettingsStore {
                 2)
             .clamp(1, 10)
             .toInt();
-    final defaultUrlTestConcurrency = economy ? 4 : 8;
+    const defaultUrlTestConcurrency = 8;
     final normalizedUrlTestConcurrency =
-        (urlTestConcurrency ?? defaultUrlTestConcurrency).clamp(
-          1,
-          defaultUrlTestConcurrency,
-        );
-    final defaultUnavailableCheckInterval = economy ? 300 : 120;
+        ((legacyEconomy && urlTestConcurrency == 4)
+                ? defaultUrlTestConcurrency
+                : urlTestConcurrency ?? defaultUrlTestConcurrency)
+            .clamp(1, defaultUrlTestConcurrency);
+    const defaultUnavailableCheckInterval = 120;
     final locationLookupConcurrency = int.tryParse(
       map[_locationLookupConcurrencyKey]?.toString() ?? '',
     );
@@ -658,7 +663,6 @@ abstract class AppSettingsStore {
         defaultValue: false,
       ),
       progressiveBlurConfigured: map.containsKey(_progressiveBlurEnabledKey),
-      performanceMode: performanceMode,
       memoryLimitEnabled: boolValue(_memoryLimitEnabledKey, defaultValue: true),
       memoryLimitWarningDismissed: boolValue(
         _memoryLimitWarningDismissedKey,
@@ -676,6 +680,14 @@ abstract class AppSettingsStore {
         'disabled' => TlsFragmentationMode.disabled,
         _ => TlsFragmentationMode.disabled,
       },
+      allowUntrustedProxyCertificates: boolValue(
+        _allowUntrustedProxyCertificatesKey,
+        defaultValue: false,
+      ),
+      allowUntrustedSubscriptionCertificates: boolValue(
+        _allowUntrustedSubscriptionCertificatesKey,
+        defaultValue: false,
+      ),
       vpnInboundEnabled: boolValue(_vpnInboundEnabledKey, defaultValue: true),
       vpnMtu: _vpnMtuValue(map[_vpnMtuKey]),
       vpnStrictRoute: boolValue(_vpnStrictRouteKey, defaultValue: true),
@@ -726,8 +738,8 @@ abstract class AppSettingsStore {
       urlTestIntervalSeconds:
           urlTestInterval == null ||
               const <int>{120, 180, 300, 900}.contains(urlTestInterval) ||
-              (economy && urlTestInterval == 1800)
-          ? (economy ? 3600 : 1800)
+              (legacyEconomy && urlTestInterval == 3600)
+          ? 1800
           : urlTestInterval,
       urlTestTimeoutSeconds:
           urlTestTimeout == null ||
@@ -737,7 +749,7 @@ abstract class AppSettingsStore {
       urlTestConcurrency: normalizedUrlTestConcurrency,
       urlTestUnavailableCheckIntervalSeconds:
           unavailableCheckInterval == null ||
-              (economy && unavailableCheckInterval == 10) ||
+              (legacyEconomy && unavailableCheckInterval == 10) ||
               const <int>{
                 5,
                 15,
@@ -753,8 +765,9 @@ abstract class AppSettingsStore {
       locationLookupLimit: switch (int.tryParse(
         map[_locationLookupLimitKey]?.toString() ?? '',
       )) {
-        null => economy ? 0 : 1,
-        2 when !economy => 1,
+        null => 1,
+        0 when legacyEconomy => 1,
+        2 => 1,
         final value => value,
       },
       locationLookupTimeoutSeconds:
@@ -763,9 +776,8 @@ abstract class AppSettingsStore {
           : locationLookupTimeout,
       locationLookupConcurrency:
           locationLookupConcurrency == null ||
-              (!economy &&
-                  (locationLookupConcurrency == 2 ||
-                      locationLookupConcurrency == 3))
+              locationLookupConcurrency == 2 ||
+              locationLookupConcurrency == 3
           ? 1
           : locationLookupConcurrency,
       blockLeaks: boolValue(_blockLeaksKey, defaultValue: false),
@@ -840,13 +852,17 @@ abstract class AppSettingsStore {
           .toString(),
       _hideServerIpKey: state.hideServerIp ? '1' : '0',
       _progressiveBlurEnabledKey: state.progressiveBlurEnabled ? '1' : '0',
-      _performanceModeKey: state.performanceMode.name,
       _memoryLimitEnabledKey: state.memoryLimitEnabled ? '1' : '0',
       _memoryLimitWarningDismissedKey: state.memoryLimitWarningDismissed
           ? '1'
           : '0',
       _updateInstallModeKey: state.updateInstallMode.name,
       _tlsFragmentationModeKey: state.tlsFragmentationMode.name,
+      _allowUntrustedProxyCertificatesKey: state.allowUntrustedProxyCertificates
+          ? '1'
+          : '0',
+      _allowUntrustedSubscriptionCertificatesKey:
+          state.allowUntrustedSubscriptionCertificates ? '1' : '0',
       _vpnInboundEnabledKey: state.vpnInboundEnabled ? '1' : '0',
       _vpnMtuKey: state.vpnMtu.toString(),
       _vpnStrictRouteKey: state.vpnStrictRoute ? '1' : '0',
@@ -1043,6 +1059,7 @@ class HiveAppSettingsStore extends AppSettingsStore {
   @override
   Future<void> saveState(AppSettingsState state) async {
     final map = stateToMap(state);
+    await _box.delete(AppSettingsStore._performanceModeKey);
     await _box.putAll(map);
     await _box.flush();
   }
@@ -1066,7 +1083,6 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             hideServerIp: false,
             progressiveBlurEnabled: false,
             progressiveBlurConfigured: false,
-            performanceMode: AppPerformanceMode.standard,
             memoryLimitEnabled: true,
             memoryLimitWarningDismissed: false,
             updateInstallMode: AppUpdateInstallMode.ask,

@@ -102,6 +102,7 @@ class SingboxConfigBuildInput {
     required this.tcpFastOpenEnabled,
     required this.tcpMultiPathEnabled,
     required this.tlsFragmentationMode,
+    this.allowUntrustedProxyCertificates = false,
     required this.interruptExistingConnections,
     required this.urlTestStrictTolerance,
     this.experimentalFakeIpEnabled = false,
@@ -156,6 +157,7 @@ class SingboxConfigBuildInput {
   final bool tcpFastOpenEnabled;
   final bool tcpMultiPathEnabled;
   final TlsFragmentationMode tlsFragmentationMode;
+  final bool allowUntrustedProxyCertificates;
   final bool interruptExistingConnections;
   final bool urlTestStrictTolerance;
   final bool experimentalFakeIpEnabled;
@@ -678,6 +680,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     tcpFastOpenEnabled: input.tcpFastOpenEnabled,
     tcpMultiPathEnabled: input.tcpMultiPathEnabled,
     tlsFragmentationMode: input.tlsFragmentationMode,
+    allowUntrustedProxyCertificates: input.allowUntrustedProxyCertificates,
     interruptExistingConnections: input.interruptExistingConnections,
     urlTestStrictTolerance: input.urlTestStrictTolerance,
     experimentalFakeIpEnabled: input.experimentalFakeIpEnabled,

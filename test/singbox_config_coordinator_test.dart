@@ -155,14 +155,41 @@ void main() {
       expect(runtime.maxConcurrentApplies, 1);
     },
   );
+
+  test(
+    'forced dataplane change detects a native runtime behind stale UI',
+    () async {
+      final runtime = _BlockingRuntime();
+      final lifecycle = RuntimeLifecycleController(
+        runtime: runtime,
+        healthCheckTimeout: const Duration(milliseconds: 20),
+      );
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        connected: false,
+        fullServiceRestartDebounce: Duration.zero,
+      );
+
+      await coordinator.emitCurrentConfigLogAsync(
+        'adblock rule-set updated',
+        restartRuntime: true,
+        forceFullServiceRestart: true,
+      );
+
+      expect(runtime.stopCalls, 1);
+      expect(runtime.startCalls, 1);
+    },
+  );
 }
 
 SingboxConfigCoordinator _coordinator({
   required RuntimeLifecycleController runtimeLifecycle,
+  bool connected = true,
   Duration fullServiceRestartDebounce = const Duration(milliseconds: 450),
 }) {
   return SingboxConfigCoordinator(
-    readSnapshot: _snapshot,
+    readSnapshot: () => _snapshot(connected: connected),
     isMounted: () => true,
     ensureActiveSubscriptionHydrated: () async => true,
     runtimeLifecycle: runtimeLifecycle,
@@ -175,13 +202,19 @@ SingboxConfigCoordinator _coordinator({
     onRuntimeLifecycleTimeout: (_) {},
     cacheStartedBuild: (_) {},
     syncRuntimeState: () async {},
+    readRuntimeStatus: () async => const <String, dynamic>{
+      'running': true,
+      'mode': 'vpn',
+      'recordedServiceAlive': true,
+      'runtimeIntentFresh': true,
+    },
     fullServiceRestartDebounce: fullServiceRestartDebounce,
   );
 }
 
-SingboxConfigCoordinatorSnapshot _snapshot() {
-  return const SingboxConfigCoordinatorSnapshot(
-    connected: true,
+SingboxConfigCoordinatorSnapshot _snapshot({bool connected = true}) {
+  return SingboxConfigCoordinatorSnapshot(
+    connected: connected,
     runtimeTransitionInProgress: false,
     activeSubscription: null,
     selectedProxyTag: '',

@@ -859,12 +859,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                             if (subscription.lastUpdated > 0) ...[
                               const Gap(6),
                               Text(
-                                l10n.lastUpdated(
-                                  formatTime(
-                                    DateTime.fromMillisecondsSinceEpoch(
-                                      subscription.lastUpdated,
-                                    ),
-                                  ),
+                                _subscriptionLastUpdatedText(
+                                  context,
+                                  subscription.lastUpdated,
                                 ),
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,

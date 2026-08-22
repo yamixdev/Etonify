@@ -641,6 +641,7 @@ class SubscriptionStore {
     SubscriptionInfo? requestInfo,
     Duration? operationTimeout,
     bool Function()? isCancelled,
+    bool allowInsecureTls = false,
   }) async {
     await ensurePayloadReady();
     final id = SubscriptionFetcher.generateId();
@@ -652,6 +653,7 @@ class SubscriptionStore {
           url,
           requestInfo: requestInfo,
           operationTimeout: _remainingUntil(deadline),
+          allowInsecureTls: allowInsecureTls,
         ),
         deadline,
         'subscription import',
@@ -839,12 +841,20 @@ class SubscriptionStore {
   /// Refreshes an existing subscription (re-fetches from URL).
   ///
   /// Returns the updated [Subscription].
-  static Future<Subscription> refresh(String id, {Duration? operationTimeout}) {
+  static Future<Subscription> refresh(
+    String id, {
+    Duration? operationTimeout,
+    bool allowInsecureTls = false,
+  }) {
     final inFlight = _refreshesInFlight[id];
     if (inFlight != null) {
       return inFlight;
     }
-    final operation = _refresh(id, operationTimeout: operationTimeout);
+    final operation = _refresh(
+      id,
+      operationTimeout: operationTimeout,
+      allowInsecureTls: allowInsecureTls,
+    );
     _refreshesInFlight[id] = operation;
     return operation.whenComplete(() {
       if (identical(_refreshesInFlight[id], operation)) {
@@ -856,6 +866,7 @@ class SubscriptionStore {
   static Future<Subscription> _refresh(
     String id, {
     Duration? operationTimeout,
+    required bool allowInsecureTls,
   }) async {
     await ensurePayloadReady();
     final existingBeforeFetch = get(id);
@@ -872,6 +883,7 @@ class SubscriptionStore {
         existingBeforeFetch.url,
         requestInfo: existingBeforeFetch.info,
         operationTimeout: _remainingUntil(deadline),
+        allowInsecureTls: allowInsecureTls,
       ),
       deadline,
       'subscription refresh',
