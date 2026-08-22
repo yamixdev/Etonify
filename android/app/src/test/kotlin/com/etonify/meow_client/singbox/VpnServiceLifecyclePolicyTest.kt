@@ -52,4 +52,36 @@ class VpnServiceLifecyclePolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `hung native stop terminates only the stale owning process`() {
+        assertTrue(
+            VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+                runtimeRunning = false,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = false,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = true,
+            ),
+        )
+    }
 }

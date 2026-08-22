@@ -64,6 +64,11 @@ class MeowApplication : Application() {
             get() = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val configFile: File
             get() = File(application.filesDir, "singbox-config.json")
+        val singboxWorkingDirectory: File
+            get() = File(
+                application.getExternalFilesDir(null) ?: application.filesDir,
+                "singbox-work",
+            ).apply { mkdirs() }
         val serviceStateFile: File
             get() = File(application.filesDir, "singbox-service-state.txt")
         val runtimeIntentFile: File
@@ -141,7 +146,7 @@ class MeowApplication : Application() {
                 MeowDiagnostics.log("Application", "ensureLibboxSetup begin pid=${android.os.Process.myPid()}")
                 MeowDiagnostics.log("Application", "ensureLibboxSetup skip Libbox.setLocale")
                 val baseDir = File(app.filesDir, "singbox-base").apply { mkdirs() }
-                val workingDir = File(app.getExternalFilesDir(null) ?: app.filesDir, "singbox-work").apply { mkdirs() }
+                val workingDir = singboxWorkingDirectory
                 val tempDir = File(app.cacheDir, "singbox-tmp").apply { mkdirs() }
                 val memoryLimitFlag = memoryLimitEnabled
                 val setupOptions = SetupOptions().apply {

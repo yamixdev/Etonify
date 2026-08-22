@@ -24,4 +24,12 @@ internal object VpnServiceLifecyclePolicy {
     fun shouldCancelScheduledRestartOnDestroy(runtimeRunning: Boolean): Boolean {
         return !runtimeRunning
     }
+
+    fun shouldTerminateProcessAfterStopTimeout(
+        runtimeRunning: Boolean,
+        activeRuntimeOwner: Boolean,
+        freshRuntimeIntent: Boolean,
+    ): Boolean {
+        return runtimeRunning && activeRuntimeOwner && !freshRuntimeIntent
+    }
 }

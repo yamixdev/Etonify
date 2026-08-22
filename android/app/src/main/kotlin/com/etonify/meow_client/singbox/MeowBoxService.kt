@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
@@ -23,7 +25,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.system.exitProcess
 
 class MeowBoxService(
     private val service: Service,
@@ -37,7 +41,10 @@ class MeowBoxService(
         const val ACTION_RESTART_CORE = "com.etonify.meow_client.singbox.RESTART_CORE"
         const val EXTRA_STOP_REASON = "stop_reason"
         private const val NOTIFICATION_ID = 42
-        private const val CLEANUP_STEP_TIMEOUT_MS = 1_200L
+        private const val COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS = 1_000L
+        private const val NATIVE_SERVICE_CLOSE_TIMEOUT_MS = 4_000L
+        private const val COMMAND_SERVER_CLOSE_TIMEOUT_MS = 1_000L
+        private const val TERMINAL_FORCE_STOP_DELAY_MS = 500L
         private const val NETWORK_WAIT_TIMEOUT_MS = 2_500L
         private const val NETWORK_WAIT_RETRY_DELAY_MS = 1_500L
         private const val NETWORK_WAIT_MAX_RETRIES = 5
@@ -50,6 +57,21 @@ class MeowBoxService(
             for (boxService in activeServices) {
                 boxService.requestStop(source)
             }
+        }
+
+        fun requestTerminalForceStopAll(source: String): Boolean {
+            var requested = false
+            for (boxService in activeServices) {
+                if (boxService.ownsActiveRuntime()) {
+                    requested = true
+                    boxService.requestTerminalForceStop(source)
+                }
+            }
+            MeowDiagnostics.log(
+                TAG,
+                "requestTerminalForceStopAll source=$source requested=$requested active=${activeServices.size}",
+            )
+            return requested
         }
 
         fun requestStopForMode(mode: String, source: String): Boolean {
@@ -152,6 +174,8 @@ class MeowBoxService(
     private var serviceGeneration = 0L
 
     private val startRequestGeneration = AtomicLong(0L)
+    private val terminalForceStopScheduled = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var pendingStartRetry: ScheduledFuture<*>? = null
@@ -518,6 +542,11 @@ class MeowBoxService(
         val alreadyRunning =
             SingboxController.running && SingboxController.serviceMode == mode && commandServer != null
         if (alreadyRunning) {
+            if (PersistentDnsCache.isClearPending(MeowApplication.singboxWorkingDirectory)) {
+                MeowDiagnostics.log(TAG, "startInternal forcing core restart for pending DNS cache clear")
+                restartCoreInternal("pending_dns_cache_clear:$source", token)
+                return
+            }
             val configHash = currentConfigHash()
             if (configHash != null && runningConfigHash != null && configHash != runningConfigHash) {
                 Log.i(
@@ -644,6 +673,10 @@ class MeowBoxService(
             return
         }
         try {
+            if (commandServer == null && !clearPendingDnsCache(runtimeActive = false, source = "before_start")) {
+                fail("Failed to clear persistent DNS cache")
+                return
+            }
             SingboxController.log(
                 "info",
                 "native_start_marker phase=before_command_server configChars=${preparedRuntimeConfig.config.length} " +
@@ -776,7 +809,7 @@ class MeowBoxService(
         // Сначала отключаем активный CommandClient.
         if (shouldStopRuntimeState) {
             val clientDisconnected = SingboxController.disconnectClientBlocking(
-                timeoutMs = CLEANUP_STEP_TIMEOUT_MS,
+                timeoutMs = COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS,
             )
 
             if (!clientDisconnected) {
@@ -794,7 +827,10 @@ class MeowBoxService(
 
         // Затем закрываем native runtime и CommandServer.
         if (server != null) {
-            nativeServiceClosed = runCleanupStep("closeService source=$source") {
+            nativeServiceClosed = runCleanupStep(
+                "closeService source=$source",
+                NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
+            ) {
                 server.closeService()
             }
 
@@ -803,7 +839,10 @@ class MeowBoxService(
             // CommandServer.close() must not keep the foreground notification
             // and Android service alive indefinitely.
             if (nativeServiceClosed) {
-                commandServerClosed = runCleanupStep("close command server source=$source") {
+                commandServerClosed = runCleanupStep(
+                    "close command server source=$source",
+                    COMMAND_SERVER_CLOSE_TIMEOUT_MS,
+                ) {
                     server.close()
                 }
             }
@@ -838,6 +877,8 @@ class MeowBoxService(
                     "generation=$generation activeGeneration=$activeGeneration",
             )
         }
+
+        clearPendingDnsCache(runtimeActive = false, source = "after_stop:$source")
 
         commandServer = null
         runningConfigHash = null
@@ -896,8 +937,27 @@ class MeowBoxService(
                 "running=${SingboxController.running} mode=${SingboxController.serviceMode} " +
                 "hasCommandServer=${commandServer != null}",
         )
-        runCatching { commandServer?.closeService() }.onFailure {
-            MeowDiagnostics.log(TAG, "restartCoreInternal closeService failed source=$source", it)
+        val server = commandServer
+        if (server != null) {
+            val closed = runCleanupStep(
+                "restart closeService source=$source",
+                NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
+            ) {
+                server.closeService()
+            }
+            if (!closed) {
+                SingboxController.log(
+                    "error",
+                    "Core restart aborted because native shutdown was not acknowledged source=$source",
+                )
+                MeowDiagnostics.log(TAG, "restartCoreInternal native close unconfirmed source=$source")
+                showForeground("Stopping")
+                return
+            }
+        }
+        if (!clearPendingDnsCache(runtimeActive = false, source = "core_restart:$source")) {
+            fail("Failed to clear persistent DNS cache")
+            return
         }
         runningConfigHash = null
         startOrReloadInternal(token)
@@ -919,7 +979,11 @@ class MeowBoxService(
         }
     }
 
-    private fun runCleanupStep(label: String, block: () -> Unit): Boolean {
+    private fun runCleanupStep(
+        label: String,
+        timeoutMs: Long,
+        block: () -> Unit,
+    ): Boolean {
         var failure: Throwable? = null
         val threadName = "MeowBoxCleanup-${label.take(32).replace(' ', '_')}"
         val thread = Thread(
@@ -936,7 +1000,7 @@ class MeowBoxService(
             start()
         }
         try {
-            thread.join(CLEANUP_STEP_TIMEOUT_MS)
+            thread.join(timeoutMs)
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
             MeowDiagnostics.log(TAG, "$label interrupted during cleanup", error)
@@ -945,7 +1009,7 @@ class MeowBoxService(
         if (thread.isAlive) {
             MeowDiagnostics.log(
                 TAG,
-                "$label timed out after ${CLEANUP_STEP_TIMEOUT_MS}ms; stop remains unconfirmed",
+                "$label timed out after ${timeoutMs}ms; stop remains unconfirmed",
             )
             thread.interrupt()
             return false
@@ -956,6 +1020,42 @@ class MeowBoxService(
             return false
         }
         return true
+    }
+
+    private fun clearPendingDnsCache(runtimeActive: Boolean, source: String): Boolean {
+        val result = PersistentDnsCache.clearIfPending(
+            MeowApplication.singboxWorkingDirectory,
+            runtimeActive = runtimeActive,
+        )
+        MeowDiagnostics.log(TAG, "persistent DNS cache lifecycle source=$source result=$result")
+        return result != DnsCacheClearResult.FAILED &&
+            result != DnsCacheClearResult.DEFERRED_RUNTIME_ACTIVE
+    }
+
+    private fun requestTerminalForceStop(source: String) {
+        if (!terminalForceStopScheduled.compareAndSet(false, true)) return
+        MeowApplication.clearRuntimeIntent()
+        cancelStartRequests("terminal_force_stop:$source")
+        cancelPendingNetworkHandoverProbe("terminal_force_stop:$source")
+        foregroundNotification.stopAndClear()
+        runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
+        mainHandler.postDelayed({
+            val shouldTerminate = VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+                runtimeRunning = SingboxController.running,
+                activeRuntimeOwner = ownsActiveRuntime(),
+                freshRuntimeIntent = MeowApplication.isRuntimeIntentFresh(currentMode()),
+            )
+            MeowDiagnostics.log(
+                TAG,
+                "terminal force stop verification source=$source terminate=$shouldTerminate " +
+                    "running=${SingboxController.running} generation=$serviceGeneration",
+            )
+            if (!shouldTerminate) return@postDelayed
+            MeowApplication.clearServiceState()
+            MeowApplication.clearRuntimeIntent()
+            android.os.Process.killProcess(android.os.Process.myPid())
+            exitProcess(0)
+        }, TERMINAL_FORCE_STOP_DELAY_MS)
     }
 
     private fun fail(message: String) {

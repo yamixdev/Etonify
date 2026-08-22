@@ -36,6 +36,7 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface as JavaNetworkInterface
 import java.net.UnknownHostException
 import java.security.KeyStore
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -45,7 +46,13 @@ abstract class MeowBasePlatformInterface(
 ) : PlatformInterface {
     override fun autoDetectInterfaceControl(fd: Int) = Unit
 
-    override fun clearDNSCache() = Unit
+    override fun clearDNSCache() {
+        val cancelled = MeowLocalResolver.cancelPendingQueries()
+        MeowDiagnostics.log(
+            "MeowPlatform",
+            "platform DNS cache cleared by core pendingQueriesCancelled=$cancelled",
+        )
+    }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
         MeowDefaultNetworkMonitor.setListener(null)
@@ -494,6 +501,39 @@ class SimpleStringIterator(
 
 private object MeowLocalResolver : LocalDNSTransport {
     private const val RCODE_NXDOMAIN = 3
+    private val pendingQueries = ConcurrentHashMap.newKeySet<PendingDnsQuery>()
+
+    fun cancelPendingQueries(): Int {
+        val snapshot = pendingQueries.toList()
+        for (query in snapshot) {
+            query.cancel(OsConstants.ECANCELED)
+        }
+        return snapshot.size
+    }
+
+    private fun registerPendingQuery(
+        ctx: ExchangeContext,
+        signal: CancellationSignal,
+        latch: CountDownLatch,
+        completed: AtomicBoolean,
+    ): PendingDnsQuery {
+        return PendingDnsQuery(ctx, signal, latch, completed).also(pendingQueries::add)
+    }
+
+    private class PendingDnsQuery(
+        private val context: ExchangeContext,
+        private val signal: CancellationSignal,
+        private val latch: CountDownLatch,
+        private val completed: AtomicBoolean,
+    ) {
+        fun cancel(errno: Int) {
+            signal.cancel()
+            if (completed.compareAndSet(false, true)) {
+                context.errnoCode(errno)
+                latch.countDown()
+            }
+        }
+    }
 
     override fun raw(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
@@ -520,7 +560,8 @@ private object MeowLocalResolver : LocalDNSTransport {
         val latch = CountDownLatch(1)
         val signal = CancellationSignal()
         val completed = AtomicBoolean(false)
-        ctx.onCancel(signal::cancel)
+        val pendingQuery = registerPendingQuery(ctx, signal, latch, completed)
+        ctx.onCancel { pendingQuery.cancel(OsConstants.ECANCELED) }
         val callback = object : DnsResolver.Callback<ByteArray> {
             override fun onAnswer(answer: ByteArray, rcode: Int) {
                 if (!completed.compareAndSet(false, true)) {
@@ -554,24 +595,27 @@ private object MeowLocalResolver : LocalDNSTransport {
                 latch.countDown()
             }
         }
-        DnsResolver.getInstance().rawQuery(
-            network,
-            message,
-            // Let Android retry across the DNS servers configured for the
-            // selected underlying network. A single lost cellular response
-            // must not fail the whole sing-box lookup immediately.
-            DnsResolver.FLAG_EMPTY,
-            Runnable::run,
-            signal,
-            callback,
-        )
-        if (!latch.await(15, TimeUnit.SECONDS) && completed.compareAndSet(false, true)) {
-            signal.cancel()
-            MeowDiagnostics.log(
-                "MeowLocalResolver",
-                "exchange raw timeout active=${MeowDefaultNetworkMonitor.describeNetwork(network)}",
+        try {
+            DnsResolver.getInstance().rawQuery(
+                network,
+                message,
+                // Let Android retry across the DNS servers configured for the
+                // selected underlying network. A single lost cellular response
+                // must not fail the whole sing-box lookup immediately.
+                DnsResolver.FLAG_EMPTY,
+                Runnable::run,
+                signal,
+                callback,
             )
-            ctx.errnoCode(OsConstants.ETIMEDOUT)
+            if (!latch.await(15, TimeUnit.SECONDS)) {
+                MeowDiagnostics.log(
+                    "MeowLocalResolver",
+                    "exchange raw timeout active=${MeowDefaultNetworkMonitor.describeNetwork(network)}",
+                )
+                pendingQuery.cancel(OsConstants.ETIMEDOUT)
+            }
+        } finally {
+            pendingQueries.remove(pendingQuery)
         }
     }
 
@@ -617,7 +661,8 @@ private object MeowLocalResolver : LocalDNSTransport {
         val latch = CountDownLatch(1)
         val signal = CancellationSignal()
         val completed = AtomicBoolean(false)
-        ctx.onCancel(signal::cancel)
+        val pendingQuery = registerPendingQuery(ctx, signal, latch, completed)
+        ctx.onCancel { pendingQuery.cancel(OsConstants.ECANCELED) }
         val callback = object : DnsResolver.Callback<Collection<java.net.InetAddress>> {
             override fun onAnswer(answer: Collection<java.net.InetAddress>, rcode: Int) {
                 if (!completed.compareAndSet(false, true)) {
@@ -651,33 +696,36 @@ private object MeowLocalResolver : LocalDNSTransport {
             "MeowLocalResolver",
             "lookup dispatch host=$host queryType=${queryType ?: -1} active=${MeowDefaultNetworkMonitor.describeNetwork(active)}",
         )
-        if (queryType != null) {
-            DnsResolver.getInstance().query(
-                active,
-                host,
-                queryType,
-                DnsResolver.FLAG_EMPTY,
-                Runnable::run,
-                signal,
-                callback,
-            )
-        } else {
-            DnsResolver.getInstance().query(
-                active,
-                host,
-                DnsResolver.FLAG_EMPTY,
-                Runnable::run,
-                signal,
-                callback,
-            )
-        }
-        if (!latch.await(15, TimeUnit.SECONDS) && completed.compareAndSet(false, true)) {
-            signal.cancel()
-            MeowDiagnostics.log(
-                "MeowLocalResolver",
-                "lookup timeout host=$host active=${MeowDefaultNetworkMonitor.describeNetwork(active)}",
-            )
-            ctx.errnoCode(OsConstants.ETIMEDOUT)
+        try {
+            if (queryType != null) {
+                DnsResolver.getInstance().query(
+                    active,
+                    host,
+                    queryType,
+                    DnsResolver.FLAG_EMPTY,
+                    Runnable::run,
+                    signal,
+                    callback,
+                )
+            } else {
+                DnsResolver.getInstance().query(
+                    active,
+                    host,
+                    DnsResolver.FLAG_EMPTY,
+                    Runnable::run,
+                    signal,
+                    callback,
+                )
+            }
+            if (!latch.await(15, TimeUnit.SECONDS)) {
+                MeowDiagnostics.log(
+                    "MeowLocalResolver",
+                    "lookup timeout host=$host active=${MeowDefaultNetworkMonitor.describeNetwork(active)}",
+                )
+                pendingQuery.cancel(OsConstants.ETIMEDOUT)
+            }
+        } finally {
+            pendingQueries.remove(pendingQuery)
         }
     }
 }

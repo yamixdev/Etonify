@@ -33,6 +33,7 @@ import com.etonify.meow_client.singbox.MeowProxyService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
 import com.etonify.meow_client.singbox.OwnProcessMemory
+import com.etonify.meow_client.singbox.PersistentDnsCache
 import com.etonify.meow_client.singbox.RuntimeMeasurement
 import com.etonify.meow_client.singbox.SingboxController
 import com.etonify.meow_client.generated.ApkInspectionMessage
@@ -54,6 +55,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import io.nekohasekai.libbox.Libbox
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -869,6 +871,8 @@ class MainActivity : FlutterFragmentActivity() {
         val target = MeowApplication.configFile
         val directory = target.parentFile ?: throw IllegalStateException("Config directory missing")
         directory.mkdirs()
+        val previousConfig = target.takeIf { it.isFile }?.readText(Charsets.UTF_8)
+        val dnsChanged = dnsConfigurationChanged(previousConfig, config)
         val atomicFile = AtomicFile(target)
         var output: FileOutputStream? = null
         try {
@@ -879,6 +883,22 @@ class MainActivity : FlutterFragmentActivity() {
             output?.let(atomicFile::failWrite)
             throw error
         }
+        if (dnsChanged) {
+            PersistentDnsCache.requestClear(
+                MeowApplication.singboxWorkingDirectory,
+                "config_dns_changed",
+            )
+            MeowDiagnostics.log(TAG, "persistent DNS cache clear requested after config change")
+        }
+    }
+
+    private fun dnsConfigurationChanged(previousConfig: String?, nextConfig: String): Boolean {
+        if (previousConfig == null) {
+            return File(MeowApplication.singboxWorkingDirectory, "cache.db").exists()
+        }
+        val previousDns = runCatching { JSONObject(previousConfig).opt("dns")?.toString() }.getOrNull()
+        val nextDns = runCatching { JSONObject(nextConfig).opt("dns")?.toString() }.getOrNull()
+        return previousDns == null || nextDns == null || previousDns != nextDns
     }
 
     private fun writeConfigAndDispatch(
@@ -976,6 +996,7 @@ class MainActivity : FlutterFragmentActivity() {
                     "activeOwner=${MeowBoxService.hasActiveRuntimeOwner(SingboxController.serviceMode)}",
             )
             MeowBoxService.requestStopAll("force_cleanup:$reason:$source")
+            MeowBoxService.requestTerminalForceStopAll("force_cleanup:$reason:$source")
             MeowDefaultNetworkMonitor.stop()
         }
         for (serviceClass in targets) {
@@ -1195,23 +1216,28 @@ class MainActivity : FlutterFragmentActivity() {
         restartCore: Boolean,
         result: MethodChannel.Result,
     ) {
+        val dnsCacheClearPending = PersistentDnsCache.isClearPending(
+            MeowApplication.singboxWorkingDirectory,
+        )
+        val effectiveRestartCore = restartCore || dnsCacheClearPending
         val targetMode = if (useVpn) "vpn" else "proxy"
         val serviceClass = if (useVpn) MeowVpnService::class.java else MeowProxyService::class.java
         Log.i(
             TAG,
-            "applyConfig useVpn=$useVpn restartCore=$restartCore running=${SingboxController.running} mode=${SingboxController.serviceMode} target=${serviceClass.simpleName}",
+            "applyConfig useVpn=$useVpn restartCore=$effectiveRestartCore dnsCacheClearPending=$dnsCacheClearPending running=${SingboxController.running} mode=${SingboxController.serviceMode} target=${serviceClass.simpleName}",
         )
         SingboxController.log(
             "info",
-            "android applyConfig requested useVpn=$useVpn restartCore=$restartCore " +
+            "android applyConfig requested useVpn=$useVpn restartCore=$effectiveRestartCore " +
+                "dnsCacheClearPending=$dnsCacheClearPending " +
                 "running=${SingboxController.running} mode=${SingboxController.serviceMode}",
         )
         MeowDiagnostics.log(
             TAG,
-            "applyConfig useVpn=$useVpn restartCore=$restartCore running=${SingboxController.running} mode=${SingboxController.serviceMode} target=${serviceClass.simpleName}",
+            "applyConfig useVpn=$useVpn restartCore=$effectiveRestartCore dnsCacheClearPending=$dnsCacheClearPending running=${SingboxController.running} mode=${SingboxController.serviceMode} target=${serviceClass.simpleName}",
         )
         if (SingboxController.running && SingboxController.serviceMode == targetMode) {
-            if (restartCore) {
+            if (effectiveRestartCore) {
                 startService(Intent(this, serviceClass).setAction(MeowBoxService.ACTION_RESTART_CORE))
                 result.success(true)
             } else {

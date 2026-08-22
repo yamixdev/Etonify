@@ -518,7 +518,7 @@ object SingboxController {
         notifyStopWaiters(true)
     }
 
-    fun awaitStopped(timeoutMs: Long = 5_000L, callback: (Boolean) -> Unit) {
+    fun awaitStopped(timeoutMs: Long = 7_000L, callback: (Boolean) -> Unit) {
         if (!running) {
             mainHandler.post { callback(true) }
             return
