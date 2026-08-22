@@ -2,14 +2,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 void main() {
-  test('Android uses the physical network first when VPN is off', () {
-    expect(
-      remoteDownloadRouteOrderForTest(android: true, vpnActive: false),
-      const <RemoteDownloadRoute>[RemoteDownloadRoute.underlying],
-    );
-  });
+  test(
+    'Android keeps the system route before physical fallback when Etonify VPN is off',
+    () {
+      expect(
+        remoteDownloadRouteOrderForTest(android: true, vpnActive: false),
+        const <RemoteDownloadRoute>[
+          RemoteDownloadRoute.app,
+          RemoteDownloadRoute.underlying,
+        ],
+      );
+    },
+  );
 
-  test('VPN-off download does not repeat the same physical route', () async {
+  test('VPN-off system route failure uses physical fallback', () async {
     final attempted = <RemoteDownloadRoute>[];
 
     await expectLater(
@@ -20,13 +26,14 @@ void main() {
         ),
         attempt: (route) async {
           attempted.add(route);
-          throw const FormatException('physical network unavailable');
+          throw const FormatException('network route unavailable');
         },
       ),
       throwsA(isA<FormatException>()),
     );
 
     expect(attempted, const <RemoteDownloadRoute>[
+      RemoteDownloadRoute.app,
       RemoteDownloadRoute.underlying,
     ]);
   });

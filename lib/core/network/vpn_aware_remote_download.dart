@@ -47,10 +47,13 @@ List<RemoteDownloadRoute> remoteDownloadRouteOrderForTest({
     return const <RemoteDownloadRoute>[RemoteDownloadRoute.app];
   }
   if (vpnActive == false) {
-    // There is no tunnel to fall back from. Both routes would ultimately use
-    // the same Wi-Fi/LTE connection, so retrying through Dart HTTP would only
-    // repeat the request and double the visible wait.
-    return const <RemoteDownloadRoute>[RemoteDownloadRoute.underlying];
+    // Etonify is not the VPN owner, but Android's default app route can still
+    // be another VPN. Preserve that working route first; only bind explicitly
+    // to Wi-Fi/LTE after the system route actually fails.
+    return const <RemoteDownloadRoute>[
+      RemoteDownloadRoute.app,
+      RemoteDownloadRoute.underlying,
+    ];
   }
   // A null state is deliberately treated like an active VPN. If the runtime
   // status bridge is temporarily unavailable, preserving the tunnel-first

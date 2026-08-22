@@ -254,10 +254,13 @@ class SubscriptionFetcher {
       return const [SubscriptionFetchRoute.app];
     }
     if (vpnRuntimeReady == false) {
-      // Without a running VPN both clients resolve to the same physical
-      // network. Use the explicitly bound Android request once instead of
-      // repeating the download after the five-second deadline.
-      return const [SubscriptionFetchRoute.underlying];
+      // Etonify is not the VPN owner, but the app route may belong to another
+      // Android VPN. Keep that route usable and bind directly to Wi-Fi/LTE only
+      // as a fallback after a real failure.
+      return const [
+        SubscriptionFetchRoute.app,
+        SubscriptionFetchRoute.underlying,
+      ];
     }
     // An unknown runtime state stays tunnel-first. A temporary status bridge
     // failure must not silently bypass a VPN that may still be active.

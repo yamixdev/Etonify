@@ -30,15 +30,18 @@ void main() {
       );
     });
 
-    test('uses only the underlying network without a ready VPN runtime', () {
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: true,
-          vpnRuntimeReady: false,
-        ),
-        const [SubscriptionFetchRoute.underlying],
-      );
-    });
+    test(
+      'keeps the system route before physical fallback without Etonify VPN',
+      () {
+        expect(
+          SubscriptionFetcher.routeOrderForTest(
+            android: true,
+            vpnRuntimeReady: false,
+          ),
+          const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying],
+        );
+      },
+    );
 
     test('unknown Android VPN state preserves tunnel-first routing', () {
       expect(
