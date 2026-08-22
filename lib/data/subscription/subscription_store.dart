@@ -642,6 +642,7 @@ class SubscriptionStore {
     Duration? operationTimeout,
     bool Function()? isCancelled,
     bool allowInsecureTls = false,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) async {
     await ensurePayloadReady();
     final id = SubscriptionFetcher.generateId();
@@ -654,6 +655,7 @@ class SubscriptionStore {
           requestInfo: requestInfo,
           operationTimeout: _remainingUntil(deadline),
           allowInsecureTls: allowInsecureTls,
+          onRouteAttempt: onRouteAttempt,
         ),
         deadline,
         'subscription import',
@@ -845,6 +847,7 @@ class SubscriptionStore {
     String id, {
     Duration? operationTimeout,
     bool allowInsecureTls = false,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) {
     final inFlight = _refreshesInFlight[id];
     if (inFlight != null) {
@@ -854,6 +857,7 @@ class SubscriptionStore {
       id,
       operationTimeout: operationTimeout,
       allowInsecureTls: allowInsecureTls,
+      onRouteAttempt: onRouteAttempt,
     );
     _refreshesInFlight[id] = operation;
     return operation.whenComplete(() {
@@ -867,6 +871,7 @@ class SubscriptionStore {
     String id, {
     Duration? operationTimeout,
     required bool allowInsecureTls,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) async {
     await ensurePayloadReady();
     final existingBeforeFetch = get(id);
@@ -884,6 +889,7 @@ class SubscriptionStore {
         requestInfo: existingBeforeFetch.info,
         operationTimeout: _remainingUntil(deadline),
         allowInsecureTls: allowInsecureTls,
+        onRouteAttempt: onRouteAttempt,
       ),
       deadline,
       'subscription refresh',

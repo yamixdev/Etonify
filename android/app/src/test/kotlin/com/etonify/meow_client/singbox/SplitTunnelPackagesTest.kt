@@ -83,18 +83,18 @@ class SplitTunnelPackagesTest {
     }
 
     @Test
-    fun `exclude mode keeps the VPN owner outside its own tunnel`() {
+    fun `exclude mode keeps the VPN owner routed through its own tunnel`() {
         assertEquals(
-            listOf("com.example.direct", "com.etonify.meow_client"),
-            ensureVpnOwnerExcluded(
-                excluded = listOf("com.example.direct"),
+            listOf("com.example.direct"),
+            keepVpnOwnerRouted(
+                excluded = listOf("com.example.direct", "com.etonify.meow_client"),
                 ownerPackage = "com.etonify.meow_client",
             ),
         )
         assertEquals(
-            listOf("com.example.direct", "com.etonify.meow_client"),
-            ensureVpnOwnerExcluded(
-                excluded = listOf("com.example.direct", "com.etonify.meow_client"),
+            listOf("com.example.direct"),
+            keepVpnOwnerRouted(
+                excluded = listOf("com.example.direct"),
                 ownerPackage = "com.etonify.meow_client",
             ),
         )
@@ -104,9 +104,29 @@ class SplitTunnelPackagesTest {
     fun `full tunnel mode does not implicitly exclude the VPN owner`() {
         assertEquals(
             emptyList<String>(),
-            ensureVpnOwnerExcluded(
+            keepVpnOwnerRouted(
                 excluded = emptyList(),
                 ownerPackage = "com.etonify.meow_client",
+            ),
+        )
+    }
+
+    @Test
+    fun `VPN owner is allowed into TUN but never added to the bypass list`() {
+        assertEquals(
+            true,
+            shouldApplyTunPackage(
+                packageName = "com.etonify.meow_client",
+                ownerPackage = "com.etonify.meow_client",
+                allowed = true,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldApplyTunPackage(
+                packageName = "com.etonify.meow_client",
+                ownerPackage = "com.etonify.meow_client",
+                allowed = false,
             ),
         )
     }

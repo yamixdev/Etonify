@@ -36,6 +36,9 @@ class FetchResult {
 
 enum SubscriptionFetchRoute { app, underlying }
 
+typedef SubscriptionFetchRouteAttemptCallback =
+    void Function(SubscriptionFetchRoute route, bool isFallback);
+
 class _FetchedSubscriptionResponse {
   const _FetchedSubscriptionResponse({
     required this.rawContent,
@@ -59,7 +62,7 @@ class SubscriptionFetcher {
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
   static const _defaultOperationTimeout = Duration(seconds: 20);
-  static const _firstRouteTimeout = Duration(seconds: 8);
+  static const _firstRouteTimeout = Duration(seconds: 5);
   static const _runtimeStatusTimeout = Duration(seconds: 1);
 
   static void configureAppVersion(String value) {
@@ -75,6 +78,7 @@ class SubscriptionFetcher {
     SubscriptionInfo? requestInfo,
     Duration? operationTimeout,
     bool allowInsecureTls = false,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) async {
     final uri = parseRequestUri(url);
     _logFetchStart(uri, requestInfo);
@@ -103,6 +107,7 @@ class SubscriptionFetcher {
       >(
         routes: routes,
         totalTimeout: totalTimeout,
+        onAttempt: onRouteAttempt,
         attempt: (route, timeout) => switch (route) {
           SubscriptionFetchRoute.app => _fetchViaAppRoute(
             uri: uri,
@@ -130,7 +135,7 @@ class SubscriptionFetcher {
     }
   }
 
-  static Future<bool> _isVpnRuntimeReady() async {
+  static Future<bool?> _isVpnRuntimeReady() async {
     if (!Platform.isAndroid) {
       return false;
     }
@@ -146,7 +151,7 @@ class SubscriptionFetcher {
         'subscription',
         'runtime status unavailable before fetch: $error',
       );
-      return false;
+      return null;
     }
   }
 
@@ -236,7 +241,7 @@ class SubscriptionFetcher {
   @visibleForTesting
   static List<SubscriptionFetchRoute> routeOrderForTest({
     required bool android,
-    required bool vpnRuntimeReady,
+    required bool? vpnRuntimeReady,
     bool allowInsecureTls = false,
   }) {
     // The native underlying-network fetcher intentionally retains Android's
@@ -248,9 +253,18 @@ class SubscriptionFetcher {
     if (!android) {
       return const [SubscriptionFetchRoute.app];
     }
-    return vpnRuntimeReady
-        ? const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying]
-        : const [SubscriptionFetchRoute.underlying, SubscriptionFetchRoute.app];
+    if (vpnRuntimeReady == false) {
+      // Without a running VPN both clients resolve to the same physical
+      // network. Use the explicitly bound Android request once instead of
+      // repeating the download after the five-second deadline.
+      return const [SubscriptionFetchRoute.underlying];
+    }
+    // An unknown runtime state stays tunnel-first. A temporary status bridge
+    // failure must not silently bypass a VPN that may still be active.
+    return const [
+      SubscriptionFetchRoute.app,
+      SubscriptionFetchRoute.underlying,
+    ];
   }
 
   @visibleForTesting
@@ -259,6 +273,7 @@ class SubscriptionFetcher {
     required Duration totalTimeout,
     required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
     attempt,
+    SubscriptionFetchRouteAttemptCallback? onAttempt,
     void Function(SubscriptionFetchRoute route, Object error)? onFailure,
   }) async {
     if (routes.isEmpty) {
@@ -277,6 +292,7 @@ class SubscriptionFetcher {
           ? remaining
           : _firstAttemptBudget(remaining, routesAfterThis);
       final route = routes[index];
+      onAttempt?.call(route, index > 0);
       try {
         return await attempt(route, timeout).timeout(timeout);
       } catch (error, stackTrace) {
@@ -298,12 +314,14 @@ class SubscriptionFetcher {
     required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
     attempt,
     required Future<R> Function(T response) finalize,
+    SubscriptionFetchRouteAttemptCallback? onAttempt,
     void Function(SubscriptionFetchRoute route, Object error)? onFailure,
   }) async {
     final response = await runRouteAttemptsForTest<T>(
       routes: routes,
       totalTimeout: totalTimeout,
       attempt: attempt,
+      onAttempt: onAttempt,
       onFailure: onFailure,
     );
     return finalize(response);

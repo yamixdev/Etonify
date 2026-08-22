@@ -541,7 +541,7 @@ class MainActivity : FlutterFragmentActivity() {
         val host = rawHost.trim().removePrefix("[").removeSuffix("]")
         require(host.isNotEmpty()) { "Host is empty." }
         require(host.length <= 253) { "Host is too long." }
-        val network = MeowDefaultNetworkMonitor.require()
+        val network = MeowDefaultNetworkMonitor.requirePhysicalNetwork()
         val addresses = network.getAllByName(host)
             .mapNotNull { address -> address.hostAddress?.trim() }
             .filter { address -> address.isNotEmpty() }
@@ -556,7 +556,7 @@ class MainActivity : FlutterFragmentActivity() {
         maxBytes: Int,
         timeoutMs: Int,
     ): Map<String, Any> {
-        val network = MeowDefaultNetworkMonitor.require()
+        val network = MeowDefaultNetworkMonitor.requirePhysicalNetwork()
         val boundedTimeout = timeoutMs.coerceIn(3_000, 60_000)
         val deadline = SystemClock.elapsedRealtime() + boundedTimeout
         var url = URL(rawUrl)
@@ -649,7 +649,7 @@ class MainActivity : FlutterFragmentActivity() {
         responseStartTimeoutMs: Int,
         idleTimeoutMs: Int,
     ): Map<String, Any> {
-        val network = MeowDefaultNetworkMonitor.require()
+        val network = MeowDefaultNetworkMonitor.requirePhysicalNetwork()
         val destination = requirePrivateDownloadTarget(destinationPath)
         val boundedResponseTimeout = responseStartTimeoutMs.coerceIn(1_000, 30_000)
         val boundedIdleTimeout = idleTimeoutMs.coerceIn(1_000, 60_000)

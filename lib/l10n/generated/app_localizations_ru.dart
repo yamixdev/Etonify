@@ -2721,11 +2721,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get remoteDownloadConnectTimeout =>
-      'Не удалось подключиться к серверу за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.';
+      'Не удалось подключиться к серверу за 5 секунд. Проверьте интернет или активный VPN и повторите попытку.';
 
   @override
   String get remoteDownloadResponseTimeout =>
-      'Сервер не начал отвечать за 7 секунд. Проверьте интернет или активный VPN и повторите попытку.';
+      'Сервер не начал отвечать за 5 секунд. Проверьте интернет или активный VPN и повторите попытку.';
+
+  @override
+  String get remoteDownloadRetryWithoutVpn => 'Пробуем без VPN';
+
+  @override
+  String get remoteDownloadRetryWithoutVpnHint =>
+      'VPN-маршрут не ответил. Повторяем через Wi-Fi или мобильную сеть.';
 
   @override
   String get remoteDownloadIdleTimeout =>

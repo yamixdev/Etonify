@@ -241,11 +241,11 @@ class MeowVpnPlatformInterface(
                 excludePackage = { options.excludePackage },
             )
             val includedPackages = splitPackages.included
-            // In exclude-package mode the VPN owner would otherwise route its
-            // own control-plane HTTP and native sockets back into its TUN. The
-            // core normally protects every socket, but one stale/unprotected FD
-            // is enough to black-hole subscription fetches and proxy dials.
-            val excludedPackages = ensureVpnOwnerExcluded(
+            // Etonify's ordinary HTTP must remain inside the VPN so the first
+            // update attempt really uses the selected outbound. Explicit
+            // fallback uses Network.openConnection() on a physical network;
+            // libbox protects its own sockets through VpnService.protect().
+            val excludedPackages = keepVpnOwnerRouted(
                 splitPackages.excluded,
                 service.packageName,
             )
@@ -413,10 +413,10 @@ class MeowVpnPlatformInterface(
             if (packageName.isBlank()) {
                 continue
             }
-            if (packageName == service.packageName) {
+            if (!shouldApplyTunPackage(packageName, service.packageName, allowed)) {
                 MeowDiagnostics.log(
                     "MeowVpnPlatform",
-                    "openTun skip own package=$packageName",
+                    "openTun keep own package routed=$packageName",
                 )
                 continue
             }
@@ -502,7 +502,9 @@ private object MeowLocalResolver : LocalDNSTransport {
             ctx.errnoCode(OsConstants.ENOSYS)
             return
         }
-        val network = runCatching { MeowDefaultNetworkMonitor.require() }.getOrElse {
+        val network = runCatching {
+            MeowDefaultNetworkMonitor.requirePhysicalNetwork()
+        }.getOrElse {
             MeowDiagnostics.log(
                 "MeowLocalResolver",
                 "exchange raw require failed current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
@@ -579,7 +581,9 @@ private object MeowLocalResolver : LocalDNSTransport {
             ctx.errorCode(RCODE_NXDOMAIN)
             return
         }
-        val active = runCatching { MeowDefaultNetworkMonitor.require() }.getOrElse {
+        val active = runCatching {
+            MeowDefaultNetworkMonitor.requirePhysicalNetwork()
+        }.getOrElse {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 runCatching {
                     val answer = InetAddress.getAllByName(host)

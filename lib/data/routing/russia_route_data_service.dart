@@ -188,6 +188,7 @@ class RussiaRouteUpdateCheck {
 
 enum RussiaRouteUpdateStage {
   checking,
+  retryingWithoutVpn,
   downloadingPackage,
   verifyingPackage,
   extractingPackage,
@@ -901,6 +902,11 @@ class RussiaRouteDataService {
         'User-Agent': 'EtonifyRouteData/1',
         'Accept': accept,
       },
+      onRouteAttempt: (route, isFallback) {
+        if (isFallback && route == RemoteDownloadRoute.underlying) {
+          _emitProgress(RussiaRouteUpdateStage.retryingWithoutVpn);
+        }
+      },
       onProgress: (completed, total) {
         onProgress?.call(completed, total > 0 ? total : expectedBytes ?? 0);
       },
@@ -1144,6 +1150,11 @@ class RussiaRouteDataService {
       maximumBytes: _maxDomainListCategoryBytes,
       headers: headers,
       acceptedStatusCodes: const <int>{HttpStatus.ok, HttpStatus.notModified},
+      onRouteAttempt: (route, isFallback) {
+        if (isFallback && route == RemoteDownloadRoute.underlying) {
+          _emitProgress(RussiaRouteUpdateStage.retryingWithoutVpn);
+        }
+      },
     );
     if (response.statusCode == HttpStatus.notModified &&
         cacheFile.existsSync()) {

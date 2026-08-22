@@ -199,11 +199,9 @@ object MeowDefaultNetworkMonitor {
     }
 
     fun require(): Network {
-        synchronized(lock) { currentNetwork }?.takeIf(::isSelectableNetwork)?.let {
-            return it
-        }
-        resolveBestNetwork()?.let {
-            MeowDiagnostics.log(TAG, "require resolved best ${describeNetwork(it)}")
+        val cached = synchronized(lock) { currentNetwork }
+        cached?.takeIf(::isSelectableNetwork)?.let {
+            MeowDiagnostics.log(TAG, "require reused cached ${describeNetwork(it)}")
             return it
         }
         val ready = CountDownLatch(1)
@@ -223,18 +221,29 @@ object MeowDefaultNetworkMonitor {
             MeowDiagnostics.log(TAG, "require late current ${describeNetwork(it)}")
             return it
         }
-        resolveBestNetwork()?.let {
-            MeowDiagnostics.log(TAG, "require late best ${describeNetwork(it)}")
+        return requirePhysicalNetwork(cached)
+    }
+
+    /**
+     * Resolves a usable physical network without changing the network owned by
+     * the running VPN. Control-plane downloads and platform DNS use this path:
+     * selecting a direct fallback must never trigger a libbox interface switch.
+     */
+    fun requirePhysicalNetwork(preferred: Network? = currentNetworkSnapshot()): Network {
+        resolveBestNetwork(preferred = preferred)?.let {
+            MeowDiagnostics.log(TAG, "physical network resolved ${describeNetwork(it)}")
             return it
         }
         val active = MeowApplication.connectivity.activeNetwork
         return if (active != null && isSelectableNetwork(active)) {
-            MeowDiagnostics.log(TAG, "require fallback active ${describeNetwork(active)}")
+            MeowDiagnostics.log(TAG, "physical network fallback active ${describeNetwork(active)}")
             active
         } else {
-            error("missing default network")
+            error("missing physical network")
         }
     }
+
+    fun currentNetworkSnapshot(): Network? = synchronized(lock) { currentNetwork }
 
     fun awaitUsableDefaultInterface(timeoutMs: Long = 1_500L): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs

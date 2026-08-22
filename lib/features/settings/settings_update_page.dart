@@ -889,6 +889,8 @@ class _DownloadProgressCard extends StatelessWidget {
     final stage = progress?.stage ?? AppUpdateDownloadStage.downloading;
     final title = switch (stage) {
       AppUpdateDownloadStage.cleaning => l10n.updatesStageCleaning,
+      AppUpdateDownloadStage.retryingWithoutVpn =>
+        l10n.remoteDownloadRetryWithoutVpn,
       AppUpdateDownloadStage.downloading => l10n.updatesDownloadingTitle,
       AppUpdateDownloadStage.verifying => l10n.updatesStageVerifying,
       AppUpdateDownloadStage.ready => l10n.updatesDownloadedTitle,
@@ -909,6 +911,8 @@ class _DownloadProgressCard extends StatelessWidget {
             const Gap(12),
             LinearProgressIndicator(value: value, minHeight: 4),
             const Gap(10),
+            if (stage == AppUpdateDownloadStage.retryingWithoutVpn)
+              Text(l10n.remoteDownloadRetryWithoutVpnHint),
             if (stage == AppUpdateDownloadStage.downloading)
               Text(l10n.updatesProgressBytes(downloaded, total)),
             if (stage == AppUpdateDownloadStage.downloading &&

@@ -373,6 +373,8 @@ String _stageLabel(
   RussiaRouteUpdateStage? stage,
 ) => switch (stage) {
   RussiaRouteUpdateStage.checking => l10n.russiaRoutesStageChecking,
+  RussiaRouteUpdateStage.retryingWithoutVpn =>
+    l10n.remoteDownloadRetryWithoutVpn,
   RussiaRouteUpdateStage.downloadingPackage =>
     l10n.russiaRoutesStageDownloading,
   RussiaRouteUpdateStage.verifyingPackage => l10n.russiaRoutesStageVerifying,

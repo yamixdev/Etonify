@@ -12,24 +12,30 @@ internal data class DefaultNetworkCandidate<T>(
  * Keeps the current usable physical network when Android reports the VPN itself as
  * active and temporarily removes VALIDATED from its underlying network. When a
  * callback identifies a different physical network as the new best candidate,
- * that callback network wins over an unvalidated stale interface.
+ * that callback network wins over an unvalidated stale interface. Outside an
+ * active VPN, Android's active physical network wins so a lingering validated
+ * Wi-Fi network cannot capture a cellular fallback request.
  */
 internal fun <T> selectDefaultNetworkCandidate(
     candidates: List<DefaultNetworkCandidate<T>>,
     current: T?,
     preferred: T? = null,
 ): DefaultNetworkCandidate<T>? {
-    return candidates
-        .filter { it.isValidated }
+    val usable = candidates.filter { it.hasUsableInterface }
+    return usable
+        .filter { it.isActive }
         .maxByOrNull { it.score }
-        ?: candidates
-            .filter { it.isActive }
+        ?: usable
+            .filter { it.value == preferred && it.isValidated }
             .maxByOrNull { it.score }
-        ?: candidates
-            .firstOrNull { it.value == preferred && it.hasUsableInterface }
-        ?: candidates
-            .firstOrNull { it.value == current && it.hasUsableInterface }
-        ?: candidates
-            .filter { it.hasUsableInterface }
+        ?: usable
+            .filter { it.value == current && it.isValidated }
+            .maxByOrNull { it.score }
+        ?: usable
+            .filter { it.isValidated }
+            .maxByOrNull { it.score }
+        ?: usable.firstOrNull { it.value == preferred }
+        ?: usable.firstOrNull { it.value == current }
+        ?: usable
             .maxByOrNull { it.score }
 }

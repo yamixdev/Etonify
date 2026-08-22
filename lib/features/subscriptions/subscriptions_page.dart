@@ -120,6 +120,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   bool _loading = false;
   int _refreshAllCompleted = 0;
   int _refreshAllTotal = 0;
+  int _lastPhysicalFallbackNoticeAt = 0;
   String? _error;
 
   bool get _addOnly => widget.openAddOnStart;
@@ -134,6 +135,24 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     if (widget.hapticEnabled) {
       HapticFeedback.lightImpact();
     }
+  }
+
+  void _handleSubscriptionRouteAttempt(
+    SubscriptionFetchRoute route,
+    bool isFallback,
+  ) {
+    if (!mounted || !isFallback || route != SubscriptionFetchRoute.underlying) {
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastPhysicalFallbackNoticeAt < 2000) {
+      return;
+    }
+    _lastPhysicalFallbackNoticeAt = now;
+    AppNotice.show(
+      context,
+      AppLocalizations.of(context).remoteDownloadRetryWithoutVpnHint,
+    );
   }
 
   @override
@@ -483,6 +502,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                 operationTimeout: _kSubscriptionOperationTimeout,
                 isCancelled: result.isCancelled,
                 allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
+                onRouteAttempt: _handleSubscriptionRouteAttempt,
               ),
       );
       final created = createdResult.subscription;
@@ -650,6 +670,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           id,
           operationTimeout: _kSubscriptionOperationTimeout,
           allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
+          onRouteAttempt: _handleSubscriptionRouteAttempt,
         ),
       );
       if (mounted) {
@@ -717,6 +738,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           id,
           operationTimeout: _kSubscriptionOperationTimeout,
           allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
+          onRouteAttempt: _handleSubscriptionRouteAttempt,
         ),
       );
       if (!mounted) {
@@ -766,6 +788,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                       operationTimeout: _kSubscriptionOperationTimeout,
                       allowInsecureTls:
                           widget.allowUntrustedSubscriptionCertificates,
+                      onRouteAttempt: _handleSubscriptionRouteAttempt,
                     ),
               )
               .toList(growable: false),

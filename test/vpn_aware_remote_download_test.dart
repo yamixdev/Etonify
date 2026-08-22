@@ -2,28 +2,74 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 void main() {
-  test('Android tries the VPN app route before the physical network', () {
+  test('Android uses the physical network first when VPN is off', () {
     expect(
-      remoteDownloadRouteOrderForTest(android: true),
+      remoteDownloadRouteOrderForTest(android: true, vpnActive: false),
+      const <RemoteDownloadRoute>[RemoteDownloadRoute.underlying],
+    );
+  });
+
+  test('VPN-off download does not repeat the same physical route', () async {
+    final attempted = <RemoteDownloadRoute>[];
+
+    await expectLater(
+      runRemoteDownloadRouteAttemptsForTest<void>(
+        routes: remoteDownloadRouteOrderForTest(
+          android: true,
+          vpnActive: false,
+        ),
+        attempt: (route) async {
+          attempted.add(route);
+          throw const FormatException('physical network unavailable');
+        },
+      ),
+      throwsA(isA<FormatException>()),
+    );
+
+    expect(attempted, const <RemoteDownloadRoute>[
+      RemoteDownloadRoute.underlying,
+    ]);
+  });
+
+  test('Android tries the VPN route before physical fallback when active', () {
+    expect(
+      remoteDownloadRouteOrderForTest(android: true, vpnActive: true),
       const <RemoteDownloadRoute>[
         RemoteDownloadRoute.app,
         RemoteDownloadRoute.underlying,
       ],
     );
+  });
+
+  test('unknown Android VPN state preserves tunnel-first routing', () {
     expect(
-      remoteDownloadRouteOrderForTest(android: false),
+      remoteDownloadRouteOrderForTest(android: true, vpnActive: null),
+      const <RemoteDownloadRoute>[
+        RemoteDownloadRoute.app,
+        RemoteDownloadRoute.underlying,
+      ],
+    );
+  });
+
+  test('non-Android platforms use their regular network route', () {
+    expect(
+      remoteDownloadRouteOrderForTest(android: false, vpnActive: false),
       const <RemoteDownloadRoute>[RemoteDownloadRoute.app],
     );
   });
 
   test('physical network is used only after the app route fails', () async {
     final attempted = <RemoteDownloadRoute>[];
+    final notifications = <(RemoteDownloadRoute, bool)>[];
 
     final result = await runRemoteDownloadRouteAttemptsForTest<String>(
       routes: const <RemoteDownloadRoute>[
         RemoteDownloadRoute.app,
         RemoteDownloadRoute.underlying,
       ],
+      onAttempt: (route, isFallback) {
+        notifications.add((route, isFallback));
+      },
       attempt: (route) async {
         attempted.add(route);
         if (route == RemoteDownloadRoute.app) {
@@ -37,6 +83,10 @@ void main() {
     expect(attempted, const <RemoteDownloadRoute>[
       RemoteDownloadRoute.app,
       RemoteDownloadRoute.underlying,
+    ]);
+    expect(notifications, const <(RemoteDownloadRoute, bool)>[
+      (RemoteDownloadRoute.app, false),
+      (RemoteDownloadRoute.underlying, true),
     ]);
   });
 

@@ -48,6 +48,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/happ_crypto_link.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/features/home/home_presentation_builder.dart';
@@ -2213,6 +2214,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           requestInfo: requestInfo,
           operationTimeout: _subscriptionOperationTimeout,
           allowInsecureTls: _allowUntrustedSubscriptionCertificates,
+          onRouteAttempt: _handleSubscriptionRouteAttempt,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,
         timeoutMessage: l10n.subscriptionOperationTimeout,
@@ -2316,6 +2318,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
       tone: tone,
       actionLabel: actionLabel,
       onAction: onAction,
+    );
+  }
+
+  void _handleSubscriptionRouteAttempt(
+    SubscriptionFetchRoute route,
+    bool isFallback,
+  ) {
+    if (!isFallback || route != SubscriptionFetchRoute.underlying) {
+      return;
+    }
+    _showAppSnackBar(
+      _currentLocalizations?.remoteDownloadRetryWithoutVpnHint ??
+          'The VPN route did not respond. Retrying without VPN.',
     );
   }
 
@@ -2477,6 +2492,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           subscription.id,
           operationTimeout: _subscriptionOperationTimeout,
           allowInsecureTls: _allowUntrustedSubscriptionCertificates,
+          onRouteAttempt: _handleSubscriptionRouteAttempt,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,
         timeoutMessage: l10n.subscriptionOperationTimeout,
@@ -2616,6 +2632,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         subscriptionId,
         operationTimeout: _subscriptionOperationTimeout,
         allowInsecureTls: _allowUntrustedSubscriptionCertificates,
+        onRouteAttempt: _handleSubscriptionRouteAttempt,
       ),
       slowMessage: l10n.subscriptionOperationSlowWarning,
       timeoutMessage: l10n.subscriptionOperationTimeout,

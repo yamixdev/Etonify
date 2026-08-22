@@ -10,7 +10,7 @@ class DefaultNetworkSelectionTest {
         val selected = selectDefaultNetworkCandidate(
             candidates = listOf(
                 candidate("cell", active = true, score = 40),
-                candidate("wifi", validated = true, score = 130),
+                candidate("wifi", validated = true, hasInterface = true, score = 130),
             ),
             current = "cell",
         )
@@ -55,6 +55,32 @@ class DefaultNetworkSelectionTest {
         )
 
         assertEquals("wifi", selected?.value)
+    }
+
+    @Test
+    fun `active physical network wins over a stale validated transport`() {
+        val selected = selectDefaultNetworkCandidate(
+            candidates = listOf(
+                candidate("wifi", validated = true, hasInterface = true, score = 130),
+                candidate("cell", active = true, hasInterface = true, score = 40),
+            ),
+            current = "wifi",
+        )
+
+        assertEquals("cell", selected?.value)
+    }
+
+    @Test
+    fun `validated candidate without an interface is rejected`() {
+        val selected = selectDefaultNetworkCandidate(
+            candidates = listOf(
+                candidate("stale", validated = true, score = 200),
+                candidate("cell", hasInterface = true, score = 40),
+            ),
+            current = "stale",
+        )
+
+        assertEquals("cell", selected?.value)
     }
 
     @Test

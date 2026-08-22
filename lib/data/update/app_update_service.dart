@@ -286,7 +286,13 @@ class AppUpdateDownloadProgress {
   }
 }
 
-enum AppUpdateDownloadStage { cleaning, downloading, verifying, ready }
+enum AppUpdateDownloadStage {
+  cleaning,
+  retryingWithoutVpn,
+  downloading,
+  verifying,
+  ready,
+}
 
 class AppUpdateVerificationResult {
   const AppUpdateVerificationResult({
@@ -785,6 +791,19 @@ class AppUpdateService {
         maximumBytes: _maxUpdateApkBytes,
         headers: const <String, String>{
           'User-Agent': 'Etonify-Android-Updater',
+        },
+        onRouteAttempt: (route, isFallback) {
+          if (isFallback && route == RemoteDownloadRoute.underlying) {
+            onProgress(
+              AppUpdateDownloadProgress(
+                downloadedBytes: downloaded,
+                totalBytes: totalBytes,
+                bytesPerSecond: 0,
+                done: false,
+                stage: AppUpdateDownloadStage.retryingWithoutVpn,
+              ),
+            );
+          }
         },
         onProgress: (completed, total) {
           downloaded = completed;

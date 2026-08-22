@@ -30,13 +30,23 @@ void main() {
       );
     });
 
-    test('prefers the underlying network without a ready VPN runtime', () {
+    test('uses only the underlying network without a ready VPN runtime', () {
       expect(
         SubscriptionFetcher.routeOrderForTest(
           android: true,
           vpnRuntimeReady: false,
         ),
-        const [SubscriptionFetchRoute.underlying, SubscriptionFetchRoute.app],
+        const [SubscriptionFetchRoute.underlying],
+      );
+    });
+
+    test('unknown Android VPN state preserves tunnel-first routing', () {
+      expect(
+        SubscriptionFetcher.routeOrderForTest(
+          android: true,
+          vpnRuntimeReady: null,
+        ),
+        const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying],
       );
     });
 
@@ -72,6 +82,7 @@ void main() {
     test('falls back after a route-specific content failure', () async {
       final attemptedRoutes = <SubscriptionFetchRoute>[];
       final attemptTimeouts = <Duration>[];
+      final notifications = <(SubscriptionFetchRoute, bool)>[];
 
       final result = await SubscriptionFetcher.runRouteAttemptsForTest<String>(
         routes: const [
@@ -79,6 +90,9 @@ void main() {
           SubscriptionFetchRoute.underlying,
         ],
         totalTimeout: const Duration(seconds: 30),
+        onAttempt: (route, isFallback) {
+          notifications.add((route, isFallback));
+        },
         attempt: (route, timeout) async {
           attemptedRoutes.add(route);
           attemptTimeouts.add(timeout);
@@ -96,8 +110,12 @@ void main() {
         SubscriptionFetchRoute.app,
         SubscriptionFetchRoute.underlying,
       ]);
-      expect(attemptTimeouts.first, const Duration(seconds: 8));
+      expect(attemptTimeouts.first, const Duration(seconds: 5));
       expect(attemptTimeouts.last, greaterThan(const Duration(seconds: 20)));
+      expect(notifications, const <(SubscriptionFetchRoute, bool)>[
+        (SubscriptionFetchRoute.app, false),
+        (SubscriptionFetchRoute.underlying, true),
+      ]);
     });
 
     test('does not start a fallback after the first route succeeds', () async {

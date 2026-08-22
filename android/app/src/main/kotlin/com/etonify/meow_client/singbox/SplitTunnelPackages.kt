@@ -49,16 +49,22 @@ internal fun requireAppliedIncludedPackages(
     }
 }
 
-internal fun ensureVpnOwnerExcluded(
+internal fun keepVpnOwnerRouted(
     excluded: List<String>,
     ownerPackage: String,
 ): List<String> {
     val normalizedOwner = ownerPackage.trim()
-    if (excluded.isEmpty() || normalizedOwner.isEmpty() || normalizedOwner in excluded) {
+    if (excluded.isEmpty() || normalizedOwner.isEmpty()) {
         return excluded
     }
-    return excluded + normalizedOwner
+    return excluded.filterNot { it == normalizedOwner }
 }
+
+internal fun shouldApplyTunPackage(
+    packageName: String,
+    ownerPackage: String,
+    allowed: Boolean,
+): Boolean = allowed || packageName != ownerPackage
 
 private fun readBoundedPackageIterator(
     fieldName: String,

@@ -2712,11 +2712,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get remoteDownloadConnectTimeout =>
-      'Could not connect to the server within 7 seconds. Check your connection or active VPN and try again.';
+      'Could not connect to the server within 5 seconds. Check your connection or active VPN and try again.';
 
   @override
   String get remoteDownloadResponseTimeout =>
-      'The server did not start responding within 7 seconds. Check your connection or active VPN and try again.';
+      'The server did not start responding within 5 seconds. Check your connection or active VPN and try again.';
+
+  @override
+  String get remoteDownloadRetryWithoutVpn => 'Trying without VPN';
+
+  @override
+  String get remoteDownloadRetryWithoutVpnHint =>
+      'The VPN route did not respond. Retrying over Wi-Fi or mobile data.';
 
   @override
   String get remoteDownloadIdleTimeout =>

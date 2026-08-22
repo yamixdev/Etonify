@@ -10,6 +10,7 @@ import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 enum AdBlockUpdateStage {
   connecting,
+  retryingWithoutVpn,
   downloading,
   compiling,
   activating,
@@ -269,6 +270,14 @@ class AdBlockRuleSetService {
       uri: uri,
       maximumBytes: _maxSourceBytes,
       headers: const <String, String>{'Accept': 'text/plain,*/*'},
+      onRouteAttempt: (route, isFallback) {
+        if (isFallback && route == RemoteDownloadRoute.underlying) {
+          _emitProgress(
+            AdBlockUpdateStage.retryingWithoutVpn,
+            elapsedMilliseconds: stopwatch.elapsedMilliseconds,
+          );
+        }
+      },
       onProgress: (completed, total) {
         final elapsed = stopwatch.elapsedMilliseconds;
         if (elapsed - lastProgressAt < 250 &&

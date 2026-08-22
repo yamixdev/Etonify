@@ -4824,14 +4824,26 @@ abstract class AppLocalizations {
   /// No description provided for @remoteDownloadConnectTimeout.
   ///
   /// In en, this message translates to:
-  /// **'Could not connect to the server within 7 seconds. Check your connection or active VPN and try again.'**
+  /// **'Could not connect to the server within 5 seconds. Check your connection or active VPN and try again.'**
   String get remoteDownloadConnectTimeout;
 
   /// No description provided for @remoteDownloadResponseTimeout.
   ///
   /// In en, this message translates to:
-  /// **'The server did not start responding within 7 seconds. Check your connection or active VPN and try again.'**
+  /// **'The server did not start responding within 5 seconds. Check your connection or active VPN and try again.'**
   String get remoteDownloadResponseTimeout;
+
+  /// No description provided for @remoteDownloadRetryWithoutVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'Trying without VPN'**
+  String get remoteDownloadRetryWithoutVpn;
+
+  /// No description provided for @remoteDownloadRetryWithoutVpnHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The VPN route did not respond. Retrying over Wi-Fi or mobile data.'**
+  String get remoteDownloadRetryWithoutVpnHint;
 
   /// No description provided for @remoteDownloadIdleTimeout.
   ///

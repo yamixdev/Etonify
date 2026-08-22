@@ -2003,15 +2003,16 @@ void main() {
     final routeRules = (route['rules'] as List).cast<Map>();
     expect(route['final'], 'select');
     expect(routeRules.any((rule) => rule.containsKey('package_name')), isFalse);
-    expect(
-      routeRules.any(
-        (rule) =>
-            rule['action'] == 'hijack-dns' &&
-            rule['type'] == 'logical' &&
-            rule['mode'] == 'or',
-      ),
-      isTrue,
+    final dnsHijackRule = routeRules.firstWhere(
+      (rule) =>
+          rule['action'] == 'hijack-dns' &&
+          rule['type'] == 'logical' &&
+          rule['mode'] == 'or',
     );
+    final dnsHijackChildren = (dnsHijackRule['rules'] as List).cast<Map>();
+    expect(dnsHijackChildren, contains(containsPair('protocol', 'dns')));
+    expect(dnsHijackChildren, contains(containsPair('port', 53)));
+    expect(route['default_domain_resolver'], 'dns-local');
     expect(
       routeRules.any(
         (rule) =>

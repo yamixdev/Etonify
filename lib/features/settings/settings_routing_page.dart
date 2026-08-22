@@ -1877,6 +1877,8 @@ class _AdBlockStatusPanel extends StatelessWidget {
   static String _stageLabel(AppLocalizations l10n, AdBlockUpdateStage? stage) =>
       switch (stage) {
         AdBlockUpdateStage.connecting => l10n.adBlockStageConnecting,
+        AdBlockUpdateStage.retryingWithoutVpn =>
+          l10n.remoteDownloadRetryWithoutVpn,
         AdBlockUpdateStage.downloading => l10n.adBlockStageDownloading,
         AdBlockUpdateStage.compiling => l10n.adBlockStageCompiling,
         AdBlockUpdateStage.activating => l10n.adBlockStageActivating,
@@ -1889,6 +1891,9 @@ class _AdBlockStatusPanel extends StatelessWidget {
     AdBlockUpdateProgress? progress,
   ) {
     if (progress == null || progress.completedBytes <= 0) {
+      if (progress?.stage == AdBlockUpdateStage.retryingWithoutVpn) {
+        return l10n.remoteDownloadRetryWithoutVpnHint;
+      }
       return l10n.adBlockPreparingHint;
     }
     final completed = _RussiaRouteDataStatusPanel._formatBytes(
@@ -2041,6 +2046,8 @@ class _RussiaRouteDataStatusPanel extends StatelessWidget {
     RussiaRouteUpdateStage? stage,
   ) => switch (stage) {
     RussiaRouteUpdateStage.checking => l10n.russiaRoutesStageChecking,
+    RussiaRouteUpdateStage.retryingWithoutVpn =>
+      l10n.remoteDownloadRetryWithoutVpn,
     RussiaRouteUpdateStage.downloadingPackage =>
       l10n.russiaRoutesStageDownloading,
     RussiaRouteUpdateStage.verifyingPackage => l10n.russiaRoutesStageVerifying,
@@ -2059,6 +2066,9 @@ class _RussiaRouteDataStatusPanel extends StatelessWidget {
     RussiaRouteUpdateProgress? progress,
   ) {
     if (progress == null) return l10n.russiaRoutesPreparingHint;
+    if (progress.stage == RussiaRouteUpdateStage.retryingWithoutVpn) {
+      return l10n.remoteDownloadRetryWithoutVpnHint;
+    }
     if (progress.totalBytes > 0) {
       return l10n.russiaRoutesDownloadProgress(
         _formatBytes(progress.completedBytes),
