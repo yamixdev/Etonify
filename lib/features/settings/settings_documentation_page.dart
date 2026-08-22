@@ -15,71 +15,126 @@ class SettingsDocumentationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final sections = <_DocumentationSectionData>[
-      _DocumentationSectionData(
-        icon: Icons.info_outline_rounded,
-        title: l10n.documentationWhatTitle,
-        body: l10n.documentationWhatBody,
+    final groups = <_DocumentationGroupData>[
+      _DocumentationGroupData(
+        title: l10n.documentationGroupGettingStarted,
+        sections: [
+          _DocumentationSectionData(
+            icon: Icons.rocket_launch_rounded,
+            title: l10n.documentationQuickStartTitle,
+            body: l10n.documentationQuickStartBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.info_outline_rounded,
+            title: l10n.documentationWhatTitle,
+            body: l10n.documentationWhatBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.subscriptions_rounded,
+            title: l10n.documentationSubscriptionsTitle,
+            body: l10n.documentationSubscriptionsBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.hub_rounded,
+            title: l10n.documentationProtocolsTitle,
+            body: l10n.documentationProtocolsBody,
+          ),
+        ],
       ),
-      _DocumentationSectionData(
-        icon: Icons.vpn_lock_rounded,
-        title: l10n.documentationModesTitle,
-        body: l10n.documentationModesBody,
+      _DocumentationGroupData(
+        title: l10n.documentationGroupConnection,
+        sections: [
+          _DocumentationSectionData(
+            icon: Icons.vpn_lock_rounded,
+            title: l10n.documentationModesTitle,
+            body: l10n.documentationModesBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.speed_rounded,
+            title: l10n.documentationChecksTitle,
+            body: l10n.documentationChecksBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.notifications_active_rounded,
+            title: l10n.documentationBackgroundTitle,
+            body: l10n.documentationBackgroundBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.account_tree_rounded,
+            title: l10n.documentationChainsTitle,
+            body: l10n.documentationChainsBody,
+          ),
+        ],
       ),
-      _DocumentationSectionData(
-        icon: Icons.hub_rounded,
-        title: l10n.documentationProtocolsTitle,
-        body: l10n.documentationProtocolsBody,
+      _DocumentationGroupData(
+        title: l10n.documentationGroupRouting,
+        sections: [
+          _DocumentationSectionData(
+            icon: Icons.alt_route_rounded,
+            title: l10n.documentationRoutingTitle,
+            body: l10n.documentationRoutingBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.route_rounded,
+            title: l10n.documentationTrafficRulesTitle,
+            body: l10n.documentationTrafficRulesBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.dns_rounded,
+            title: l10n.documentationDnsTitle,
+            body: l10n.documentationDnsBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.folder_special_rounded,
+            title: l10n.documentationRuleFilesTitle,
+            body: l10n.documentationRuleFilesBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.security_rounded,
+            title: l10n.documentationSecurityTitle,
+            body: l10n.documentationSecurityBody,
+          ),
+        ],
       ),
-      _DocumentationSectionData(
-        icon: Icons.account_tree_rounded,
-        title: l10n.documentationChainsTitle,
-        body: l10n.documentationChainsBody,
+      _DocumentationGroupData(
+        title: l10n.documentationGroupMaintenance,
+        sections: [
+          _DocumentationSectionData(
+            icon: Icons.system_update_rounded,
+            title: l10n.documentationUpdatesTitle,
+            body: l10n.documentationUpdatesBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.lock_clock_rounded,
+            title: l10n.documentationBackupTitle,
+            body: l10n.documentationBackupBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.science_rounded,
+            title: l10n.documentationExperimentalTitle,
+            body: l10n.documentationExperimentalBody,
+          ),
+        ],
       ),
-      _DocumentationSectionData(
-        icon: Icons.subscriptions_rounded,
-        title: l10n.documentationSubscriptionsTitle,
-        body: l10n.documentationSubscriptionsBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.speed_rounded,
-        title: l10n.documentationChecksTitle,
-        body: l10n.documentationChecksBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.alt_route_rounded,
-        title: l10n.documentationRoutingTitle,
-        body: l10n.documentationRoutingBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.dns_rounded,
-        title: l10n.documentationDnsTitle,
-        body: l10n.documentationDnsBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.folder_special_rounded,
-        title: l10n.documentationRuleFilesTitle,
-        body: l10n.documentationRuleFilesBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.science_rounded,
-        title: l10n.documentationExperimentalTitle,
-        body: l10n.documentationExperimentalBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.monitor_heart_rounded,
-        title: l10n.documentationDiagnosticsTitle,
-        body: l10n.documentationDiagnosticsBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.warning_amber_rounded,
-        title: l10n.documentationLimitsTitle,
-        body: l10n.documentationLimitsBody,
-      ),
-      _DocumentationSectionData(
-        icon: Icons.support_agent_rounded,
-        title: l10n.documentationSupportTitle,
-        body: l10n.documentationSupportBody,
+      _DocumentationGroupData(
+        title: l10n.documentationGroupHelp,
+        sections: [
+          _DocumentationSectionData(
+            icon: Icons.monitor_heart_rounded,
+            title: l10n.documentationDiagnosticsTitle,
+            body: l10n.documentationDiagnosticsBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.warning_amber_rounded,
+            title: l10n.documentationLimitsTitle,
+            body: l10n.documentationLimitsBody,
+          ),
+          _DocumentationSectionData(
+            icon: Icons.support_agent_rounded,
+            title: l10n.documentationSupportTitle,
+            body: l10n.documentationSupportBody,
+          ),
+        ],
       ),
     ];
 
@@ -99,9 +154,13 @@ class SettingsDocumentationPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _DocumentationIntro(subtitle: l10n.documentationPageSubtitle),
-                const Gap(12),
-                for (final section in sections)
-                  _DocumentationSection(data: section),
+                for (final group in groups) ...[
+                  const Gap(20),
+                  _DocumentationGroupTitle(title: group.title),
+                  const Gap(8),
+                  for (final section in group.sections)
+                    _DocumentationSection(data: section),
+                ],
               ],
             ),
           ),
@@ -109,6 +168,13 @@ class SettingsDocumentationPage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DocumentationGroupData {
+  const _DocumentationGroupData({required this.title, required this.sections});
+
+  final String title;
+  final List<_DocumentationSectionData> sections;
 }
 
 class _DocumentationSectionData {
@@ -158,6 +224,28 @@ class _DocumentationIntro extends StatelessWidget {
   }
 }
 
+class _DocumentationGroupTitle extends StatelessWidget {
+  const _DocumentationGroupTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        title,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+}
+
 class _DocumentationSection extends StatelessWidget {
   const _DocumentationSection({required this.data});
 
@@ -170,8 +258,10 @@ class _DocumentationSection extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ExpansionTile(
+        key: PageStorageKey<String>(data.title),
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
         leading: Icon(data.icon, color: colors.primary),
         title: Text(
           data.title,

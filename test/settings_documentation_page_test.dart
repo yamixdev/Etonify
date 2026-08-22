@@ -21,18 +21,26 @@ void main() {
     await tester.pumpWidget(_documentationApp(const Locale('ru')));
 
     expect(find.text('Справочник Etonify'), findsOneWidget);
+    expect(find.text('Начало работы'), findsOneWidget);
+    expect(find.text('Быстрый старт'), findsOneWidget);
     expect(find.text('Что такое Etonify'), findsOneWidget);
     expect(find.text('VPN и локальный прокси'), findsOneWidget);
-    expect(find.textContaining('Etonify — Android-клиент'), findsNothing);
+    expect(find.textContaining('Etonify — VPN-клиент'), findsNothing);
 
     await tester.tap(find.text('Что такое Etonify'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Etonify — Android-клиент'), findsOneWidget);
+    expect(find.textContaining('Etonify — VPN-клиент'), findsOneWidget);
+
+    await tester.tap(find.text('Быстрый старт'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Добавьте подписку'), findsOneWidget);
 
     await tester.pumpWidget(_documentationApp(const Locale('en')));
     await tester.pumpAndSettle();
 
     expect(find.text('Etonify guide'), findsOneWidget);
+    expect(find.text('Getting started'), findsOneWidget);
+    expect(find.text('Quick start'), findsOneWidget);
     expect(find.text('What Etonify is'), findsOneWidget);
     expect(find.text('VPN and local proxy'), findsOneWidget);
     expect(find.textContaining('Etonify is an Android client'), findsNothing);
