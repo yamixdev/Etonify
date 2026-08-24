@@ -404,7 +404,6 @@ class SingboxConfigBuilder {
                 },
             ],
           'final': dnsFinal,
-          'independent_cache': true,
           'cache_capacity': 4096,
           if (dnsPreferIpv6) 'strategy': 'prefer_ipv6',
         },
@@ -682,7 +681,35 @@ class SingboxConfigBuilder {
       final binaryPath = snowtunBinaryPath?.trim() ?? '';
       return confId.isNotEmpty && transport == 'xtun' && binaryPath.isNotEmpty;
     }
+    if (!_supportsOutboundConfigExtensions(outbound.config)) {
+      return false;
+    }
     return _hasValidServer(outbound.config);
+  }
+
+  bool _supportsOutboundConfigExtensions(Map<String, dynamic> config) {
+    final type = config['type']?.toString().trim().toLowerCase() ?? '';
+    if (type == 'vless') {
+      final encryption =
+          config['encryption']?.toString().trim().toLowerCase() ?? '';
+      if (encryption.isNotEmpty &&
+          encryption != 'none' &&
+          !_supportsCoreConfigExtension(capabilities.supportsVlessEncryption)) {
+        return false;
+      }
+    }
+
+    final transport = config['transport'];
+    if (transport is! Map) return true;
+    final transportType =
+        transport['type']?.toString().trim().toLowerCase() ?? '';
+    return switch (transportType) {
+      'xhttp' => _supportsCoreConfigExtension(capabilities.supportsXHttp),
+      'splithttp' => _supportsCoreConfigExtension(
+        capabilities.supportsSplitHttpAlias,
+      ),
+      _ => true,
+    };
   }
 
   static bool _isWireGuardEndpoint(Outbound outbound) {
@@ -1372,10 +1399,15 @@ class SingboxConfigBuilder {
   static void _normalizeStableOutboundSchema(Map<String, dynamic> config) {
     final type = config['type']?.toString().trim().toLowerCase();
     if (type == 'vless') {
-      // VLESS does not expose a configurable encryption field in sing-box.
-      // Legacy parsers stored `encryption: none`; omitting it is equivalent
-      // and keeps the config accepted by the strict stable-core decoder.
-      config.remove('encryption');
+      // `none` is the upstream/default VLESS mode and is omitted from the
+      // strict sing-box schema. Etonify's non-default encryption extension is
+      // preserved after capability filtering in _isUsableOutbound().
+      final encryption = config['encryption']?.toString().trim() ?? '';
+      if (encryption.isEmpty || encryption.toLowerCase() == 'none') {
+        config.remove('encryption');
+      } else {
+        config['encryption'] = encryption;
+      }
     }
     if (type == 'wireguard') {
       final peers = config['peers'];

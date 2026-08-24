@@ -23,6 +23,9 @@ class LibboxCapabilities {
     required this.supportsConfigCheck,
     required this.supportsCloseConnections,
     required this.supportsRealitySpiderX,
+    this.supportsXHttp = false,
+    this.supportsSplitHttpAlias = false,
+    this.supportsVlessEncryption = false,
     required this.tunStacks,
   });
 
@@ -46,6 +49,11 @@ class LibboxCapabilities {
     supportsCloseConnections: false,
     // The unversioned libbox bundled with Etonify 0.2.1 accepted spider_x.
     supportsRealitySpiderX: true,
+    // Keep the last unversioned Etonify core compatible. Replacement cores
+    // must advertise these extensions through the versioned contract.
+    supportsXHttp: true,
+    supportsSplitHttpAlias: true,
+    supportsVlessEncryption: true,
     tunStacks: <String>{'system', 'gvisor', 'mixed'},
   );
 
@@ -110,6 +118,9 @@ class LibboxCapabilities {
         supportsConfigCheck: _readBool(json, 'supports_config_check'),
         supportsCloseConnections: _readBool(json, 'supports_close_connections'),
         supportsRealitySpiderX: _readBool(json, 'supports_reality_spider_x'),
+        supportsXHttp: _readBool(json, 'supports_xhttp'),
+        supportsSplitHttpAlias: _readBool(json, 'supports_splithttp_alias'),
+        supportsVlessEncryption: _readBool(json, 'supports_vless_encryption'),
         tunStacks: _readStringSet(json, 'tun_stacks'),
       );
     } on FormatException {
@@ -161,6 +172,9 @@ class LibboxCapabilities {
   final bool supportsConfigCheck;
   final bool supportsCloseConnections;
   final bool supportsRealitySpiderX;
+  final bool supportsXHttp;
+  final bool supportsSplitHttpAlias;
+  final bool supportsVlessEncryption;
   final Set<String> tunStacks;
 
   bool get hasVersionedContract => apiVersion > 0;

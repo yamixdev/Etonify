@@ -16,6 +16,9 @@ void main() {
         LibboxCapabilities.parseOrLegacy('{"api_version":0}'),
         same(LibboxCapabilities.bundledLegacy),
       );
+      expect(LibboxCapabilities.bundledLegacy.supportsXHttp, isTrue);
+      expect(LibboxCapabilities.bundledLegacy.supportsSplitHttpAlias, isTrue);
+      expect(LibboxCapabilities.bundledLegacy.supportsVlessEncryption, isTrue);
     });
 
     test('parses the versioned core contract and ignores unknown fields', () {
@@ -39,6 +42,9 @@ void main() {
           "supports_config_check": true,
           "supports_close_connections": true,
           "supports_reality_spider_x": true,
+          "supports_xhttp": true,
+          "supports_splithttp_alias": true,
+          "supports_vless_encryption": true,
           "tun_stacks": ["SYSTEM", "gvisor", "mixed", ""],
           "future_field": "ignored"
         }
@@ -66,6 +72,9 @@ void main() {
       expect(capabilities.supportsConfigCheck, isTrue);
       expect(capabilities.supportsCloseConnections, isTrue);
       expect(capabilities.supportsRealitySpiderX, isTrue);
+      expect(capabilities.supportsXHttp, isTrue);
+      expect(capabilities.supportsSplitHttpAlias, isTrue);
+      expect(capabilities.supportsVlessEncryption, isTrue);
       expect(capabilities.supportsTunStack('system'), isTrue);
       expect(capabilities.supportsTunStack(' GVISOR '), isTrue);
       expect(capabilities.supportsTunStack('mixed'), isTrue);
@@ -80,6 +89,9 @@ void main() {
       expect(capabilities.supportsTargetedUrlTest, isFalse);
       expect(capabilities.supportsConfigCheck, isFalse);
       expect(capabilities.supportsRealitySpiderX, isFalse);
+      expect(capabilities.supportsXHttp, isFalse);
+      expect(capabilities.supportsSplitHttpAlias, isFalse);
+      expect(capabilities.supportsVlessEncryption, isFalse);
       expect(capabilities.tunStacks, isEmpty);
       expect(
         capabilities.urlTestCompletionModel,

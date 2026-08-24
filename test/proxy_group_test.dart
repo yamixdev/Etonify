@@ -1540,6 +1540,139 @@ void main() {
     );
   });
 
+  test('startup config omits DNS fields removed by sing-box 1.14', () {
+    const subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: 'file:///sub.json',
+      outbounds: [],
+    );
+
+    final config = _defaultBuilder(subscription).build();
+    final dns = Map<String, dynamic>.from(config['dns'] as Map);
+
+    expect(dns, isNot(contains('independent_cache')));
+    expect(dns['cache_capacity'], 4096);
+  });
+
+  test('startup config gates XHTTP transports by core capability', () {
+    const subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: 'file:///sub.json',
+      outbounds: [
+        Outbound(
+          tag: 'xhttp-leaf',
+          name: 'XHTTP',
+          config: {
+            'type': 'vless',
+            'tag': 'xhttp-leaf',
+            'server': 'xhttp.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'encryption': 'none',
+            'transport': {'type': 'xhttp', 'path': '/api'},
+          },
+        ),
+        Outbound(
+          tag: 'splithttp-leaf',
+          name: 'SplitHTTP',
+          config: {
+            'type': 'vless',
+            'tag': 'splithttp-leaf',
+            'server': 'splithttp.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'encryption': 'none',
+            'transport': {'type': 'splithttp', 'path': '/api'},
+          },
+        ),
+      ],
+    );
+
+    Set<String> emittedTags(LibboxCapabilities capabilities) {
+      final outbounds =
+          (_defaultBuilder(
+                    subscription,
+                    capabilities: capabilities,
+                  ).build()['outbounds']
+                  as List)
+              .cast<Map<String, dynamic>>();
+      return outbounds
+          .map((outbound) => outbound['tag']?.toString() ?? '')
+          .toSet();
+    }
+
+    final unsupported = LibboxCapabilities.parseOrLegacy('{"api_version":1}');
+    final xhttpOnly = LibboxCapabilities.parseOrLegacy(
+      '{"api_version":1,"supports_xhttp":true}',
+    );
+    final supported = LibboxCapabilities.parseOrLegacy(
+      '{"api_version":1,"supports_xhttp":true,'
+      '"supports_splithttp_alias":true}',
+    );
+
+    expect(emittedTags(unsupported), isNot(contains('xhttp-leaf')));
+    expect(emittedTags(unsupported), isNot(contains('splithttp-leaf')));
+    expect(emittedTags(xhttpOnly), contains('xhttp-leaf'));
+    expect(emittedTags(xhttpOnly), isNot(contains('splithttp-leaf')));
+    expect(
+      emittedTags(supported),
+      containsAll(<String>{'xhttp-leaf', 'splithttp-leaf'}),
+    );
+  });
+
+  test('startup config preserves supported VLESS encryption', () {
+    const encryption =
+        'mlkem768x25519plus.native.0rtt.'
+        'MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs';
+    const subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: 'file:///sub.json',
+      outbounds: [
+        Outbound(
+          tag: 'encrypted-leaf',
+          name: 'Encrypted',
+          config: {
+            'type': 'vless',
+            'tag': 'encrypted-leaf',
+            'server': 'encrypted.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'encryption': encryption,
+          },
+        ),
+      ],
+    );
+
+    Map<String, dynamic>? emittedLeaf(LibboxCapabilities capabilities) {
+      final outbounds =
+          (_defaultBuilder(
+                    subscription,
+                    capabilities: capabilities,
+                  ).build()['outbounds']
+                  as List)
+              .cast<Map<String, dynamic>>();
+      for (final outbound in outbounds) {
+        if (outbound['tag'] == 'encrypted-leaf') return outbound;
+      }
+      return null;
+    }
+
+    final unsupported = LibboxCapabilities.parseOrLegacy('{"api_version":1}');
+    final supported = LibboxCapabilities.parseOrLegacy(
+      '{"api_version":1,"supports_vless_encryption":true}',
+    );
+
+    expect(emittedLeaf(unsupported), isNull);
+    expect(emittedLeaf(supported)?['encryption'], encryption);
+    expect(
+      emittedLeaf(LibboxCapabilities.bundledLegacy)?['encryption'],
+      encryption,
+    );
+  });
+
   test('proxy chain strips inherited domain resolver', () {
     const subscription = Subscription(
       id: 'sub',
