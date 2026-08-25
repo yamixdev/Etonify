@@ -50,6 +50,7 @@ internal class MeowForegroundNotification(
         private const val PREF_CONNECTED_TEXT = "connected_text"
         private const val PREF_CHECKING_TEXT = "checking_text"
         private const val PREF_UNAVAILABLE_TEXT = "unavailable_text"
+        private const val PREF_TOTAL_LABEL = "total_label"
         private const val PREF_REFRESH_LABEL = "refresh_label"
         private const val PREF_STOP_LABEL = "stop_label"
         private const val PREF_URLTEST_GROUP = "urltest_group"
@@ -118,6 +119,7 @@ internal class MeowForegroundNotification(
         val connectedText: String = "VPN подключён",
         val checkingText: String = "...",
         val unavailableText: String = "Пинг недоступен",
+        val totalLabel: String = "Всего трафика",
         val refreshLabel: String = "Проверить пинг",
         val stopLabel: String = "Остановить",
         val urlTestRequest: UrlTestRequest? = null,
@@ -188,6 +190,7 @@ internal class MeowForegroundNotification(
                 connectedText = text("connectedText", "VPN подключён"),
                 checkingText = text("checkingText", "..."),
                 unavailableText = text("unavailableText", "Пинг недоступен"),
+                totalLabel = text("totalLabel", "Всего трафика"),
                 refreshLabel = text("refreshLabel", "Проверить пинг"),
                 stopLabel = text("stopLabel", "Остановить"),
                 urlTestRequest = UrlTestRequest.fromArguments(arguments),
@@ -405,6 +408,7 @@ internal class MeowForegroundNotification(
             connectedText = text(PREF_CONNECTED_TEXT, "VPN подключён"),
             checkingText = text(PREF_CHECKING_TEXT, "..."),
             unavailableText = text(PREF_UNAVAILABLE_TEXT, "Пинг недоступен"),
+            totalLabel = text(PREF_TOTAL_LABEL, "Всего трафика"),
             refreshLabel = text(PREF_REFRESH_LABEL, "Проверить пинг"),
             stopLabel = text(PREF_STOP_LABEL, "Остановить"),
             urlTestRequest = request,
@@ -421,6 +425,7 @@ internal class MeowForegroundNotification(
             putString(PREF_CONNECTED_TEXT, value.connectedText)
             putString(PREF_CHECKING_TEXT, value.checkingText)
             putString(PREF_UNAVAILABLE_TEXT, value.unavailableText)
+            putString(PREF_TOTAL_LABEL, value.totalLabel)
             putString(PREF_REFRESH_LABEL, value.refreshLabel)
             putString(PREF_STOP_LABEL, value.stopLabel)
             if (value.latencyMillis == null) {
@@ -513,6 +518,13 @@ internal class MeowForegroundNotification(
             .setShowWhen(false)
             .setContentIntent(contentIntent())
 
+        if (showDetails) {
+            // OEM notification layouts often collapse line breaks in
+            // setContentText(). BigTextStyle preserves the dedicated totals
+            // line when both current speed and total traffic are shown.
+            builder.setStyle(Notification.BigTextStyle().bigText(content))
+        }
+
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             foregroundPresentationNeedsImmediateDelivery(lifecycleStatus)
@@ -552,17 +564,18 @@ internal class MeowForegroundNotification(
     private fun detailedContent(): String {
         val speed = "↓ ${formatRate(displayedDownlink)}  ↑ ${formatRate(displayedUplink)}"
         val totals = "↓ ${formatBytes(downlinkTotal)}  ↑ ${formatBytes(uplinkTotal)}"
-        val traffic = when (presentation.trafficDisplayMode) {
-            notificationTrafficModeTotal -> totals
-            notificationTrafficModeBoth -> "$speed  ·  всего $totals"
-            else -> speed
-        }
         val latency = when {
             latencyChecking -> presentation.checkingText
             presentation.latencyMillis != null -> "${presentation.latencyMillis} мс"
             else -> presentation.unavailableText
         }
-        return "$traffic  ·  $latency"
+        return notificationDetailedContent(
+            trafficDisplayMode = presentation.trafficDisplayMode,
+            speed = speed,
+            totals = totals,
+            totalLabel = presentation.totalLabel,
+            latency = latency,
+        )
     }
 
     private fun lifecycleStatusText(status: String): String = when (status) {
@@ -624,3 +637,15 @@ internal fun foregroundRefreshCanDeliver(
     queuedGeneration: Long,
     currentGeneration: Long,
 ): Boolean = foregroundStarted && queuedGeneration == currentGeneration
+
+internal fun notificationDetailedContent(
+    trafficDisplayMode: String,
+    speed: String,
+    totals: String,
+    totalLabel: String,
+    latency: String,
+): String = when (trafficDisplayMode) {
+    notificationTrafficModeTotal -> "$totalLabel: $totals  ·  $latency"
+    notificationTrafficModeBoth -> "$speed  ·  $latency\n$totalLabel: $totals"
+    else -> "$speed  ·  $latency"
+}

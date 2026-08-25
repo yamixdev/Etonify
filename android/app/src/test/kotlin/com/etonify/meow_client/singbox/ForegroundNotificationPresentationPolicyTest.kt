@@ -1,5 +1,6 @@
 package com.etonify.meow_client.singbox
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,6 +44,34 @@ class ForegroundNotificationPresentationPolicyTest {
                 foregroundStarted = true,
                 queuedGeneration = 9L,
                 currentGeneration = 9L,
+            ),
+        )
+    }
+
+    @Test
+    fun `current speed and total traffic use separate notification lines`() {
+        assertEquals(
+            "↓ 1 МБ/с  ↑ 2 МБ/с  ·  40 мс\nВсего трафика: ↓ 10 МБ  ↑ 20 МБ",
+            notificationDetailedContent(
+                trafficDisplayMode = "both",
+                speed = "↓ 1 МБ/с  ↑ 2 МБ/с",
+                totals = "↓ 10 МБ  ↑ 20 МБ",
+                totalLabel = "Всего трафика",
+                latency = "40 мс",
+            ),
+        )
+    }
+
+    @Test
+    fun `total-only notification uses the supplied localized label`() {
+        assertEquals(
+            "Total traffic: ↓ 10 MB  ↑ 20 MB  ·  40 ms",
+            notificationDetailedContent(
+                trafficDisplayMode = "total",
+                speed = "↓ 1 MB/s  ↑ 2 MB/s",
+                totals = "↓ 10 MB  ↑ 20 MB",
+                totalLabel = "Total traffic",
+                latency = "40 ms",
             ),
         )
     }
