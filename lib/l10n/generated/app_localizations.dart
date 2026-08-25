@@ -140,6 +140,18 @@ abstract class AppLocalizations {
   /// **'Unavailable'**
   String get proxyUnavailable;
 
+  /// No description provided for @proxyLatencyNoResult.
+  ///
+  /// In en, this message translates to:
+  /// **'No result'**
+  String get proxyLatencyNoResult;
+
+  /// No description provided for @proxyLatencyNoResultDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No latency test result is available for this server yet.'**
+  String get proxyLatencyNoResultDescription;
+
   /// No description provided for @proxySelectorTitle.
   ///
   /// In en, this message translates to:
@@ -641,7 +653,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationChecksBody.
   ///
   /// In en, this message translates to:
-  /// **'URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. A red warning icon means the check failed; the detailed cause remains in Logs.'**
+  /// **'URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. “No result” means the check has not returned a value yet or the previous result was cleared after a network change. A red warning icon means the check failed; the detailed cause remains in Logs.'**
   String get documentationChecksBody;
 
   /// No description provided for @documentationBackgroundTitle.
@@ -1376,6 +1388,54 @@ abstract class AppLocalizations {
   /// **'Check now'**
   String get updatesCheckAction;
 
+  /// No description provided for @updatesChannelMenuAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update channel'**
+  String get updatesChannelMenuAction;
+
+  /// No description provided for @updatesChannelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update channel'**
+  String get updatesChannelTitle;
+
+  /// No description provided for @updatesChannelStable.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable'**
+  String get updatesChannelStable;
+
+  /// No description provided for @updatesChannelStableSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stable releases for everyday use.'**
+  String get updatesChannelStableSubtitle;
+
+  /// No description provided for @updatesChannelBeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Beta'**
+  String get updatesChannelBeta;
+
+  /// No description provided for @updatesChannelBetaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Test alpha, beta, and RC builds published as GitHub prereleases.'**
+  String get updatesChannelBetaSubtitle;
+
+  /// No description provided for @updatesChannelBetaWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Test builds may contain bugs. You can return to Stable when a stable build becomes newer than the installed build.'**
+  String get updatesChannelBetaWarning;
+
+  /// No description provided for @updatesPrereleaseVersionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Test build'**
+  String get updatesPrereleaseVersionTooltip;
+
   /// No description provided for @updatesRetryAction.
   ///
   /// In en, this message translates to:
@@ -1591,6 +1651,39 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Installed version: {version}'**
   String updatesUpToDateSubtitle(String version);
+
+  /// No description provided for @updatesCurrentVersionNewerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed version is newer'**
+  String get updatesCurrentVersionNewerTitle;
+
+  /// No description provided for @updatesCurrentVersionNewerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed: {currentVersion}. Selected channel: {channelVersion}. No update is required.'**
+  String updatesCurrentVersionNewerSubtitle(
+    String currentVersion,
+    String channelVersion,
+  );
+
+  /// No description provided for @updatesNoChannelReleaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No releases in this channel yet'**
+  String get updatesNoChannelReleaseTitle;
+
+  /// No description provided for @updatesNoBetaReleaseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No Etonify prerelease has been published on GitHub yet.'**
+  String get updatesNoBetaReleaseSubtitle;
+
+  /// No description provided for @updatesNoStableReleaseSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No stable Etonify release has been published on GitHub yet.'**
+  String get updatesNoStableReleaseSubtitle;
 
   /// No description provided for @updatesAvailableTitle.
   ///
@@ -2071,6 +2164,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speed and total'**
   String get notificationTrafficDisplayBoth;
+
+  /// No description provided for @notificationTrafficTotalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total traffic'**
+  String get notificationTrafficTotalLabel;
 
   /// No description provided for @notificationTrafficRefreshTitle.
   ///
@@ -5066,6 +5165,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} categories'**
   String trafficRulesRuleCount(int count);
+
+  /// No description provided for @coreIntegrationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Core and configuration'**
+  String get coreIntegrationTitle;
+
+  /// No description provided for @coreIntegrationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows the actual bundled core and last applied configuration state, not just the switches displayed by the app.'**
+  String get coreIntegrationSubtitle;
+
+  /// No description provided for @coreApiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Core API'**
+  String get coreApiLabel;
+
+  /// No description provided for @coreCompatibilityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatibility'**
+  String get coreCompatibilityLabel;
+
+  /// No description provided for @coreCompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatible'**
+  String get coreCompatible;
+
+  /// No description provided for @coreIncompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'Incompatible'**
+  String get coreIncompatible;
+
+  /// No description provided for @coreConfigStateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration state'**
+  String get coreConfigStateLabel;
+
+  /// No description provided for @coreConfigApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied'**
+  String get coreConfigApplied;
+
+  /// No description provided for @coreConfigValidated.
+  ///
+  /// In en, this message translates to:
+  /// **'Validated'**
+  String get coreConfigValidated;
+
+  /// No description provided for @coreConfigFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get coreConfigFailed;
+
+  /// No description provided for @coreConfigSuperseded.
+  ///
+  /// In en, this message translates to:
+  /// **'Superseded'**
+  String get coreConfigSuperseded;
+
+  /// No description provided for @coreConfigNotApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'Not applied yet'**
+  String get coreConfigNotApplied;
+
+  /// No description provided for @coreConfigPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying…'**
+  String get coreConfigPending;
+
+  /// No description provided for @coreRuntimeStateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'VPN state'**
+  String get coreRuntimeStateLabel;
+
+  /// No description provided for @coreRuntimeRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get coreRuntimeRunning;
+
+  /// No description provided for @coreRuntimeStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get coreRuntimeStopped;
+
+  /// No description provided for @coreRuntimeGenerationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime generation'**
+  String get coreRuntimeGenerationLabel;
+
+  /// No description provided for @coreConfigSchemaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration schema'**
+  String get coreConfigSchemaLabel;
+
+  /// No description provided for @coreLastChangeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Last applied'**
+  String get coreLastChangeLabel;
 }
 
 class _AppLocalizationsDelegate

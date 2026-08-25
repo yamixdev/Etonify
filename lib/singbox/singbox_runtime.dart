@@ -38,7 +38,7 @@ class AppVersionInfo {
 
   String get displayVersion {
     final normalized = versionName.trim();
-    return normalized.isEmpty ? '0.3.0-beta.4' : normalized;
+    return normalized.isEmpty ? '0.3.1' : normalized;
   }
 
   int get updateBuildNumber => normalizeSplitApkVersionCode(versionCode);
@@ -333,6 +333,7 @@ class SingboxRuntime {
     required String connectedText,
     required String checkingText,
     required String unavailableText,
+    required String totalLabel,
     required String refreshLabel,
     required String stopLabel,
   }) async {
@@ -364,6 +365,7 @@ class SingboxRuntime {
           connectedText: connectedText,
           checkingText: checkingText,
           unavailableText: unavailableText,
+          totalLabel: totalLabel,
           refreshLabel: refreshLabel,
           stopLabel: stopLabel,
         ),
@@ -526,6 +528,31 @@ class SingboxRuntime {
     } on MissingPluginException {
       return const {};
     }
+  }
+
+  Future<Map<String, dynamic>> fetchUrlViaOutbound({
+    required String outboundTag,
+    required Uri uri,
+    required Map<String, String> headers,
+    required int maxBytes,
+    required Duration timeout,
+  }) async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError(
+        'Outbound HTTP fetch is only available on Android.',
+      );
+    }
+    return await _methods.invokeMapMethod<String, dynamic>(
+          'fetchUrlViaOutbound',
+          <String, Object?>{
+            'outboundTag': outboundTag,
+            'url': uri.toString(),
+            'headers': headers,
+            'maxBytes': maxBytes,
+            'timeoutMillis': timeout.inMilliseconds,
+          },
+        ) ??
+        const <String, dynamic>{};
   }
 
   Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async {
@@ -840,13 +867,13 @@ class SingboxRuntime {
         () => _hostApi.getCoreCapabilities(),
         () => _methods.invokeMethod<String>('getCoreCapabilities'),
       ).timeout(const Duration(seconds: 2));
-      return LibboxCapabilities.parseOrLegacy(value);
+      return LibboxCapabilities.parseStrict(value);
     } on TimeoutException {
-      return LibboxCapabilities.bundledLegacy;
+      return LibboxCapabilities.incompatible;
     } on MissingPluginException {
-      return LibboxCapabilities.bundledLegacy;
+      return LibboxCapabilities.incompatible;
     } on PlatformException {
-      return LibboxCapabilities.bundledLegacy;
+      return LibboxCapabilities.incompatible;
     }
   }
 

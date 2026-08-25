@@ -55,6 +55,7 @@ class HomePage extends StatelessWidget {
       state.showActiveProfileRefreshAction;
   String get brandName => state.brandName;
   String get versionLabel => state.versionLabel;
+  bool get prereleaseVersion => state.prereleaseVersion;
 
   VoidCallback get onToggleConnection => actions.toggleConnection;
   VoidCallback get onRefreshLatency => actions.refreshLatency;
@@ -86,6 +87,7 @@ class HomePage extends StatelessWidget {
         title: _HomeBrandTitle(
           brandName: brandName,
           versionLabel: versionLabel,
+          prereleaseVersion: prereleaseVersion,
           titleColor: titleColor,
           onOpenChangelog: onOpenChangelog,
         ),
@@ -326,12 +328,14 @@ class _HomeBrandTitle extends StatelessWidget {
   const _HomeBrandTitle({
     required this.brandName,
     required this.versionLabel,
+    required this.prereleaseVersion,
     required this.titleColor,
     required this.onOpenChangelog,
   });
 
   final String brandName;
   final String versionLabel;
+  final bool prereleaseVersion;
   final Color titleColor;
   final VoidCallback onOpenChangelog;
 
@@ -365,15 +369,33 @@ class _HomeBrandTitle extends StatelessWidget {
                 color: theme.colorScheme.outlineVariant.withValues(alpha: .45),
               ),
             ),
-            child: Text(
-              versionLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (prereleaseVersion) ...[
+                  Tooltip(
+                    message: AppLocalizations.of(
+                      context,
+                    ).updatesPrereleaseVersionTooltip,
+                    child: Icon(
+                      Icons.science_rounded,
+                      size: 14,
+                      color: theme.colorScheme.tertiary,
+                    ),
+                  ),
+                  const Gap(4),
+                ],
+                Text(
+                  versionLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

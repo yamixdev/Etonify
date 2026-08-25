@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 
 const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
@@ -10,12 +11,52 @@ const int appSettingsStandardUrlTestUnavailableCheckIntervalSeconds = 120;
 const int appSettingsStandardLocationLookupLimit = 1;
 const int appSettingsStandardLocationLookupConcurrency = 1;
 
+enum SettingsRuntimeImpact {
+  uiOnly,
+  runtimeFlags,
+  safeCoreRestart,
+  fullServiceRestart,
+}
+
+class AppSettingsImpactRegistry {
+  const AppSettingsImpactRegistry._();
+
+  static const _fullServiceRestartReasons = <String>{
+    'vpn inbound changed',
+    'vpn mtu changed',
+    'vpn strict route changed',
+    'vpn tun implementation changed',
+    'proxy inbound changed',
+    'proxy allow lan changed',
+    'proxy port changed',
+    'inbound connection mode changed',
+    'proxy credentials changed',
+    'block leaks changed',
+    'adblock changed',
+    'traffic rule preset changed',
+    'bypass local network changed',
+    'split routing mode changed',
+    'split routing packages changed',
+    'experimental fakeip changed',
+  };
+
+  static SettingsRuntimeImpact resolve(AppSettingsChange change) {
+    if (change.configReason case final reason?) {
+      return _fullServiceRestartReasons.contains(reason)
+          ? SettingsRuntimeImpact.fullServiceRestart
+          : SettingsRuntimeImpact.safeCoreRestart;
+    }
+    if (change.syncRuntimeFlags) {
+      return SettingsRuntimeImpact.runtimeFlags;
+    }
+    return SettingsRuntimeImpact.uiOnly;
+  }
+}
+
 class AppSettingsChange {
   const AppSettingsChange({
     required this.changed,
     this.configReason,
-    this.restartRuntime = true,
-    this.forceFullServiceRestart = false,
     this.refreshTheme = false,
     this.publishTraffic = false,
     this.syncRuntimeFlags = false,
@@ -27,13 +68,19 @@ class AppSettingsChange {
 
   final bool changed;
   final String? configReason;
-  final bool restartRuntime;
-  final bool forceFullServiceRestart;
   final bool refreshTheme;
   final bool publishTraffic;
   final bool syncRuntimeFlags;
   final bool scheduleLocationRefresh;
   final bool pumpLocationLookupWaiters;
+
+  SettingsRuntimeImpact get runtimeImpact =>
+      AppSettingsImpactRegistry.resolve(this);
+  bool get restartRuntime =>
+      runtimeImpact == SettingsRuntimeImpact.safeCoreRestart ||
+      runtimeImpact == SettingsRuntimeImpact.fullServiceRestart;
+  bool get forceFullServiceRestart =>
+      runtimeImpact == SettingsRuntimeImpact.fullServiceRestart;
 }
 
 class AppSettingsController {
@@ -44,6 +91,7 @@ class AppSettingsController {
   bool memoryLimitEnabled = true;
   bool memoryLimitWarningDismissed = false;
   AppUpdateInstallMode updateInstallMode = AppUpdateInstallMode.ask;
+  AppUpdateChannel updateChannel = AppUpdateChannel.stable;
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled;
   bool allowUntrustedProxyCertificates = false;
   bool allowUntrustedSubscriptionCertificates = false;
@@ -135,6 +183,7 @@ class AppSettingsController {
       memoryLimitEnabled: memoryLimitEnabled,
       memoryLimitWarningDismissed: memoryLimitWarningDismissed,
       updateInstallMode: updateInstallMode,
+      updateChannel: updateChannel,
       tlsFragmentationMode: tlsFragmentationMode,
       allowUntrustedProxyCertificates: allowUntrustedProxyCertificates,
       allowUntrustedSubscriptionCertificates:
@@ -202,6 +251,7 @@ class AppSettingsController {
     memoryLimitEnabled = state.memoryLimitEnabled;
     memoryLimitWarningDismissed = state.memoryLimitWarningDismissed;
     updateInstallMode = state.updateInstallMode;
+    updateChannel = state.updateChannel;
     tlsFragmentationMode = state.tlsFragmentationMode;
     allowUntrustedProxyCertificates = state.allowUntrustedProxyCertificates;
     allowUntrustedSubscriptionCertificates =
@@ -345,7 +395,7 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     proxySort = normalized;
-    return const AppSettingsChange(changed: true, restartRuntime: false);
+    return const AppSettingsChange(changed: true);
   }
 
   AppSettingsChange setAccentColor(String value) {
@@ -377,6 +427,14 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     updateInstallMode = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setUpdateChannel(AppUpdateChannel value) {
+    if (updateChannel == value) {
+      return const AppSettingsChange.none();
+    }
+    updateChannel = value;
     return const AppSettingsChange(changed: true);
   }
 
@@ -498,7 +556,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'inbound connection mode changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -716,7 +773,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'block leaks changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -728,7 +784,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'adblock changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -747,7 +802,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'traffic rule preset changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -759,7 +813,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'bypass local network changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -776,7 +829,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'split routing mode changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -789,7 +841,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'split routing packages changed',
-      forceFullServiceRestart: true,
     );
   }
 
@@ -858,7 +909,6 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'experimental fakeip changed',
-      forceFullServiceRestart: true,
     );
   }
 

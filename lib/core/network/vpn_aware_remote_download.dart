@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -7,7 +8,7 @@ import 'package:meow_client/core/network/remote_download_timeout.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
-enum RemoteDownloadRoute { app, underlying }
+enum RemoteDownloadRoute { outbound, app, underlying }
 
 typedef RemoteDownloadRouteAttemptCallback =
     void Function(RemoteDownloadRoute route, bool isFallback);
@@ -42,6 +43,8 @@ class RemoteDownloadHttpException extends HttpException {
 List<RemoteDownloadRoute> remoteDownloadRouteOrderForTest({
   required bool android,
   required bool? vpnActive,
+  bool supportsOutboundFetch = false,
+  bool requiresAppFallback = false,
 }) {
   if (!android) {
     return const <RemoteDownloadRoute>[RemoteDownloadRoute.app];
@@ -55,6 +58,13 @@ List<RemoteDownloadRoute> remoteDownloadRouteOrderForTest({
       RemoteDownloadRoute.underlying,
     ];
   }
+  if (vpnActive == true && supportsOutboundFetch) {
+    return <RemoteDownloadRoute>[
+      RemoteDownloadRoute.outbound,
+      if (requiresAppFallback) RemoteDownloadRoute.app,
+      RemoteDownloadRoute.underlying,
+    ];
+  }
   // A null state is deliberately treated like an active VPN. If the runtime
   // status bridge is temporarily unavailable, preserving the tunnel-first
   // privacy policy is safer than silently bypassing it.
@@ -62,19 +72,6 @@ List<RemoteDownloadRoute> remoteDownloadRouteOrderForTest({
     RemoteDownloadRoute.app,
     RemoteDownloadRoute.underlying,
   ];
-}
-
-@visibleForTesting
-bool vpnRemoteRouteReadyForTest({
-  required Map<String, dynamic> status,
-  required bool interfaceAvailable,
-  bool interfaceSettled = true,
-}) {
-  return status['running'] == true &&
-      status['mode']?.toString().toLowerCase() == 'vpn' &&
-      status['nativeRecoveryPending'] != true &&
-      interfaceAvailable &&
-      interfaceSettled;
 }
 
 @visibleForTesting
@@ -105,25 +102,25 @@ Future<T> runRemoteDownloadRouteAttemptsForTest<T>({
 
 /// Downloads Etonify-owned remote data without pinning it to one Android path.
 ///
-/// When the VPN is active the regular Dart HTTP client is tried first, so the
-/// request follows the tunnel. Android's explicitly selected physical network
-/// is used only after that path fails. A network handover gets a short settling
-/// window, but the downloader never waits for user traffic: an idle VPN can be
-/// perfectly healthy while its traffic counters remain at zero.
+/// When the Etonify VPN is active, small bounded responses are fetched directly
+/// through the selected core outbound. This avoids routing an app-owned HTTP
+/// connection back through its own TUN. The regular Android app route remains a
+/// fallback for responses larger than the RPC limit, followed by an explicitly
+/// selected physical network. Every route fully terminates before the next one
+/// starts, so late callbacks cannot overwrite a newer attempt's progress.
 class VpnAwareRemoteDownloader {
   VpnAwareRemoteDownloader._();
 
   static final VpnAwareRemoteDownloader instance = VpnAwareRemoteDownloader._();
 
-  static const vpnSettleTimeout = Duration(seconds: 5);
   static const responseStartTimeout = Duration(seconds: 5);
   static const _runtimeStatusTimeout = Duration(seconds: 1);
-  static const _settlePollInterval = Duration(milliseconds: 250);
-  static const _networkHandoverSettleWindow = Duration(milliseconds: 750);
+  static const _outboundFetchMaximumBytes = 3 * 1024 * 1024;
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
 
   int _temporaryFileGeneration = 0;
+  Future<bool>? _outboundFetchCapability;
 
   Future<RemoteDownloadResult> fetchBytes({
     required Uri uri,
@@ -136,32 +133,52 @@ class VpnAwareRemoteDownloader {
     if (maximumBytes <= 0) {
       throw ArgumentError.value(maximumBytes, 'maximumBytes');
     }
-    final vpnActive = await _waitForActiveVpnToSettle();
+    final routeState = await _resolveRouteState();
     final routes = remoteDownloadRouteOrderForTest(
       android: Platform.isAndroid,
-      vpnActive: vpnActive,
+      vpnActive: routeState.vpnActive,
+      supportsOutboundFetch: routeState.supportsOutboundFetch,
+      requiresAppFallback: maximumBytes > _outboundFetchMaximumBytes,
     );
     AppLogStore.info(
       'remote download',
-      'host=${uri.host} vpnActive=$vpnActive '
+      'host=${uri.host} vpnActive=${routeState.vpnActive} '
           'routeOrder=${routes.map((route) => route.name).join('->')}',
     );
+    var attemptGeneration = 0;
     return runRemoteDownloadRouteAttemptsForTest<RemoteDownloadResult>(
       routes: routes,
-      onAttempt: onRouteAttempt,
+      onAttempt: (route, isFallback) {
+        attemptGeneration++;
+        onProgress?.call(0, 0);
+        onRouteAttempt?.call(route, isFallback);
+      },
       attempt: (route) async {
+        final generation = attemptGeneration;
+        void reportProgress(int completed, int total) {
+          if (generation == attemptGeneration) {
+            onProgress?.call(completed, total);
+          }
+        }
+
         final result = switch (route) {
+          RemoteDownloadRoute.outbound => await _fetchBytesViaOutbound(
+            uri: uri,
+            headers: headers,
+            maximumBytes: maximumBytes,
+            onProgress: reportProgress,
+          ),
           RemoteDownloadRoute.app => await _fetchBytesViaApp(
             uri: uri,
             headers: headers,
             maximumBytes: maximumBytes,
-            onProgress: onProgress,
+            onProgress: reportProgress,
           ),
           RemoteDownloadRoute.underlying => await _fetchBytesViaUnderlying(
             uri: uri,
             headers: headers,
             maximumBytes: maximumBytes,
-            onProgress: onProgress,
+            onProgress: reportProgress,
           ),
         };
         if (!acceptedStatusCodes.contains(result.statusCode)) {
@@ -195,38 +212,57 @@ class VpnAwareRemoteDownloader {
     }
     final destination = File(destinationPath);
     await destination.parent.create(recursive: true);
-    final vpnActive = await _waitForActiveVpnToSettle();
+    final routeState = await _resolveRouteState();
     final routes = remoteDownloadRouteOrderForTest(
       android: Platform.isAndroid,
-      vpnActive: vpnActive,
+      vpnActive: routeState.vpnActive,
+      supportsOutboundFetch: routeState.supportsOutboundFetch,
+      requiresAppFallback: maximumBytes > _outboundFetchMaximumBytes,
     );
     AppLogStore.info(
       'remote download',
-      'host=${uri.host} vpnActive=$vpnActive '
+      'host=${uri.host} vpnActive=${routeState.vpnActive} '
           'routeOrder=${routes.map((route) => route.name).join('->')}',
     );
-    try {
-      return await runRemoteDownloadRouteAttemptsForTest<RemoteDownloadResult>(
-        routes: routes,
-        onAttempt: onRouteAttempt,
-        attempt: (route) async {
-          if (await destination.exists()) {
-            await destination.delete();
+    var attemptGeneration = 0;
+    return runRemoteDownloadRouteAttemptsForTest<RemoteDownloadResult>(
+      routes: routes,
+      onAttempt: (route, isFallback) {
+        attemptGeneration++;
+        onProgress?.call(0, 0);
+        onRouteAttempt?.call(route, isFallback);
+      },
+      attempt: (route) async {
+        final generation = attemptGeneration;
+        void reportProgress(int completed, int total) {
+          if (generation == attemptGeneration) {
+            onProgress?.call(completed, total);
           }
+        }
+
+        final attemptFile = File(_nextAttemptPath(destination.path));
+        try {
           final result = switch (route) {
+            RemoteDownloadRoute.outbound => await _downloadFileViaOutbound(
+              uri: uri,
+              headers: headers,
+              destination: attemptFile,
+              maximumBytes: maximumBytes,
+              onProgress: reportProgress,
+            ),
             RemoteDownloadRoute.app => await _downloadFileViaApp(
               uri: uri,
               headers: headers,
-              destination: destination,
+              destination: attemptFile,
               maximumBytes: maximumBytes,
-              onProgress: onProgress,
+              onProgress: reportProgress,
             ),
             RemoteDownloadRoute.underlying => await _downloadFileViaUnderlying(
               uri: uri,
               headers: headers,
-              destination: destination,
+              destination: attemptFile,
               maximumBytes: maximumBytes,
-              onProgress: onProgress,
+              onProgress: reportProgress,
             ),
           };
           if (!acceptedStatusCodes.contains(result.statusCode)) {
@@ -235,85 +271,134 @@ class VpnAwareRemoteDownloader {
               uri: result.finalUri,
             );
           }
+          await _replaceDestination(attemptFile, destination);
           return result;
-        },
-        onFailure: (route, error) {
-          AppLogStore.warning(
-            'remote download',
-            'path=${route.name} failed host=${uri.host}: $error',
-          );
-        },
-      );
-    } catch (_) {
-      if (await destination.exists()) {
-        await destination.delete();
-      }
-      rethrow;
-    }
+        } catch (_) {
+          if (await attemptFile.exists()) {
+            await attemptFile.delete();
+          }
+          rethrow;
+        }
+      },
+      onFailure: (route, error) {
+        AppLogStore.warning(
+          'remote download',
+          'path=${route.name} failed host=${uri.host}: $error',
+        );
+      },
+    );
   }
 
-  Future<bool?> _waitForActiveVpnToSettle() async {
+  Future<({bool? vpnActive, bool supportsOutboundFetch})>
+  _resolveRouteState() async {
     if (!Platform.isAndroid) {
-      return false;
+      return (vpnActive: false, supportsOutboundFetch: false);
     }
-    Map<String, dynamic> status;
     try {
-      status = await SingboxRuntime.instance.status().timeout(
+      final status = await SingboxRuntime.instance.status().timeout(
         _runtimeStatusTimeout,
       );
+      final vpnActive =
+          status['running'] == true &&
+          status['mode']?.toString().toLowerCase() == 'vpn';
+      if (!vpnActive) {
+        return (vpnActive: false, supportsOutboundFetch: false);
+      }
+      _outboundFetchCapability ??= SingboxRuntime.instance
+          .getCoreCapabilities()
+          .then((value) => value.supportsOutboundHttpFetch);
+      final supported = await _outboundFetchCapability!.timeout(
+        _runtimeStatusTimeout,
+        onTimeout: () => false,
+      );
+      return (vpnActive: true, supportsOutboundFetch: supported);
     } catch (error) {
       AppLogStore.warning(
         'remote download',
         'runtime status unavailable before download: $error',
       );
-      return null;
+      return (vpnActive: null, supportsOutboundFetch: false);
     }
-    final vpnActive =
-        status['running'] == true &&
-        status['mode']?.toString().toLowerCase() == 'vpn';
-    if (!vpnActive) {
-      return false;
-    }
+  }
 
-    final stopwatch = Stopwatch()..start();
-    while (true) {
-      var interfaceAvailable = false;
-      var interfaceSettled = true;
-      try {
-        final interfaceState = await SingboxRuntime.instance
-            .getNetworkInterfaceState()
-            .timeout(_runtimeStatusTimeout);
-        interfaceAvailable = interfaceState.available;
-        final updatedAtMillis = interfaceState.updatedAtMillis;
-        if (updatedAtMillis > 0) {
-          final ageMillis =
-              DateTime.now().millisecondsSinceEpoch - updatedAtMillis;
-          interfaceSettled =
-              ageMillis >= _networkHandoverSettleWindow.inMilliseconds;
-        }
-      } catch (_) {}
-      if (vpnRemoteRouteReadyForTest(
-        status: status,
-        interfaceAvailable: interfaceAvailable,
-        interfaceSettled: interfaceSettled,
-      )) {
-        return true;
-      }
-      if (stopwatch.elapsed >= vpnSettleTimeout) {
-        AppLogStore.warning(
-          'remote download',
-          'VPN settle wait elapsed; trying tunnel before physical fallback',
-        );
-        return true;
-      }
-      await Future<void>.delayed(_settlePollInterval);
-      try {
-        status = await SingboxRuntime.instance.status().timeout(
-          _runtimeStatusTimeout,
-        );
-      } catch (_) {
-        return true;
-      }
+  Future<RemoteDownloadResult> _fetchBytesViaOutbound({
+    required Uri uri,
+    required Map<String, String> headers,
+    required int maximumBytes,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final native = await SingboxRuntime.instance.fetchUrlViaOutbound(
+      outboundTag: 'select',
+      uri: uri,
+      headers: headers,
+      maxBytes: maximumBytes.clamp(1, _outboundFetchMaximumBytes).toInt(),
+      timeout: responseStartTimeout,
+    );
+    final bodyValue = native['body'];
+    final bytes = switch (bodyValue) {
+      Uint8List value => value,
+      List<int> value => Uint8List.fromList(value),
+      _ => Uint8List(0),
+    };
+    onProgress?.call(bytes.length, bytes.length);
+    final headersValue = native['headersJson']?.toString() ?? '';
+    final decodedHeaders = headersValue.isEmpty
+        ? const <String, Object?>{}
+        : (jsonDecode(headersValue) as Map).map(
+            (key, value) => MapEntry(key.toString(), value),
+          );
+    return RemoteDownloadResult(
+      statusCode: (native['statusCode'] as num?)?.toInt() ?? 0,
+      headers: <String, String>{
+        for (final entry in decodedHeaders.entries)
+          entry.key.toLowerCase(): entry.value.toString(),
+      },
+      finalUri: Uri.tryParse(native['finalUrl']?.toString() ?? '') ?? uri,
+      route: RemoteDownloadRoute.outbound,
+      downloadedBytes: bytes.length,
+      bytes: bytes,
+    );
+  }
+
+  Future<RemoteDownloadResult> _downloadFileViaOutbound({
+    required Uri uri,
+    required Map<String, String> headers,
+    required File destination,
+    required int maximumBytes,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final result = await _fetchBytesViaOutbound(
+      uri: uri,
+      headers: headers,
+      maximumBytes: maximumBytes,
+      onProgress: onProgress,
+    );
+    await destination.writeAsBytes(result.bytes ?? Uint8List(0), flush: true);
+    return RemoteDownloadResult(
+      statusCode: result.statusCode,
+      headers: result.headers,
+      finalUri: result.finalUri,
+      route: result.route,
+      downloadedBytes: result.downloadedBytes,
+    );
+  }
+
+  String _nextAttemptPath(String destinationPath) =>
+      '$destinationPath.attempt-$pid-${DateTime.now().microsecondsSinceEpoch}-'
+      '${_temporaryFileGeneration++}';
+
+  static Future<void> _replaceDestination(
+    File attempt,
+    File destination,
+  ) async {
+    if (await destination.exists()) {
+      await destination.delete();
+    }
+    try {
+      await attempt.rename(destination.path);
+    } on FileSystemException {
+      await attempt.copy(destination.path);
+      await attempt.delete();
     }
   }
 

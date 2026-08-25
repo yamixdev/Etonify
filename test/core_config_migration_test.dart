@@ -36,7 +36,10 @@ void main() {
       result.state.coreConfigSchemaVersion,
       currentCoreConfigSchemaVersion,
     );
-    expect(result.changes, isEmpty);
+    expect(
+      result.steps.map((step) => '${step.fromVersion}->${step.toVersion}'),
+      ['0->1', '1->2', '2->3', '3->4'],
+    );
     expect(result.state.activeProfileId, original.activeProfileId);
     expect(result.state.selectedProxyTag, original.selectedProxyTag);
     expect(result.state.proxySort, original.proxySort);
@@ -102,6 +105,53 @@ void main() {
       isNot(contains('core_config_schema_version')),
     );
   });
+
+  test('DNS, URLTest and FakeIP settings migrate deterministically', () {
+    final original = _loadVersion021Fixture(store).copyWith(
+      coreConfigSchemaVersion: 1,
+      dnsDirectResolver: '1.1.1.1',
+      dnsProxyResolver: '',
+      russiaDnsDirectResolver: '',
+      urlTestUrl: '   ',
+      urlTestConcurrency: 99,
+      urlTestUnavailableCheckIntervalSeconds: 1,
+      vpnInboundEnabled: true,
+      experimentalFakeIpEnabled: true,
+      splitRoutingMode: SplitRoutingMode.proxySelected,
+      splitRoutingPackages: const [' org.example.app ', 'org.example.app', ''],
+    );
+
+    final result = CoreConfigMigration.plan(
+      state: original,
+      capabilities: _versionedCapabilities(
+        tunStacks: const <String>{'system', 'gvisor', 'mixed'},
+      ),
+    );
+
+    expect(result.status, CoreConfigMigrationStatus.readyForValidation);
+    expect(result.state.dnsDirectResolver, 'udp://1.1.1.1');
+    expect(
+      result.state.dnsProxyResolver,
+      'https://dns.cloudflare.com/dns-query',
+    );
+    expect(result.state.urlTestUrl, defaultUrlTestUrl);
+    expect(result.state.urlTestConcurrency, 8);
+    expect(result.state.urlTestUnavailableCheckIntervalSeconds, 120);
+    expect(result.state.experimentalFakeIpEnabled, isFalse);
+    expect(result.state.splitRoutingPackages, ['org.example.app']);
+  });
+
+  test('an incompatible core blocks migration without changing settings', () {
+    final original = _loadVersion021Fixture(store);
+    final result = CoreConfigMigration.plan(
+      state: original,
+      capabilities: LibboxCapabilities.incompatible,
+    );
+
+    expect(result.status, CoreConfigMigrationStatus.blocked);
+    expect(result.state, same(original));
+    expect(result.blockReason, 'core_contract_unavailable');
+  });
 }
 
 AppSettingsState _loadVersion021Fixture(_TestSettingsStore store) {
@@ -111,8 +161,8 @@ AppSettingsState _loadVersion021Fixture(_TestSettingsStore store) {
 
 LibboxCapabilities _versionedCapabilities({required Set<String> tunStacks}) {
   return LibboxCapabilities(
-    apiVersion: 1,
-    coreVersion: '1.13.14-etonify',
+    apiVersion: 2,
+    coreVersion: '1.14.0-rc.1-etonify.2',
     supportsTargetedUrlTest: false,
     supportsGroupUrlTestSessions: false,
     supportsStructuredProbeErrors: false,

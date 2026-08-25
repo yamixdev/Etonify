@@ -124,6 +124,7 @@ class ProxyPanelShell extends StatefulWidget {
     this.resetListKey,
     this.onInteractionActiveChanged,
     this.onOpenRequested,
+    this.onClosed,
   });
 
   final bool ready;
@@ -137,6 +138,7 @@ class ProxyPanelShell extends StatefulWidget {
   final Object? resetListKey;
   final ValueChanged<bool>? onInteractionActiveChanged;
   final VoidCallback? onOpenRequested;
+  final VoidCallback? onClosed;
 
   @override
   State<ProxyPanelShell> createState() => _ProxyPanelShellState();
@@ -264,6 +266,7 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
       _lastSize = _minSize;
       _resetListScroll();
       _finishInteraction();
+      widget.onClosed?.call();
     });
   }
 
@@ -554,6 +557,7 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     if ((target - current).abs() <= 0.0001) {
       if (!open) {
         _resetListScroll();
+        widget.onClosed?.call();
       }
       _finishInteraction();
       return;
@@ -581,6 +585,7 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
         }
         if (!open) {
           _resetListScroll();
+          widget.onClosed?.call();
         }
         _publishMetrics();
         _finishInteraction();

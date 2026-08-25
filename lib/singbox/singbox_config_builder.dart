@@ -688,13 +688,16 @@ class SingboxConfigBuilder {
   }
 
   bool _supportsOutboundConfigExtensions(Map<String, dynamic> config) {
+    if (!capabilities.isCompatible) return false;
     final type = config['type']?.toString().trim().toLowerCase() ?? '';
     if (type == 'vless') {
       final encryption =
           config['encryption']?.toString().trim().toLowerCase() ?? '';
       if (encryption.isNotEmpty &&
           encryption != 'none' &&
-          !_supportsCoreConfigExtension(capabilities.supportsVlessEncryption)) {
+          (!_supportsCoreConfigExtension(capabilities.supportsVlessEncryption) ||
+              (capabilities.apiVersion >= 2 &&
+                  !capabilities.supportsVlessEncryptionValue(encryption)))) {
         return false;
       }
     }
@@ -703,11 +706,16 @@ class SingboxConfigBuilder {
     if (transport is! Map) return true;
     final transportType =
         transport['type']?.toString().trim().toLowerCase() ?? '';
+    final transportMode = transport['mode']?.toString().trim() ?? '';
     return switch (transportType) {
-      'xhttp' => _supportsCoreConfigExtension(capabilities.supportsXHttp),
-      'splithttp' => _supportsCoreConfigExtension(
-        capabilities.supportsSplitHttpAlias,
-      ),
+      'xhttp' =>
+        _supportsCoreConfigExtension(capabilities.supportsXHttp) &&
+            (capabilities.apiVersion < 2 ||
+                capabilities.supportsXHttpMode(transportMode)),
+      'splithttp' =>
+        _supportsCoreConfigExtension(capabilities.supportsSplitHttpAlias) &&
+            (capabilities.apiVersion < 2 ||
+                capabilities.supportsXHttpMode(transportMode)),
       _ => true,
     };
   }
@@ -1108,13 +1116,13 @@ class SingboxConfigBuilder {
   }
 
   bool _supportsCoreConfigExtension(bool advertised) =>
-      !capabilities.hasVersionedContract || advertised;
+      capabilities.isLegacyContract || advertised;
 
   // The old bundled core exposed URLTest tuning as custom JSON fields. The
   // versioned Etonify core exposes the same controls through URLTestWithOptions
   // while intentionally retaining the upstream sing-box config schema.
   bool get _supportsLegacyUrlTestConfigExtensions =>
-      !capabilities.hasVersionedContract;
+      capabilities.isLegacyContract;
 
   String _urltestInterval(int? seconds) {
     final safeSeconds = seconds == null || seconds <= 0 ? 180 : seconds;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
@@ -42,6 +44,36 @@ void main() {
     expect(
       remoteDownloadRouteOrderForTest(android: true, vpnActive: true),
       const <RemoteDownloadRoute>[
+        RemoteDownloadRoute.app,
+        RemoteDownloadRoute.underlying,
+      ],
+    );
+  });
+
+  test('supported core uses the selected outbound without an app detour', () {
+    expect(
+      remoteDownloadRouteOrderForTest(
+        android: true,
+        vpnActive: true,
+        supportsOutboundFetch: true,
+      ),
+      const <RemoteDownloadRoute>[
+        RemoteDownloadRoute.outbound,
+        RemoteDownloadRoute.underlying,
+      ],
+    );
+  });
+
+  test('large responses retain a streaming app fallback', () {
+    expect(
+      remoteDownloadRouteOrderForTest(
+        android: true,
+        vpnActive: true,
+        supportsOutboundFetch: true,
+        requiresAppFallback: true,
+      ),
+      const <RemoteDownloadRoute>[
+        RemoteDownloadRoute.outbound,
         RemoteDownloadRoute.app,
         RemoteDownloadRoute.underlying,
       ],
@@ -115,42 +147,32 @@ void main() {
     expect(attempted, const <RemoteDownloadRoute>[RemoteDownloadRoute.app]);
   });
 
-  test('VPN settle readiness requires a stable VPN interface', () {
-    const running = <String, dynamic>{
-      'running': true,
-      'mode': 'vpn',
-      'nativeRecoveryPending': false,
-    };
+  test('fallback starts only after the previous route terminates', () async {
+    final firstStarted = Completer<void>();
+    final releaseFirst = Completer<void>();
+    var fallbackStarted = false;
 
-    expect(
-      vpnRemoteRouteReadyForTest(status: running, interfaceAvailable: true),
-      isTrue,
+    final result = runRemoteDownloadRouteAttemptsForTest<String>(
+      routes: const <RemoteDownloadRoute>[
+        RemoteDownloadRoute.outbound,
+        RemoteDownloadRoute.underlying,
+      ],
+      attempt: (route) async {
+        if (route == RemoteDownloadRoute.outbound) {
+          firstStarted.complete();
+          await releaseFirst.future;
+          throw const FormatException('outbound failed');
+        }
+        fallbackStarted = true;
+        return 'physical';
+      },
     );
-    expect(
-      vpnRemoteRouteReadyForTest(status: running, interfaceAvailable: false),
-      isFalse,
-    );
-    expect(
-      vpnRemoteRouteReadyForTest(
-        status: running,
-        interfaceAvailable: true,
-        interfaceSettled: false,
-      ),
-      isFalse,
-    );
-    expect(
-      vpnRemoteRouteReadyForTest(
-        status: <String, dynamic>{...running, 'nativeRecoveryPending': true},
-        interfaceAvailable: true,
-      ),
-      isFalse,
-    );
-    expect(
-      vpnRemoteRouteReadyForTest(
-        status: <String, dynamic>{...running, 'mode': 'proxy'},
-        interfaceAvailable: true,
-      ),
-      isFalse,
-    );
+
+    await firstStarted.future;
+    await Future<void>.delayed(Duration.zero);
+    expect(fallbackStarted, isFalse);
+    releaseFirst.complete();
+    expect(await result, 'physical');
+    expect(fallbackStarted, isTrue);
   });
 }

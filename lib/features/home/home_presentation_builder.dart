@@ -27,6 +27,7 @@ class HomePresentationData {
     required this.showActiveProfileRefreshAction,
     required this.brandName,
     required this.versionLabel,
+    this.prereleaseVersion = false,
   });
 
   final bool connected;
@@ -47,6 +48,7 @@ class HomePresentationData {
   final bool showActiveProfileRefreshAction;
   final String brandName;
   final String versionLabel;
+  final bool prereleaseVersion;
 
   HomeViewState toViewState() {
     final showTraffic = connected && trafficAvailable;
@@ -69,6 +71,7 @@ class HomePresentationData {
       showActiveProfileRefreshAction: showActiveProfileRefreshAction,
       brandName: brandName,
       versionLabel: versionLabel,
+      prereleaseVersion: prereleaseVersion,
     );
   }
 }

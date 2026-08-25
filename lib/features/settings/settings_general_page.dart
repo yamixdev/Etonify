@@ -402,39 +402,76 @@ class SettingsGeneralPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Card(
                 margin: EdgeInsets.zero,
-                child: ListTile(
-                  key: const ValueKey('notification-traffic-display-setting'),
+                child: Semantics(
                   enabled: currentStatusNotificationEnabled,
-                  leading: SettingsLeadingIcon(
-                    icon: Icons.speed_rounded,
-                    color: currentStatusNotificationEnabled
-                        ? cs.primary
-                        : cs.onSurface.withValues(alpha: 0.38),
-                  ),
-                  title: Text(l10n.notificationTrafficDisplayTitle),
-                  subtitle: Text(l10n.notificationTrafficDisplaySubtitle),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _notificationTrafficDisplayModeName(
-                          l10n,
-                          currentNotificationTrafficDisplayMode,
-                        ),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: currentStatusNotificationEnabled
-                              ? cs.onSurfaceVariant
-                              : cs.onSurface.withValues(alpha: 0.38),
-                        ),
+                  button: true,
+                  child: InkWell(
+                    key: const ValueKey('notification-traffic-display-setting'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: currentStatusNotificationEnabled
+                        ? () => unawaited(
+                            _showNotificationTrafficDisplayPicker(context),
+                          )
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SettingsLeadingIcon(
+                            icon: Icons.speed_rounded,
+                            color: currentStatusNotificationEnabled
+                                ? cs.primary
+                                : cs.onSurface.withValues(alpha: 0.38),
+                          ),
+                          const Gap(16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.notificationTrafficDisplayTitle,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: currentStatusNotificationEnabled
+                                        ? cs.onSurface
+                                        : cs.onSurface.withValues(alpha: 0.38),
+                                  ),
+                                ),
+                                const Gap(3),
+                                Text(
+                                  l10n.notificationTrafficDisplaySubtitle,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: currentStatusNotificationEnabled
+                                        ? cs.onSurfaceVariant
+                                        : cs.onSurface.withValues(alpha: 0.38),
+                                  ),
+                                ),
+                                const Gap(6),
+                                Text(
+                                  _notificationTrafficDisplayModeName(
+                                    l10n,
+                                    currentNotificationTrafficDisplayMode,
+                                  ),
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: currentStatusNotificationEnabled
+                                        ? cs.primary
+                                        : cs.onSurface.withValues(alpha: 0.38),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Gap(8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: currentStatusNotificationEnabled
+                                ? cs.onSurfaceVariant
+                                : cs.onSurface.withValues(alpha: 0.38),
+                          ),
+                        ],
                       ),
-                      const Icon(Icons.chevron_right_rounded),
-                    ],
+                    ),
                   ),
-                  onTap: currentStatusNotificationEnabled
-                      ? () => unawaited(
-                          _showNotificationTrafficDisplayPicker(context),
-                        )
-                      : null,
                 ),
               ),
             ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
@@ -181,12 +182,45 @@ void main() {
       expect(runtime.startCalls, 1);
     },
   );
+
+  test('failed runtime apply restores the previous promoted config', () async {
+    final temp = await Directory.systemTemp.createTemp('etonify-config-tx-');
+    addTearDown(() => temp.delete(recursive: true));
+    final target = File('${temp.path}/config.json')..writeAsStringSync('old');
+    final candidate = File('${temp.path}/candidate.json')
+      ..writeAsStringSync('new');
+    final runtime = _FailingPreparedRuntime();
+    final lifecycle = RuntimeLifecycleController(
+      runtime: runtime,
+      healthCheckTimeout: const Duration(milliseconds: 20),
+    );
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(
+      runtimeLifecycle: lifecycle,
+      readConfigPath: () async => target.path,
+    );
+
+    final result = await coordinator.applyRuntimeConfig(
+      build: _build('', configPath: candidate.path),
+      useVpn: true,
+      restartRuntime: true,
+    );
+
+    expect(result.status, SingboxConfigApplyStatus.failed);
+    expect(target.readAsStringSync(), 'old');
+    expect(candidate.existsSync(), isFalse);
+    expect(
+      temp.listSync().whereType<File>().map((file) => file.path),
+      everyElement(isNot(contains('.rollback.'))),
+    );
+  });
 }
 
 SingboxConfigCoordinator _coordinator({
   required RuntimeLifecycleController runtimeLifecycle,
   bool connected = true,
   Duration fullServiceRestartDebounce = const Duration(milliseconds: 450),
+  SingboxConfigPathReader? readConfigPath,
 }) {
   return SingboxConfigCoordinator(
     readSnapshot: () => _snapshot(connected: connected),
@@ -208,6 +242,7 @@ SingboxConfigCoordinator _coordinator({
       'recordedServiceAlive': true,
       'runtimeIntentFresh': true,
     },
+    readConfigPath: readConfigPath,
     fullServiceRestartDebounce: fullServiceRestartDebounce,
   );
 }
@@ -264,7 +299,7 @@ SingboxConfigCoordinatorSnapshot _snapshot({bool connected = true}) {
   );
 }
 
-SingboxConfigBuildResult _build(String config) {
+SingboxConfigBuildResult _build(String config, {String? configPath}) {
   return SingboxConfigBuildResult(
     plan: const SingboxBuildPlan(
       config: <String, dynamic>{},
@@ -272,7 +307,7 @@ SingboxConfigBuildResult _build(String config) {
       visibleProxyOutboundCount: 1,
     ),
     configJson: config,
-    configPath: null,
+    configPath: configPath,
     configLength: config.length,
     configOutboundCount: 1,
     configInboundCount: 1,
@@ -282,6 +317,21 @@ SingboxConfigBuildResult _build(String config) {
     selectedProxyInvalid: false,
     startableOutboundCount: 1,
   );
+}
+
+class _FailingPreparedRuntime extends _BlockingRuntime {
+  @override
+  Future<void> applyPreparedConfig({
+    required bool useVpn,
+    required bool restartCore,
+  }) async {
+    throw StateError('prepared apply failed');
+  }
+
+  @override
+  Future<void> startPrepared({required bool useVpn}) async {
+    throw StateError('prepared restart failed');
+  }
 }
 
 class _BlockingRuntime implements RuntimeLifecycleRuntime {

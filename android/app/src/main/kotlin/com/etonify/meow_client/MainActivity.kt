@@ -194,6 +194,7 @@ class MainActivity : FlutterFragmentActivity() {
         "connectedText" to presentation.connectedText,
         "checkingText" to presentation.checkingText,
         "unavailableText" to presentation.unavailableText,
+        "totalLabel" to presentation.totalLabel,
         "refreshLabel" to presentation.refreshLabel,
         "stopLabel" to presentation.stopLabel,
     )
@@ -2555,6 +2556,37 @@ class MainActivity : FlutterFragmentActivity() {
                             result.success(it)
                         }.onFailure {
                             result.error("lookup_outbound_external_info_failed", it.message, null)
+                        }
+                    }
+                }
+
+                "fetchUrlViaOutbound" -> {
+                    val outboundTag = call.argument<String>("outboundTag")?.trim().orEmpty()
+                    val url = call.argument<String>("url")?.trim().orEmpty()
+                    val headers = (call.argument<Map<*, *>>("headers") ?: emptyMap<Any?, Any?>())
+                        .entries
+                        .mapNotNull { entry ->
+                            val name = entry.key?.toString()?.trim().orEmpty()
+                            if (name.isEmpty()) null else name to entry.value?.toString().orEmpty()
+                        }
+                        .toMap()
+                    val maxBytes = (call.argument<Number>("maxBytes")?.toInt() ?: 0)
+                        .coerceIn(1, 3 * 1024 * 1024)
+                    val timeoutMillis = (call.argument<Number>("timeoutMillis")?.toInt() ?: 10_000)
+                        .coerceIn(1_000, 60_000)
+                    if (outboundTag.isEmpty() || url.isEmpty()) {
+                        result.error("outbound_http_invalid", "Outbound tag or URL is empty", null)
+                        return@setMethodCallHandler
+                    }
+                    SingboxController.fetchUrlViaOutbound(
+                        outboundTag = outboundTag,
+                        url = url,
+                        headers = headers,
+                        maxBytes = maxBytes,
+                        timeoutMillis = timeoutMillis,
+                    ) { fetchResult ->
+                        fetchResult.onSuccess(result::success).onFailure { error ->
+                            result.error("outbound_http_failed", error.message ?: error.toString(), null)
                         }
                     }
                 }

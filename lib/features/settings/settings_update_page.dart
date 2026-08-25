@@ -6,6 +6,7 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -18,12 +19,16 @@ class SettingsUpdatePage extends StatefulWidget {
     super.key,
     required this.currentVersion,
     this.installMode = AppUpdateInstallMode.ask,
+    this.updateChannel = AppUpdateChannel.stable,
     this.onInstallModeChanged,
+    this.onUpdateChannelChanged,
   });
 
   final String currentVersion;
   final AppUpdateInstallMode installMode;
+  final AppUpdateChannel updateChannel;
   final ValueChanged<AppUpdateInstallMode>? onInstallModeChanged;
+  final ValueChanged<AppUpdateChannel>? onUpdateChannelChanged;
 
   @override
   State<SettingsUpdatePage> createState() => _SettingsUpdatePageState();
@@ -43,6 +48,7 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
   late String _currentVersion = widget.currentVersion;
   int _currentVersionCode = 0;
   late AppUpdateInstallMode _installMode = widget.installMode;
+  late AppUpdateChannel _updateChannel = widget.updateChannel;
   AppUpdateInfo? _pendingAutoInstallInfo;
   bool _resumingAutoInstall = false;
 
@@ -115,6 +121,7 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       currentVersion: _currentVersion,
       currentBuildNumber: _currentVersionCode,
       manual: manual,
+      channel: _updateChannel,
     );
     if (!mounted) return;
     setState(() {
@@ -123,6 +130,73 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       _downloadedFilePath = result.downloadedFilePath;
     });
     await _refreshDownloadedVerification();
+  }
+
+  String _channelName(AppLocalizations l10n, AppUpdateChannel channel) =>
+      switch (channel) {
+        AppUpdateChannel.stable => l10n.updatesChannelStable,
+        AppUpdateChannel.beta => l10n.updatesChannelBeta,
+      };
+
+  Future<void> _chooseUpdateChannel() async {
+    if (_checking || _downloading || _installing || _clearingUpdateCache) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final selected = await showModalBottomSheet<AppUpdateChannel>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l10n.updatesChannelTitle,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Gap(8),
+              _UpdateChannelTile(
+                channel: AppUpdateChannel.stable,
+                selected: _updateChannel == AppUpdateChannel.stable,
+                title: l10n.updatesChannelStable,
+                subtitle: l10n.updatesChannelStableSubtitle,
+                icon: Icons.verified_rounded,
+              ),
+              _UpdateChannelTile(
+                channel: AppUpdateChannel.beta,
+                selected: _updateChannel == AppUpdateChannel.beta,
+                title: l10n.updatesChannelBeta,
+                subtitle: l10n.updatesChannelBetaSubtitle,
+                icon: Icons.science_rounded,
+              ),
+              const Gap(8),
+              Text(
+                l10n.updatesChannelBetaWarning,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null || selected == _updateChannel || !mounted) return;
+    setState(() {
+      _updateChannel = selected;
+      _result = null;
+      _downloadProgress = null;
+      _downloadedFilePath = null;
+      _verification = null;
+    });
+    widget.onUpdateChannelChanged?.call(selected);
+    await _check(manual: true);
   }
 
   Future<void> _startUpdateFlow(AppUpdateInfo info) async {
@@ -489,12 +563,13 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       appBar: AppBar(
         title: Text(l10n.updatesTitle),
         actions: [
-          IconButton(
-            tooltip: l10n.updatesCheckAction,
-            onPressed: _checking || _downloading || _installing
-                ? null
-                : () => _check(manual: true),
-            icon: const Icon(Icons.refresh_rounded),
+          UpdateOverflowMenu(
+            enabled: !_checking && !_downloading && !_installing,
+            checkLabel: l10n.updatesCheckAction,
+            channelLabel: l10n.updatesChannelMenuAction,
+            currentChannelLabel: _channelName(l10n, _updateChannel),
+            onCheck: () => _check(manual: true),
+            onChangeChannel: _chooseUpdateChannel,
           ),
         ],
       ),
@@ -576,6 +651,9 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       AppUpdateStatus.unsupportedAndroid => l10n.updatesUnsupportedAndroidTitle,
       AppUpdateStatus.downloaded => l10n.updatesDownloadedTitle,
       AppUpdateStatus.upToDate => l10n.updatesUpToDateTitle,
+      AppUpdateStatus.currentVersionNewer =>
+        l10n.updatesCurrentVersionNewerTitle,
+      AppUpdateStatus.noReleaseAvailable => l10n.updatesNoChannelReleaseTitle,
       AppUpdateStatus.error => l10n.updatesErrorTitle,
       _ => l10n.updatesTitle,
     };
@@ -605,9 +683,23 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
               ).uri.pathSegments.last,
       ),
       AppUpdateStatus.upToDate => l10n.updatesUpToDateSubtitle(_currentVersion),
+      AppUpdateStatus.currentVersionNewer when info != null =>
+        l10n.updatesCurrentVersionNewerSubtitle(
+          _versionWithBuild(_currentVersion, _currentVersionCode),
+          _versionWithBuild(info.displayVersion, info.buildNumber),
+        ),
+      AppUpdateStatus.noReleaseAvailable =>
+        _updateChannel == AppUpdateChannel.beta
+            ? l10n.updatesNoBetaReleaseSubtitle
+            : l10n.updatesNoStableReleaseSubtitle,
       AppUpdateStatus.error => l10n.updatesErrorSubtitle,
       _ => l10n.updatesSubtitle,
     };
+  }
+
+  String _versionWithBuild(String version, int? buildNumber) {
+    if (buildNumber == null || buildNumber <= 0) return version;
+    return '$version+$buildNumber';
   }
 }
 
@@ -616,6 +708,98 @@ class _InstallModeDecision {
 
   final AppUpdateInstallMode mode;
   final bool remember;
+}
+
+enum _UpdateMenuAction { check, channel }
+
+class UpdateOverflowMenu extends StatelessWidget {
+  const UpdateOverflowMenu({
+    super.key,
+    required this.enabled,
+    required this.checkLabel,
+    required this.channelLabel,
+    required this.currentChannelLabel,
+    required this.onCheck,
+    required this.onChangeChannel,
+  });
+
+  final bool enabled;
+  final String checkLabel;
+  final String channelLabel;
+  final String currentChannelLabel;
+  final VoidCallback onCheck;
+  final VoidCallback onChangeChannel;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_UpdateMenuAction>(
+      key: const ValueKey('update-overflow-menu'),
+      enabled: enabled,
+      tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+      icon: const Icon(Icons.more_vert_rounded),
+      onSelected: (action) {
+        switch (action) {
+          case _UpdateMenuAction.check:
+            onCheck();
+          case _UpdateMenuAction.channel:
+            onChangeChannel();
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<_UpdateMenuAction>(
+          key: const ValueKey('update-menu-check'),
+          value: _UpdateMenuAction.check,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.refresh_rounded),
+            title: Text(checkLabel),
+          ),
+        ),
+        PopupMenuItem<_UpdateMenuAction>(
+          key: const ValueKey('update-menu-channel'),
+          value: _UpdateMenuAction.channel,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.tune_rounded),
+            title: Text(channelLabel),
+            subtitle: Text(currentChannelLabel),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UpdateChannelTile extends StatelessWidget {
+  const _UpdateChannelTile({
+    required this.channel,
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final AppUpdateChannel channel;
+  final bool selected;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      color: selected ? theme.colorScheme.secondaryContainer : null,
+      child: ListTile(
+        onTap: () => Navigator.of(context).pop(channel),
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: selected ? const Icon(Icons.check_rounded) : null,
+      ),
+    );
+  }
 }
 
 class _UpdateActionButton extends StatelessWidget {

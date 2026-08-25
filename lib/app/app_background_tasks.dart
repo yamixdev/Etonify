@@ -39,6 +39,115 @@ class ProxyCacheBuildInput {
   final bool markAllServersRussia;
 }
 
+enum ProxyCacheBuildScope { home, full }
+
+/// Serializes proxy presentation builds and retains at most one pending build.
+///
+/// Multiple runtime events often arrive together after URLTest or a network
+/// change. Running an isolate for every intermediate event duplicates a large
+/// subscription several times. The pending scope is coalesced and a full-list
+/// request always wins over a home-only refresh.
+class ProxyCacheBuildCoordinator {
+  bool _inFlight = false;
+  ProxyCacheBuildScope? _pendingScope;
+
+  bool get inFlight => _inFlight;
+  ProxyCacheBuildScope? get pendingScope => _pendingScope;
+
+  bool beginOrQueue(ProxyCacheBuildScope scope) {
+    if (_inFlight) {
+      _pendingScope =
+          _pendingScope == ProxyCacheBuildScope.full ||
+              scope == ProxyCacheBuildScope.full
+          ? ProxyCacheBuildScope.full
+          : ProxyCacheBuildScope.home;
+      return false;
+    }
+    _inFlight = true;
+    return true;
+  }
+
+  ProxyCacheBuildScope? complete() {
+    _inFlight = false;
+    final next = _pendingScope;
+    _pendingScope = null;
+    return next;
+  }
+
+  void cancelPending() {
+    _pendingScope = null;
+  }
+}
+
+/// Creates the smallest subscription snapshot required by the proxy
+/// presentation builders.
+///
+/// A complete outbound config may contain certificates, transport headers and
+/// other deeply nested values. Sending thousands of those maps to an isolate
+/// temporarily duplicates them in the Dart heap even though the proxy list
+/// only needs protocol, endpoint, TLS and transport labels.
+Subscription compactSubscriptionForProxyCache(Subscription subscription) {
+  return subscription.copyWith(
+    rawContent: '',
+    outbounds: subscription.outbounds
+        .map(
+          (outbound) => outbound.copyWith(
+            config: _compactOutboundPresentationConfig(outbound.config),
+          ),
+        )
+        .toList(growable: false),
+    proxyChains: subscription.proxyChains
+        .map(
+          (chain) => chain.targetConfig.isEmpty
+              ? chain
+              : chain.copyWith(
+                  targetConfig: _compactOutboundPresentationConfig(
+                    chain.targetConfig,
+                  ),
+                ),
+        )
+        .toList(growable: false),
+  );
+}
+
+Map<String, dynamic> _compactOutboundPresentationConfig(
+  Map<String, dynamic> config,
+) {
+  final compact = <String, dynamic>{};
+  for (final key in const <String>[
+    'type',
+    'server',
+    'server_port',
+    'security',
+    '_group_only',
+  ]) {
+    if (config.containsKey(key)) {
+      compact[key] = config[key];
+    }
+  }
+
+  final tls = config['tls'];
+  if (tls is Map) {
+    final compactTls = <String, dynamic>{};
+    if (tls.containsKey('enabled')) {
+      compactTls['enabled'] = tls['enabled'];
+    }
+    final reality = tls['reality'];
+    if (reality is Map && reality.containsKey('enabled')) {
+      compactTls['reality'] = <String, dynamic>{'enabled': reality['enabled']};
+    }
+    if (compactTls.isNotEmpty) {
+      compact['tls'] = compactTls;
+    }
+  }
+
+  final transport = config['transport'];
+  if (transport is Map && transport.containsKey('type')) {
+    compact['transport'] = <String, dynamic>{'type': transport['type']};
+  }
+  return compact;
+}
+
 class ProxyCacheBuildResult {
   const ProxyCacheBuildResult({
     required this.activeProfile,

@@ -76,7 +76,7 @@ void main() {
 
     expect(result.appVersionInfo.versionName, '0.3.0');
     expect(result.appVersionInfo.versionCode, 0);
-    expect(result.coreCapabilities, same(LibboxCapabilities.bundledLegacy));
+    expect(result.coreCapabilities, same(LibboxCapabilities.incompatible));
   });
 
   test('opens encrypted storage before the core capability bridge', () async {

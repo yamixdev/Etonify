@@ -5,6 +5,7 @@ import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 import 'secure_hive_storage.dart';
@@ -150,6 +151,7 @@ class AppSettingsState {
     this.memoryLimitEnabled = true,
     this.memoryLimitWarningDismissed = false,
     this.updateInstallMode = AppUpdateInstallMode.ask,
+    this.updateChannel = AppUpdateChannel.stable,
     this.tlsFragmentationMode = TlsFragmentationMode.disabled,
     this.allowUntrustedProxyCertificates = false,
     this.allowUntrustedSubscriptionCertificates = false,
@@ -212,6 +214,7 @@ class AppSettingsState {
   final bool memoryLimitEnabled;
   final bool memoryLimitWarningDismissed;
   final AppUpdateInstallMode updateInstallMode;
+  final AppUpdateChannel updateChannel;
   final TlsFragmentationMode tlsFragmentationMode;
   final bool allowUntrustedProxyCertificates;
   final bool allowUntrustedSubscriptionCertificates;
@@ -274,6 +277,7 @@ class AppSettingsState {
     bool? memoryLimitEnabled,
     bool? memoryLimitWarningDismissed,
     AppUpdateInstallMode? updateInstallMode,
+    AppUpdateChannel? updateChannel,
     TlsFragmentationMode? tlsFragmentationMode,
     bool? allowUntrustedProxyCertificates,
     bool? allowUntrustedSubscriptionCertificates,
@@ -345,6 +349,7 @@ class AppSettingsState {
       memoryLimitWarningDismissed:
           memoryLimitWarningDismissed ?? this.memoryLimitWarningDismissed,
       updateInstallMode: updateInstallMode ?? this.updateInstallMode,
+      updateChannel: updateChannel ?? this.updateChannel,
       tlsFragmentationMode: tlsFragmentationMode ?? this.tlsFragmentationMode,
       allowUntrustedProxyCertificates:
           allowUntrustedProxyCertificates ??
@@ -438,6 +443,7 @@ abstract class AppSettingsStore {
   static const _memoryLimitWarningDismissedKey =
       'memory_limit_warning_dismissed';
   static const _updateInstallModeKey = 'update_install_mode';
+  static const _updateChannelKey = 'update_channel';
   static const _tlsFragmentationModeKey = 'tls_fragmentation_mode';
   static const _allowUntrustedProxyCertificatesKey =
       'allow_untrusted_proxy_certificates';
@@ -504,6 +510,7 @@ abstract class AppSettingsStore {
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
     _updateInstallModeKey,
+    _updateChannelKey,
     _tlsFragmentationModeKey,
     _vpnInboundEnabledKey,
     _vpnMtuKey,
@@ -673,6 +680,10 @@ abstract class AppSettingsStore {
         'auto' => AppUpdateInstallMode.auto,
         'ask' => AppUpdateInstallMode.ask,
         _ => AppUpdateInstallMode.ask,
+      },
+      updateChannel: switch (map[_updateChannelKey]) {
+        'beta' => AppUpdateChannel.beta,
+        _ => AppUpdateChannel.stable,
       },
       tlsFragmentationMode: switch (map[_tlsFragmentationModeKey]) {
         'record' => TlsFragmentationMode.record,
@@ -857,6 +868,7 @@ abstract class AppSettingsStore {
           ? '1'
           : '0',
       _updateInstallModeKey: state.updateInstallMode.name,
+      _updateChannelKey: state.updateChannel.name,
       _tlsFragmentationModeKey: state.tlsFragmentationMode.name,
       _allowUntrustedProxyCertificatesKey: state.allowUntrustedProxyCertificates
           ? '1'

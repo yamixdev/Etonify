@@ -6,21 +6,23 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 Widget _generalSettingsApp({
   required bool statusNotificationEnabled,
+  Locale locale = const Locale('en'),
+  NotificationTrafficDisplayMode trafficDisplayMode =
+      NotificationTrafficDisplayMode.speed,
   ValueChanged<NotificationTrafficDisplayMode>? onTrafficDisplayChanged,
   ValueChanged<int>? onTrafficRefreshChanged,
 }) {
   return MaterialApp(
-    locale: const Locale('en'),
+    locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: SettingsGeneralPage(
-      currentLocaleCode: 'en',
+      currentLocaleCode: locale.languageCode,
       currentThemePreference: AppThemePreference.system,
       currentAccentColorHex: 'default',
       currentHapticEnabled: true,
       currentStatusNotificationEnabled: statusNotificationEnabled,
-      currentNotificationTrafficDisplayMode:
-          NotificationTrafficDisplayMode.speed,
+      currentNotificationTrafficDisplayMode: trafficDisplayMode,
       currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
       currentMemoryLimitEnabled: true,
@@ -59,8 +61,7 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
 
-      final tile = tester.widget<ListTile>(find.byKey(trafficDisplaySetting));
-      expect(tile.enabled, isFalse);
+      final tile = tester.widget<InkWell>(find.byKey(trafficDisplaySetting));
       expect(tile.onTap, isNull);
     },
   );
@@ -81,8 +82,7 @@ void main() {
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    final tile = tester.widget<ListTile>(find.byKey(trafficDisplaySetting));
-    expect(tile.enabled, isTrue);
+    final tile = tester.widget<InkWell>(find.byKey(trafficDisplaySetting));
     expect(tile.onTap, isNotNull);
 
     await tester.pumpAndSettle();
@@ -93,6 +93,36 @@ void main() {
 
     expect(selected, NotificationTrafficDisplayMode.total);
   });
+
+  testWidgets(
+    'notification display setting stays readable on a narrow screen',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          locale: const Locale('ru'),
+          trafficDisplayMode: NotificationTrafficDisplayMode.both,
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(trafficDisplaySetting),
+        240,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final title = find.text('Что показывать в уведомлении');
+      expect(title, findsOneWidget);
+      expect(tester.getSize(title).width, greaterThan(120));
+      expect(find.text('Скорость и общий объём'), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'notification traffic refresh slider is disabled with status off',

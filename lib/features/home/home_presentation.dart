@@ -17,6 +17,7 @@ class HomeViewState {
     required this.trafficBytes,
     required this.brandName,
     required this.versionLabel,
+    this.prereleaseVersion = false,
     this.runtimeStates,
     this.trafficListenable,
     this.activeProfileRefreshing = false,
@@ -39,6 +40,7 @@ class HomeViewState {
   final bool showActiveProfileRefreshAction;
   final String brandName;
   final String versionLabel;
+  final bool prereleaseVersion;
 }
 
 @immutable

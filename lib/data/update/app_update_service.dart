@@ -9,6 +9,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,12 +18,16 @@ enum AppUpdateStatus {
   unknown,
   checking,
   upToDate,
+  currentVersionNewer,
+  noReleaseAvailable,
   updateAvailable,
   unsupportedAndroid,
   downloading,
   downloaded,
   error,
 }
+
+enum AppUpdateVersionRelation { remoteNewer, same, currentNewer }
 
 class AppUpdateAsset {
   const AppUpdateAsset({
@@ -80,6 +85,9 @@ class AppUpdateInfo {
     required this.asset,
     this.minimumAndroidSdk,
     this.packageName,
+    this.channel = AppUpdateChannel.stable,
+    this.isPrerelease = false,
+    this.releaseLabel,
   });
 
   final String version;
@@ -92,8 +100,14 @@ class AppUpdateInfo {
   final AppUpdateAsset asset;
   final int? minimumAndroidSdk;
   final String? packageName;
+  final AppUpdateChannel channel;
+  final bool isPrerelease;
+  final String? releaseLabel;
 
-  String get displayVersion => version;
+  String get displayVersion {
+    final label = releaseLabel?.trim() ?? '';
+    return label.isEmpty ? version : label;
+  }
 
   String get technicalVersion =>
       buildNumber == null ? version : '$version+$buildNumber';
@@ -109,6 +123,9 @@ class AppUpdateInfo {
     'asset': asset.toMap(),
     'minimumAndroidSdk': minimumAndroidSdk,
     'packageName': packageName,
+    'channel': channel.name,
+    'isPrerelease': isPrerelease,
+    'releaseLabel': releaseLabel,
   };
 
   static AppUpdateInfo? fromMap(Object? value) {
@@ -140,6 +157,12 @@ class AppUpdateInfo {
         value['minimumAndroidSdk'],
       ),
       packageName: value['packageName']?.toString().trim(),
+      channel: switch (value['channel']?.toString()) {
+        'beta' => AppUpdateChannel.beta,
+        _ => AppUpdateChannel.stable,
+      },
+      isPrerelease: value['isPrerelease'] == true,
+      releaseLabel: value['releaseLabel']?.toString().trim(),
     );
   }
 }
@@ -196,6 +219,7 @@ class AppUpdateMetadata {
     this.lastError,
     this.latestInfo,
     this.downloadedUpdatePath,
+    this.channel = AppUpdateChannel.stable,
   });
 
   final int? lastCheckAtMillis;
@@ -203,6 +227,7 @@ class AppUpdateMetadata {
   final String? lastError;
   final AppUpdateInfo? latestInfo;
   final String? downloadedUpdatePath;
+  final AppUpdateChannel channel;
 
   DateTime? get lastCheckAt => lastCheckAtMillis == null
       ? null
@@ -220,6 +245,7 @@ class AppUpdateMetadata {
     'lastError': lastError,
     'latestInfo': latestInfo?.toMap(),
     'downloadedUpdatePath': downloadedUpdatePath,
+    'channel': channel.name,
   };
 
   static AppUpdateMetadata fromMap(Map<dynamic, dynamic> map) {
@@ -236,6 +262,10 @@ class AppUpdateMetadata {
       lastError: map['lastError']?.toString(),
       latestInfo: AppUpdateInfo.fromMap(map['latestInfo']),
       downloadedUpdatePath: map['downloadedUpdatePath']?.toString(),
+      channel: switch (map['channel']?.toString()) {
+        'beta' => AppUpdateChannel.beta,
+        _ => AppUpdateChannel.stable,
+      },
     );
   }
 }
@@ -335,11 +365,14 @@ class AppUpdateService {
   static const _metadataBoxName = 'app_update_state';
   static const _latestReleaseUrl =
       'https://api.github.com/repos/$repositoryOwner/$repositoryName/releases/latest';
+  static const _releasesUrl =
+      'https://api.github.com/repos/$repositoryOwner/$repositoryName/releases?per_page=100';
   static const _assetTokens = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
   static const _manifestAssetName = 'etonify-update.json';
   static const _maxReleaseMetadataBytes = 1024 * 1024;
   static const _maxUpdateApkBytes = 512 * 1024 * 1024;
-  Future<AppUpdateCheckResult>? _checkInFlight;
+  final Map<AppUpdateChannel, Future<AppUpdateCheckResult>> _checksInFlight =
+      <AppUpdateChannel, Future<AppUpdateCheckResult>>{};
 
   Future<Box<dynamic>> _openBox() async {
     await HiveAppSettingsStore.initHive();
@@ -371,17 +404,21 @@ class AppUpdateService {
     required String currentVersion,
     int? currentBuildNumber,
     bool manual = false,
+    AppUpdateChannel channel = AppUpdateChannel.stable,
   }) {
-    final inFlight = _checkInFlight;
+    final inFlight = _checksInFlight[channel];
     if (inFlight != null) return inFlight;
     final operation = _checkForUpdates(
       currentVersion: currentVersion,
       currentBuildNumber: currentBuildNumber,
       manual: manual,
+      channel: channel,
     );
-    _checkInFlight = operation;
+    _checksInFlight[channel] = operation;
     return operation.whenComplete(() {
-      if (identical(_checkInFlight, operation)) _checkInFlight = null;
+      if (identical(_checksInFlight[channel], operation)) {
+        _checksInFlight.remove(channel);
+      }
     });
   }
 
@@ -389,16 +426,23 @@ class AppUpdateService {
     required String currentVersion,
     int? currentBuildNumber,
     required bool manual,
+    required AppUpdateChannel channel,
   }) async {
     final metadata = await loadMetadata();
+    final metadataMatchesChannel = metadata.channel == channel;
     final cachedInfoMissingDigest =
+        metadataMatchesChannel &&
         metadata.latestInfo != null &&
         metadata.latestInfo!.asset.digestSha256 == null;
-    if (!manual && !metadata.isDue && !cachedInfoMissingDigest) {
+    if (!manual &&
+        metadataMatchesChannel &&
+        !metadata.isDue &&
+        !cachedInfoMissingDigest) {
       final cached = await _cachedCheckResultFor(
         metadata,
         currentVersion: currentVersion,
         currentBuildNumber: currentBuildNumber,
+        channel: channel,
       );
       if (cached != null) {
         return cached;
@@ -407,7 +451,21 @@ class AppUpdateService {
 
     final checkedAt = DateTime.now();
     try {
-      final release = await _fetchLatestRelease();
+      final release = await _fetchRelease(channel);
+      if (release == null) {
+        await _deleteCachedUpdateFiles();
+        await _saveMetadata(
+          AppUpdateMetadata(
+            lastCheckAtMillis: checkedAt.millisecondsSinceEpoch,
+            lastStatus: AppUpdateStatus.noReleaseAvailable,
+            channel: channel,
+          ),
+        );
+        return AppUpdateCheckResult(
+          status: AppUpdateStatus.noReleaseAvailable,
+          checkedAt: checkedAt,
+        );
+      }
       final manifest = await _fetchReleaseManifest(release['assets']);
       var assets = _parseAssets(release['assets']);
       if (manifest != null) {
@@ -456,14 +514,19 @@ class AppUpdateService {
         asset: asset,
         minimumAndroidSdk: manifest?.minimumAndroidSdk,
         packageName: manifest?.packageName,
+        channel: channel,
+        isPrerelease: release['prerelease'] == true,
+        releaseLabel: releaseVersionLabel(tagName, fallback: version),
       );
-      final remoteIsNewer = isRemoteVersionNewer(
+      final versionRelation = compareVersions(
         info.version,
         currentVersion,
         remoteBuildNumber: info.buildNumber,
         currentBuildNumber: currentBuildNumber,
       );
       final deviceSdk = await _androidSdkInt();
+      final remoteIsNewer =
+          versionRelation == AppUpdateVersionRelation.remoteNewer;
       final unsupportedAndroid =
           remoteIsNewer &&
           info.minimumAndroidSdk != null &&
@@ -473,6 +536,8 @@ class AppUpdateService {
           ? AppUpdateStatus.unsupportedAndroid
           : remoteIsNewer
           ? AppUpdateStatus.updateAvailable
+          : versionRelation == AppUpdateVersionRelation.currentNewer
+          ? AppUpdateStatus.currentVersionNewer
           : AppUpdateStatus.upToDate;
       final downloadedFilePath = status == AppUpdateStatus.updateAvailable
           ? await _validDownloadedPathFor(info, metadata.downloadedUpdatePath)
@@ -488,6 +553,7 @@ class AppUpdateService {
           lastStatus: status,
           latestInfo: info,
           downloadedUpdatePath: downloadedFilePath,
+          channel: channel,
         ),
       );
       return AppUpdateCheckResult(
@@ -505,6 +571,7 @@ class AppUpdateService {
         currentBuildNumber: currentBuildNumber,
         checkedAt: checkedAt,
         error: message,
+        channel: channel,
       );
       if (cached != null) {
         return cached;
@@ -514,14 +581,15 @@ class AppUpdateService {
           lastCheckAtMillis: checkedAt.millisecondsSinceEpoch,
           lastStatus: AppUpdateStatus.error,
           lastError: message,
-          latestInfo: metadata.latestInfo,
+          latestInfo: metadataMatchesChannel ? metadata.latestInfo : null,
           downloadedUpdatePath: null,
+          channel: channel,
         ),
       );
       return AppUpdateCheckResult(
         status: AppUpdateStatus.error,
         checkedAt: checkedAt,
-        info: metadata.latestInfo,
+        info: metadataMatchesChannel ? metadata.latestInfo : null,
         error: message,
       );
     }
@@ -533,27 +601,35 @@ class AppUpdateService {
     int? currentBuildNumber,
     DateTime? checkedAt,
     String? error,
+    required AppUpdateChannel channel,
   }) async {
+    if (metadata.channel != channel) {
+      return null;
+    }
     final info = metadata.latestInfo;
     if (info == null) {
       return null;
     }
-    final remoteIsNewer = isRemoteVersionNewer(
+    final versionRelation = compareVersions(
       info.version,
       currentVersion,
       remoteBuildNumber: info.buildNumber,
       currentBuildNumber: currentBuildNumber,
     );
-    if (!remoteIsNewer) {
+    if (versionRelation != AppUpdateVersionRelation.remoteNewer) {
       final deleted = await _deleteCachedUpdateFiles();
+      final status = versionRelation == AppUpdateVersionRelation.currentNewer
+          ? AppUpdateStatus.currentVersionNewer
+          : AppUpdateStatus.upToDate;
       await _saveMetadata(
         AppUpdateMetadata(
           lastCheckAtMillis:
               checkedAt?.millisecondsSinceEpoch ?? metadata.lastCheckAtMillis,
-          lastStatus: AppUpdateStatus.upToDate,
+          lastStatus: status,
           lastError: error,
           latestInfo: info,
           downloadedUpdatePath: null,
+          channel: channel,
         ),
       );
       if (deleted > 0) {
@@ -564,7 +640,7 @@ class AppUpdateService {
         );
       }
       return AppUpdateCheckResult(
-        status: AppUpdateStatus.upToDate,
+        status: status,
         checkedAt: checkedAt ?? metadata.lastCheckAt ?? DateTime.now(),
         info: info,
         error: error,
@@ -634,6 +710,14 @@ class AppUpdateService {
     final deleted = await _deleteCachedUpdateFiles();
     final nextStatus = info == null
         ? AppUpdateStatus.unknown
+        : compareVersions(
+                info.version,
+                currentVersion,
+                remoteBuildNumber: info.buildNumber,
+                currentBuildNumber: currentBuildNumber,
+              ) ==
+              AppUpdateVersionRelation.currentNewer
+        ? AppUpdateStatus.currentVersionNewer
         : AppUpdateStatus.upToDate;
     final metadataChanged =
         metadata.lastStatus != nextStatus ||
@@ -645,6 +729,7 @@ class AppUpdateService {
           lastCheckAtMillis: metadata.lastCheckAtMillis,
           lastStatus: nextStatus,
           latestInfo: info,
+          channel: metadata.channel,
         ),
       );
     }
@@ -655,8 +740,10 @@ class AppUpdateService {
     );
   }
 
-  Future<Map<String, dynamic>> _fetchLatestRelease() async {
-    final uri = Uri.parse(_latestReleaseUrl);
+  Future<Map<String, dynamic>?> _fetchRelease(AppUpdateChannel channel) async {
+    final uri = Uri.parse(
+      channel == AppUpdateChannel.stable ? _latestReleaseUrl : _releasesUrl,
+    );
     final result = await VpnAwareRemoteDownloader.instance.fetchBytes(
       uri: uri,
       maximumBytes: _maxReleaseMetadataBytes,
@@ -668,10 +755,16 @@ class AppUpdateService {
     final decoded = jsonDecode(
       utf8.decode(result.bytes ?? const <int>[], allowMalformed: false),
     );
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('GitHub response is not an object.');
+    if (channel == AppUpdateChannel.stable) {
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('GitHub response is not an object.');
+      }
+      return selectReleaseForChannel(decoded, channel);
     }
-    return decoded;
+    if (decoded is! Iterable) {
+      throw const FormatException('GitHub response is not a release list.');
+    }
+    return selectReleaseForChannel(decoded, channel);
   }
 
   Future<AppUpdateManifest?> _fetchReleaseManifest(Object? rawAssets) async {
@@ -757,6 +850,7 @@ class AppUpdateService {
           lastStatus: AppUpdateStatus.downloaded,
           latestInfo: info,
           downloadedUpdatePath: existingPath,
+          channel: info.channel,
         ),
       );
       onProgress(
@@ -866,6 +960,7 @@ class AppUpdateService {
           lastStatus: AppUpdateStatus.downloaded,
           latestInfo: info,
           downloadedUpdatePath: target.path,
+          channel: info.channel,
         ),
       );
       onProgress(
@@ -939,22 +1034,30 @@ class AppUpdateService {
     final deleted = await _deleteCachedUpdateFiles();
     final metadata = await loadMetadata();
     final info = metadata.latestInfo;
-    final status = info == null
-        ? AppUpdateStatus.unknown
-        : isRemoteVersionNewer(
+    final relation = info == null
+        ? AppUpdateVersionRelation.same
+        : compareVersions(
             info.version,
             currentVersion,
             remoteBuildNumber: info.buildNumber,
             currentBuildNumber: currentBuildNumber,
-          )
-        ? AppUpdateStatus.updateAvailable
-        : AppUpdateStatus.upToDate;
+          );
+    final status = info == null
+        ? AppUpdateStatus.unknown
+        : switch (relation) {
+            AppUpdateVersionRelation.remoteNewer =>
+              AppUpdateStatus.updateAvailable,
+            AppUpdateVersionRelation.currentNewer =>
+              AppUpdateStatus.currentVersionNewer,
+            AppUpdateVersionRelation.same => AppUpdateStatus.upToDate,
+          };
     await _saveMetadata(
       AppUpdateMetadata(
         lastCheckAtMillis: metadata.lastCheckAtMillis,
         lastStatus: status,
         lastError: metadata.lastError,
         latestInfo: info,
+        channel: metadata.channel,
       ),
     );
     return deleted;
@@ -1148,6 +1251,46 @@ class AppUpdateService {
   }
 
   @visibleForTesting
+  static String releaseVersionLabel(
+    String tagName, {
+    required String fallback,
+  }) {
+    final normalizedTag = tagName.trim().replaceFirst(
+      RegExp(r'^v(?=\d)', caseSensitive: false),
+      '',
+    );
+    return normalizedTag.isEmpty ? fallback : normalizedTag;
+  }
+
+  static bool isPrereleaseVersion(String value) {
+    return RegExp(
+      r'(?:^|[.\-_])(alpha|beta|rc|preview|pre|dev)(?:[.\-_\d]|$)',
+      caseSensitive: false,
+    ).hasMatch(value.trim());
+  }
+
+  @visibleForTesting
+  static Map<String, dynamic>? selectReleaseForChannel(
+    Object? releases,
+    AppUpdateChannel channel,
+  ) {
+    if (releases is Map) {
+      final normalized = Map<String, dynamic>.from(releases);
+      if (normalized['draft'] == true) return null;
+      final prerelease = normalized['prerelease'] == true;
+      return prerelease == channel.acceptsPrereleases ? normalized : null;
+    }
+    if (releases is! Iterable) return null;
+    for (final raw in releases) {
+      if (raw is! Map || raw['draft'] == true) continue;
+      final prerelease = raw['prerelease'] == true;
+      if (prerelease != channel.acceptsPrereleases) continue;
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  @visibleForTesting
   static int? extractBuildNumber(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
@@ -1191,14 +1334,29 @@ class AppUpdateService {
     String currentVersion, {
     int? remoteBuildNumber,
     int? currentBuildNumber,
+  }) =>
+      compareVersions(
+        remoteVersion,
+        currentVersion,
+        remoteBuildNumber: remoteBuildNumber,
+        currentBuildNumber: currentBuildNumber,
+      ) ==
+      AppUpdateVersionRelation.remoteNewer;
+
+  @visibleForTesting
+  static AppUpdateVersionRelation compareVersions(
+    String remoteVersion,
+    String currentVersion, {
+    int? remoteBuildNumber,
+    int? currentBuildNumber,
   }) {
     final remote = _versionParts(normalizeVersion(remoteVersion));
     final current = _versionParts(normalizeVersion(currentVersion));
     for (var i = 0; i < max(remote.length, current.length); i++) {
       final r = i < remote.length ? remote[i] : 0;
       final c = i < current.length ? current[i] : 0;
-      if (r > c) return true;
-      if (r < c) return false;
+      if (r > c) return AppUpdateVersionRelation.remoteNewer;
+      if (r < c) return AppUpdateVersionRelation.currentNewer;
     }
     final remoteBuild =
         parseBuildNumber(remoteBuildNumber) ??
@@ -1207,9 +1365,14 @@ class AppUpdateService {
         parseBuildNumber(currentBuildNumber) ??
         extractBuildNumber(currentVersion);
     if (remoteBuild != null && currentBuild != null) {
-      return remoteBuild > currentBuild;
+      if (remoteBuild > currentBuild) {
+        return AppUpdateVersionRelation.remoteNewer;
+      }
+      if (remoteBuild < currentBuild) {
+        return AppUpdateVersionRelation.currentNewer;
+      }
     }
-    return false;
+    return AppUpdateVersionRelation.same;
   }
 
   static List<int> _versionParts(String version) => version

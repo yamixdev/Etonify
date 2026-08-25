@@ -46,14 +46,17 @@ class ProxyTile extends StatelessWidget {
     final hasLatencyError = latencyError?.trim().isNotEmpty == true;
     final highlighted = state?.highlighted ?? this.highlighted;
     final selecting = state?.selecting ?? false;
+    final hasNoLatencyResult =
+        !selecting &&
+        !latencyChecking &&
+        !latencyUnavailable &&
+        latency == null;
     final latencyText = selecting
         ? l10n.proxySwitching
         : latencyChecking
         ? '... ms'
-        : hasLatencyError
-        ? '—'
         : latency == null
-        ? '—'
+        ? l10n.proxyLatencyNoResult
         : '$latency ms';
     final delayColor = selecting
         ? theme.colorScheme.primary
@@ -80,7 +83,11 @@ class ProxyTile extends StatelessWidget {
       unavailableLabel: l10n.proxyUnavailable,
       emphasized:
           selecting || latencyFresh || latencyUnavailable || hasLatencyError,
-      tooltip: hasLatencyError ? _latencyErrorTooltip(latencyError) : null,
+      tooltip: hasLatencyError
+          ? _latencyErrorTooltip(latencyError)
+          : hasNoLatencyResult
+          ? l10n.proxyLatencyNoResultDescription
+          : null,
     );
 
     final horizontalInset = !forceBaseInset && proxy.isGroupChild ? 24.0 : 6.0;

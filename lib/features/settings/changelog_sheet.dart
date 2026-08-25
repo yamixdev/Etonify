@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/release_notes_card.dart';
@@ -11,10 +12,12 @@ class ChangelogSheet extends StatefulWidget {
     super.key,
     required this.currentVersion,
     required this.currentBuildNumber,
+    this.updateChannel = AppUpdateChannel.stable,
   });
 
   final String currentVersion;
   final int currentBuildNumber;
+  final AppUpdateChannel updateChannel;
 
   @override
   State<ChangelogSheet> createState() => _ChangelogSheetState();
@@ -57,7 +60,10 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
   Future<void> _load() async {
     final service = AppUpdateService.instance;
     try {
-      final cached = (await service.loadMetadata()).latestInfo;
+      final metadata = await service.loadMetadata();
+      final cached = metadata.channel == widget.updateChannel
+          ? metadata.latestInfo
+          : null;
       if (mounted && cached != null) {
         setState(() => _info = cached);
       }
@@ -66,6 +72,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
         currentVersion: widget.currentVersion,
         currentBuildNumber: widget.currentBuildNumber,
         manual: false,
+        channel: widget.updateChannel,
       );
       if (!mounted) return;
       final nextInfo = result.info;

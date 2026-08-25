@@ -242,9 +242,9 @@ class AppBootstrapController {
     } catch (error) {
       AppLogStore.warning(
         'sing-box',
-        'Failed to read core capabilities, using legacy contract: $error',
+        'Failed to read core capabilities; runtime start is disabled: $error',
       );
-      return LibboxCapabilities.bundledLegacy;
+      return LibboxCapabilities.incompatible;
     }
   }
 

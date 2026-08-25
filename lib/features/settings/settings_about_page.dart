@@ -11,6 +11,8 @@ import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/models/core_integration_diagnostics.dart';
+import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/widgets/app_visual_effects.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
@@ -21,6 +23,9 @@ class SettingsAboutPage extends StatefulWidget {
     super.key,
     required this.versionLabel,
     required this.onShowOnboarding,
+    this.readCoreIntegrationDiagnostics,
+    this.loadCoreCapabilities,
+    this.readRuntimeStatus,
   });
 
   static final Uri _coreSourceUri = Uri.parse(
@@ -31,6 +36,10 @@ class SettingsAboutPage extends StatefulWidget {
 
   final String versionLabel;
   final VoidCallback onShowOnboarding;
+  final CoreIntegrationDiagnosticsSnapshot Function()?
+  readCoreIntegrationDiagnostics;
+  final Future<LibboxCapabilities> Function()? loadCoreCapabilities;
+  final Future<Map<String, dynamic>> Function()? readRuntimeStatus;
 
   @override
   State<SettingsAboutPage> createState() => _SettingsAboutPageState();
@@ -76,8 +85,12 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
   void _openDiagnosticsPage() {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) =>
-            SettingsDiagnosticsPage(onShowOnboarding: widget.onShowOnboarding),
+        builder: (context) => SettingsDiagnosticsPage(
+          onShowOnboarding: widget.onShowOnboarding,
+          readCoreIntegrationDiagnostics: widget.readCoreIntegrationDiagnostics,
+          loadCoreCapabilities: widget.loadCoreCapabilities,
+          readRuntimeStatus: widget.readRuntimeStatus,
+        ),
       ),
     );
   }
@@ -151,9 +164,19 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
 }
 
 class SettingsDiagnosticsPage extends StatefulWidget {
-  const SettingsDiagnosticsPage({super.key, required this.onShowOnboarding});
+  const SettingsDiagnosticsPage({
+    super.key,
+    required this.onShowOnboarding,
+    this.readCoreIntegrationDiagnostics,
+    this.loadCoreCapabilities,
+    this.readRuntimeStatus,
+  });
 
   final VoidCallback onShowOnboarding;
+  final CoreIntegrationDiagnosticsSnapshot Function()?
+  readCoreIntegrationDiagnostics;
+  final Future<LibboxCapabilities> Function()? loadCoreCapabilities;
+  final Future<Map<String, dynamic>> Function()? readRuntimeStatus;
 
   @override
   State<SettingsDiagnosticsPage> createState() =>
@@ -164,6 +187,17 @@ class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
   bool _debugVisible = false;
   Map<String, dynamic>? _performanceSnapshot;
   bool _performanceBusy = false;
+  LibboxCapabilities? _coreCapabilities;
+  Map<String, dynamic>? _runtimeStatus;
+  CoreIntegrationDiagnosticsSnapshot _coreIntegration =
+      const CoreIntegrationDiagnosticsSnapshot.empty();
+  bool _coreIntegrationBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshCoreIntegration();
+  }
 
   void _toggleDebugVisible() {
     if (AppVisualEffects.of(context).hapticEnabled) {
@@ -188,6 +222,42 @@ class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
     }
   }
 
+  Future<void> _refreshCoreIntegration() async {
+    if (_coreIntegrationBusy) return;
+    setState(() => _coreIntegrationBusy = true);
+    try {
+      final capabilities =
+          await (widget.loadCoreCapabilities?.call() ??
+                  SingboxRuntime.instance.getCoreCapabilities())
+              .timeout(
+                const Duration(seconds: 3),
+                onTimeout: () => LibboxCapabilities.incompatible,
+              )
+              .catchError((_) => LibboxCapabilities.incompatible);
+      final status =
+          await (widget.readRuntimeStatus?.call() ??
+                  SingboxRuntime.instance.status())
+              .timeout(
+                const Duration(seconds: 3),
+                onTimeout: () => const <String, dynamic>{},
+              )
+              .catchError((_) => const <String, dynamic>{});
+      final diagnostics =
+          widget.readCoreIntegrationDiagnostics?.call() ??
+          const CoreIntegrationDiagnosticsSnapshot.empty();
+      if (!mounted) return;
+      setState(() {
+        _coreCapabilities = capabilities;
+        _runtimeStatus = status;
+        _coreIntegration = diagnostics;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _coreIntegrationBusy = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -206,6 +276,14 @@ class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _CoreIntegrationCard(
+                  capabilities: _coreCapabilities,
+                  runtimeStatus: _runtimeStatus,
+                  diagnostics: _coreIntegration,
+                  busy: _coreIntegrationBusy,
+                  onRefresh: _refreshCoreIntegration,
+                ),
+                const Gap(12),
                 _AboutResourcesCard(
                   snapshot: _performanceSnapshot,
                   busy: _performanceBusy,
@@ -234,6 +312,178 @@ class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
         ],
       ),
     );
+  }
+}
+
+class _CoreIntegrationCard extends StatelessWidget {
+  const _CoreIntegrationCard({
+    required this.capabilities,
+    required this.runtimeStatus,
+    required this.diagnostics,
+    required this.busy,
+    required this.onRefresh,
+  });
+
+  final LibboxCapabilities? capabilities;
+  final Map<String, dynamic>? runtimeStatus;
+  final CoreIntegrationDiagnosticsSnapshot diagnostics;
+  final bool busy;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final cs = theme.colorScheme;
+    final core = capabilities;
+    final compatible = core?.isCompatible == true;
+    final running = runtimeStatus?['running'] == true;
+    final nativeGeneration =
+        (runtimeStatus?['runtimeGeneration'] as num?)?.toInt() ?? 0;
+    final effectiveGeneration = nativeGeneration > 0
+        ? nativeGeneration
+        : diagnostics.configRuntimeGeneration;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.coreIntegrationTitle,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: l10n.refresh,
+                  onPressed: busy ? null : onRefresh,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                ),
+              ],
+            ),
+            Text(
+              l10n.coreIntegrationSubtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+            const Gap(14),
+            _AboutInfoRow(
+              label: l10n.coreVersionLabel,
+              value: core?.coreVersion.trim().isNotEmpty == true
+                  ? core!.coreVersion
+                  : '—',
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreApiLabel,
+              value: core == null || core.apiVersion <= 0
+                  ? '—'
+                  : core.apiVersion.toString(),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreCompatibilityLabel,
+              value: core == null
+                  ? '—'
+                  : compatible
+                  ? l10n.coreCompatible
+                  : l10n.coreIncompatible,
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreConfigStateLabel,
+              value: _applyStatusLabel(l10n, diagnostics),
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreRuntimeStateLabel,
+              value: running
+                  ? l10n.coreRuntimeRunning
+                  : l10n.coreRuntimeStopped,
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreRuntimeGenerationLabel,
+              value: effectiveGeneration > 0
+                  ? effectiveGeneration.toString()
+                  : '—',
+            ),
+            const Gap(8),
+            _AboutInfoRow(
+              label: l10n.coreConfigSchemaLabel,
+              value: diagnostics.configSchemaVersion > 0
+                  ? diagnostics.configSchemaVersion.toString()
+                  : '—',
+            ),
+            if (diagnostics.lastApplyAtMillis > 0) ...[
+              const Gap(8),
+              _AboutInfoRow(
+                label: l10n.coreLastChangeLabel,
+                value: _formatDateTime(diagnostics.lastApplyAtMillis),
+              ),
+            ],
+            if (core != null &&
+                !compatible &&
+                core.contractError.isNotEmpty) ...[
+              const Gap(12),
+              Text(
+                core.contractError,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.error,
+                  height: 1.35,
+                ),
+              ),
+            ],
+            if (diagnostics.applyError.isNotEmpty) ...[
+              const Gap(8),
+              Text(
+                diagnostics.applyError,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.error,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _applyStatusLabel(
+    AppLocalizations l10n,
+    CoreIntegrationDiagnosticsSnapshot diagnostics,
+  ) {
+    if (diagnostics.settingsApplyPending) return l10n.coreConfigPending;
+    return switch (diagnostics.applyStatus) {
+      'applied' => l10n.coreConfigApplied,
+      'validated' => l10n.coreConfigValidated,
+      'failed' => l10n.coreConfigFailed,
+      'superseded' => l10n.coreConfigSuperseded,
+      _ => l10n.coreConfigNotApplied,
+    };
+  }
+
+  static String _formatDateTime(int millisecondsSinceEpoch) {
+    final value = DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
+    String two(int part) => part.toString().padLeft(2, '0');
+    return '${two(value.day)}.${two(value.month)}.${value.year} '
+        '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
   }
 }
 

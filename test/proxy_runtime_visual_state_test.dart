@@ -56,4 +56,49 @@ void main() {
     expect(store.valueFor('other')?.latency, 80);
     expect(store.revision.value, revisionBefore);
   });
+
+  test('resolver retains only pinned and currently observed proxy states', () {
+    final store = ProxyRuntimeVisualStore();
+    addTearDown(store.dispose);
+    final observed = store.listenableFor('visible');
+    void listener() {}
+
+    observed.addListener(listener);
+    store.replaceResolver(
+      (tag) => ProxyRuntimeVisualState(latency: tag.length),
+      pinnedTags: const ['active'],
+    );
+
+    expect(store.valueFor('visible')?.latency, 7);
+    expect(store.valueFor('offscreen')?.latency, 9);
+    expect(store.retainedStateCount, 2);
+
+    observed.removeListener(listener);
+    store.pruneUnobserved();
+
+    expect(store.retainedNotifierCount, 0);
+    expect(store.retainedStateCount, 1);
+    expect(store.valueFor('active')?.latency, 6);
+  });
+
+  test('an observed unavailable row receives a later resolved state', () {
+    final store = ProxyRuntimeVisualStore();
+    addTearDown(store.dispose);
+    var available = false;
+    final observed = store.listenableFor('visible');
+    void listener() {}
+
+    observed.addListener(listener);
+    store.replaceResolver(
+      (_) => available ? const ProxyRuntimeVisualState(latency: 95) : null,
+    );
+
+    expect(observed.value, isNull);
+
+    available = true;
+    store.refreshTags(const ['visible']);
+
+    expect(observed.value?.latency, 95);
+    observed.removeListener(listener);
+  });
 }

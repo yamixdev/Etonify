@@ -324,7 +324,7 @@ class SubscriptionRuntimeController {
           ? buildProxyCache(cacheInput)
           : buildHomeProxyCache(cacheInput);
       return HydratedActiveSubscription(
-        subscription: normalizedSubscription,
+        subscription: normalizedSubscription.withoutRawContentForRuntime(),
         normalized: normalized,
         proxyCache: proxyCache,
       );

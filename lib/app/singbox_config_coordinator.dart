@@ -18,6 +18,37 @@ enum SingboxConfigCoordinatorPhase {
   failed,
 }
 
+enum SingboxConfigApplyStatus {
+  validated,
+  applied,
+  skipped,
+  superseded,
+  failed,
+}
+
+class SingboxConfigApplyResult {
+  const SingboxConfigApplyResult({
+    required this.status,
+    required this.reason,
+    this.generation = 0,
+    this.error = '',
+    this.runtimeGeneration = 0,
+  });
+
+  final SingboxConfigApplyStatus status;
+  final String reason;
+  final int generation;
+  final String error;
+  final int runtimeGeneration;
+
+  bool get success =>
+      status == SingboxConfigApplyStatus.validated ||
+      status == SingboxConfigApplyStatus.applied ||
+      status == SingboxConfigApplyStatus.skipped;
+
+  bool get superseded => status == SingboxConfigApplyStatus.superseded;
+}
+
 class SingboxConfigCoordinatorSnapshot {
   const SingboxConfigCoordinatorSnapshot({
     required this.connected,
@@ -154,6 +185,7 @@ typedef SingboxConfigPhaseSetter =
 typedef SingboxConfigRuntimeFailureNotifier =
     void Function({required bool timedOut});
 typedef SingboxRuntimeStatusReader = Future<Map<String, dynamic>> Function();
+typedef SingboxConfigPathReader = Future<String?> Function();
 
 class SingboxConfigCoordinator {
   SingboxConfigCoordinator({
@@ -171,6 +203,7 @@ class SingboxConfigCoordinator {
     required RuntimeVoidHook cacheStartedBuild,
     required Future<void> Function() syncRuntimeState,
     SingboxRuntimeStatusReader? readRuntimeStatus,
+    SingboxConfigPathReader? readConfigPath,
     this.fullServiceRestartDebounce = const Duration(milliseconds: 450),
   }) : _readSnapshot = readSnapshot,
        _isMounted = isMounted,
@@ -185,7 +218,9 @@ class SingboxConfigCoordinator {
        _onRuntimeLifecycleTimeout = onRuntimeLifecycleTimeout,
        _cacheStartedBuild = cacheStartedBuild,
        _syncRuntimeState = syncRuntimeState,
-       _readRuntimeStatus = readRuntimeStatus ?? SingboxRuntime.instance.status;
+       _readRuntimeStatus = readRuntimeStatus ?? SingboxRuntime.instance.status,
+       _readConfigPath =
+           readConfigPath ?? SingboxRuntime.instance.getConfigPath;
 
   final Duration fullServiceRestartDebounce;
 
@@ -203,12 +238,21 @@ class SingboxConfigCoordinator {
   final RuntimeVoidHook _cacheStartedBuild;
   final Future<void> Function() _syncRuntimeState;
   final SingboxRuntimeStatusReader _readRuntimeStatus;
+  final SingboxConfigPathReader _readConfigPath;
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
   Future<String?>? _singboxConfigPathFuture;
   Future<void> _runtimeConfigApplyQueue = Future<void>.value();
   Timer? _fullServiceRestartDebounceTimer;
+  SingboxConfigApplyResult _lastApplyResult = const SingboxConfigApplyResult(
+    status: SingboxConfigApplyStatus.skipped,
+    reason: 'not_applied_yet',
+  );
+  int _lastApplyAtMillis = 0;
+
+  SingboxConfigApplyResult get lastApplyResult => _lastApplyResult;
+  int get lastApplyAtMillis => _lastApplyAtMillis;
 
   void dispose() {
     _runtimeConfigApplyGeneration++;
@@ -245,7 +289,7 @@ class SingboxConfigCoordinator {
             reason,
             restartRuntime: restartRuntime,
             forceFullServiceRestart: true,
-          ),
+          ).then<void>((_) {}),
         );
       });
       return;
@@ -255,11 +299,11 @@ class SingboxConfigCoordinator {
         reason,
         restartRuntime: restartRuntime,
         forceFullServiceRestart: forceFullServiceRestart,
-      ),
+      ).then<void>((_) {}),
     );
   }
 
-  Future<void> emitCurrentConfigLogAsync(
+  Future<SingboxConfigApplyResult> emitCurrentConfigLogAsync(
     String reason, {
     required bool restartRuntime,
     bool applyWhenNativeRunning = false,
@@ -303,13 +347,28 @@ class SingboxConfigCoordinator {
               : SingboxConfigCoordinatorPhase.failed,
         );
       }
-      return;
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: SingboxConfigApplyStatus.failed,
+          reason: reason,
+          generation: generation,
+          error: error.toString(),
+        ),
+      );
     }
     if (build == null) {
       if (applyToRuntime && _isMounted() && _isCurrentApply(generation)) {
         _setPhase(SingboxConfigCoordinatorPhase.connected);
       }
-      return;
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: applyToRuntime
+              ? SingboxConfigApplyStatus.superseded
+              : SingboxConfigApplyStatus.skipped,
+          reason: reason,
+          generation: generation,
+        ),
+      );
     }
     if (applyToRuntime && !_applyStartupValidationResult(build, reason)) {
       discardPreparedConfigCandidate(build);
@@ -317,14 +376,27 @@ class SingboxConfigCoordinator {
         _setPhase(SingboxConfigCoordinatorPhase.failed);
       }
       _showNoValidOutboundsWarning();
-      return;
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: SingboxConfigApplyStatus.failed,
+          reason: reason,
+          generation: generation,
+          error: 'no_valid_outbounds',
+        ),
+      );
     }
     recordBuiltConfigLog(reason, build);
     if (!applyToRuntime) {
-      return;
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: SingboxConfigApplyStatus.validated,
+          reason: reason,
+          generation: generation,
+        ),
+      );
     }
     snapshot = _readSnapshot();
-    await applyRuntimeConfig(
+    return applyRuntimeConfig(
       build: build,
       useVpn: snapshot.vpnInboundEnabled,
       restartRuntime: restartRuntime,
@@ -333,7 +405,7 @@ class SingboxConfigCoordinator {
     );
   }
 
-  Future<void> applyRuntimeConfig({
+  Future<SingboxConfigApplyResult> applyRuntimeConfig({
     required SingboxConfigBuildResult build,
     required bool useVpn,
     required bool restartRuntime,
@@ -357,7 +429,7 @@ class SingboxConfigCoordinator {
     return operation;
   }
 
-  Future<void> _applyRuntimeConfigSerially({
+  Future<SingboxConfigApplyResult> _applyRuntimeConfigSerially({
     required SingboxConfigBuildResult build,
     required bool useVpn,
     required bool restartRuntime,
@@ -365,9 +437,17 @@ class SingboxConfigCoordinator {
     required int generation,
   }) async {
     var preparedBuildPromoted = false;
+    _PreparedConfigTransaction? preparedConfigTransaction;
+    var runtimeApplySucceeded = false;
     try {
       if (!_isMounted() || !_isCurrentApply(generation)) {
-        return;
+        return _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.superseded,
+            reason: 'runtime_apply',
+            generation: generation,
+          ),
+        );
       }
       final policy = await _resolveRuntimeApplyPolicy(
         useVpn: useVpn,
@@ -375,14 +455,26 @@ class SingboxConfigCoordinator {
         forceFullServiceRestart: forceFullServiceRestart,
       );
       if (!_isMounted() || !_isCurrentApply(generation)) {
-        return;
+        return _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.superseded,
+            reason: 'runtime_apply',
+            generation: generation,
+          ),
+        );
       }
       if (policy == RuntimeApplyPolicy.logOnly) {
         AppLogStore.info(
           'runtime',
           'config apply skipped because runtime is not running useVpn=$useVpn',
         );
-        return;
+        return _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.validated,
+            reason: 'runtime_not_running',
+            generation: generation,
+          ),
+        );
       }
       _setPhase(
         policy == RuntimeApplyPolicy.fullServiceRestart
@@ -394,7 +486,10 @@ class SingboxConfigCoordinator {
         useVpn: useVpn,
         policy: policy,
         promotePreparedConfig: (candidate) async {
-          await promotePreparedConfigBuild(candidate);
+          preparedConfigTransaction = await _beginPreparedConfigTransaction(
+            candidate,
+            generation: generation,
+          );
           preparedBuildPromoted = candidate.hasPreparedConfig;
         },
         cacheStartedBuild: _cacheStartedBuild,
@@ -403,13 +498,31 @@ class SingboxConfigCoordinator {
         onWatchdogTimeout: _onRuntimeLifecycleTimeout,
       );
       if (!_isMounted() || !_isCurrentApply(generation)) {
-        return;
+        return _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.superseded,
+            reason: 'runtime_apply',
+            generation: generation,
+          ),
+        );
       }
       if (!result.success) {
+        await preparedConfigTransaction?.rollback();
+        preparedConfigTransaction = null;
         _setPhase(SingboxConfigCoordinatorPhase.failed);
         _showRuntimeFailure(timedOut: result.timedOut);
-        return;
+        return _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.failed,
+            reason: 'runtime_apply',
+            generation: generation,
+            error: result.error?.toString() ?? 'runtime_apply_failed',
+          ),
+        );
       }
+      runtimeApplySucceeded = true;
+      await preparedConfigTransaction?.commit();
+      preparedConfigTransaction = null;
       if (result.policy == RuntimeApplyPolicy.safeCoreRestart) {
         _setPhase(SingboxConfigCoordinatorPhase.connected);
         if (result.recovered) {
@@ -425,7 +538,16 @@ class SingboxConfigCoordinator {
           _syncRuntimeState,
         ),
       );
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: SingboxConfigApplyStatus.applied,
+          reason: 'runtime_apply',
+          generation: generation,
+        ),
+      );
     } catch (error, stackTrace) {
+      await preparedConfigTransaction?.rollback();
+      preparedConfigTransaction = null;
       AppLogStore.error(
         'sing-box',
         'Failed to apply config: $error\n$stackTrace',
@@ -434,13 +556,32 @@ class SingboxConfigCoordinator {
         _setPhase(SingboxConfigCoordinatorPhase.failed);
         _showRuntimeFailure(timedOut: false);
       }
+      return _recordApplyResult(
+        SingboxConfigApplyResult(
+          status: SingboxConfigApplyStatus.failed,
+          reason: 'runtime_apply',
+          generation: generation,
+          error: error.toString(),
+        ),
+      );
     } finally {
       // Applying a prepared build consumes its staged file. If the operation
       // became stale or failed before promotion, remove the orphan candidate.
       if (!preparedBuildPromoted) {
         discardPreparedConfigCandidate(build);
       }
+      if (!runtimeApplySucceeded) {
+        await preparedConfigTransaction?.rollback();
+      }
     }
+  }
+
+  SingboxConfigApplyResult _recordApplyResult(SingboxConfigApplyResult result) {
+    if (!result.superseded) {
+      _lastApplyResult = result;
+      _lastApplyAtMillis = DateTime.now().millisecondsSinceEpoch;
+    }
+    return result;
   }
 
   Future<RuntimeLifecycleResult> startRuntimeWithBuild(
@@ -464,6 +605,12 @@ class SingboxConfigCoordinator {
     bool returnConfig = false,
     bool validateConfig = true,
   }) async {
+    final capabilities = _readSnapshot().capabilities;
+    if (!capabilities.isCompatible) {
+      throw StateError(
+        'Incompatible libbox contract: ${capabilities.contractError}',
+      );
+    }
     if (!await _ensureActiveSubscriptionHydrated()) {
       return null;
     }
@@ -537,6 +684,40 @@ class SingboxConfigCoordinator {
     );
   }
 
+  Future<_PreparedConfigTransaction?> _beginPreparedConfigTransaction(
+    SingboxConfigBuildResult build, {
+    required int generation,
+  }) async {
+    if (!build.hasPreparedConfig) return null;
+    final targetPath = await ensureSingboxConfigPath();
+    if (targetPath == null || targetPath.trim().isEmpty) {
+      throw StateError('Prepared config target path is unavailable.');
+    }
+    final source = File(build.configPath!);
+    final target = File(targetPath);
+    final backup = File('$targetPath.rollback.$generation');
+    target.parent.createSync(recursive: true);
+    if (backup.existsSync()) backup.deleteSync();
+    var hadTarget = false;
+    try {
+      if (target.existsSync()) {
+        target.renameSync(backup.path);
+        hadTarget = true;
+      }
+      source.renameSync(target.path);
+      return _PreparedConfigTransaction(
+        target: target,
+        backup: backup,
+        hadTarget: hadTarget,
+      );
+    } catch (_) {
+      if (!target.existsSync() && hadTarget && backup.existsSync()) {
+        backup.renameSync(target.path);
+      }
+      rethrow;
+    }
+  }
+
   void discardPreparedConfigCandidate(SingboxConfigBuildResult build) {
     if (!build.hasPreparedConfig) {
       return;
@@ -593,7 +774,7 @@ class SingboxConfigCoordinator {
   }
 
   Future<String?> ensureSingboxConfigPath() {
-    return _singboxConfigPathFuture ??= SingboxRuntime.instance.getConfigPath();
+    return _singboxConfigPathFuture ??= _readConfigPath();
   }
 
   Future<RuntimeApplyPolicy> _resolveRuntimeApplyPolicy({
@@ -745,5 +926,35 @@ class SingboxConfigCoordinator {
         file.deleteSync();
       }
     } catch (_) {}
+  }
+}
+
+class _PreparedConfigTransaction {
+  _PreparedConfigTransaction({
+    required this.target,
+    required this.backup,
+    required this.hadTarget,
+  });
+
+  final File target;
+  final File backup;
+  final bool hadTarget;
+  bool _finished = false;
+
+  Future<void> commit() async {
+    if (_finished) return;
+    _finished = true;
+    if (backup.existsSync()) backup.deleteSync();
+  }
+
+  Future<void> rollback() async {
+    if (_finished) return;
+    _finished = true;
+    if (target.existsSync()) target.deleteSync();
+    if (hadTarget && backup.existsSync()) {
+      backup.renameSync(target.path);
+    } else if (backup.existsSync()) {
+      backup.deleteSync();
+    }
   }
 }

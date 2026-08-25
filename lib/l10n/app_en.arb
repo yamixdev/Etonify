@@ -7,6 +7,8 @@
   "proxiesTitle": "Proxies",
   "proxySwitching": "Switching",
   "proxyUnavailable": "Unavailable",
+  "proxyLatencyNoResult": "No result",
+  "proxyLatencyNoResultDescription": "No latency test result is available for this server yet.",
   "proxySelectorTitle": "Selector",
   "proxyLowestName": "Lowest",
   "proxyAutomaticSelectionLabel": "Automatic selection",
@@ -97,7 +99,7 @@
   "documentationSubscriptionsTitle": "Subscriptions and profiles",
   "documentationSubscriptionsBody": "A profile keeps its name, subscription sources, servers, and last selected server together. One profile can contain several URLs; refresh keeps them inside that profile.\n\nAdd data from the clipboard, a file, a QR code, or manually. Automatic refresh updates subscription content on a schedule but does not start the VPN. If a source returns an empty response, HTML, or an HTTP error, Etonify reports the cause and keeps the previous working data.",
   "documentationChecksTitle": "Servers and URLTest",
-  "documentationChecksBody": "URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. A red warning icon means the check failed; the detailed cause remains in Logs.",
+  "documentationChecksBody": "URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. “No result” means the check has not returned a value yet or the previous result was cleared after a network change. A red warning icon means the check failed; the detailed cause remains in Logs.",
   "documentationBackgroundTitle": "Background operation and notification",
   "documentationBackgroundBody": "While VPN is active, Android displays the Etonify service notification. It shows the server, latency, traffic, and a stop action. You can change the traffic view and refresh interval in General settings.\n\nTurning off the screen or closing the interface should not stop the VPN. However, force-stopping the app in Android settings prevents the service from starting until Etonify is opened manually. Firmware with aggressive battery management may require background activity and auto-start permission.",
   "documentationRoutingTitle": "Split tunneling and TUN stack",
@@ -241,6 +243,14 @@
   "updatesSubtitle": "Check GitHub Releases and download the matching APK.",
   "updatesChecking": "Checking for updates…",
   "updatesCheckAction": "Check now",
+  "updatesChannelMenuAction": "Update channel",
+  "updatesChannelTitle": "Update channel",
+  "updatesChannelStable": "Stable",
+  "updatesChannelStableSubtitle": "Stable releases for everyday use.",
+  "updatesChannelBeta": "Beta",
+  "updatesChannelBetaSubtitle": "Test alpha, beta, and RC builds published as GitHub prereleases.",
+  "updatesChannelBetaWarning": "Test builds may contain bugs. You can return to Stable when a stable build becomes newer than the installed build.",
+  "updatesPrereleaseVersionTooltip": "Test build",
   "updatesRetryAction": "Retry",
   "updatesUnsupportedAndroidTitle": "Update not supported",
   "updatesUnsupportedAndroidSubtitle": "Version {version} requires Android SDK {minSdk} or newer. This device can keep using the latest compatible release.",
@@ -300,6 +310,17 @@
       "version": { "type": "String" }
     }
   },
+  "updatesCurrentVersionNewerTitle": "Installed version is newer",
+  "updatesCurrentVersionNewerSubtitle": "Installed: {currentVersion}. Selected channel: {channelVersion}. No update is required.",
+  "@updatesCurrentVersionNewerSubtitle": {
+    "placeholders": {
+      "currentVersion": { "type": "String" },
+      "channelVersion": { "type": "String" }
+    }
+  },
+  "updatesNoChannelReleaseTitle": "No releases in this channel yet",
+  "updatesNoBetaReleaseSubtitle": "No Etonify prerelease has been published on GitHub yet.",
+  "updatesNoStableReleaseSubtitle": "No stable Etonify release has been published on GitHub yet.",
   "updatesAvailableTitle": "Update available",
   "updatesAvailableSubtitle": "{version} · {size}",
   "updatesAvailableSnack": "Client update available",
@@ -465,6 +486,7 @@
   "notificationTrafficDisplaySpeed": "Current speed",
   "notificationTrafficDisplayTotal": "Total transferred",
   "notificationTrafficDisplayBoth": "Speed and total",
+  "notificationTrafficTotalLabel": "Total traffic",
   "notificationTrafficRefreshTitle": "Traffic refresh",
   "notificationTrafficRefreshSubtitle": "How often to update data in the notification.",
   "notificationTrafficRefreshSeconds": "{seconds} s",
@@ -1174,5 +1196,24 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "coreIntegrationTitle": "Core and configuration",
+  "coreIntegrationSubtitle": "Shows the actual bundled core and last applied configuration state, not just the switches displayed by the app.",
+  "coreApiLabel": "Core API",
+  "coreCompatibilityLabel": "Compatibility",
+  "coreCompatible": "Compatible",
+  "coreIncompatible": "Incompatible",
+  "coreConfigStateLabel": "Configuration state",
+  "coreConfigApplied": "Applied",
+  "coreConfigValidated": "Validated",
+  "coreConfigFailed": "Failed",
+  "coreConfigSuperseded": "Superseded",
+  "coreConfigNotApplied": "Not applied yet",
+  "coreConfigPending": "Applying…",
+  "coreRuntimeStateLabel": "VPN state",
+  "coreRuntimeRunning": "Running",
+  "coreRuntimeStopped": "Stopped",
+  "coreRuntimeGenerationLabel": "Runtime generation",
+  "coreConfigSchemaLabel": "Configuration schema",
+  "coreLastChangeLabel": "Last applied"
 }

@@ -7,6 +7,8 @@
   "proxiesTitle": "Прокси",
   "proxySwitching": "Переключение",
   "proxyUnavailable": "Недоступен",
+  "proxyLatencyNoResult": "Нет данных",
+  "proxyLatencyNoResultDescription": "Результат проверки для этого сервера ещё не получен.",
   "proxySelectorTitle": "Выбор",
   "proxyLowestName": "Самый быстрый",
   "proxyAutomaticSelectionLabel": "Автовыбор",
@@ -97,7 +99,7 @@
   "documentationSubscriptionsTitle": "Подписки и профили",
   "documentationSubscriptionsBody": "Профиль объединяет название, источники подписки, серверы и последний выбранный сервер. В одном профиле может быть несколько URL — при обновлении они остаются внутри этого профиля.\n\nДобавить данные можно из буфера обмена, файла, QR-кода или вручную. Автообновление меняет содержимое подписки по расписанию, но не включает VPN. Если источник возвращает пустой ответ, HTML или ошибку HTTP, Etonify покажет причину и сохранит предыдущие рабочие данные.",
   "documentationChecksTitle": "Серверы и URLTest",
-  "documentationChecksBody": "URLTest выполняет HTTP-запрос через прокси. Это не ICMP-пинг, поэтому значение включает установление прокси-соединения, TLS и ответ тестового сайта.\n\nПроверка на главном экране относится к выбранному серверу. Полная проверка в списке обновляет серверы по мере получения ответов. Результаты могут отличаться между Wi‑Fi и мобильной сетью. Lowest выбирает доступный сервер с лучшим последним результатом. Красный треугольник означает неудачную проверку; подробная причина остаётся в логах.",
+  "documentationChecksBody": "URLTest выполняет HTTP-запрос через прокси. Это не ICMP-пинг, поэтому значение включает установление прокси-соединения, TLS и ответ тестового сайта.\n\nПроверка на главном экране относится к выбранному серверу. Полная проверка в списке обновляет серверы по мере получения ответов. Результаты могут отличаться между Wi‑Fi и мобильной сетью. Lowest выбирает доступный сервер с лучшим последним результатом. «Нет данных» означает, что результат ещё не получен или был сброшен после смены сети. Красный треугольник означает неудачную проверку; подробная причина остаётся в логах.",
   "documentationBackgroundTitle": "Работа в фоне и уведомление",
   "documentationBackgroundBody": "Пока VPN включён, Android показывает служебное уведомление Etonify. В нём доступны сервер, задержка, трафик и остановка VPN. Вид трафика и частоту обновления можно изменить в общих настройках.\n\nВыключение экрана и закрытие интерфейса не должны останавливать VPN. Однако принудительная остановка приложения в системных настройках запрещает Android запускать сервис до следующего ручного открытия Etonify. На прошивках с жёстким энергосбережением может понадобиться разрешить фоновую работу и автозапуск.",
   "documentationRoutingTitle": "Раздельная маршрутизация и стек TUN",
@@ -241,6 +243,14 @@
   "updatesSubtitle": "Проверка выпусков на GitHub и загрузка APK для этого устройства.",
   "updatesChecking": "Проверка обновлений…",
   "updatesCheckAction": "Проверить",
+  "updatesChannelMenuAction": "Канал обновлений",
+  "updatesChannelTitle": "Канал обновлений",
+  "updatesChannelStable": "Stable",
+  "updatesChannelStableSubtitle": "Стабильные версии для повседневного использования.",
+  "updatesChannelBeta": "Beta",
+  "updatesChannelBetaSubtitle": "Тестовые alpha-, beta- и RC-версии из GitHub Pre-release.",
+  "updatesChannelBetaWarning": "Тестовые версии могут содержать ошибки. Вернуться на Stable можно, когда стабильная сборка станет новее установленной.",
+  "updatesPrereleaseVersionTooltip": "Тестовая версия",
   "updatesRetryAction": "Повторить",
   "updatesUnsupportedAndroidTitle": "Обновление не поддерживается",
   "updatesUnsupportedAndroidSubtitle": "Версия {version} требует Android SDK {minSdk} или новее. Для этого устройства останется доступна последняя совместимая версия.",
@@ -300,6 +310,17 @@
       "version": { "type": "String" }
     }
   },
+  "updatesCurrentVersionNewerTitle": "Установленная версия новее",
+  "updatesCurrentVersionNewerSubtitle": "Установлена {currentVersion}. В выбранном канале доступна {channelVersion}; обновление не требуется.",
+  "@updatesCurrentVersionNewerSubtitle": {
+    "placeholders": {
+      "currentVersion": { "type": "String" },
+      "channelVersion": { "type": "String" }
+    }
+  },
+  "updatesNoChannelReleaseTitle": "В этом канале пока нет версий",
+  "updatesNoBetaReleaseSubtitle": "На GitHub пока нет опубликованных Pre-release версий Etonify.",
+  "updatesNoStableReleaseSubtitle": "На GitHub пока нет опубликованной стабильной версии Etonify.",
   "updatesAvailableTitle": "Доступно обновление",
   "updatesAvailableSubtitle": "{version} · {size}",
   "updatesAvailableSnack": "Доступно обновление клиента",
@@ -465,6 +486,7 @@
   "notificationTrafficDisplaySpeed": "Текущая скорость",
   "notificationTrafficDisplayTotal": "Всего передано",
   "notificationTrafficDisplayBoth": "Скорость и общий объём",
+  "notificationTrafficTotalLabel": "Всего трафика",
   "notificationTrafficRefreshTitle": "Обновление трафика",
   "notificationTrafficRefreshSubtitle": "Как часто обновлять данные в уведомлении.",
   "notificationTrafficRefreshSeconds": "{seconds} с",
@@ -1174,5 +1196,24 @@
     "placeholders": {
       "count": { "type": "int" }
     }
-  }
+  },
+  "coreIntegrationTitle": "Ядро и конфигурация",
+  "coreIntegrationSubtitle": "Фактическое состояние встроенного ядра и последнего конфига, а не только положение переключателей в интерфейсе.",
+  "coreApiLabel": "API ядра",
+  "coreCompatibilityLabel": "Совместимость",
+  "coreCompatible": "Совместимо",
+  "coreIncompatible": "Несовместимо",
+  "coreConfigStateLabel": "Состояние конфига",
+  "coreConfigApplied": "Применён",
+  "coreConfigValidated": "Проверен",
+  "coreConfigFailed": "Ошибка",
+  "coreConfigSuperseded": "Заменён новым",
+  "coreConfigNotApplied": "Ещё не применялся",
+  "coreConfigPending": "Применяется…",
+  "coreRuntimeStateLabel": "Состояние VPN",
+  "coreRuntimeRunning": "Работает",
+  "coreRuntimeStopped": "Остановлен",
+  "coreRuntimeGenerationLabel": "Поколение runtime",
+  "coreConfigSchemaLabel": "Схема конфига",
+  "coreLastChangeLabel": "Последнее применение"
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 
 void main() {
@@ -77,6 +78,64 @@ void main() {
         AppUpdateService.isRemoteVersionNewer('0.2.0+4', '0.2.0+3'),
         isTrue,
       );
+      expect(
+        AppUpdateService.compareVersions(
+          '0.3.0',
+          '0.3.0-beta.5',
+          remoteBuildNumber: 20,
+          currentBuildNumber: 18,
+        ),
+        AppUpdateVersionRelation.remoteNewer,
+      );
+      expect(
+        AppUpdateService.compareVersions(
+          '0.3.0',
+          '0.3.0-beta.5',
+          remoteBuildNumber: 18,
+          currentBuildNumber: 20,
+        ),
+        AppUpdateVersionRelation.currentNewer,
+      );
+    });
+
+    test('selects only releases belonging to the chosen channel', () {
+      final releases = <Map<String, Object?>>[
+        {'tag_name': 'v0.4.0', 'draft': true, 'prerelease': false},
+        {'tag_name': 'v0.3.1-beta.2', 'draft': false, 'prerelease': true},
+        {'tag_name': 'v0.3.0', 'draft': false, 'prerelease': false},
+      ];
+
+      expect(
+        AppUpdateService.selectReleaseForChannel(
+          releases,
+          AppUpdateChannel.stable,
+        )?['tag_name'],
+        'v0.3.0',
+      );
+      expect(
+        AppUpdateService.selectReleaseForChannel(
+          releases,
+          AppUpdateChannel.beta,
+        )?['tag_name'],
+        'v0.3.1-beta.2',
+      );
+      expect(
+        AppUpdateService.selectReleaseForChannel(const <Map<String, Object?>>[
+          {'tag_name': 'v0.3.0', 'prerelease': false},
+        ], AppUpdateChannel.beta),
+        isNull,
+      );
+    });
+
+    test('recognizes alpha, beta, and RC build labels', () {
+      expect(AppUpdateService.isPrereleaseVersion('0.3.0-alpha.1'), isTrue);
+      expect(AppUpdateService.isPrereleaseVersion('0.3.0-beta.5'), isTrue);
+      expect(AppUpdateService.isPrereleaseVersion('0.3.0-rc.1'), isTrue);
+      expect(AppUpdateService.isPrereleaseVersion('0.3.0'), isFalse);
+      expect(
+        AppUpdateService.releaseVersionLabel('v0.3.0-rc.1', fallback: '0.3.0'),
+        '0.3.0-rc.1',
+      );
     });
 
     test('keeps user-facing update version without build code', () {
@@ -97,6 +156,33 @@ void main() {
 
       expect(info.displayVersion, '0.2.1');
       expect(info.technicalVersion, '0.2.1+5');
+    });
+
+    test('persists prerelease channel metadata', () {
+      const info = AppUpdateInfo(
+        version: '0.3.0',
+        buildNumber: 19,
+        tagName: 'v0.3.0-rc.1',
+        title: 'Etonify 0.3.0 RC 1',
+        body: '',
+        htmlUrl: 'https://example.com/release',
+        publishedAt: null,
+        asset: AppUpdateAsset(
+          name: 'etonify-v0.3.0-rc.1-arm64-v8a.apk',
+          downloadUrl: 'https://example.com/app.apk',
+          sizeBytes: 100,
+        ),
+        channel: AppUpdateChannel.beta,
+        isPrerelease: true,
+        releaseLabel: '0.3.0-rc.1',
+      );
+
+      final restored = AppUpdateInfo.fromMap(info.toMap());
+
+      expect(restored, isNotNull);
+      expect(restored!.channel, AppUpdateChannel.beta);
+      expect(restored.isPrerelease, isTrue);
+      expect(restored.displayVersion, '0.3.0-rc.1');
     });
 
     test('sanitizes APK asset file names', () {

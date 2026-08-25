@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 
 void main() {
@@ -38,6 +39,17 @@ void main() {
     expect(change.changed, isTrue);
     expect(change.configReason, isNull);
     expect(controller.statusNotificationEnabled, isFalse);
+  });
+
+  test('update channel changes without restarting the VPN runtime', () {
+    final controller = AppSettingsController();
+
+    final change = controller.setUpdateChannel(AppUpdateChannel.beta);
+
+    expect(change.changed, isTrue);
+    expect(change.restartRuntime, isFalse);
+    expect(change.configReason, isNull);
+    expect(controller.updateChannel, AppUpdateChannel.beta);
   });
 
   test('notification traffic display can change without a config rebuild', () {

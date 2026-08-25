@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 
 void main() {
   test('defaults to stable runtime values', () {
@@ -59,6 +60,25 @@ void main() {
       NotificationTrafficDisplayMode.both,
     );
     expect(map['notification_traffic_display_mode'], 'both');
+  });
+
+  test('persists the selected update channel', () {
+    final store = _TestSettingsStore();
+    final state = store.mapState(const <String, dynamic>{
+      'update_channel': 'beta',
+    });
+    final persisted = store.stateToMap(state);
+    final exported = store.stateToSafeExportMap(state);
+
+    expect(state.updateChannel, AppUpdateChannel.beta);
+    expect(persisted['update_channel'], 'beta');
+    expect(exported['update_channel'], 'beta');
+    expect(
+      store.mapState(const <String, dynamic>{
+        'update_channel': 'unknown',
+      }).updateChannel,
+      AppUpdateChannel.stable,
+    );
   });
 
   test('persists the single selected traffic rule preset', () {

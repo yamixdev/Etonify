@@ -30,6 +30,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get proxyUnavailable => 'Unavailable';
 
   @override
+  String get proxyLatencyNoResult => 'No result';
+
+  @override
+  String get proxyLatencyNoResultDescription =>
+      'No latency test result is available for this server yet.';
+
+  @override
   String get proxySelectorTitle => 'Selector';
 
   @override
@@ -301,7 +308,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get documentationChecksBody =>
-      'URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. A red warning icon means the check failed; the detailed cause remains in Logs.';
+      'URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. “No result” means the check has not returned a value yet or the previous result was cleared after a network change. A red warning icon means the check failed; the detailed cause remains in Logs.';
 
   @override
   String get documentationBackgroundTitle =>
@@ -717,6 +724,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updatesCheckAction => 'Check now';
 
   @override
+  String get updatesChannelMenuAction => 'Update channel';
+
+  @override
+  String get updatesChannelTitle => 'Update channel';
+
+  @override
+  String get updatesChannelStable => 'Stable';
+
+  @override
+  String get updatesChannelStableSubtitle =>
+      'Stable releases for everyday use.';
+
+  @override
+  String get updatesChannelBeta => 'Beta';
+
+  @override
+  String get updatesChannelBetaSubtitle =>
+      'Test alpha, beta, and RC builds published as GitHub prereleases.';
+
+  @override
+  String get updatesChannelBetaWarning =>
+      'Test builds may contain bugs. You can return to Stable when a stable build becomes newer than the installed build.';
+
+  @override
+  String get updatesPrereleaseVersionTooltip => 'Test build';
+
+  @override
   String get updatesRetryAction => 'Retry';
 
   @override
@@ -843,6 +877,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String updatesUpToDateSubtitle(String version) {
     return 'Installed version: $version';
   }
+
+  @override
+  String get updatesCurrentVersionNewerTitle => 'Installed version is newer';
+
+  @override
+  String updatesCurrentVersionNewerSubtitle(
+    String currentVersion,
+    String channelVersion,
+  ) {
+    return 'Installed: $currentVersion. Selected channel: $channelVersion. No update is required.';
+  }
+
+  @override
+  String get updatesNoChannelReleaseTitle => 'No releases in this channel yet';
+
+  @override
+  String get updatesNoBetaReleaseSubtitle =>
+      'No Etonify prerelease has been published on GitHub yet.';
+
+  @override
+  String get updatesNoStableReleaseSubtitle =>
+      'No stable Etonify release has been published on GitHub yet.';
 
   @override
   String get updatesAvailableTitle => 'Update available';
@@ -1117,6 +1173,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationTrafficDisplayBoth => 'Speed and total';
+
+  @override
+  String get notificationTrafficTotalLabel => 'Total traffic';
 
   @override
   String get notificationTrafficRefreshTitle => 'Traffic refresh';
@@ -2859,4 +2918,62 @@ class AppLocalizationsEn extends AppLocalizations {
   String trafficRulesRuleCount(int count) {
     return '$count categories';
   }
+
+  @override
+  String get coreIntegrationTitle => 'Core and configuration';
+
+  @override
+  String get coreIntegrationSubtitle =>
+      'Shows the actual bundled core and last applied configuration state, not just the switches displayed by the app.';
+
+  @override
+  String get coreApiLabel => 'Core API';
+
+  @override
+  String get coreCompatibilityLabel => 'Compatibility';
+
+  @override
+  String get coreCompatible => 'Compatible';
+
+  @override
+  String get coreIncompatible => 'Incompatible';
+
+  @override
+  String get coreConfigStateLabel => 'Configuration state';
+
+  @override
+  String get coreConfigApplied => 'Applied';
+
+  @override
+  String get coreConfigValidated => 'Validated';
+
+  @override
+  String get coreConfigFailed => 'Failed';
+
+  @override
+  String get coreConfigSuperseded => 'Superseded';
+
+  @override
+  String get coreConfigNotApplied => 'Not applied yet';
+
+  @override
+  String get coreConfigPending => 'Applying…';
+
+  @override
+  String get coreRuntimeStateLabel => 'VPN state';
+
+  @override
+  String get coreRuntimeRunning => 'Running';
+
+  @override
+  String get coreRuntimeStopped => 'Stopped';
+
+  @override
+  String get coreRuntimeGenerationLabel => 'Runtime generation';
+
+  @override
+  String get coreConfigSchemaLabel => 'Configuration schema';
+
+  @override
+  String get coreLastChangeLabel => 'Last applied';
 }

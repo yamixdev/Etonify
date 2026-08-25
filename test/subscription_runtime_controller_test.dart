@@ -111,6 +111,37 @@ void main() {
     },
   );
 
+  test(
+    'hydration does not retain raw subscription content in runtime',
+    () async {
+      final controller = SubscriptionRuntimeController();
+      final stored = _subscription(
+        id: 'large-subscription',
+        selectedProxyTag: 'vless-1',
+        outbounds: [_outbound('vless-1')],
+      ).copyWith(rawContent: 'vless://stored-secret@example.test:443');
+      final metadata = Subscription.fromMetadataMap(stored.toMetadataMap());
+
+      final hydrated = await controller
+          .hydrateActiveSubscriptionAndBuildProxyCache(
+            metadata: metadata,
+            selectedProxyTag: 'vless-1',
+            preferSelectedProxyTag: true,
+            preserveRuntimeState: false,
+            runtimeSnapshot: const SubscriptionRuntimeSnapshot(),
+            payloadSnapshot: jsonEncode(stored.toPayloadMap()),
+          );
+
+      expect(hydrated.subscription.rawContent, isEmpty);
+      expect(hydrated.subscription.hasRawPayload, isTrue);
+      expect(hydrated.subscription.outbounds, hasLength(1));
+      expect(
+        hydrated.subscription.toMetadataMap(),
+        containsPair('has_raw_payload', true),
+      );
+    },
+  );
+
   test('runtime fingerprint is stable for equivalent config map order', () {
     final controller = SubscriptionRuntimeController();
     final left = _subscription(

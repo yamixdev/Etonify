@@ -490,9 +490,7 @@ class Subscription {
               .where((outbound) => outbound.config['_group_only'] != true)
               .length
         : cachedVisibleProxyCount;
-    final rawPayloadAvailable = payloadLoaded
-        ? rawContent.trim().length > 16
-        : hasRawPayload;
+    final rawPayloadAvailable = hasRawPayload || rawContent.trim().length > 16;
     return {
       'id': id,
       'name': name,
@@ -519,6 +517,22 @@ class Subscription {
   };
 
   Map<String, dynamic> toMap() => {...toMetadataMap(), ...toPayloadMap()};
+
+  /// Returns the hydrated runtime representation without retaining the raw
+  /// subscription response in the Dart heap.
+  ///
+  /// Parsed outbounds and groups remain available for config generation while
+  /// the encrypted payload in Hive stays the source of truth for reparsing and
+  /// export.
+  Subscription withoutRawContentForRuntime() {
+    if (rawContent.isEmpty) {
+      return this;
+    }
+    return copyWith(
+      rawContent: '',
+      hasRawPayload: hasRawPayload || rawContent.trim().length > 16,
+    );
+  }
 
   factory Subscription.fromMetadataMap(Map<String, dynamic> map) {
     return Subscription(

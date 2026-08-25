@@ -30,6 +30,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get proxyUnavailable => 'Недоступен';
 
   @override
+  String get proxyLatencyNoResult => 'Нет данных';
+
+  @override
+  String get proxyLatencyNoResultDescription =>
+      'Результат проверки для этого сервера ещё не получен.';
+
+  @override
   String get proxySelectorTitle => 'Выбор';
 
   @override
@@ -304,7 +311,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get documentationChecksBody =>
-      'URLTest выполняет HTTP-запрос через прокси. Это не ICMP-пинг, поэтому значение включает установление прокси-соединения, TLS и ответ тестового сайта.\n\nПроверка на главном экране относится к выбранному серверу. Полная проверка в списке обновляет серверы по мере получения ответов. Результаты могут отличаться между Wi‑Fi и мобильной сетью. Lowest выбирает доступный сервер с лучшим последним результатом. Красный треугольник означает неудачную проверку; подробная причина остаётся в логах.';
+      'URLTest выполняет HTTP-запрос через прокси. Это не ICMP-пинг, поэтому значение включает установление прокси-соединения, TLS и ответ тестового сайта.\n\nПроверка на главном экране относится к выбранному серверу. Полная проверка в списке обновляет серверы по мере получения ответов. Результаты могут отличаться между Wi‑Fi и мобильной сетью. Lowest выбирает доступный сервер с лучшим последним результатом. «Нет данных» означает, что результат ещё не получен или был сброшен после смены сети. Красный треугольник означает неудачную проверку; подробная причина остаётся в логах.';
 
   @override
   String get documentationBackgroundTitle => 'Работа в фоне и уведомление';
@@ -718,6 +725,33 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updatesCheckAction => 'Проверить';
 
   @override
+  String get updatesChannelMenuAction => 'Канал обновлений';
+
+  @override
+  String get updatesChannelTitle => 'Канал обновлений';
+
+  @override
+  String get updatesChannelStable => 'Stable';
+
+  @override
+  String get updatesChannelStableSubtitle =>
+      'Стабильные версии для повседневного использования.';
+
+  @override
+  String get updatesChannelBeta => 'Beta';
+
+  @override
+  String get updatesChannelBetaSubtitle =>
+      'Тестовые alpha-, beta- и RC-версии из GitHub Pre-release.';
+
+  @override
+  String get updatesChannelBetaWarning =>
+      'Тестовые версии могут содержать ошибки. Вернуться на Stable можно, когда стабильная сборка станет новее установленной.';
+
+  @override
+  String get updatesPrereleaseVersionTooltip => 'Тестовая версия';
+
+  @override
   String get updatesRetryAction => 'Повторить';
 
   @override
@@ -842,6 +876,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String updatesUpToDateSubtitle(String version) {
     return 'Установленная версия: $version';
   }
+
+  @override
+  String get updatesCurrentVersionNewerTitle => 'Установленная версия новее';
+
+  @override
+  String updatesCurrentVersionNewerSubtitle(
+    String currentVersion,
+    String channelVersion,
+  ) {
+    return 'Установлена $currentVersion. В выбранном канале доступна $channelVersion; обновление не требуется.';
+  }
+
+  @override
+  String get updatesNoChannelReleaseTitle => 'В этом канале пока нет версий';
+
+  @override
+  String get updatesNoBetaReleaseSubtitle =>
+      'На GitHub пока нет опубликованных Pre-release версий Etonify.';
+
+  @override
+  String get updatesNoStableReleaseSubtitle =>
+      'На GitHub пока нет опубликованной стабильной версии Etonify.';
 
   @override
   String get updatesAvailableTitle => 'Доступно обновление';
@@ -1116,6 +1172,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get notificationTrafficDisplayBoth => 'Скорость и общий объём';
+
+  @override
+  String get notificationTrafficTotalLabel => 'Всего трафика';
 
   @override
   String get notificationTrafficRefreshTitle => 'Обновление трафика';
@@ -2866,4 +2925,62 @@ class AppLocalizationsRu extends AppLocalizations {
   String trafficRulesRuleCount(int count) {
     return 'Категорий: $count';
   }
+
+  @override
+  String get coreIntegrationTitle => 'Ядро и конфигурация';
+
+  @override
+  String get coreIntegrationSubtitle =>
+      'Фактическое состояние встроенного ядра и последнего конфига, а не только положение переключателей в интерфейсе.';
+
+  @override
+  String get coreApiLabel => 'API ядра';
+
+  @override
+  String get coreCompatibilityLabel => 'Совместимость';
+
+  @override
+  String get coreCompatible => 'Совместимо';
+
+  @override
+  String get coreIncompatible => 'Несовместимо';
+
+  @override
+  String get coreConfigStateLabel => 'Состояние конфига';
+
+  @override
+  String get coreConfigApplied => 'Применён';
+
+  @override
+  String get coreConfigValidated => 'Проверен';
+
+  @override
+  String get coreConfigFailed => 'Ошибка';
+
+  @override
+  String get coreConfigSuperseded => 'Заменён новым';
+
+  @override
+  String get coreConfigNotApplied => 'Ещё не применялся';
+
+  @override
+  String get coreConfigPending => 'Применяется…';
+
+  @override
+  String get coreRuntimeStateLabel => 'Состояние VPN';
+
+  @override
+  String get coreRuntimeRunning => 'Работает';
+
+  @override
+  String get coreRuntimeStopped => 'Остановлен';
+
+  @override
+  String get coreRuntimeGenerationLabel => 'Поколение runtime';
+
+  @override
+  String get coreConfigSchemaLabel => 'Схема конфига';
+
+  @override
+  String get coreLastChangeLabel => 'Последнее применение';
 }

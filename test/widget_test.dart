@@ -13,7 +13,9 @@ import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/features/settings/settings_about_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 void main() {
@@ -199,6 +201,7 @@ void main() {
   testWidgets('proxy panel shell opens and collapses with local state', (
     tester,
   ) async {
+    var closeCount = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: StatefulBuilder(
@@ -210,6 +213,7 @@ void main() {
             visibleRows: 20,
             hasActiveProfile: true,
             onOpenRequested: () => rebuildHost(() {}),
+            onClosed: () => closeCount++,
             homeBuilder: (context, metrics, gestures) {
               return ColoredBox(
                 color: Colors.white,
@@ -259,6 +263,7 @@ void main() {
     );
 
     expect(find.text('panel:0.00'), findsOneWidget);
+    expect(closeCount, 0);
 
     final partialOpen = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('proxy-panel-header'))),
@@ -275,6 +280,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('panel:0.00'), findsOneWidget);
+    expect(closeCount, 1);
 
     await tester.tap(find.byKey(const ValueKey('proxy-panel-header')));
     await tester.pumpAndSettle();
@@ -285,6 +291,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('panel:0.00'), findsOneWidget);
+    expect(closeCount, 2);
   });
 
   testWidgets('real proxy panel opens from the collapsed header swipe', (
@@ -749,8 +756,14 @@ void main() {
       await tester.pump();
 
       expect(find.text('EOF'), findsNothing);
-      expect(find.text('—'), findsOneWidget);
+      expect(find.text('No result'), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == 'unexpected EOF',
+        ),
+        findsOneWidget,
+      );
     },
   );
 
@@ -1525,7 +1538,21 @@ void main() {
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: SettingsAboutPage(versionLabel: '0.1.1', onShowOnboarding: () {}),
+        home: SettingsAboutPage(
+          versionLabel: '0.1.1',
+          onShowOnboarding: () {},
+          readCoreIntegrationDiagnostics: () =>
+              const CoreIntegrationDiagnosticsSnapshot(
+                applyStatus: 'applied',
+                applyReason: 'settings_changed',
+                applyError: '',
+                configGeneration: 7,
+                configRuntimeGeneration: 4,
+                configSchemaVersion: 4,
+                settingsApplyPending: false,
+                lastApplyAtMillis: 1,
+              ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -1569,7 +1596,26 @@ void main() {
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: SettingsAboutPage(versionLabel: '0.1.1', onShowOnboarding: () {}),
+        home: SettingsAboutPage(
+          versionLabel: '0.1.1',
+          onShowOnboarding: () {},
+          readCoreIntegrationDiagnostics: () =>
+              const CoreIntegrationDiagnosticsSnapshot(
+                applyStatus: 'applied',
+                applyReason: 'settings_changed',
+                applyError: '',
+                configGeneration: 7,
+                configRuntimeGeneration: 4,
+                configSchemaVersion: 4,
+                settingsApplyPending: false,
+                lastApplyAtMillis: 1,
+              ),
+          loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+          readRuntimeStatus: () async => const <String, dynamic>{
+            'running': true,
+            'runtimeGeneration': 4,
+          },
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -1583,6 +1629,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsDiagnosticsPage), findsOneWidget);
+    expect(find.text('Core and configuration'), findsOneWidget);
+    expect(find.text('Applied'), findsOneWidget);
+    expect(find.text('4'), findsWidgets);
     expect(find.text('Process memory'), findsOneWidget);
   });
 

@@ -398,6 +398,7 @@ data class VpnNotificationPresentationMessage (
   val connectedText: String,
   val checkingText: String,
   val unavailableText: String,
+  val totalLabel: String,
   val refreshLabel: String,
   val stopLabel: String
 )
@@ -420,9 +421,10 @@ data class VpnNotificationPresentationMessage (
       val connectedText = pigeonVar_list[13] as String
       val checkingText = pigeonVar_list[14] as String
       val unavailableText = pigeonVar_list[15] as String
-      val refreshLabel = pigeonVar_list[16] as String
-      val stopLabel = pigeonVar_list[17] as String
-      return VpnNotificationPresentationMessage(detailed, trafficDisplayMode, trafficRefreshSeconds, title, latencyMillis, groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, connectedText, checkingText, unavailableText, refreshLabel, stopLabel)
+      val totalLabel = pigeonVar_list[16] as String
+      val refreshLabel = pigeonVar_list[17] as String
+      val stopLabel = pigeonVar_list[18] as String
+      return VpnNotificationPresentationMessage(detailed, trafficDisplayMode, trafficRefreshSeconds, title, latencyMillis, groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, connectedText, checkingText, unavailableText, totalLabel, refreshLabel, stopLabel)
     }
   }
   fun toList(): List<Any?> {
@@ -443,6 +445,7 @@ data class VpnNotificationPresentationMessage (
       connectedText,
       checkingText,
       unavailableText,
+      totalLabel,
       refreshLabel,
       stopLabel,
     )
@@ -455,7 +458,7 @@ data class VpnNotificationPresentationMessage (
       return true
     }
     val other = other as VpnNotificationPresentationMessage
-    return SingboxApiPigeonUtils.deepEquals(this.detailed, other.detailed) && SingboxApiPigeonUtils.deepEquals(this.trafficDisplayMode, other.trafficDisplayMode) && SingboxApiPigeonUtils.deepEquals(this.trafficRefreshSeconds, other.trafficRefreshSeconds) && SingboxApiPigeonUtils.deepEquals(this.title, other.title) && SingboxApiPigeonUtils.deepEquals(this.latencyMillis, other.latencyMillis) && SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.connectedText, other.connectedText) && SingboxApiPigeonUtils.deepEquals(this.checkingText, other.checkingText) && SingboxApiPigeonUtils.deepEquals(this.unavailableText, other.unavailableText) && SingboxApiPigeonUtils.deepEquals(this.refreshLabel, other.refreshLabel) && SingboxApiPigeonUtils.deepEquals(this.stopLabel, other.stopLabel)
+    return SingboxApiPigeonUtils.deepEquals(this.detailed, other.detailed) && SingboxApiPigeonUtils.deepEquals(this.trafficDisplayMode, other.trafficDisplayMode) && SingboxApiPigeonUtils.deepEquals(this.trafficRefreshSeconds, other.trafficRefreshSeconds) && SingboxApiPigeonUtils.deepEquals(this.title, other.title) && SingboxApiPigeonUtils.deepEquals(this.latencyMillis, other.latencyMillis) && SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.connectedText, other.connectedText) && SingboxApiPigeonUtils.deepEquals(this.checkingText, other.checkingText) && SingboxApiPigeonUtils.deepEquals(this.unavailableText, other.unavailableText) && SingboxApiPigeonUtils.deepEquals(this.totalLabel, other.totalLabel) && SingboxApiPigeonUtils.deepEquals(this.refreshLabel, other.refreshLabel) && SingboxApiPigeonUtils.deepEquals(this.stopLabel, other.stopLabel)
   }
 
   override fun hashCode(): Int {
@@ -476,12 +479,13 @@ data class VpnNotificationPresentationMessage (
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.connectedText)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.checkingText)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.unavailableText)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.totalLabel)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.refreshLabel)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.stopLabel)
     return result
   }
   override fun toString(): String {
-    return "VpnNotificationPresentationMessage(detailed=$detailed, trafficDisplayMode=$trafficDisplayMode, trafficRefreshSeconds=$trafficRefreshSeconds, title=$title, latencyMillis=$latencyMillis, groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, connectedText=$connectedText, checkingText=$checkingText, unavailableText=$unavailableText, refreshLabel=$refreshLabel, stopLabel=$stopLabel)"
+    return "VpnNotificationPresentationMessage(detailed=$detailed, trafficDisplayMode=$trafficDisplayMode, trafficRefreshSeconds=$trafficRefreshSeconds, title=$title, latencyMillis=$latencyMillis, groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, connectedText=$connectedText, checkingText=$checkingText, unavailableText=$unavailableText, totalLabel=$totalLabel, refreshLabel=$refreshLabel, stopLabel=$stopLabel)"
   }
 }
 

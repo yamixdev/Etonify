@@ -24,6 +24,7 @@ import io.nekohasekai.libbox.LogIterator
 import io.nekohasekai.libbox.OutboundGroupIterator
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
+import org.json.JSONObject
 import java.util.ArrayDeque
 import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
@@ -1007,6 +1008,35 @@ object SingboxController {
         }
     }
 
+    fun fetchUrlViaOutbound(
+        outboundTag: String,
+        url: String,
+        headers: Map<String, String>,
+        maxBytes: Int,
+        timeoutMillis: Int,
+        callback: (Result<Map<String, Any?>>) -> Unit,
+    ) {
+        val operationGeneration = activeRuntimeGeneration
+        lookupExecutor.execute {
+            var result = runCatching {
+                check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
+                    "stale runtime before outbound HTTP fetch"
+                }
+                fetchUrlViaOutbound(
+                    outboundTag = outboundTag,
+                    url = url,
+                    headersJson = JSONObject(headers).toString(),
+                    maxBytes = maxBytes,
+                    timeoutMillis = timeoutMillis,
+                )
+            }
+            if (operationGeneration != activeRuntimeGeneration) {
+                result = Result.failure(IllegalStateException("stale runtime after outbound HTTP fetch"))
+            }
+            mainHandler.post { callback(result) }
+        }
+    }
+
     fun reloadService(callback: (Result<Unit>) -> Unit) {
         commandExecutor.execute {
             val result = runCatching {
@@ -1143,5 +1173,36 @@ object SingboxController {
                 put("countryCode", countryCode)
             }
         }
+    }
+
+    private fun fetchUrlViaOutbound(
+        outboundTag: String,
+        url: String,
+        headersJson: String,
+        maxBytes: Int,
+        timeoutMillis: Int,
+    ): Map<String, Any?> = withStandaloneCommandClient { client ->
+        val method = client.javaClass.methods.firstOrNull { candidate ->
+            candidate.parameterCount == 5 &&
+                candidate.name.equals("fetchURLViaOutbound", ignoreCase = true)
+        } ?: throw UnsupportedOperationException("Bundled libbox does not support outbound HTTP fetch")
+        val response = method.invoke(
+            client,
+            outboundTag.trim(),
+            url.trim(),
+            headersJson,
+            maxBytes,
+            timeoutMillis,
+        ) ?: error("Outbound HTTP fetch returned no response")
+        val responseClass = response.javaClass
+        fun value(getter: String): Any? = responseClass.methods
+            .firstOrNull { it.parameterCount == 0 && it.name.equals(getter, ignoreCase = true) }
+            ?.invoke(response)
+        mapOf(
+            "statusCode" to (value("getStatusCode") as? Number)?.toInt(),
+            "body" to (value("getBody") as? ByteArray),
+            "headersJson" to value("getHeaders")?.toString().orEmpty(),
+            "finalUrl" to value("getFinalURL")?.toString().orEmpty(),
+        )
     }
 }

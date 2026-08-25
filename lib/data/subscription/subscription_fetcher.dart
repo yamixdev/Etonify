@@ -5,6 +5,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:meow_client/core/network/remote_download_timeout.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
@@ -34,7 +36,7 @@ class FetchResult {
   final String url;
 }
 
-enum SubscriptionFetchRoute { app, underlying }
+enum SubscriptionFetchRoute { outbound, app, underlying }
 
 typedef SubscriptionFetchRouteAttemptCallback =
     void Function(SubscriptionFetchRoute route, bool isFallback);
@@ -90,6 +92,34 @@ class SubscriptionFetcher {
           operationTimeout != null && operationTimeout > Duration.zero
           ? operationTimeout
           : _defaultOperationTimeout;
+      if (!allowInsecureTls) {
+        final downloaded = await VpnAwareRemoteDownloader.instance.fetchBytes(
+          uri: uri,
+          maximumBytes: _maxSubscriptionResponseBytes,
+          headers: headers,
+          onRouteAttempt: (route, isFallback) {
+            onRouteAttempt?.call(switch (route) {
+              RemoteDownloadRoute.outbound => SubscriptionFetchRoute.outbound,
+              RemoteDownloadRoute.app => SubscriptionFetchRoute.app,
+              RemoteDownloadRoute.underlying =>
+                SubscriptionFetchRoute.underlying,
+            }, isFallback);
+          },
+        );
+        final rawContent = decodeResponseUtf8ForTest(
+          downloaded.bytes ?? Uint8List(0),
+        );
+        final response = _buildFetchedResponse(
+          rawContent: rawContent,
+          headerValue: (name) => downloaded.headers[name.toLowerCase()],
+        );
+        AppLogStore.info(
+          'subscription',
+          'fetch complete path=${downloaded.route.name} '
+              'bytes=${downloaded.downloadedBytes}',
+        );
+        return await _buildResult(url: url, response: response);
+      }
       final vpnRuntimeReady = await _isVpnRuntimeReady();
       final routes = routeOrderForTest(
         android: Platform.isAndroid,
@@ -109,6 +139,9 @@ class SubscriptionFetcher {
         totalTimeout: totalTimeout,
         onAttempt: onRouteAttempt,
         attempt: (route, timeout) => switch (route) {
+          SubscriptionFetchRoute.outbound => throw StateError(
+            'Outbound fetch is handled by the VPN-aware downloader',
+          ),
           SubscriptionFetchRoute.app => _fetchViaAppRoute(
             uri: uri,
             headers: headers,
@@ -131,6 +164,17 @@ class SubscriptionFetcher {
       );
     } catch (error, stackTrace) {
       await _logFetchFailure(uri: uri, error: error, stackTrace: stackTrace);
+      if (error is RemoteDownloadHttpException) {
+        throw SubscriptionHttpStatusException(
+          error.statusCode,
+          uri: error.uri ?? uri,
+        );
+      }
+      if (error is RemoteDownloadTooLargeException) {
+        throw const SubscriptionContentException(
+          SubscriptionContentFailureKind.responseTooLarge,
+        );
+      }
       rethrow;
     }
   }
@@ -297,7 +341,10 @@ class SubscriptionFetcher {
       final route = routes[index];
       onAttempt?.call(route, index > 0);
       try {
-        return await attempt(route, timeout).timeout(timeout);
+        // Every route owns and cancels its own timeout. Future.timeout does not
+        // cancel the source future and could otherwise leave the first HTTP
+        // request alive while the fallback route starts.
+        return await attempt(route, timeout);
       } catch (error, stackTrace) {
         lastError = error;
         lastStackTrace = stackTrace;

@@ -101,6 +101,7 @@ class VpnNotificationPresentationMessage {
     required this.connectedText,
     required this.checkingText,
     required this.unavailableText,
+    required this.totalLabel,
     required this.refreshLabel,
     required this.stopLabel,
   });
@@ -121,6 +122,7 @@ class VpnNotificationPresentationMessage {
   String connectedText;
   String checkingText;
   String unavailableText;
+  String totalLabel;
   String refreshLabel;
   String stopLabel;
 }

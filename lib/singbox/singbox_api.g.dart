@@ -343,6 +343,7 @@ class VpnNotificationPresentationMessage {
     required this.connectedText,
     required this.checkingText,
     required this.unavailableText,
+    required this.totalLabel,
     required this.refreshLabel,
     required this.stopLabel,
   });
@@ -379,6 +380,8 @@ class VpnNotificationPresentationMessage {
 
   String unavailableText;
 
+  String totalLabel;
+
   String refreshLabel;
 
   String stopLabel;
@@ -401,6 +404,7 @@ class VpnNotificationPresentationMessage {
       connectedText,
       checkingText,
       unavailableText,
+      totalLabel,
       refreshLabel,
       stopLabel,
     ];
@@ -428,8 +432,9 @@ class VpnNotificationPresentationMessage {
       connectedText: result[13]! as String,
       checkingText: result[14]! as String,
       unavailableText: result[15]! as String,
-      refreshLabel: result[16]! as String,
-      stopLabel: result[17]! as String,
+      totalLabel: result[16]! as String,
+      refreshLabel: result[17]! as String,
+      stopLabel: result[18]! as String,
     );
   }
 
@@ -442,7 +447,7 @@ class VpnNotificationPresentationMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(detailed, other.detailed) && _deepEquals(trafficDisplayMode, other.trafficDisplayMode) && _deepEquals(trafficRefreshSeconds, other.trafficRefreshSeconds) && _deepEquals(title, other.title) && _deepEquals(latencyMillis, other.latencyMillis) && _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(connectedText, other.connectedText) && _deepEquals(checkingText, other.checkingText) && _deepEquals(unavailableText, other.unavailableText) && _deepEquals(refreshLabel, other.refreshLabel) && _deepEquals(stopLabel, other.stopLabel);
+    return _deepEquals(detailed, other.detailed) && _deepEquals(trafficDisplayMode, other.trafficDisplayMode) && _deepEquals(trafficRefreshSeconds, other.trafficRefreshSeconds) && _deepEquals(title, other.title) && _deepEquals(latencyMillis, other.latencyMillis) && _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(connectedText, other.connectedText) && _deepEquals(checkingText, other.checkingText) && _deepEquals(unavailableText, other.unavailableText) && _deepEquals(totalLabel, other.totalLabel) && _deepEquals(refreshLabel, other.refreshLabel) && _deepEquals(stopLabel, other.stopLabel);
   }
 
   @override
@@ -451,7 +456,7 @@ class VpnNotificationPresentationMessage {
 
   @override
   String toString() {
-    return 'VpnNotificationPresentationMessage(detailed: $detailed, trafficDisplayMode: $trafficDisplayMode, trafficRefreshSeconds: $trafficRefreshSeconds, title: $title, latencyMillis: $latencyMillis, groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, connectedText: $connectedText, checkingText: $checkingText, unavailableText: $unavailableText, refreshLabel: $refreshLabel, stopLabel: $stopLabel)';
+    return 'VpnNotificationPresentationMessage(detailed: $detailed, trafficDisplayMode: $trafficDisplayMode, trafficRefreshSeconds: $trafficRefreshSeconds, title: $title, latencyMillis: $latencyMillis, groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, connectedText: $connectedText, checkingText: $checkingText, unavailableText: $unavailableText, totalLabel: $totalLabel, refreshLabel: $refreshLabel, stopLabel: $stopLabel)';
   }
 }
 
