@@ -46,7 +46,7 @@ class SettingsBackupExportActions {
     final l10n = AppLocalizations.of(context);
     final password = await _askPassword(context);
     if (password == null || !context.mounted) return;
-    final content = await _service.buildProfileExportInBackground(
+    final bytes = await _service.buildProfileExportBytesInBackground(
       subscriptions: await loadSubscriptions(),
       clientVersion: clientVersion,
       encryption: EtonifyProfileEncryption.encrypted,
@@ -57,7 +57,7 @@ class SettingsBackupExportActions {
       fileName: 'etonify-profile.etonify-profile',
       type: FileType.custom,
       allowedExtensions: const ['etonify-profile'],
-      bytes: Uint8List.fromList(utf8.encode(content)),
+      bytes: bytes,
     );
     if (path == null || !context.mounted) return;
     _showSaved(context);
@@ -87,7 +87,7 @@ class SettingsBackupExportActions {
     );
     if (confirmed != true || !context.mounted) return;
     final l10n = AppLocalizations.of(context);
-    final content = await _service.buildProfileExportInBackground(
+    final bytes = await _service.buildProfileExportBytesInBackground(
       subscriptions: await loadSubscriptions(),
       clientVersion: clientVersion,
       encryption: EtonifyProfileEncryption.plain,
@@ -97,7 +97,7 @@ class SettingsBackupExportActions {
       fileName: 'etonify-profile-plain.etonify-profile',
       type: FileType.custom,
       allowedExtensions: const ['etonify-profile'],
-      bytes: Uint8List.fromList(utf8.encode(content)),
+      bytes: bytes,
     );
     if (path == null || !context.mounted) return;
     _showSaved(context);

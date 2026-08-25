@@ -97,15 +97,19 @@ void main() {
       ],
     );
 
-    final content = await service.buildProfileExportInBackground(
+    final bytes = await service.buildProfileExportBytesInBackground(
       subscriptions: [first, second],
       clientVersion: '0.2.2',
       encryption: EtonifyProfileEncryption.plain,
     );
-    expect(utf8.encode(content).length, greaterThan(8 * 1024 * 1024));
+    expect(bytes.length, greaterThan(8 * 1024 * 1024));
+    expect(
+      service.detectProfileEncryption(bytes),
+      EtonifyProfileEncryption.plain,
+    );
 
     final parsed = await service.parseProfileExportInBackground(
-      bytes: utf8.encode(content),
+      bytes: bytes,
       currentClientVersion: '0.2.2',
     );
 
@@ -120,6 +124,21 @@ void main() {
     expect(parsed.subscriptions[1].outbounds.map((item) => item.tag), [
       'second-1',
     ]);
+  });
+
+  test('detects encrypted profile before the expensive full decode', () async {
+    final bytes = await service.buildProfileExportBytesInBackground(
+      subscriptions: [sampleSubscription()],
+      clientVersion: '0.3.1',
+      encryption: EtonifyProfileEncryption.encrypted,
+      password: 'correct-password',
+    );
+
+    expect(
+      service.detectProfileEncryption(bytes),
+      EtonifyProfileEncryption.encrypted,
+    );
+    expect(service.detectProfileEncryption(utf8.encode('{}')), isNull);
   });
 
   test('rejects backups that require a newer minimum client version', () {

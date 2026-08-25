@@ -175,6 +175,46 @@ class EtonifyBackupService {
     );
   }
 
+  /// Produces the final bytes in the worker isolate so the UI isolate never
+  /// holds both a multi-megabyte JSON string and its UTF-8 copy.
+  Future<Uint8List> buildProfileExportBytesInBackground({
+    required List<Subscription> subscriptions,
+    required String clientVersion,
+    required EtonifyProfileEncryption encryption,
+    String? password,
+  }) async {
+    final transferable = await Isolate.run(() {
+      final content = const EtonifyBackupService().buildProfileExport(
+        subscriptions: subscriptions,
+        clientVersion: clientVersion,
+        encryption: encryption,
+        password: password,
+      );
+      return TransferableTypedData.fromList([utf8.encode(content)]);
+    }, debugName: 'etonify-profile-export-bytes');
+    return transferable.materialize().asUint8List();
+  }
+
+  /// Reads the encryption marker from the bounded envelope header.
+  ///
+  /// This lets the UI ask for a password before starting the expensive full
+  /// JSON decode instead of decoding a large encrypted backup twice.
+  EtonifyProfileEncryption? detectProfileEncryption(List<int> bytes) {
+    if (bytes.isEmpty || bytes.length > maxImportBytes) return null;
+    final head = utf8.decode(
+      bytes.take(4096).toList(growable: false),
+      allowMalformed: true,
+    );
+    final match = RegExp(
+      r'"encryption"\s*:\s*"(encrypted|plain)"',
+    ).firstMatch(head);
+    return switch (match?.group(1)) {
+      'encrypted' => EtonifyProfileEncryption.encrypted,
+      'plain' => EtonifyProfileEncryption.plain,
+      _ => null,
+    };
+  }
+
   EtonifyProfileImportResult parseProfileExport({
     required List<int> bytes,
     required String currentClientVersion,

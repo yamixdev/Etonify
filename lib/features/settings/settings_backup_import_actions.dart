@@ -75,23 +75,31 @@ class SettingsBackupImportActions {
   }
 
   Future<void> _importProfile(BuildContext context, List<int> bytes) async {
+    String? password;
+    if (_service.detectProfileEncryption(bytes) ==
+        EtonifyProfileEncryption.encrypted) {
+      password = await _askPassword(context);
+      if (password == null || !context.mounted) return;
+    }
     EtonifyProfileImportResult parsed;
     try {
       parsed = await _service.parseProfileExportInBackground(
         bytes: bytes,
         currentClientVersion: clientVersion,
+        password: password,
       );
     } on EtonifyBackupException catch (error) {
-      if (!error.message.toLowerCase().contains('password')) {
+      if (password != null ||
+          !error.message.toLowerCase().contains('password')) {
         rethrow;
       }
       if (!context.mounted) return;
-      final password = await _askPassword(context);
-      if (password == null) return;
+      final retryPassword = await _askPassword(context);
+      if (retryPassword == null) return;
       parsed = await _service.parseProfileExportInBackground(
         bytes: bytes,
         currentClientVersion: clientVersion,
-        password: password,
+        password: retryPassword,
       );
     }
     if (!context.mounted) return;
