@@ -8,7 +8,7 @@
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android)](https://github.com/yamixdev/Etonify/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.0-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
-[![Core](https://img.shields.io/badge/etonify--core-1.13.19-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
+[![Core](https://img.shields.io/badge/etonify--core-1.14.0--rc.1-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-@etonify-26A5E4?style=flat-square&logo=telegram)](https://t.me/etonify)
 
@@ -27,9 +27,9 @@ Etonify is built for people who already have a VPN subscription, share link, or 
 
 | Component | Current value |
 | --- | --- |
-| App source version | `0.3.0+20` |
+| App source version | `0.3.1+21` |
 | Android support | Android 8.0 and newer (API 26+) |
-| Bundled core | `v1.13.19-etonify.1`, based on sing-box 1.13.19 |
+| Bundled core | `v1.14.0-rc.1-etonify.2`, based on sing-box 1.14.0-rc.1 |
 | App languages | English and Russian |
 | Release target | Android only |
 

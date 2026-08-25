@@ -8,7 +8,7 @@
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android)](https://github.com/yamixdev/Etonify/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.0-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
-[![Core](https://img.shields.io/badge/etonify--core-1.13.19-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
+[![Core](https://img.shields.io/badge/etonify--core-1.14.0--rc.1-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-@etonify-26A5E4?style=flat-square&logo=telegram)](https://t.me/etonify)
 
@@ -27,9 +27,9 @@ Etonify برای افرادی ساخته شده است که از قبل اشتر
 
 | بخش | مقدار فعلی |
 | --- | --- |
-| نسخهٔ کد کلاینت | `0.3.0+20` |
+| نسخهٔ کد کلاینت | `0.3.1+21` |
 | نسخهٔ Android | Android 8.0 و جدیدتر (API 26+) |
-| هستهٔ داخلی | `v1.13.19-etonify.1` بر پایهٔ sing-box 1.13.19 |
+| هستهٔ داخلی | `v1.14.0-rc.1-etonify.2` بر پایهٔ sing-box 1.14.0-rc.1 |
 | زبان‌های رابط برنامه | انگلیسی و روسی |
 | پلتفرم انتشار | فقط Android |
 
