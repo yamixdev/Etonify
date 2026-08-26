@@ -65,6 +65,17 @@ void main() {
     expect(parsed.subscriptions.single.selectedProxyTag, 'node-1');
   });
 
+  test('normalizes version prefix and build metadata in exports', () {
+    final content = service.buildProfileExport(
+      subscriptions: [sampleSubscription()],
+      clientVersion: 'v0.3.1+20',
+      encryption: EtonifyProfileEncryption.plain,
+    );
+
+    final envelope = jsonDecode(content) as Map<String, dynamic>;
+    expect(envelope['createdByVersion'], '0.3.1');
+  });
+
   test('large backup keeps profiles and their servers separate', () async {
     final first = sampleSubscription().copyWith(
       name: 'First profile',

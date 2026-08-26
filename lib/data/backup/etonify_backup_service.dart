@@ -72,6 +72,9 @@ class EtonifyBackupService {
   static const _nonceBytes = 12;
   static const _keyBytes = 32;
   static const _tagBits = 128;
+  static final RegExp _profileEncryptionRegExp = RegExp(
+    r'"encryption"\s*:\s*"(encrypted|plain)"',
+  );
 
   String buildSettingsExport({
     required AppSettingsStore store,
@@ -205,9 +208,7 @@ class EtonifyBackupService {
       bytes.take(4096).toList(growable: false),
       allowMalformed: true,
     );
-    final match = RegExp(
-      r'"encryption"\s*:\s*"(encrypted|plain)"',
-    ).firstMatch(head);
+    final match = _profileEncryptionRegExp.firstMatch(head);
     return switch (match?.group(1)) {
       'encrypted' => EtonifyProfileEncryption.encrypted,
       'plain' => EtonifyProfileEncryption.plain,
@@ -429,7 +430,8 @@ class EtonifyBackupService {
 }
 
 String _normalizeVersion(String value) {
-  final normalized = value.trim().replaceFirst(RegExp(r'^v'), '');
+  final trimmed = value.trim();
+  final normalized = trimmed.startsWith('v') ? trimmed.substring(1) : trimmed;
   return normalized.split('+').first;
 }
 
