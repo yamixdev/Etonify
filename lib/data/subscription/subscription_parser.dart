@@ -151,6 +151,36 @@ class ParsedOutboundGroup {
 class SubscriptionParser {
   SubscriptionParser._();
 
+  static final RegExp _base64WhitespacePattern = RegExp(r'\s');
+  static final RegExp _base64AlphabetPattern = RegExp(r'^[A-Za-z0-9+/=_-]+$');
+  static final RegExp _proxyChainSeparatorPattern = RegExp(r'\s+->\s+');
+  static const List<String> _proxyLinkSchemes = <String>[
+    'vless://',
+    'vmess://',
+    'trojan://',
+    'ss://',
+    'ssr://',
+    'socks://',
+    'socks4://',
+    'socks4a://',
+    'socks5://',
+    'socks5h://',
+    'naive+https://',
+    'naive+quic://',
+    'http://',
+    'https://',
+    'hysteria2://',
+    'hy2://',
+    'hysteria://',
+    'hy://',
+    'tuic://',
+    'anytls://',
+  ];
+  static final RegExp _proxyLinkSchemePattern = RegExp(
+    _proxyLinkSchemes.map(RegExp.escape).join('|'),
+    caseSensitive: false,
+  );
+
   static Future<ParseResult> parseInBackground(String content) async {
     final payload = await compute(_parseSubscriptionContent, content);
     return ParseResult.fromMap(Map<String, dynamic>.from(payload));
@@ -260,10 +290,10 @@ class SubscriptionParser {
   /// Returns the decoded string or null if it fails or produces garbage.
   static String? _tryBase64Decode(String input) {
     // Remove whitespace (base64 can be multi-line)
-    final clean = input.replaceAll(RegExp(r'\s'), '');
+    final clean = input.replaceAll(_base64WhitespacePattern, '');
 
     // Quick heuristic: valid base64 chars only
-    if (!RegExp(r'^[A-Za-z0-9+/=_-]+$').hasMatch(clean)) return null;
+    if (!_base64AlphabetPattern.hasMatch(clean)) return null;
 
     try {
       String s = clean.replaceAll('-', '+').replaceAll('_', '/');
@@ -343,8 +373,11 @@ class SubscriptionParser {
   }
 
   static List<String> _splitProxyChainLinks(String line) {
+    if (!line.contains('->')) {
+      return <String>[line];
+    }
     return line
-        .split(RegExp(r'\s+->\s+'))
+        .split(_proxyChainSeparatorPattern)
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList(growable: false);
@@ -469,46 +502,28 @@ class SubscriptionParser {
   }
 
   static List<String> _splitConcatenatedLinks(String line) {
-    const schemes = <String>[
-      'vless://',
-      'vmess://',
-      'trojan://',
-      'ss://',
-      'ssr://',
-      'socks://',
-      'socks4://',
-      'socks4a://',
-      'socks5://',
-      'socks5h://',
-      'naive+https://',
-      'naive+quic://',
-      'http://',
-      'https://',
-      'hysteria2://',
-      'hy2://',
-      'hysteria://',
-      'hy://',
-      'tuic://',
-      'anytls://',
-    ];
-
-    final matches = RegExp(
-      '(${schemes.map(RegExp.escape).join('|')})',
-      caseSensitive: false,
-    ).allMatches(line).toList(growable: false);
-
-    if (matches.length <= 1) {
+    final matches = _proxyLinkSchemePattern.allMatches(line).iterator;
+    if (!matches.moveNext()) {
+      return [line];
+    }
+    final firstStart = matches.current.start;
+    if (!matches.moveNext()) {
       return [line];
     }
 
     final parts = <String>[];
-    for (var i = 0; i < matches.length; i++) {
-      final start = matches[i].start;
-      final end = i + 1 < matches.length ? matches[i + 1].start : line.length;
-      final part = line.substring(start, end).trim();
+    var start = firstStart;
+    do {
+      final nextStart = matches.current.start;
+      final part = line.substring(start, nextStart).trim();
       if (part.isNotEmpty) {
         parts.add(part);
       }
+      start = nextStart;
+    } while (matches.moveNext());
+    final lastPart = line.substring(start).trim();
+    if (lastPart.isNotEmpty) {
+      parts.add(lastPart);
     }
     return parts;
   }

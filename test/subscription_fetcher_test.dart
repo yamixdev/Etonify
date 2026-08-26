@@ -286,6 +286,36 @@ void main() {
       expect(result.headerInfo.title, 'MyProfile');
     });
 
+    test('parses encoded filename and mixed metadata separators', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((request) async {
+        request.response.headers.set(
+          'content-disposition',
+          "attachment; filename*=UTF-8''%D0%9C%D1%8F%D1%83",
+        );
+        request.response.headers.set(
+          'subscription-userinfo',
+          'upload=1; download=2&total=3; expire=4',
+        );
+        request.response.write(
+          'vless://uuid@server.com:443?type=tcp&security=tls#Node1',
+        );
+        await request.response.close();
+      });
+
+      final result = await SubscriptionFetcher.fetch(
+        'http://${server.address.host}:${server.port}/sub',
+      );
+
+      expect(result.headerInfo.title, 'Мяу');
+      expect(result.headerInfo.upload, 1);
+      expect(result.headerInfo.download, 2);
+      expect(result.headerInfo.total, 3);
+      expect(result.headerInfo.expire, 4);
+    });
+
     test('rejects oversized responses before parsing', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);

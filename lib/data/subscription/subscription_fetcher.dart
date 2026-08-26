@@ -66,9 +66,23 @@ class SubscriptionFetcher {
   static const _defaultOperationTimeout = Duration(seconds: 20);
   static const _firstRouteTimeout = Duration(seconds: 5);
   static const _runtimeStatusTimeout = Duration(seconds: 1);
+  static final RegExp _versionPrefixRegExp = RegExp(r'^v');
+  static final RegExp _unicodeHttpUriRegExp = RegExp(
+    r'^([A-Za-z][A-Za-z0-9+.\-]*):\/\/([^\/?#]*)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$',
+  );
+  static final RegExp _encodedFilenameRegExp = RegExp(
+    r'''filename\*\s*=\s*UTF-8''([^;]+)''',
+    caseSensitive: false,
+  );
+  static final RegExp _plainFilenameRegExp = RegExp(
+    r'filename\s*=\s*"([^"]+)"|filename\s*=\s*([^";\s]+)',
+    caseSensitive: false,
+  );
+  static final RegExp _keyValueSeparatorRegExp = RegExp(r'[;&]');
+  static final RegExp _surroundingQuotesRegExp = RegExp(r'^"+|"+$');
 
   static void configureAppVersion(String value) {
-    final normalized = value.trim().replaceFirst(RegExp(r'^v'), '');
+    final normalized = value.trim().replaceFirst(_versionPrefixRegExp, '');
     _appVersion = normalized.isEmpty ? fallbackAppVersion : normalized;
   }
 
@@ -640,9 +654,7 @@ class SubscriptionFetcher {
   }
 
   static Uri _parseUnicodeHttpUri(String rawUrl) {
-    final match = RegExp(
-      r'^([A-Za-z][A-Za-z0-9+.\-]*):\/\/([^\/?#]*)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$',
-    ).firstMatch(rawUrl);
+    final match = _unicodeHttpUriRegExp.firstMatch(rawUrl);
     if (match == null) {
       throw FormatException('Invalid URL', rawUrl);
     }
@@ -1049,18 +1061,12 @@ class SubscriptionFetcher {
 
   /// Gets the first value for a header (case-insensitive).
   static String? _titleFromContentDisposition(String value) {
-    final encodedMatch = RegExp(
-      r'''filename\*\s*=\s*UTF-8''([^;]+)''',
-      caseSensitive: false,
-    ).firstMatch(value);
+    final encodedMatch = _encodedFilenameRegExp.firstMatch(value);
     if (encodedMatch != null) {
       return _normalizeTitle(Uri.decodeComponent(encodedMatch.group(1)!));
     }
 
-    final plainMatch = RegExp(
-      r'filename\s*=\s*"([^"]+)"|filename\s*=\s*([^";\s]+)',
-      caseSensitive: false,
-    ).firstMatch(value);
+    final plainMatch = _plainFilenameRegExp.firstMatch(value);
     if (plainMatch != null) {
       return _normalizeTitle(plainMatch.group(1) ?? plainMatch.group(2) ?? '');
     }
@@ -1071,7 +1077,7 @@ class SubscriptionFetcher {
   /// Parses key=value pairs separated by `;` or `&`.
   static Map<String, String> _parseKeyValuePairs(String input) {
     final result = <String, String>{};
-    final parts = input.split(RegExp(r'[;&]'));
+    final parts = input.split(_keyValueSeparatorRegExp);
     for (final part in parts) {
       final trimmed = part.trim();
       final eqIdx = trimmed.indexOf('=');
@@ -1106,7 +1112,7 @@ class SubscriptionFetcher {
   }
 
   static String? _normalizeTitle(String input) {
-    var normalized = input.trim().replaceAll(RegExp(r'^"+|"+$'), '');
+    var normalized = input.trim().replaceAll(_surroundingQuotesRegExp, '');
     if (normalized.isEmpty) {
       return null;
     }

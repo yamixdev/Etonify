@@ -11,6 +11,14 @@ import 'dart:convert';
 class LinkParser {
   LinkParser._();
 
+  static final RegExp _naiveSchemePattern = RegExp(
+    r'^naive\+(?:https|quic)://',
+    caseSensitive: false,
+  );
+  static final RegExp _httpHeaderLineBreakPattern = RegExp(r'\r?\n');
+  static final RegExp _authorityTerminatorPattern = RegExp(r'[/?#]');
+  static final RegExp _uppercasePattern = RegExp(r'[A-Z]');
+
   // ───────────────────────────── public API ─────────────────────────────
 
   /// Try to parse [line] as a proxy link.
@@ -345,10 +353,7 @@ class LinkParser {
     final name = _fragment(raw);
     final isQuic = raw.toLowerCase().startsWith('naive+quic://');
     final uri = Uri.parse(
-      raw.replaceFirst(
-        RegExp(r'^naive\+(?:https|quic)://', caseSensitive: false),
-        isQuic ? 'https://' : 'https://',
-      ),
+      raw.replaceFirst(_naiveSchemePattern, isQuic ? 'https://' : 'https://'),
     );
     final explicitPort = _explicitPort(raw);
     if (uri.host.isEmpty) return null;
@@ -801,7 +806,7 @@ class LinkParser {
     if (value.isEmpty) return const {};
 
     final headers = <String, String>{};
-    for (final line in value.split(RegExp(r'\r?\n'))) {
+    for (final line in value.split(_httpHeaderLineBreakPattern)) {
       final separator = line.indexOf(':');
       if (separator <= 0) continue;
       final name = line.substring(0, separator).trim();
@@ -818,7 +823,7 @@ class LinkParser {
     if (schemeEnd < 0) return null;
 
     var authority = raw.substring(schemeEnd + 3);
-    final end = authority.indexOf(RegExp(r'[/?#]'));
+    final end = authority.indexOf(_authorityTerminatorPattern);
     if (end >= 0) {
       authority = authority.substring(0, end);
     }
@@ -880,7 +885,7 @@ class LinkParser {
   /// Converts camelCase to snake_case (e.g. xPaddingBytes → x_padding_bytes).
   static String _camelToSnake(String input) {
     return input.replaceAllMapped(
-      RegExp(r'[A-Z]'),
+      _uppercasePattern,
       (m) => '_${m.group(0)!.toLowerCase()}',
     );
   }
