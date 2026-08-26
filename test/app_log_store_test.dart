@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
@@ -60,6 +62,29 @@ void main() {
       expect(dump, isNot(contains('device-id')));
       expect(dump, isNot(contains('private/subscription/path')));
       expect(dump, isNot(contains('11111111-1111-4111-8111-111111111111')));
+    });
+
+    test('normalizes native ANSI log messages', () {
+      expect(
+        AppLogStore.normalizeMessage('\u001b[31mERROR\u001b[0m failed'),
+        'ERROR failed',
+      );
+      expect(AppLogStore.normalizeMessage('[32mINFO[0m ready'), 'INFO ready');
+    });
+
+    test('counts encoded JSON bytes without materializing the full JSON', () {
+      final config = <String, dynamic>{
+        'name': 'Россия "VPN"',
+        'enabled': true,
+        'nullable': null,
+        'values': <Object>[1, 2.5, 'line\nnext', r'c:\vpn'],
+        'nested': <String, dynamic>{'emoji': '🐈'},
+      };
+
+      expect(
+        AppLogStore.jsonUtf8LengthForTest(config),
+        utf8.encode(jsonEncode(config)).length,
+      );
     });
   });
 }
