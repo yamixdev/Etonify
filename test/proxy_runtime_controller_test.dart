@@ -345,6 +345,69 @@ void main() {
     expect(controller.runtimeLatencyTimes['vless-1'], 20);
   });
 
+  test('partial snapshot preserves every unrelated latency collection', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.runtimeLatencies.addAll({'vless-1': 42, 'vless-2': 51});
+    controller.runtimeLatencyTimes.addAll({'vless-1': 100, 'vless-2': 90});
+    controller.unavailableLatencyTags.add('vless-3');
+    controller.invalidatedLatencyTags.add('vless-4');
+    controller.latencyErrors['vless-3'] = 'old timeout';
+    controller.latencyFailureCounts['vless-3'] = 2;
+
+    final result = controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {
+                'tag': 'vless-1',
+                'status': 'available',
+                'delay': 73,
+                'time': 101,
+              },
+            ],
+          },
+        ],
+      ),
+    );
+
+    expect(result.changed, isTrue);
+    expect(result.affectedProxyTags, {'vless-1'});
+    expect(controller.runtimeLatencies, {'vless-1': 73, 'vless-2': 51});
+    expect(controller.runtimeLatencyTimes, {'vless-1': 101, 'vless-2': 90});
+    expect(controller.unavailableLatencyTags, {'vless-3'});
+    expect(controller.invalidatedLatencyTags, {'vless-4'});
+    expect(controller.latencyErrors, {'vless-3': 'old timeout'});
+    expect(controller.latencyFailureCounts, {'vless-3': 2});
+  });
+
+  test('non-terminal group status does not mutate runtime latency state', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.runtimeLatencies['vless-1'] = 73;
+    controller.runtimeLatencyTimes['vless-1'] = 100;
+    controller.lowestLatency = 73;
+
+    final result = controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {'tag': 'vless-1', 'status': 'checking', 'delay': 0, 'time': 101},
+            ],
+          },
+        ],
+      ),
+    );
+
+    expect(result, same(ProxyRuntimeGroupUpdateResult.noChanges));
+    expect(controller.runtimeLatencies, {'vless-1': 73});
+    expect(controller.runtimeLatencyTimes, {'vless-1': 100});
+  });
+
   test('an error without an unavailable status is still a failed URLTest', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);

@@ -337,51 +337,25 @@ class ProxyRuntimeController {
       return ProxyRuntimeGroupUpdateResult.noChanges;
     }
 
-    final nextRuntimeLatencies = Map<String, int>.from(runtimeLatencies);
-    final nextRuntimeLatencyTimes = Map<String, int>.from(runtimeLatencyTimes);
-    final nextUnavailableLatencyTags = Set<String>.from(unavailableLatencyTags);
-    final nextInvalidatedLatencyTags = Set<String>.from(invalidatedLatencyTags);
-    final nextLatencyErrors = Map<String, String>.from(latencyErrors);
-    final nextLatencyFailureCounts = Map<String, int>.from(
-      latencyFailureCounts,
-    );
-    final touchedTags = <String>{
-      ...delays.keys,
-      ...statuses.keys,
-      ...errors.keys,
-    };
-    for (final tag in touchedTags) {
-      final status = statuses[tag];
+    // Every accepted item writes a delay entry (including null for failures),
+    // so its keys are the complete and smallest touched-tag set.
+    final touchedTags = delays.keys.toSet();
+
+    bool unavailableAfterUpdate(String tag) {
       final delay = delays[tag];
       final hasPositiveDelay = delay != null && delay > 0;
       final error = errors[tag]?.trim() ?? '';
       final terminalFailure =
-          status == urlTestStatusUnavailable ||
+          statuses[tag] == urlTestStatusUnavailable ||
           (error.isNotEmpty && !hasPositiveDelay);
       if (terminalFailure) {
-        nextInvalidatedLatencyTags.remove(tag);
-        final failureCount = (nextLatencyFailureCounts[tag] ?? 0) + 1;
-        nextLatencyFailureCounts[tag] = failureCount;
-        nextRuntimeLatencies.remove(tag);
-        nextUnavailableLatencyTags.add(tag);
-        nextLatencyErrors[tag] = error.isNotEmpty ? error : 'URL test failed';
-        final time = updatedTimes[tag];
-        if (time != null) {
-          nextRuntimeLatencyTimes[tag] = time;
-        }
-        continue;
+        return true;
       }
       if (hasPositiveDelay) {
-        nextInvalidatedLatencyTags.remove(tag);
-        nextRuntimeLatencies[tag] = delay;
-        nextUnavailableLatencyTags.remove(tag);
-        nextLatencyErrors.remove(tag);
-        nextLatencyFailureCounts.remove(tag);
-        final time = updatedTimes[tag];
-        if (time != null) {
-          nextRuntimeLatencyTimes[tag] = time;
-        }
+        return false;
       }
+      return unavailableLatencyTags.contains(tag) ||
+          latencyErrors.containsKey(tag);
     }
 
     // Do not keep presenting a child that the same URLTest update has already
@@ -392,14 +366,8 @@ class ProxyRuntimeController {
       final effectiveTag = selectedLeaf != null && selectedLeaf.isNotEmpty
           ? selectedLeaf
           : selectedTag;
-      return nextUnavailableLatencyTags.contains(effectiveTag) ||
-          nextLatencyErrors.containsKey(effectiveTag);
+      return unavailableAfterUpdate(effectiveTag);
     });
-
-    final nextLowestLatency = _computeLowestLatency(
-      nextRuntimeLatencies,
-      nextUnavailableLatencyTags,
-    );
 
     final pendingRuntimeSelectTag = input.pendingRuntimeSelectTag;
     // The app owns the persisted `select` choice. Native status is used only
@@ -422,24 +390,18 @@ class ProxyRuntimeController {
       );
     }
 
-    final latencyStateChanged =
-        lowestLatency != nextLowestLatency ||
-        !mapEquals(runtimeLatencies, nextRuntimeLatencies) ||
-        !mapEquals(runtimeLatencyTimes, nextRuntimeLatencyTimes) ||
-        !setEquals(unavailableLatencyTags, nextUnavailableLatencyTags) ||
-        !setEquals(invalidatedLatencyTags, nextInvalidatedLatencyTags) ||
-        !mapEquals(latencyErrors, nextLatencyErrors) ||
-        !mapEquals(latencyFailureCounts, nextLatencyFailureCounts) ||
-        !mapEquals(runtimeLowestSelections, lowestSelections) ||
-        !mapEquals(runtimeGroupSelections, groupSelections);
+    final lowestSelectionsChanged = !mapEquals(
+      runtimeLowestSelections,
+      lowestSelections,
+    );
+    final groupSelectionsChanged = !mapEquals(
+      runtimeGroupSelections,
+      groupSelections,
+    );
     final realOutboundRuntimeStateChanged =
         touchedTags.any(input.activeOutboundTags.contains) ||
-        !mapEquals(runtimeLowestSelections, lowestSelections) ||
-        !mapEquals(runtimeGroupSelections, groupSelections);
-
-    if (!runtimeSelectionConfirmsPending && !latencyStateChanged) {
-      return ProxyRuntimeGroupUpdateResult.noChanges;
-    }
+        lowestSelectionsChanged ||
+        groupSelectionsChanged;
 
     final nextRuntimeLowestOutboundTag = lowestSelections[lowestProxyTag];
     final shouldRebuildProxyCache =
@@ -450,41 +412,89 @@ class ProxyRuntimeController {
           (entry) =>
               input.visibleGroupProxyCacheMissingChild(entry.key, entry.value),
         );
-    final lowestSelectionsChanged = !mapEquals(
-      runtimeLowestSelections,
-      lowestSelections,
-    );
-    final groupSelectionsChanged = !mapEquals(
-      runtimeGroupSelections,
-      groupSelections,
-    );
     final requiresRootRebuild =
         lowestSelectionsChanged || groupSelectionsChanged;
 
-    runtimeLatencies
-      ..clear()
-      ..addAll(nextRuntimeLatencies);
-    runtimeLatencyTimes
-      ..clear()
-      ..addAll(nextRuntimeLatencyTimes);
-    unavailableLatencyTags
-      ..clear()
-      ..addAll(nextUnavailableLatencyTags);
-    invalidatedLatencyTags
-      ..clear()
-      ..addAll(nextInvalidatedLatencyTags);
-    latencyErrors
-      ..clear()
-      ..addAll(nextLatencyErrors);
-    latencyFailureCounts
-      ..clear()
-      ..addAll(nextLatencyFailureCounts);
-    runtimeGroupSelections
-      ..clear()
-      ..addAll(groupSelections);
-    runtimeLowestSelections
-      ..clear()
-      ..addAll(lowestSelections);
+    // This method runs synchronously on the UI isolate, so no observer can see
+    // a partially applied snapshot. Mutate only the tags carried by this event
+    // instead of cloning, comparing, clearing, and repopulating every latency
+    // collection. On large subscriptions this removes the remaining O(N)
+    // allocation churn from the URLTest hot path.
+    var latencyCollectionsChanged = false;
+    for (final tag in touchedTags) {
+      final status = statuses[tag];
+      final delay = delays[tag];
+      final hasPositiveDelay = delay != null && delay > 0;
+      final error = errors[tag]?.trim() ?? '';
+      final terminalFailure =
+          status == urlTestStatusUnavailable ||
+          (error.isNotEmpty && !hasPositiveDelay);
+      if (terminalFailure) {
+        latencyCollectionsChanged =
+            invalidatedLatencyTags.remove(tag) || latencyCollectionsChanged;
+        latencyFailureCounts[tag] = (latencyFailureCounts[tag] ?? 0) + 1;
+        latencyCollectionsChanged = true;
+        latencyCollectionsChanged =
+            runtimeLatencies.remove(tag) != null || latencyCollectionsChanged;
+        latencyCollectionsChanged =
+            unavailableLatencyTags.add(tag) || latencyCollectionsChanged;
+        final nextError = error.isNotEmpty ? error : 'URL test failed';
+        if (latencyErrors[tag] != nextError) {
+          latencyErrors[tag] = nextError;
+          latencyCollectionsChanged = true;
+        }
+        final time = updatedTimes[tag];
+        if (time != null && runtimeLatencyTimes[tag] != time) {
+          runtimeLatencyTimes[tag] = time;
+          latencyCollectionsChanged = true;
+        }
+        continue;
+      }
+      if (!hasPositiveDelay) {
+        continue;
+      }
+      latencyCollectionsChanged =
+          invalidatedLatencyTags.remove(tag) || latencyCollectionsChanged;
+      if (runtimeLatencies[tag] != delay) {
+        runtimeLatencies[tag] = delay;
+        latencyCollectionsChanged = true;
+      }
+      latencyCollectionsChanged =
+          unavailableLatencyTags.remove(tag) || latencyCollectionsChanged;
+      latencyCollectionsChanged =
+          latencyErrors.remove(tag) != null || latencyCollectionsChanged;
+      latencyCollectionsChanged =
+          latencyFailureCounts.remove(tag) != null || latencyCollectionsChanged;
+      final time = updatedTimes[tag];
+      if (time != null && runtimeLatencyTimes[tag] != time) {
+        runtimeLatencyTimes[tag] = time;
+        latencyCollectionsChanged = true;
+      }
+    }
+
+    final nextLowestLatency = _computeLowestLatency(
+      runtimeLatencies,
+      unavailableLatencyTags,
+    );
+    final latencyStateChanged =
+        latencyCollectionsChanged ||
+        lowestLatency != nextLowestLatency ||
+        lowestSelectionsChanged ||
+        groupSelectionsChanged;
+    if (!runtimeSelectionConfirmsPending && !latencyStateChanged) {
+      return ProxyRuntimeGroupUpdateResult.noChanges;
+    }
+
+    if (groupSelectionsChanged) {
+      runtimeGroupSelections
+        ..clear()
+        ..addAll(groupSelections);
+    }
+    if (lowestSelectionsChanged) {
+      runtimeLowestSelections
+        ..clear()
+        ..addAll(lowestSelections);
+    }
     lowestLatency = nextLowestLatency;
     runtimeLowestOutboundTag = nextRuntimeLowestOutboundTag;
     return ProxyRuntimeGroupUpdateResult(
