@@ -111,6 +111,23 @@ void main() {
       expect(ParsedOutboundSchema.sanitize(outbound), isNull);
     });
 
+    test('rejects Snowtun outbounds without client runtime integration', () {
+      const outbound = {
+        'type': 'snowtun',
+        'tag': 'snowtun',
+        'server': 'server.example',
+        'server_port': 443,
+        'conf_id': 'example',
+        'xtun': {'enabled': true},
+      };
+
+      expect(
+        ParsedOutboundSchema.validate(outbound),
+        'unsupported outbound type: snowtun',
+      );
+      expect(ParsedOutboundSchema.sanitize(outbound), isNull);
+    });
+
     test(
       'validates VLESS reality flow during import and startup validation',
       () {

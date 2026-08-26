@@ -217,8 +217,6 @@ class SingboxConfigBuildInput {
     this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
-    required this.snowtunBinaryPath,
-    required this.snowtunProtectPath,
     this.outputConfigPath,
     this.returnConfig = true,
   });
@@ -272,8 +270,6 @@ class SingboxConfigBuildInput {
   final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
-  final String? snowtunBinaryPath;
-  final String? snowtunProtectPath;
   final String? outputConfigPath;
   final bool returnConfig;
 }
@@ -795,8 +791,6 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     experimentalFakeIpEnabled: input.experimentalFakeIpEnabled,
     markAllServersRussia: input.markAllServersRussia,
     capabilities: input.capabilities,
-    snowtunBinaryPath: input.snowtunBinaryPath,
-    snowtunProtectPath: input.snowtunProtectPath,
   ).buildPlan();
   final config = plan.config;
   final configJson = jsonEncode(config);

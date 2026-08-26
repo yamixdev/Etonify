@@ -105,8 +105,6 @@ class SingboxConfigCoordinatorSnapshot {
     this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
-    this.snowtunBinaryPath,
-    this.snowtunProtectPath,
   });
 
   final bool connected;
@@ -163,8 +161,6 @@ class SingboxConfigCoordinatorSnapshot {
   final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
-  final String? snowtunBinaryPath;
-  final String? snowtunProtectPath;
 
   bool get routeDataPathsValid =>
       russiaGeositeRuBlockedPath?.isNotEmpty == true &&
@@ -888,8 +884,6 @@ class SingboxConfigCoordinator {
       experimentalFakeIpEnabled: snapshot.experimentalFakeIpEnabled,
       markAllServersRussia: snapshot.markAllServersRussia,
       capabilities: snapshot.capabilities,
-      snowtunBinaryPath: snapshot.snowtunBinaryPath,
-      snowtunProtectPath: snapshot.snowtunProtectPath,
       outputConfigPath: outputConfigPath,
       returnConfig: returnConfig,
     );

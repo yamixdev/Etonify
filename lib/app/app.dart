@@ -4199,8 +4199,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final config = SingboxConfigBuilder.buildProxyChainOutboundConfig(
       chain: chain,
       target: target,
-      snowtunBinaryPath: null,
-      snowtunProtectPath: null,
       vpnInboundEnabled: _vpnInboundEnabled,
       tcpFastOpenEnabled: _experimentalTcpFastOpen,
       tcpMultiPathEnabled: _experimentalTcpMultiPath,

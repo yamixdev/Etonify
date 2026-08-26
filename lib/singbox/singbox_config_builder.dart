@@ -15,8 +15,6 @@ class SingboxConfigBuilder {
   // by MeowVpnPlatformInterface, so they do not loop back into this TUN.
   static const _applicationPackageName = 'com.etonify.meow_client';
   static const List<String> _russiaDirectDomainSuffixes = ['ru', 'su', 'рф'];
-  static const String _snowtunProtectPath =
-      '@com.etonify.meow_client.snowtun.protect';
   static const int _urltestInterruptDelayThresholdMs = 300;
   static final RegExp _ipv4LiteralPattern = RegExp(
     r'^\d{1,3}(?:\.\d{1,3}){3}$',
@@ -73,8 +71,6 @@ class SingboxConfigBuilder {
     this.experimentalFakeIpEnabled = false,
     required this.markAllServersRussia,
     this.capabilities = LibboxCapabilities.bundledLegacy,
-    this.snowtunBinaryPath,
-    this.snowtunProtectPath,
   });
 
   final Subscription? activeSubscription;
@@ -126,8 +122,6 @@ class SingboxConfigBuilder {
   final bool experimentalFakeIpEnabled;
   final bool markAllServersRussia;
   final LibboxCapabilities capabilities;
-  final String? snowtunBinaryPath;
-  final String? snowtunProtectPath;
 
   Map<String, dynamic> build() {
     return buildPlan().config;
@@ -678,13 +672,6 @@ class SingboxConfigBuilder {
   }
 
   bool _isUsableOutbound(Outbound outbound) {
-    if (outbound.type == 'snowtun') {
-      final confId = (outbound.config['conf_id'] as String?)?.trim() ?? '';
-      final transport =
-          outbound.config['transport']?.toString().trim().toLowerCase() ?? '';
-      final binaryPath = snowtunBinaryPath?.trim() ?? '';
-      return confId.isNotEmpty && transport == 'xtun' && binaryPath.isNotEmpty;
-    }
     if (!_supportsOutboundConfigExtensions(outbound.config)) {
       return false;
     }
@@ -812,24 +799,6 @@ class SingboxConfigBuilder {
     final config = Map<String, dynamic>.from(outbound.config);
     config.remove('_group_only');
     _normalizeStableOutboundSchema(config);
-    if (outbound.type == 'snowtun') {
-      final binaryPath = snowtunBinaryPath?.trim();
-      if (binaryPath == null || binaryPath.isEmpty) {
-        return config;
-      }
-      config['binary_path'] = binaryPath;
-      final protectPath = snowtunProtectPath?.trim();
-      if (vpnInboundEnabled &&
-          Platform.isAndroid &&
-          protectPath != null &&
-          protectPath.isNotEmpty) {
-        config['protect_path'] = protectPath;
-      }
-      final transport = config['transport']?.toString().trim().toLowerCase();
-      if (transport != null && transport.isNotEmpty) {
-        config['transport'] = transport;
-      }
-    }
     _normalizeServerAddress(config);
     _ensureRealityUtls(
       config,
@@ -877,8 +846,6 @@ class SingboxConfigBuilder {
   static Map<String, dynamic>? buildProxyChainOutboundConfig({
     required SubscriptionProxyChain chain,
     required Outbound target,
-    required String? snowtunBinaryPath,
-    required String? snowtunProtectPath,
     required bool vpnInboundEnabled,
     required bool tcpFastOpenEnabled,
     required bool tcpMultiPathEnabled,
@@ -896,24 +863,6 @@ class SingboxConfigBuilder {
     config['detour'] = detourTag;
     config.remove('domain_resolver');
     _normalizeStableOutboundSchema(config);
-    if (target.type == 'snowtun') {
-      final binaryPath = snowtunBinaryPath?.trim();
-      if (binaryPath == null || binaryPath.isEmpty) {
-        return null;
-      }
-      config['binary_path'] = binaryPath;
-      final protectPath = snowtunProtectPath?.trim();
-      if (vpnInboundEnabled &&
-          Platform.isAndroid &&
-          protectPath != null &&
-          protectPath.isNotEmpty) {
-        config['protect_path'] = protectPath;
-      }
-      final transport = config['transport']?.toString().trim().toLowerCase();
-      if (transport != null && transport.isNotEmpty) {
-        config['transport'] = transport;
-      }
-    }
     _normalizeServerAddress(config);
     _ensureRealityUtls(config, supportsSpiderX: supportsRealitySpiderX);
     _applyGlobalTlsCertificatePolicy(config, allowUntrustedProxyCertificates);
@@ -948,8 +897,6 @@ class SingboxConfigBuilder {
       final config = buildProxyChainOutboundConfig(
         chain: chain,
         target: target,
-        snowtunBinaryPath: snowtunBinaryPath,
-        snowtunProtectPath: snowtunProtectPath,
         vpnInboundEnabled: vpnInboundEnabled,
         tcpFastOpenEnabled: tcpFastOpenEnabled,
         tcpMultiPathEnabled: tcpMultiPathEnabled,
@@ -1170,13 +1117,6 @@ class SingboxConfigBuilder {
   Map<String, dynamic>? _urltestMethodEntry(String? value) {
     final method = _urltestMethod(value);
     return method == null ? null : {'method': method};
-  }
-
-  static String? defaultSnowtunProtectPath() {
-    if (!Platform.isAndroid) {
-      return null;
-    }
-    return _snowtunProtectPath;
   }
 
   String _normalizedResolver(String value, String fallback) {

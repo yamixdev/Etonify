@@ -58,7 +58,6 @@ class ParsedOutboundSchema {
     'anytls',
     'naive',
     'wireguard',
-    'snowtun',
   };
 
   static const Set<String> _baseOutboundKeys = {
@@ -391,12 +390,6 @@ class ParsedOutboundSchema {
     'workers',
   };
 
-  static const Set<String> _typeSpecificKeysSnowtun = {
-    'binary_path',
-    'conf_id',
-    'transport',
-  };
-
   static Map<String, dynamic>? sanitize(Map<String, dynamic> outbound) {
     final canonical = _canonicalize(outbound);
     final sanitized = _sanitizeOutbound(canonical);
@@ -592,19 +585,8 @@ class ParsedOutboundSchema {
       }
     }
 
-    if (type == 'snowtun') {
-      final confId = (config['conf_id'] as String?)?.trim() ?? '';
-      if (confId.isEmpty) {
-        return 'missing snowtun conf_id';
-      }
-      final transport = _normalizedType(config['transport']);
-      if (transport != 'xtun') {
-        return 'unsupported snowtun transport: ${transport.isEmpty ? 'unknown' : transport}';
-      }
-    }
-
     final transport = config['transport'];
-    if (type != 'snowtun' && transport is Map) {
+    if (transport is Map) {
       final transportType = _normalizedType(transport['type']);
       if (!_knownTransportTypes.contains(transportType)) {
         return 'unsupported transport type: ${transportType.isEmpty ? 'unknown' : transportType}';
@@ -616,9 +598,7 @@ class ParsedOutboundSchema {
       if (transportValidationError != null) {
         return transportValidationError;
       }
-    } else if (type != 'snowtun' &&
-        config.containsKey('transport') &&
-        transport != null) {
+    } else if (config.containsKey('transport') && transport != null) {
       return 'invalid transport: $transport';
     }
 
@@ -912,7 +892,6 @@ class ParsedOutboundSchema {
         'anytls' => _typeSpecificKeysAnytls,
         'naive' => _typeSpecificKeysNaive,
         'wireguard' => _typeSpecificKeysWireguard,
-        'snowtun' => _typeSpecificKeysSnowtun,
         _ => const <String>{},
       },
     };
@@ -931,20 +910,11 @@ class ParsedOutboundSchema {
       sanitized['tls'] = tls;
     }
 
-    if (type == 'snowtun') {
-      final transport = _normalizedType(sanitized['transport']);
-      if (transport.isEmpty) {
-        sanitized.remove('transport');
-      } else {
-        sanitized['transport'] = transport;
-      }
+    final transport = _sanitizeTransport(sanitized['transport']);
+    if (transport == null) {
+      sanitized.remove('transport');
     } else {
-      final transport = _sanitizeTransport(sanitized['transport']);
-      if (transport == null) {
-        sanitized.remove('transport');
-      } else {
-        sanitized['transport'] = transport;
-      }
+      sanitized['transport'] = transport;
     }
 
     final multiplex = _sanitizeMultiplex(sanitized['multiplex']);
@@ -1416,7 +1386,7 @@ class ParsedOutboundSchema {
   }
 
   static bool _requiresServer(String type) {
-    return type != 'wireguard' && type != 'snowtun';
+    return type != 'wireguard';
   }
 
   static int? _intValue(dynamic value) {
