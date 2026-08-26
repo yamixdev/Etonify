@@ -388,6 +388,14 @@ class MeowBoxService(
 
     override fun setSystemProxyEnabled(isEnabled: Boolean) = Unit
 
+    override fun connectSSHAgent(): Int {
+        throw UnsupportedOperationException("SSH agent forwarding is not supported on Android")
+    }
+
+    override fun triggerNativeCrash() {
+        MeowDiagnostics.log(TAG, "native crash request ignored in production Android service")
+    }
+
     override fun writeDebugMessage(message: String?) {
         SingboxController.log("debug", message ?: "")
     }

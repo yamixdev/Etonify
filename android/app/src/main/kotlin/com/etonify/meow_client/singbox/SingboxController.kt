@@ -22,6 +22,7 @@ import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.LogEntry
 import io.nekohasekai.libbox.LogIterator
 import io.nekohasekai.libbox.OutboundGroupIterator
+import io.nekohasekai.libbox.OutboundGroupItemIterator
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
 import org.json.JSONObject
@@ -269,6 +270,23 @@ object SingboxController {
             )
         }
 
+        override fun writeOutbounds(message: OutboundGroupItemIterator?) {
+            if (message == null || !commandClientLifecycle.acceptsEvents(epoch)) return
+            // Etonify subscribes to CommandGroup, which remains the
+            // authoritative tree used by the proxy list. CommandOutbounds is
+            // optional in libbox 1.14; if enabled later, still consume its
+            // targeted URLTest results for the foreground notification.
+            while (message.hasNext()) {
+                val item = message.next()
+                MeowBoxService.publishNotificationUrlTestResult(
+                    tag = item.tag,
+                    delayMillis = item.urlTestDelay.toLong(),
+                    timeSeconds = item.urlTestTime,
+                    status = item.urlTestStatus,
+                )
+            }
+        }
+
         override fun writeLogs(messageList: LogIterator?) {
             if (messageList == null || !commandClientLifecycle.acceptsEvents(epoch)) return
             val logs = mutableListOf<Map<String, Any?>>()
@@ -297,9 +315,9 @@ object SingboxController {
             uplinkTotal = message.uplinkTotal
             downlinkTotal = message.downlinkTotal
             coreMemoryBytes = message.memory
-            coreGoroutines = message.goroutines.toInt()
-            connectionsIn = message.connectionsIn.toInt()
-            connectionsOut = message.connectionsOut.toInt()
+            coreGoroutines = message.goroutines
+            connectionsIn = message.connectionsIn
+            connectionsOut = message.connectionsOut
             // Some libbox builds briefly report trafficAvailable=false while
             // their cumulative counters are already populated. Treat a
             // non-zero rate or total as authoritative so the foreground

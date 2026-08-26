@@ -14,9 +14,10 @@ import android.os.Build
 import android.os.Process
 import android.system.ErrnoException
 import android.system.OsConstants
-import android.util.Base64
 import androidx.annotation.RequiresApi
 import com.etonify.meow_client.MeowApplication
+import io.nekohasekai.libbox.BridgeOptions
+import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.InterfaceUpdateListener
@@ -24,10 +25,13 @@ import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterface
 import io.nekohasekai.libbox.NetworkInterfaceIterator
+import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.Notification
 import io.nekohasekai.libbox.PlatformInterface
+import io.nekohasekai.libbox.PlatformUser
 import io.nekohasekai.libbox.RoutePrefix
 import io.nekohasekai.libbox.RoutePrefixIterator
+import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
@@ -35,7 +39,6 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface as JavaNetworkInterface
 import java.net.UnknownHostException
-import java.security.KeyStore
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -45,6 +48,19 @@ abstract class MeowBasePlatformInterface(
     protected val context: Context,
 ) : PlatformInterface {
     override fun autoDetectInterfaceControl(fd: Int) = Unit
+
+    override fun cancelNotification(identifier: String, typeID: Int) {
+        // Core-originated notifications are currently mirrored to Etonify's
+        // logs only, so there is no Android notification ID to cancel here.
+        MeowDiagnostics.log(
+            "MeowPlatform",
+            "core notification cancelled identifier=$identifier typeID=$typeID",
+        )
+    }
+
+    override fun checkPlatformShell() {
+        throw UnsupportedOperationException("platform shell is not supported on Android")
+    }
 
     override fun clearDNSCache() {
         val cancelled = MeowLocalResolver.cancelPendingQueries()
@@ -56,6 +72,17 @@ abstract class MeowBasePlatformInterface(
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
         MeowDefaultNetworkMonitor.setListener(null)
+    }
+
+    override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {
+        // libbox currently advertises the platform neighbor resolver for every
+        // mobile platform. Etonify has no Android ARP/NDP bridge, so keep the
+        // lifecycle callback harmless instead of failing ordinary VPN startup.
+        MeowDiagnostics.log("MeowPlatform", "neighbor monitor closed (not provided by Android client)")
+    }
+
+    override fun createBridge(options: BridgeOptions): BridgeSession {
+        throw UnsupportedOperationException("platform bridge is not used by Android VpnService")
     }
 
     override fun findConnectionOwner(
@@ -145,7 +172,34 @@ abstract class MeowBasePlatformInterface(
 
     override fun localDNSTransport(): LocalDNSTransport? = MeowLocalResolver
 
+    override fun lookupSFTPServer(): String {
+        throw UnsupportedOperationException("SFTP server lookup is not supported on Android")
+    }
+
+    override fun lookupUser(username: String): PlatformUser {
+        throw UnsupportedOperationException("platform user lookup is not supported on Android")
+    }
+
+    override fun openShellSession(
+        user: PlatformUser,
+        command: String,
+        environ: StringIterator,
+        term: String,
+        rows: Int,
+        cols: Int,
+    ): ShellSession {
+        throw UnsupportedOperationException("platform shell is not supported on Android")
+    }
+
+    override fun readSystemSSHHostKey(): String {
+        throw UnsupportedOperationException("system SSH host keys are not available on Android")
+    }
+
     override fun readWIFIState(): WIFIState = WIFIState("", "")
+
+    override fun registerMyInterface(name: String) {
+        MeowDiagnostics.log("MeowPlatform", "core registered interface name=$name")
+    }
 
     override fun sendNotification(notification: Notification?) {
         if (notification == null) return
@@ -158,24 +212,19 @@ abstract class MeowBasePlatformInterface(
         }
     }
 
-    override fun systemCertificates(): StringIterator {
-        val certificates = mutableListOf<String>()
-        runCatching {
-            val keyStore = KeyStore.getInstance("AndroidCAStore")
-            keyStore.load(null, null)
-            val aliases = keyStore.aliases()
-            while (aliases.hasMoreElements()) {
-                val certificate = keyStore.getCertificate(aliases.nextElement())
-                val encoded = Base64.encodeToString(certificate.encoded, Base64.NO_WRAP)
-                certificates += "-----BEGIN CERTIFICATE-----\n$encoded\n-----END CERTIFICATE-----"
-            }
-        }
-        return SimpleStringIterator(certificates)
+    override fun startNeighborMonitor(listener: NeighborUpdateListener?) {
+        MeowDiagnostics.log("MeowPlatform", "neighbor monitor skipped (not provided by Android client)")
     }
+
+    override fun tailscaleHostname(): String = ""
 
     override fun underNetworkExtension(): Boolean = false
 
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
+
+    override fun usePlatformBridge(): Boolean = false
+
+    override fun usePlatformShell(): Boolean = false
 
     override fun useProcFS(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 }
@@ -256,11 +305,17 @@ class MeowVpnPlatformInterface(
                 splitPackages.excluded,
                 service.packageName,
             )
-            val dnsAddress = runCatching { options.dnsServerAddress?.value }
-                .getOrNull()
-                ?.trim()
-                .orEmpty()
-            if (dnsAddress.isNotEmpty()) {
+            val dnsAddresses = runCatching {
+                val iterator: StringIterator? = options.dnsServerAddress
+                iterator?.toList().orEmpty()
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .distinct()
+            }.getOrElse { error ->
+                MeowDiagnostics.log("MeowVpnPlatform", "openTun read DNS addresses failed", error)
+                throw error
+            }
+            for (dnsAddress in dnsAddresses) {
                 builder.addDnsServer(dnsAddress)
                 MeowDiagnostics.log("MeowVpnPlatform", "openTun dns=$dnsAddress")
             }

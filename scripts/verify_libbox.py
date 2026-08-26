@@ -20,6 +20,21 @@ HASH_FILE = LIBS / "libbox.sha256"
 PROVENANCE_FILE = LIBS / "libbox.provenance.json"
 CORE_PATH = ROOT / "etonify-core"
 
+# Generated gomobile interfaces are compile-time contracts implemented by the
+# Android Kotlin bridge. Pin the normalized signatures that require explicit
+# client adaptation. A future core update that adds an abstract callback or
+# changes TUN/setup options will fail here before an APK build is attempted.
+LIBBOX_ANDROID_API_ENTRIES = (
+    "io/nekohasekai/libbox/PlatformInterface.java",
+    "io/nekohasekai/libbox/CommandServerHandler.java",
+    "io/nekohasekai/libbox/CommandClientHandler.java",
+    "io/nekohasekai/libbox/TunOptions.java",
+    "io/nekohasekai/libbox/SetupOptions.java",
+)
+LIBBOX_ANDROID_API_SHA256 = (
+    "9e8de8846dd170353f25f48426f943cada44f9f3aac9601d8e02839110f7ac18"
+)
+
 
 def fail(message: str) -> None:
     raise RuntimeError(message)
@@ -50,6 +65,39 @@ def tracked_gitlink_commit() -> str:
     return match.group(1)
 
 
+def normalized_android_api(archive: zipfile.ZipFile) -> bytes:
+    signatures: list[str] = []
+    for entry_name in LIBBOX_ANDROID_API_ENTRIES:
+        try:
+            source = archive.read(entry_name).decode("utf-8")
+        except KeyError as error:
+            fail(f"libbox sources archive is missing {entry_name}")
+            raise AssertionError("unreachable") from error
+        signatures.append(f"[{entry_name}]")
+        for line in source.splitlines():
+            normalized = " ".join(line.strip().split())
+            if (
+                normalized.startswith("public ")
+                and "(" in normalized
+                and normalized.endswith(";")
+            ):
+                signatures.append(normalized)
+    return ("\n".join(signatures) + "\n").encode("utf-8")
+
+
+def verify_android_api_contract() -> str:
+    with zipfile.ZipFile(SOURCES) as archive:
+        normalized = normalized_android_api(archive)
+    actual = hashlib.sha256(normalized).hexdigest()
+    if actual != LIBBOX_ANDROID_API_SHA256:
+        fail(
+            "libbox Android Java API changed: adapt the Kotlin bridge and "
+            "update LIBBOX_ANDROID_API_SHA256; "
+            f"expected {LIBBOX_ANDROID_API_SHA256}, got {actual}"
+        )
+    return actual
+
+
 def main() -> None:
     required = (AAR, SOURCES, HASH_FILE, PROVENANCE_FILE)
     missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
@@ -57,6 +105,8 @@ def main() -> None:
         fail(f"missing libbox artifacts: {', '.join(missing)}")
     if AAR.stat().st_size == 0 or SOURCES.stat().st_size == 0:
         fail("libbox binary and sources archive must not be empty")
+
+    android_api_hash = verify_android_api_contract()
 
     hash_line = HASH_FILE.read_text(encoding="utf-8").strip()
     hash_match = re.fullmatch(r"([0-9a-fA-F]{64})\s+\*?libbox\.aar", hash_line)
@@ -91,7 +141,13 @@ def main() -> None:
                 f"{checkout_commit} != {source_commit}"
             )
 
-    for key in ("etonify_version", "upstream_commit", "go", "android_ndk", "build_tags"):
+    for key in (
+        "etonify_version",
+        "upstream_commit",
+        "go",
+        "android_ndk",
+        "build_tags",
+    ):
         if not provenance.get(key):
             fail(f"libbox provenance is missing {key}")
 
@@ -116,7 +172,8 @@ def main() -> None:
 
     print(
         "Verified libbox.aar "
-        f"sha256={actual_hash} source_commit={source_commit}"
+        f"sha256={actual_hash} source_commit={source_commit} "
+        f"android_api={android_api_hash}"
     )
 
 

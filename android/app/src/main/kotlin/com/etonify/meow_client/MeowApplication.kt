@@ -54,6 +54,10 @@ class MeowApplication : Application() {
         private const val FLAG_HEARTBEAT_INTERVAL_SECONDS = "network_heartbeat_interval_seconds"
         private const val LEGACY_FLAG_PERFORMANCE_MODE = "performance_mode"
         private const val FLAG_MEMORY_LIMIT_ENABLED = "memory_limit_enabled"
+        // libbox 1.14 applies 3/4 of OomMemoryLimit as Go's soft memory
+        // limit. Keep the previous Etonify 30 MiB Go limit without forcing a
+        // tighter 22.5 MiB limit that would cause unnecessary GC pressure.
+        private const val LIBBOX_OOM_MEMORY_LIMIT_BYTES = 40L * 1024L * 1024L
         @Volatile
         private var uncaughtExceptionLoggerInstalled = false
 
@@ -155,9 +159,15 @@ class MeowApplication : Application() {
                     tempPath = tempDir.absolutePath
                     logMaxLines = 800
                     debug = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                    oomKillerEnabled = memoryLimitFlag
+                    oomKillerDisabled = false
+                    oomMemoryLimit = if (memoryLimitFlag) {
+                        LIBBOX_OOM_MEMORY_LIMIT_BYTES
+                    } else {
+                        0L
+                    }
                 }
                 Libbox.setup(setupOptions)
-                Libbox.setMemoryLimit(memoryLimitFlag)
                 libboxReady = true
                 MeowDiagnostics.log(
                     "Application",
