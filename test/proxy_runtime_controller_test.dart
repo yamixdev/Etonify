@@ -312,6 +312,39 @@ void main() {
     expect(controller.runtimeLatencyTimes['vless-1'], 20);
   });
 
+  test('newest result wins for duplicate tags inside one snapshot', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+
+    final result = controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {
+                'tag': 'vless-1',
+                'status': 'available',
+                'delay': 73,
+                'time': 20,
+              },
+              {
+                'tag': 'vless-1',
+                'status': 'available',
+                'delay': 999,
+                'time': 19,
+              },
+            ],
+          },
+        ],
+      ),
+    );
+
+    expect(result.changed, isTrue);
+    expect(controller.runtimeLatencies['vless-1'], 73);
+    expect(controller.runtimeLatencyTimes['vless-1'], 20);
+  });
+
   test('an error without an unavailable status is still a failed URLTest', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);

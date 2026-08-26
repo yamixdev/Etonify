@@ -217,7 +217,10 @@ class ProxyRuntimeController {
     final delays = <String, int?>{};
     final statuses = <String, String>{};
     final errors = <String, String>{};
-    final times = Map<String, int>.from(runtimeLatencyTimes);
+    // Keep only timestamps changed by this snapshot. Cloning the complete
+    // latency timestamp map for every coalesced groups event creates avoidable
+    // UI-isolate allocation pressure on large subscriptions.
+    final updatedTimes = <String, int>{};
     String? runtimeSelected;
     final subscriptionGroupTags = input.activeSubscription.groups
         .map((group) => group.tag)
@@ -237,7 +240,9 @@ class ProxyRuntimeController {
       if (rawGroup is! Map) {
         continue;
       }
-      final group = Map<String, dynamic>.from(rawGroup);
+      // EventChannel has already materialized this read-only map. Copying every
+      // group would only create another short-lived hash map.
+      final group = rawGroup;
       final tag = group['tag']?.toString() ?? '';
       if (tag == 'select') {
         runtimeSelected = group['selected']?.toString();
@@ -259,7 +264,9 @@ class ProxyRuntimeController {
         if (rawItem is! Map) {
           continue;
         }
-        final item = Map<String, dynamic>.from(rawItem);
+        // A URLTest snapshot can contain thousands of items. Read the existing
+        // platform map directly instead of allocating one map per proxy.
+        final item = rawItem;
         final itemTag = item['tag']?.toString() ?? '';
         if (itemTag.isEmpty || isLowestProxyTag(itemTag)) {
           continue;
@@ -268,7 +275,8 @@ class ProxyRuntimeController {
         final error = (item['error']?.toString() ?? '').trim();
         final delay = (item['delay'] as num?)?.toInt();
         final time = (item['time'] as num?)?.toInt();
-        final currentTime = times[itemTag];
+        final currentTime =
+            updatedTimes[itemTag] ?? runtimeLatencyTimes[itemTag];
         final nextTime = time != null && time > 0 ? time : null;
         final positiveDelay = delay != null && delay > 0;
         final terminalFailure =
@@ -305,7 +313,7 @@ class ProxyRuntimeController {
           errors.remove(itemTag);
         }
         if (nextTime != null && (positiveDelay || terminalFailure)) {
-          times[itemTag] = nextTime;
+          updatedTimes[itemTag] = nextTime;
         }
         delays[itemTag] = delay != null && delay > 0 ? delay : null;
       }
@@ -357,7 +365,7 @@ class ProxyRuntimeController {
         nextRuntimeLatencies.remove(tag);
         nextUnavailableLatencyTags.add(tag);
         nextLatencyErrors[tag] = error.isNotEmpty ? error : 'URL test failed';
-        final time = times[tag];
+        final time = updatedTimes[tag];
         if (time != null) {
           nextRuntimeLatencyTimes[tag] = time;
         }
@@ -369,7 +377,7 @@ class ProxyRuntimeController {
         nextUnavailableLatencyTags.remove(tag);
         nextLatencyErrors.remove(tag);
         nextLatencyFailureCounts.remove(tag);
-        final time = times[tag];
+        final time = updatedTimes[tag];
         if (time != null) {
           nextRuntimeLatencyTimes[tag] = time;
         }
