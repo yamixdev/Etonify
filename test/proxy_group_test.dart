@@ -2390,6 +2390,65 @@ void main() {
     expect(tun['address'], contains('fdfe:dcba:9876::1/126'));
   });
 
+  test('accepts valid IP proxy servers and filters malformed literals', () {
+    const subscription = Subscription(
+      id: 'ip-server-validation',
+      name: 'IP server validation',
+      url: 'https://example.com/sub',
+      outbounds: [
+        Outbound(
+          tag: 'ipv4',
+          name: 'IPv4',
+          config: {
+            'type': 'vless',
+            'server': '192.0.2.1',
+            'server_port': 443,
+            'uuid': 'ipv4-uuid',
+          },
+        ),
+        Outbound(
+          tag: 'ipv6',
+          name: 'IPv6',
+          config: {
+            'type': 'vless',
+            'server': '2001:db8::1',
+            'server_port': 443,
+            'uuid': 'ipv6-uuid',
+          },
+        ),
+        Outbound(
+          tag: 'bracketed-ipv6',
+          name: 'Bracketed IPv6',
+          config: {
+            'type': 'vless',
+            'server': '[2001:db8::2]',
+            'server_port': 443,
+            'uuid': 'bracketed-ipv6-uuid',
+          },
+        ),
+        Outbound(
+          tag: 'malformed-ipv6',
+          name: 'Malformed IPv6',
+          config: {
+            'type': 'vless',
+            'server': 'abc:def',
+            'server_port': 443,
+            'uuid': 'malformed-ipv6-uuid',
+          },
+        ),
+      ],
+    );
+
+    final config = _defaultBuilder(subscription).build();
+    final outboundTags = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>()
+        .map((outbound) => outbound['tag'])
+        .toSet();
+
+    expect(outboundTags, containsAll(['ipv4', 'ipv6', 'bracketed-ipv6']));
+    expect(outboundTags, isNot(contains('malformed-ipv6')));
+  });
+
   test('VPN TUN and local proxy can run in the same service config', () {
     const subscription = Subscription(
       id: 'vpn-with-local-proxy',

@@ -18,6 +18,10 @@ class SingboxConfigBuilder {
   static const String _snowtunProtectPath =
       '@com.etonify.meow_client.snowtun.protect';
   static const int _urltestInterruptDelayThresholdMs = 300;
+  static final RegExp _ipv4LiteralPattern = RegExp(
+    r'^\d{1,3}(?:\.\d{1,3}){3}$',
+  );
+  static final RegExp _ipv6LiteralPattern = RegExp(r'^[\da-fA-F:]+$');
 
   const SingboxConfigBuilder({
     required this.activeSubscription,
@@ -695,7 +699,9 @@ class SingboxConfigBuilder {
           config['encryption']?.toString().trim().toLowerCase() ?? '';
       if (encryption.isNotEmpty &&
           encryption != 'none' &&
-          (!_supportsCoreConfigExtension(capabilities.supportsVlessEncryption) ||
+          (!_supportsCoreConfigExtension(
+                capabilities.supportsVlessEncryption,
+              ) ||
               (capabilities.apiVersion >= 2 &&
                   !capabilities.supportsVlessEncryptionValue(encryption)))) {
         return false;
@@ -786,17 +792,20 @@ class SingboxConfigBuilder {
     return '';
   }
 
-  static bool _looksLikeIp(String s) {
-    // IPv4: digits and dots, must have at least one dot (e.g. 1.2.3.4)
-    // IPv6: hex digits and colons, must have at least one colon (e.g. ::1)
-    // Bracketed IPv6: [::1]
-    if (s.contains('.') && RegExp(r'^\d{1,3}(\.\d{1,3}){1,3}$').hasMatch(s)) {
-      return true;
+  static bool _looksLikeIp(String value) {
+    if (_ipv4LiteralPattern.hasMatch(value)) {
+      return InternetAddress.tryParse(value)?.type == InternetAddressType.IPv4;
     }
-    if (s.contains(':') && RegExp(r'^[\da-fA-F:[\]]+$').hasMatch(s)) {
-      return true;
+
+    final unwrapped =
+        value.length >= 2 && value.startsWith('[') && value.endsWith(']')
+        ? value.substring(1, value.length - 1)
+        : value;
+    if (!unwrapped.contains(':') || !_ipv6LiteralPattern.hasMatch(unwrapped)) {
+      return false;
     }
-    return false;
+    return InternetAddress.tryParse(unwrapped)?.type ==
+        InternetAddressType.IPv6;
   }
 
   Map<String, dynamic> _buildProxyOutbound(Outbound outbound) {
