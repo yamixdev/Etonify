@@ -73,6 +73,16 @@ void main() {
     });
   });
 
+  test('domain-list normalization keeps domains and rejects invalid rules', () {
+    expect(normalizeRussiaRouteDomainForTest('..Example.COM..'), 'example.com');
+    expect(
+      normalizeRussiaRouteDomainForTest('cdn_service-1.example'),
+      'cdn_service-1.example',
+    );
+    expect(normalizeRussiaRouteDomainForTest('example..com'), isNull);
+    expect(normalizeRussiaRouteDomainForTest('regexp:^example'), isNull);
+  });
+
   test(
     'bundled smart routing installs offline and remains due for refresh',
     () async {

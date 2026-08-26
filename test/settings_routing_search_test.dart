@@ -17,6 +17,14 @@ void main() {
       );
       expect(
         installedAppSearchScoreForTest(
+          label: 'Telegram Beta',
+          packageName: 'org.telegram.messenger-beta',
+          query: 'messenger beta',
+        ),
+        greaterThanOrEqualTo(0),
+      );
+      expect(
+        installedAppSearchScoreForTest(
           label: label,
           packageName: packageName,
           query: 'org messenger',

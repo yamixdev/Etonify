@@ -10,6 +10,9 @@ import 'package:jni/jni.dart';
 import 'package:jni_flutter/jni_flutter.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
+final RegExp _domainListWhitespaceRegExp = RegExp(r'\s');
+final RegExp _validDomainRegExp = RegExp(r'^[a-z0-9.\-_]+$');
+
 @visibleForTesting
 bool shouldRebuildRussiaRouteDomainLists({
   required bool currentDataAvailable,
@@ -20,6 +23,10 @@ bool shouldRebuildRussiaRouteDomainLists({
       downloadedContentChanged ||
       !compiledFilesAvailable;
 }
+
+@visibleForTesting
+String? normalizeRussiaRouteDomainForTest(String value) =>
+    _normalizeDomainValue(value);
 
 class RussiaRouteDataStatus {
   const RussiaRouteDataStatus({
@@ -1534,7 +1541,7 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
 
 String _parseIncludedCategory(String line) {
   final include = line.substring('include:'.length).trim();
-  final separator = include.indexOf(RegExp(r'\s'));
+  final separator = include.indexOf(_domainListWhitespaceRegExp);
   return separator < 0 ? include : include.substring(0, separator);
 }
 
@@ -1579,7 +1586,7 @@ String? _normalizeDomainValue(String value) {
       normalized.contains(':') ||
       normalized.contains('/') ||
       normalized.contains('*') ||
-      !RegExp(r'^[a-z0-9.\-_]+$').hasMatch(normalized)) {
+      !_validDomainRegExp.hasMatch(normalized)) {
     return null;
   }
   return normalized;

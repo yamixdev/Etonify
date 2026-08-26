@@ -20,6 +20,9 @@ import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 final _installedAppIconCache = _InstalledAppIconCache(maxEntries: 96);
 final _installedAppIconLoads = <String, Future<Uint8List?>>{};
+final _appSearchSeparatorsPattern = RegExp(r'[._\-]+');
+final _appSearchWhitespacePattern = RegExp(r'\s+');
+final _appSearchNonAlphaNumericPattern = RegExp(r'[^a-z0-9а-яё]+');
 const _splitRoutingTemporarilyDisabled = false;
 
 void clearInstalledAppIconCache() {
@@ -922,21 +925,46 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
 }
 
 class _InstalledApp {
-  _InstalledApp({
+  factory _InstalledApp({
+    required String packageName,
+    required String label,
+    required bool system,
+    required bool launchable,
+  }) {
+    final preparedLabel = _prepareAppSearchText(label);
+    final preparedPackage = _prepareAppSearchText(packageName);
+    return _InstalledApp._(
+      packageName: packageName,
+      label: label,
+      system: system,
+      launchable: launchable,
+      normalizedLabel: preparedLabel.normalized,
+      normalizedPackage: preparedPackage.normalized,
+      compactLabel: preparedLabel.compact,
+      compactPackage: preparedPackage.compact,
+      searchWords: List<String>.unmodifiable(<String>[
+        ...preparedLabel.words,
+        ...preparedPackage.words,
+      ]),
+      compactSearchWords: List<String>.unmodifiable(<String>[
+        ...preparedLabel.compactWords,
+        ...preparedPackage.compactWords,
+      ]),
+    );
+  }
+
+  const _InstalledApp._({
     required this.packageName,
     required this.label,
     required this.system,
     required this.launchable,
-  }) : normalizedLabel = _normalizeAppSearchText(label),
-       normalizedPackage = _normalizeAppSearchText(packageName),
-       compactLabel = _compactAppSearchText(label),
-       compactPackage = _compactAppSearchText(packageName),
-       searchWords = List<String>.unmodifiable(
-         <String>[
-           ..._normalizeAppSearchText(label).split(' '),
-           ..._normalizeAppSearchText(packageName).split(' '),
-         ].where((word) => word.isNotEmpty),
-       );
+    required this.normalizedLabel,
+    required this.normalizedPackage,
+    required this.compactLabel,
+    required this.compactPackage,
+    required this.searchWords,
+    required this.compactSearchWords,
+  });
 
   final String packageName;
   final String label;
@@ -947,6 +975,7 @@ class _InstalledApp {
   final String compactLabel;
   final String compactPackage;
   final List<String> searchWords;
+  final List<String> compactSearchWords;
 
   String displayLabel(String fallback) {
     final normalized = label.trim();
@@ -1130,30 +1159,60 @@ class _ScoredInstalledApp {
 }
 
 class _InstalledAppSearchQuery {
-  _InstalledAppSearchQuery(String rawValue)
-    : normalized = _normalizeAppSearchText(rawValue),
-      compact = _compactAppSearchText(rawValue),
-      tokens = List<String>.unmodifiable(
-        _normalizeAppSearchText(
-          rawValue,
-        ).split(' ').where((token) => token.isNotEmpty),
-      );
+  factory _InstalledAppSearchQuery(String rawValue) {
+    final prepared = _prepareAppSearchText(rawValue);
+    return _InstalledAppSearchQuery._(
+      normalized: prepared.normalized,
+      compact: prepared.compact,
+      tokens: prepared.words,
+    );
+  }
+
+  const _InstalledAppSearchQuery._({
+    required this.normalized,
+    required this.compact,
+    required this.tokens,
+  });
 
   final String normalized;
   final String compact;
   final List<String> tokens;
 }
 
-String _normalizeAppSearchText(String value) {
-  return value
-      .toLowerCase()
-      .replaceAll(RegExp(r'[._\-]+'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
+class _PreparedAppSearchText {
+  const _PreparedAppSearchText({
+    required this.normalized,
+    required this.compact,
+    required this.words,
+    required this.compactWords,
+  });
+
+  final String normalized;
+  final String compact;
+  final List<String> words;
+  final List<String> compactWords;
 }
 
-String _compactAppSearchText(String value) {
-  return value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9а-яё]+'), '');
+_PreparedAppSearchText _prepareAppSearchText(String value) {
+  final lowercase = value.toLowerCase();
+  final normalized = lowercase
+      .replaceAll(_appSearchSeparatorsPattern, ' ')
+      .replaceAll(_appSearchWhitespacePattern, ' ')
+      .trim();
+  final words = normalized.isEmpty
+      ? const <String>[]
+      : List<String>.unmodifiable(normalized.split(' '));
+  final compactWords = List<String>.unmodifiable(
+    words
+        .map((word) => word.replaceAll(_appSearchNonAlphaNumericPattern, ''))
+        .where((word) => word.isNotEmpty),
+  );
+  return _PreparedAppSearchText(
+    normalized: normalized,
+    compact: lowercase.replaceAll(_appSearchNonAlphaNumericPattern, ''),
+    words: words,
+    compactWords: compactWords,
+  );
 }
 
 int _installedAppSearchScore(_InstalledApp app, String rawQuery) {
@@ -1189,21 +1248,49 @@ int _installedAppSearchScorePrepared(
           packageCompact.contains(queryCompact))) {
     return 14;
   }
-  if (tokens.isNotEmpty &&
-      tokens.every((token) => words.any((word) => word.startsWith(token)))) {
+  if (tokens.isNotEmpty && _allTokensStartWithWords(tokens, words)) {
     return 18;
   }
-  if (tokens.isNotEmpty &&
-      tokens.every(
-        (token) => label.contains(token) || packageName.contains(token),
-      )) {
+  if (tokens.isNotEmpty && _allTokensContained(tokens, label, packageName)) {
     return 24;
   }
-  if (queryCompact.length >= 3 &&
-      words.any((word) => _isCloseAppSearchMatch(queryCompact, word))) {
-    return 34;
+  if (queryCompact.length >= 3) {
+    for (final word in app.compactSearchWords) {
+      if (_isCloseAppSearchMatch(queryCompact, word)) {
+        return 34;
+      }
+    }
   }
   return -1;
+}
+
+bool _allTokensStartWithWords(List<String> tokens, List<String> words) {
+  for (final token in tokens) {
+    var matched = false;
+    for (final word in words) {
+      if (word.startsWith(token)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _allTokensContained(
+  List<String> tokens,
+  String label,
+  String packageName,
+) {
+  for (final token in tokens) {
+    if (!label.contains(token) && !packageName.contains(token)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 @visibleForTesting
@@ -1223,8 +1310,7 @@ int installedAppSearchScoreForTest({
   );
 }
 
-bool _isCloseAppSearchMatch(String query, String word) {
-  final compactWord = _compactAppSearchText(word);
+bool _isCloseAppSearchMatch(String query, String compactWord) {
   if (compactWord.length < 3) {
     return false;
   }
@@ -1243,18 +1329,21 @@ int _boundedEditDistance(String a, String b, int maxDistance) {
     return maxDistance + 1;
   }
   var previous = List<int>.generate(b.length + 1, (index) => index);
+  var current = List<int>.filled(b.length + 1, 0);
   for (var i = 1; i <= a.length; i++) {
-    final current = List<int>.filled(b.length + 1, i);
-    var rowMin = current[0];
+    current[0] = i;
+    var rowMin = i;
     for (var j = 1; j <= b.length; j++) {
       final substitutionCost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1)
           ? 0
           : 1;
-      final value = [
-        previous[j] + 1,
-        current[j - 1] + 1,
-        previous[j - 1] + substitutionCost,
-      ].reduce((left, right) => left < right ? left : right);
+      final deletion = previous[j] + 1;
+      final insertion = current[j - 1] + 1;
+      final substitution = previous[j - 1] + substitutionCost;
+      var value = deletion < insertion ? deletion : insertion;
+      if (substitution < value) {
+        value = substitution;
+      }
       current[j] = value;
       if (value < rowMin) {
         rowMin = value;
@@ -1263,7 +1352,9 @@ int _boundedEditDistance(String a, String b, int maxDistance) {
     if (rowMin > maxDistance) {
       return maxDistance + 1;
     }
+    final swap = previous;
     previous = current;
+    current = swap;
   }
   return previous[b.length];
 }
