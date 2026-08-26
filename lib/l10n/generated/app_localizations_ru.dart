@@ -1210,22 +1210,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hideServerIpSubtitle => 'Маскирует последние два октета IP-адреса';
 
   @override
-  String get memoryLimitTitle => 'Ограничение памяти';
+  String get memoryLimitTitle => 'Мягкий лимит памяти ядра';
 
   @override
   String get memoryLimitEnabledSubtitle =>
-      'Рекомендуется. sing-box остановится раньше, чем нехватка памяти начнёт ломать работу приложения. Изменение вступит в силу после перезапуска приложения.';
+      'Рекомендуется. Ограничивает только память Go-части sing-box и помогает ядру раньше освобождать неиспользуемые данные. VPN не отключается при достижении этого лимита. Изменение вступит в силу после перезапуска приложения.';
 
   @override
   String get memoryLimitDisabledSubtitle =>
-      'Выключено. Может помочь при ложной ошибке лимита памяти, но повышает расход RAM и риск вылета. Вступит в силу после перезапуска приложения.';
+      'Выключено. Go-часть sing-box управляет памятью без заданного Etonify лимита и может удерживать больше RAM. Вступит в силу после перезапуска приложения.';
 
   @override
-  String get memoryLimitDisableWarningTitle => 'Выключить ограничение памяти?';
+  String get memoryLimitDisableWarningTitle => 'Выключить мягкий лимит ядра?';
 
   @override
   String get memoryLimitDisableWarningMessage =>
-      'Используйте это только если VPN не запускается с ошибкой лимита памяти. Без лимита может вырасти расход RAM, нагрев и шанс, что Android закроет приложение. Изменение вступит в силу после перезапуска Etonify.';
+      'Без мягкого лимита Go-часть sing-box может дольше удерживать свободную память. Это не меняет лимиты Flutter или Android и не влияет на автоматическое завершение приложения системой. Изменение вступит в силу после перезапуска Etonify.';
 
   @override
   String get memoryLimitDisableConfirm => 'Выключить';

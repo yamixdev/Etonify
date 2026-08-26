@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
 import android.os.Build
+import com.etonify.meow_client.singbox.LibboxMemoryPolicy
 import com.etonify.meow_client.singbox.MeowDiagnostics
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.SetupOptions
@@ -54,10 +55,6 @@ class MeowApplication : Application() {
         private const val FLAG_HEARTBEAT_INTERVAL_SECONDS = "network_heartbeat_interval_seconds"
         private const val LEGACY_FLAG_PERFORMANCE_MODE = "performance_mode"
         private const val FLAG_MEMORY_LIMIT_ENABLED = "memory_limit_enabled"
-        // libbox 1.14 applies 3/4 of OomMemoryLimit as Go's soft memory
-        // limit. Keep the previous Etonify 30 MiB Go limit without forcing a
-        // tighter 22.5 MiB limit that would cause unnecessary GC pressure.
-        private const val LIBBOX_OOM_MEMORY_LIMIT_BYTES = 40L * 1024L * 1024L
         @Volatile
         private var uncaughtExceptionLoggerInstalled = false
 
@@ -153,25 +150,29 @@ class MeowApplication : Application() {
                 val workingDir = singboxWorkingDirectory
                 val tempDir = File(app.cacheDir, "singbox-tmp").apply { mkdirs() }
                 val memoryLimitFlag = memoryLimitEnabled
+                val memoryPolicy = LibboxMemoryPolicy.forAndroid(memoryLimitFlag)
                 val setupOptions = SetupOptions().apply {
                     basePath = baseDir.absolutePath
                     workingPath = workingDir.absolutePath
                     tempPath = tempDir.absolutePath
                     logMaxLines = 800
                     debug = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-                    oomKillerEnabled = memoryLimitFlag
+                    // Android already owns process-level memory pressure and
+                    // termination. A libbox RSS killer must not reset the VPN
+                    // network when Flutter and mapped libraries exceed a Go
+                    // heap budget.
+                    oomKillerEnabled = memoryPolicy.processOomKillerEnabled
                     oomKillerDisabled = false
-                    oomMemoryLimit = if (memoryLimitFlag) {
-                        LIBBOX_OOM_MEMORY_LIMIT_BYTES
-                    } else {
-                        0L
-                    }
+                    oomMemoryLimit = memoryPolicy.processOomMemoryLimitBytes
+                    goMemoryLimit = memoryPolicy.goMemoryLimitBytes
                 }
                 Libbox.setup(setupOptions)
                 libboxReady = true
                 MeowDiagnostics.log(
                     "Application",
-                    "ensureLibboxSetup done pid=${android.os.Process.myPid()} memoryLimit=${if (memoryLimitFlag) "enabled" else "disabled"}",
+                    "ensureLibboxSetup done pid=${android.os.Process.myPid()} " +
+                        "goMemoryLimit=${memoryPolicy.goMemoryLimitBytes} " +
+                        "processOomKiller=${if (memoryPolicy.processOomKillerEnabled) "enabled" else "disabled"}",
                 )
             }
         }

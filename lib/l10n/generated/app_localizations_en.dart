@@ -1211,22 +1211,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hideServerIpSubtitle => 'Masks last two octets of the IP address';
 
   @override
-  String get memoryLimitTitle => 'Memory limit';
+  String get memoryLimitTitle => 'Soft core memory limit';
 
   @override
   String get memoryLimitEnabledSubtitle =>
-      'Recommended. Lets sing-box stop before memory pressure can destabilize the app. Changes take effect after app restart.';
+      'Recommended. Limits only memory managed by the Go part of sing-box and encourages earlier cleanup of unused data. Reaching this limit does not stop the VPN. Changes take effect after app restart.';
 
   @override
   String get memoryLimitDisabledSubtitle =>
-      'Disabled. Can help with false memory-limit errors, but may increase RAM use and crash risk. Takes effect after app restart.';
+      'Disabled. The Go part of sing-box manages memory without an Etonify budget and may retain more RAM. Takes effect after app restart.';
 
   @override
-  String get memoryLimitDisableWarningTitle => 'Disable memory limit?';
+  String get memoryLimitDisableWarningTitle => 'Disable the soft core limit?';
 
   @override
   String get memoryLimitDisableWarningMessage =>
-      'Use this only if VPN start fails with a memory-limit error. Disabling the limit can increase RAM usage, heat, and the chance Android kills the app. The change takes effect after restarting Etonify.';
+      'Without the soft limit, the Go part of sing-box may retain unused memory for longer. This does not change Flutter or Android memory limits and does not affect system process termination. The change takes effect after restarting Etonify.';
 
   @override
   String get memoryLimitDisableConfirm => 'Disable';

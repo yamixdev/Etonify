@@ -2234,31 +2234,31 @@ abstract class AppLocalizations {
   /// No description provided for @memoryLimitTitle.
   ///
   /// In en, this message translates to:
-  /// **'Memory limit'**
+  /// **'Soft core memory limit'**
   String get memoryLimitTitle;
 
   /// No description provided for @memoryLimitEnabledSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Recommended. Lets sing-box stop before memory pressure can destabilize the app. Changes take effect after app restart.'**
+  /// **'Recommended. Limits only memory managed by the Go part of sing-box and encourages earlier cleanup of unused data. Reaching this limit does not stop the VPN. Changes take effect after app restart.'**
   String get memoryLimitEnabledSubtitle;
 
   /// No description provided for @memoryLimitDisabledSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Disabled. Can help with false memory-limit errors, but may increase RAM use and crash risk. Takes effect after app restart.'**
+  /// **'Disabled. The Go part of sing-box manages memory without an Etonify budget and may retain more RAM. Takes effect after app restart.'**
   String get memoryLimitDisabledSubtitle;
 
   /// No description provided for @memoryLimitDisableWarningTitle.
   ///
   /// In en, this message translates to:
-  /// **'Disable memory limit?'**
+  /// **'Disable the soft core limit?'**
   String get memoryLimitDisableWarningTitle;
 
   /// No description provided for @memoryLimitDisableWarningMessage.
   ///
   /// In en, this message translates to:
-  /// **'Use this only if VPN start fails with a memory-limit error. Disabling the limit can increase RAM usage, heat, and the chance Android kills the app. The change takes effect after restarting Etonify.'**
+  /// **'Without the soft limit, the Go part of sing-box may retain unused memory for longer. This does not change Flutter or Android memory limits and does not affect system process termination. The change takes effect after restarting Etonify.'**
   String get memoryLimitDisableWarningMessage;
 
   /// No description provided for @memoryLimitDisableConfirm.
