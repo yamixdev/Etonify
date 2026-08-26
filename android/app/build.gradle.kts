@@ -72,7 +72,10 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            // Keep native libraries uncompressed and page-aligned in the APK.
+            // With the large libbox.so this avoids an additional extracted copy
+            // in the app data directory and supports 16 KB page-size devices.
+            useLegacyPackaging = false
             // Keep the old Happ native library on disk, but do not package it.
             excludes += setOf("**/liberror-code.so")
         }
