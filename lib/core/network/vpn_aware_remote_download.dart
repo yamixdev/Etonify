@@ -13,6 +13,30 @@ enum RemoteDownloadRoute { outbound, app, underlying }
 typedef RemoteDownloadRouteAttemptCallback =
     void Function(RemoteDownloadRoute route, bool isFallback);
 
+@visibleForTesting
+final class RetryableFutureCache<T> {
+  Future<T>? _pending;
+
+  Future<T> resolve({
+    required Future<T> Function() load,
+    required Duration timeout,
+  }) {
+    final request = _pending ??= Future<T>.sync(load);
+    return _awaitRequest(request, timeout);
+  }
+
+  Future<T> _awaitRequest(Future<T> request, Duration timeout) async {
+    try {
+      return await request.timeout(timeout);
+    } catch (error, stackTrace) {
+      if (identical(_pending, request)) {
+        _pending = null;
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+}
+
 @immutable
 class RemoteDownloadResult {
   const RemoteDownloadResult({
@@ -120,7 +144,8 @@ class VpnAwareRemoteDownloader {
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
 
   int _temporaryFileGeneration = 0;
-  Future<bool>? _outboundFetchCapability;
+  final RetryableFutureCache<bool> _outboundFetchCapability =
+      RetryableFutureCache<bool>();
 
   Future<RemoteDownloadResult> fetchBytes({
     required Uri uri,
@@ -294,30 +319,38 @@ class VpnAwareRemoteDownloader {
     if (!Platform.isAndroid) {
       return (vpnActive: false, supportsOutboundFetch: false);
     }
+    late final Map<String, dynamic> status;
     try {
-      final status = await SingboxRuntime.instance.status().timeout(
+      status = await SingboxRuntime.instance.status().timeout(
         _runtimeStatusTimeout,
       );
-      final vpnActive =
-          status['running'] == true &&
-          status['mode']?.toString().toLowerCase() == 'vpn';
-      if (!vpnActive) {
-        return (vpnActive: false, supportsOutboundFetch: false);
-      }
-      _outboundFetchCapability ??= SingboxRuntime.instance
-          .getCoreCapabilities()
-          .then((value) => value.supportsOutboundHttpFetch);
-      final supported = await _outboundFetchCapability!.timeout(
-        _runtimeStatusTimeout,
-        onTimeout: () => false,
-      );
-      return (vpnActive: true, supportsOutboundFetch: supported);
     } catch (error) {
       AppLogStore.warning(
         'remote download',
         'runtime status unavailable before download: $error',
       );
       return (vpnActive: null, supportsOutboundFetch: false);
+    }
+    final vpnActive =
+        status['running'] == true &&
+        status['mode']?.toString().toLowerCase() == 'vpn';
+    if (!vpnActive) {
+      return (vpnActive: false, supportsOutboundFetch: false);
+    }
+    try {
+      final supported = await _outboundFetchCapability.resolve(
+        load: () => SingboxRuntime.instance.getCoreCapabilities().then(
+          (value) => value.supportsOutboundHttpFetch,
+        ),
+        timeout: _runtimeStatusTimeout,
+      );
+      return (vpnActive: true, supportsOutboundFetch: supported);
+    } catch (error) {
+      AppLogStore.warning(
+        'remote download',
+        'outbound fetch capability unavailable before download: $error',
+      );
+      return (vpnActive: true, supportsOutboundFetch: false);
     }
   }
 

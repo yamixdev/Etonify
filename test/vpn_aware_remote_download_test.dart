@@ -4,6 +4,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 void main() {
+  test('capability cache retries after a failed read', () async {
+    final cache = RetryableFutureCache<bool>();
+    var reads = 0;
+
+    Future<bool> load() async {
+      reads++;
+      if (reads == 1) {
+        throw StateError('native bridge is not ready');
+      }
+      return true;
+    }
+
+    await expectLater(
+      cache.resolve(load: load, timeout: const Duration(seconds: 1)),
+      throwsStateError,
+    );
+    expect(
+      await cache.resolve(load: load, timeout: const Duration(seconds: 1)),
+      isTrue,
+    );
+    expect(reads, 2);
+  });
+
+  test('capability cache retries after a timed out read', () async {
+    final cache = RetryableFutureCache<bool>();
+    var reads = 0;
+
+    Future<bool> load() {
+      reads++;
+      return reads == 1 ? Completer<bool>().future : Future<bool>.value(true);
+    }
+
+    await expectLater(
+      cache.resolve(load: load, timeout: const Duration(milliseconds: 1)),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(
+      await cache.resolve(load: load, timeout: const Duration(seconds: 1)),
+      isTrue,
+    );
+    expect(reads, 2);
+  });
+
   test(
     'Android keeps the system route before physical fallback when Etonify VPN is off',
     () {
