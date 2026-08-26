@@ -226,6 +226,7 @@ jobs:
             --obfuscate
             --build-name "${RELEASE_VERSION}"
             --split-debug-info=build/debug-info/android
+            --target-platform android-arm,android-arm64
           )
           if [ -n "${BUILD_NUMBER}" ]; then
             common_args+=(--build-number "${BUILD_NUMBER}")
@@ -240,8 +241,6 @@ jobs:
             "build/release-apks/etonify-v${RELEASE_VERSION}-arm64-v8a.apk"
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
             "build/release-apks/etonify-v${RELEASE_VERSION}-armeabi-v7a.apk"
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
-            "build/release-apks/etonify-v${RELEASE_VERSION}-x86_64.apk"
 
       - name: List APK outputs
         run: ls -lah build/release-apks/*.apk
@@ -333,7 +332,6 @@ jobs:
           - etonify-v${RELEASE_VERSION}-universal.apk
           - etonify-v${RELEASE_VERSION}-arm64-v8a.apk
           - etonify-v${RELEASE_VERSION}-armeabi-v7a.apk
-          - etonify-v${RELEASE_VERSION}-x86_64.apk
           EOF
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then

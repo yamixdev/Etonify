@@ -139,13 +139,20 @@ jobs:
           fi
           safe_version="${raw_version//+/_}"
           mkdir -p build/beta-apks
-          flutter build apk --release --obfuscate --split-debug-info=build/debug-info/android --split-per-abi
+          common_args=(
+            --release
+            --obfuscate
+            --split-debug-info=build/debug-info/android
+            --target-platform android-arm,android-arm64
+          )
+          flutter build apk "${common_args[@]}"
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "build/beta-apks/etonify-v${safe_version}-internal-debug-signed-universal.apk"
+          flutter build apk "${common_args[@]}" --split-per-abi
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
             "build/beta-apks/etonify-v${safe_version}-internal-debug-signed-arm64-v8a.apk"
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
             "build/beta-apks/etonify-v${safe_version}-internal-debug-signed-armeabi-v7a.apk"
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
-            "build/beta-apks/etonify-v${safe_version}-internal-debug-signed-x86_64.apk"
           cat > build/beta-apks/README.txt <<EOF
           INTERNAL TEST BUILD — NOT FOR DISTRIBUTION
 

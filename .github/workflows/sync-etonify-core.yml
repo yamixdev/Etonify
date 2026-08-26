@@ -114,6 +114,16 @@ jobs:
           make lib_android
           test -s libbox.aar
           test -s libbox-sources.jar
+          source release/ETONIFY_BASELINE
+          actual_abis="$(unzip -Z1 libbox.aar \
+            | sed -n 's#^jni/\([^/]*\)/libbox\.so$#\1#p' \
+            | sort \
+            | paste -sd, -)"
+          expected_abis="$(tr ',' '\n' <<< "$LIBBOX_ANDROID_ABIS" | sort | paste -sd, -)"
+          if [ "$actual_abis" != "$expected_abis" ]; then
+            echo "::error title=Unexpected libbox ABI set::Expected $expected_abis, got $actual_abis"
+            exit 1
+          fi
 
       - name: Replace bundled libbox artifacts
         shell: bash
@@ -137,7 +147,7 @@ jobs:
           export LIBBOX_SHA256="$(sha256sum "$libs/libbox.aar" | awk '{print $1}')"
           export CORE_VERSION CORE_COMMIT CORE_SOURCE_VERSION
           export UPSTREAM_COMMIT GOMOBILE_VERSION ANDROID_NDK_VERSION
-          export LIBBOX_ANDROID_API LIBBOX_BUILD_TAGS
+          export LIBBOX_ANDROID_API LIBBOX_ANDROID_ABIS LIBBOX_BUILD_TAGS
           export GO_ACTUAL="$(go version)"
           export JAVA_ACTUAL="$(java --version 2>&1 | head -n 1)"
           python3 - <<'PY'
@@ -157,6 +167,7 @@ jobs:
               "java": os.environ["JAVA_ACTUAL"],
               "android_ndk": os.environ["ANDROID_NDK_VERSION"],
               "android_api": int(os.environ["LIBBOX_ANDROID_API"]),
+              "android_abis": os.environ["LIBBOX_ANDROID_ABIS"].split(","),
               "build_tags": os.environ["LIBBOX_BUILD_TAGS"],
           }
           Path("android/app/libs/libbox.provenance.json").write_text(

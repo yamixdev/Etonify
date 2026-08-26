@@ -8,6 +8,7 @@ import json
 import re
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -93,6 +94,25 @@ def main() -> None:
     for key in ("etonify_version", "upstream_commit", "go", "android_ndk", "build_tags"):
         if not provenance.get(key):
             fail(f"libbox provenance is missing {key}")
+
+    expected_abis = {"armeabi-v7a", "arm64-v8a"}
+    recorded_abis = set(provenance.get("android_abis", ()))
+    if recorded_abis != expected_abis:
+        fail(
+            "libbox provenance Android ABIs must be exactly "
+            f"{sorted(expected_abis)}, got {sorted(recorded_abis)}"
+        )
+    with zipfile.ZipFile(AAR) as archive:
+        bundled_abis = {
+            name.split("/")[1]
+            for name in archive.namelist()
+            if re.fullmatch(r"jni/[^/]+/libbox\.so", name)
+        }
+    if bundled_abis != expected_abis:
+        fail(
+            "libbox.aar Android ABIs must be exactly "
+            f"{sorted(expected_abis)}, got {sorted(bundled_abis)}"
+        )
 
     print(
         "Verified libbox.aar "

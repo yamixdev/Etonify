@@ -19,7 +19,8 @@ void main() {
         workflow,
         contains(r'etonify-v${RELEASE_VERSION}-armeabi-v7a.apk'),
       );
-      expect(workflow, contains(r'etonify-v${RELEASE_VERSION}-x86_64.apk'));
+      expect(workflow, contains('--target-platform android-arm,android-arm64'));
+      expect(workflow, isNot(contains('x86')));
       expect(workflow, contains('--draft'));
       expect(workflow, contains('uses: actions/checkout@v7.0.1'));
       expect(workflow, contains('uses: actions/setup-java@v5.6.0'));
@@ -28,4 +29,16 @@ void main() {
       expect(workflow, isNot(contains('uses: actions/setup-java@v4')));
     },
   );
+
+  test('Android beta workflow publishes only ARM and ARM-universal APKs', () {
+    final workflow = File(
+      '.github/workflows/android-beta-apk.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains('--target-platform android-arm,android-arm64'));
+    expect(workflow, contains('internal-debug-signed-universal.apk'));
+    expect(workflow, contains('internal-debug-signed-arm64-v8a.apk'));
+    expect(workflow, contains('internal-debug-signed-armeabi-v7a.apk'));
+    expect(workflow, isNot(contains('x86')));
+  });
 }
