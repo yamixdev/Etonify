@@ -91,6 +91,49 @@ void main() {
     expect(items.map((item) => item.tag), ['healthy', 'old-fast']);
   });
 
+  test('latency sorting resolves runtime state once per proxy', () {
+    final items = List<AppProxySummary>.generate(
+      256,
+      (index) => _proxy(
+        'proxy-$index',
+        'Proxy $index',
+        latency: 256 - index,
+        fresh: true,
+      ),
+    );
+    final calls = <String, int>{};
+
+    sortProxySummaries(
+      items,
+      ProxySort.latency,
+      keepPinnedFirst: false,
+      runtimeStateFor: (tag) {
+        calls.update(tag, (count) => count + 1, ifAbsent: () => 1);
+        return null;
+      },
+    );
+
+    expect(calls.length, items.length);
+    expect(calls.values, everyElement(1));
+  });
+
+  test('name sorting does not resolve unused runtime state', () {
+    final items = [_proxy('b', 'Beta'), _proxy('a', 'Alpha')];
+    var calls = 0;
+
+    sortProxySummaries(
+      items,
+      ProxySort.name,
+      runtimeStateFor: (_) {
+        calls++;
+        return null;
+      },
+    );
+
+    expect(calls, 0);
+    expect(items.map((item) => item.tag), ['a', 'b']);
+  });
+
   test('runtime state can clear an old latency without marking it dead', () {
     final items = [
       _proxy('old-fast', 'Old fast', latency: 1, fresh: true),

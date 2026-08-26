@@ -14,15 +14,81 @@ void sortProxySummaries(
   if (sort == ProxySort.source || items.length < 2) {
     return;
   }
-  items.sort(
-    (a, b) => compareProxySummaries(
-      a,
-      b,
+
+  // Resolve mutable runtime state and pinned ranks once per row. A comparator
+  // is invoked O(N log N) times, so doing these lookups from inside it makes a
+  // mass URLTest needlessly expensive for large subscriptions.
+  final prepared = List<_PreparedProxySort>.generate(
+    items.length,
+    (index) => _PreparedProxySort(
+      items[index],
       sort: sort,
       keepPinnedFirst: keepPinnedFirst,
-      runtimeStateFor: runtimeStateFor,
+      runtimeState: sort == ProxySort.latency || sort == ProxySort.working
+          ? runtimeStateFor?.call(items[index].tag)
+          : null,
     ),
+    growable: false,
   );
+  prepared.sort((a, b) => a.compareTo(b, sort));
+  for (var index = 0; index < items.length; index++) {
+    items[index] = prepared[index].proxy;
+  }
+}
+
+class _PreparedProxySort {
+  _PreparedProxySort(
+    this.proxy, {
+    required ProxySort sort,
+    required bool keepPinnedFirst,
+    required ProxyRuntimeVisualState? runtimeState,
+  }) : pinned = keepPinnedFirst && isPinnedProxyTag(proxy.tag),
+       pinnedOrder = keepPinnedFirst ? pinnedProxyTagOrder(proxy.tag) : 0,
+       latencyRank = sort == ProxySort.latency || sort == ProxySort.working
+           ? _latencyRank(proxy, runtimeState)
+           : 0,
+       latency = runtimeState == null ? proxy.latency : runtimeState.latency;
+
+  final AppProxySummary proxy;
+  final bool pinned;
+  final int pinnedOrder;
+  final int latencyRank;
+  final int? latency;
+
+  int compareTo(_PreparedProxySort other, ProxySort sort) {
+    if (pinned && other.pinned) {
+      return pinnedOrder.compareTo(other.pinnedOrder);
+    }
+    if (pinned) {
+      return -1;
+    }
+    if (other.pinned) {
+      return 1;
+    }
+
+    return switch (sort) {
+      ProxySort.source => 0,
+      ProxySort.name => proxy.displayName.compareTo(other.proxy.displayName),
+      ProxySort.country => proxy.countryCode.compareTo(other.proxy.countryCode),
+      ProxySort.latency || ProxySort.working => _compareLatencyTo(other),
+    };
+  }
+
+  int _compareLatencyTo(_PreparedProxySort other) {
+    final rankOrder = latencyRank.compareTo(other.latencyRank);
+    if (rankOrder != 0) {
+      return rankOrder;
+    }
+    if (latencyRank == 0 || latencyRank == 2) {
+      final latencyOrder = (latency ?? 1 << 30).compareTo(
+        other.latency ?? 1 << 30,
+      );
+      if (latencyOrder != 0) {
+        return latencyOrder;
+      }
+    }
+    return proxy.displayName.compareTo(other.proxy.displayName);
+  }
 }
 
 int compareProxySummaries(

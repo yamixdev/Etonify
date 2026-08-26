@@ -372,6 +372,8 @@ class ProxiesPage extends StatefulWidget {
 }
 
 class _ProxiesPageState extends State<ProxiesPage> {
+  static const _largeProxyRuntimeResortInterval = Duration(milliseconds: 320);
+
   late ProxySort _sort;
   List<AppProxySummary> _visibleItems = const [];
   Timer? _runtimeResortTimer;
@@ -447,16 +449,26 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   void _onSheetMetricsChanged() {
-    final atMaxExtent = _effectiveSheetAtMaxExtent;
+    final metrics = _sheetMetrics;
+    final atMaxExtent = metrics?.atMaxExtent ?? widget.sheetAtMaxExtent;
     final activateList = !_embeddedListActivated && atMaxExtent;
+    final deactivateList =
+        _embeddedListActivated &&
+        metrics != null &&
+        !metrics.dragging &&
+        !metrics.animating &&
+        metrics.progress <= 0.001;
     final resetHeaderCollapse =
         !atMaxExtent && _proxySheetHeaderScrollCollapse != 0;
-    if (!activateList && !resetHeaderCollapse) {
+    if (!activateList && !deactivateList && !resetHeaderCollapse) {
       return;
     }
     if (!mounted) {
       if (activateList) {
         _embeddedListActivated = true;
+        _rebuildVisibleItems();
+      } else if (deactivateList) {
+        _releaseEmbeddedListPresentation();
       }
       if (resetHeaderCollapse) {
         _proxySheetHeaderScrollCollapse = 0;
@@ -466,6 +478,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
     setState(() {
       if (activateList) {
         _embeddedListActivated = true;
+        _rebuildVisibleItems();
+      } else if (deactivateList) {
+        _releaseEmbeddedListPresentation();
       }
       if (resetHeaderCollapse) {
         _proxySheetHeaderScrollCollapse = 0;
@@ -479,23 +494,38 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     if (!notify || !mounted) {
       _embeddedListActivated = true;
+      _rebuildVisibleItems();
       return;
     }
     setState(() {
       _embeddedListActivated = true;
+      _rebuildVisibleItems();
     });
+  }
+
+  void _releaseEmbeddedListPresentation() {
+    _runtimeResortTimer?.cancel();
+    _runtimeResortTimer = null;
+    _embeddedListActivated = false;
+    _visibleItems = const <AppProxySummary>[];
+    _invalidateVisibleEntries();
   }
 
   void _onRuntimeStatesChanged() {
     if (!mounted ||
+        (widget.embedded && !_embeddedListActivated) ||
         (_sort != ProxySort.latency && _sort != ProxySort.working)) {
       return;
     }
     if (_runtimeResortTimer?.isActive ?? false) {
       return;
     }
-    _runtimeResortTimer = Timer(const Duration(milliseconds: 80), () {
+    final interval = widget.proxies.length >= 500
+        ? _largeProxyRuntimeResortInterval
+        : const Duration(milliseconds: 80);
+    _runtimeResortTimer = Timer(interval, () {
       if (!mounted ||
+          (widget.embedded && !_embeddedListActivated) ||
           (_sort != ProxySort.latency && _sort != ProxySort.working)) {
         return;
       }
@@ -515,6 +545,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   void _rebuildVisibleItems() {
+    if (widget.embedded && !_embeddedListActivated) {
+      _visibleItems = const <AppProxySummary>[];
+      _invalidateVisibleEntries();
+      return;
+    }
     final pinnedItems = <AppProxySummary>[];
     final visibleItems = <AppProxySummary>[];
     for (final proxy in widget.proxies) {
@@ -536,7 +571,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _sortItems(visibleItems);
     _visibleItems = [...pinnedItems, ...visibleItems];
     _invalidateVisibleEntries();
-    _visibleEntriesImpl();
   }
 
   bool _isPinnedHeaderProxy(AppProxySummary proxy) =>
@@ -1000,6 +1034,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     final entries = _visibleEntries();
     return ListView.builder(
+      scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+      addAutomaticKeepAlives: false,
+      addRepaintBoundaries: true,
+      addSemanticIndexes: false,
       padding: EdgeInsets.only(top: listTopPadding, bottom: listBottomPadding),
       itemCount: entries.length,
       itemBuilder: (context, index) {

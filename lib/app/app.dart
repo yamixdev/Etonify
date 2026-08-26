@@ -111,7 +111,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   static const _androidImageCacheMaximumEntries = 64;
   static const _proxyChainTargetSourceCacheMaximumEntries = 2;
   static const _largeProxyListCacheReleaseThreshold = 500;
-  static const _proxyListCacheReleaseDelay = Duration(seconds: 12);
+  static const _veryLargeProxyListCacheReleaseThreshold = 2000;
+  static const _largeProxyListCacheReleaseDelay = Duration(seconds: 4);
+  static const _veryLargeProxyListCacheReleaseDelay = Duration(seconds: 1);
   static const _splitRoutingTemporarilyDisabled = false;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late ThemeData _lightTheme;
@@ -525,6 +527,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _publishTrafficDashboardSnapshot();
           _preloadProxyFlags();
           unawaited(_syncQuickSettingsTileLabel());
+          if (buildFullProxyList && !_proxyPanelOpen) {
+            _scheduleProxyListCacheRelease();
+          }
         }
       } catch (error, stackTrace) {
         AppLogStore.warning(
@@ -568,8 +573,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _fullProxyListCacheRequested) {
       return;
     }
-    _fullProxyListCacheRequested = true;
-    _rebuildDerivedCaches();
+    setState(() {
+      _fullProxyListCacheRequested = true;
+      _rebuildDerivedCaches();
+    });
   }
 
   void _cancelScheduledProxyListCacheRelease() {
@@ -582,7 +589,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!_fullProxyListCacheReady || !_isLargeProxyListCache) {
       return;
     }
-    _proxyListCacheReleaseTimer = Timer(_proxyListCacheReleaseDelay, () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _proxyPanelOpen) {
+        return;
+      }
+      _proxyRuntimeVisualStates.pruneUnobserved(
+        additionalPinnedTags: [?_displayProxyCache?.tag],
+      );
+    });
+    final releaseDelay =
+        _fullProxyListCachedRowCount >= _veryLargeProxyListCacheReleaseThreshold
+        ? _veryLargeProxyListCacheReleaseDelay
+        : _largeProxyListCacheReleaseDelay;
+    _proxyListCacheReleaseTimer = Timer(releaseDelay, () {
       _proxyListCacheReleaseTimer = null;
       if (!mounted || _proxyPanelOpen || _proxyPanelInteractionActive) {
         return;
@@ -592,15 +611,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   bool get _isLargeProxyListCache {
+    return _fullProxyListCachedRowCount >= _largeProxyListCacheReleaseThreshold;
+  }
+
+  int get _fullProxyListCachedRowCount {
     var childRows = 0;
     for (final children in _activeGroupChildrenByTagCache.values) {
       childRows += children.length;
     }
     return max(
-          _activeTopLevelProxiesCount,
-          max(_activeProxiesCache.length, childRows),
-        ) >=
-        _largeProxyListCacheReleaseThreshold;
+      _activeTopLevelProxiesCount,
+      max(_activeProxiesCache.length, childRows),
+    );
   }
 
   bool _releaseFullProxyListCache({required String reason}) {
@@ -920,10 +942,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _preloadProxyFlags() {
     final codes = <String>{};
+    var inspectedRows = 0;
     void addCode(String countryCode) {
-      if (codes.length >= _maximumPreloadedProxyFlags) {
+      if (inspectedRows >= _maximumPreloadedProxyFlags) {
         return;
       }
+      inspectedRows++;
       final code = CountryFlagBadge.circleFlagCodeFor(countryCode);
       if (code != null) {
         codes.add(code);
@@ -938,10 +962,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     for (final proxy in _activeProxiesCache) {
       addCode(proxy.countryCode);
+      if (inspectedRows >= _maximumPreloadedProxyFlags) {
+        break;
+      }
     }
-    for (final children in _activeGroupChildrenByTagCache.values) {
-      for (final proxy in children) {
-        addCode(proxy.countryCode);
+    if (inspectedRows < _maximumPreloadedProxyFlags) {
+      preloadChildren:
+      for (final children in _activeGroupChildrenByTagCache.values) {
+        for (final proxy in children) {
+          addCode(proxy.countryCode);
+          if (inspectedRows >= _maximumPreloadedProxyFlags) {
+            break preloadChildren;
+          }
+        }
       }
     }
     if (codes.isEmpty || setEquals(codes, _preloadedProxyFlagCodes)) {
@@ -7447,9 +7480,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       onOpenRequested: () {
         _proxyPanelOpen = true;
         _cancelScheduledProxyListCacheRelease();
+      },
+      onOpened: () {
+        if (!_proxyPanelOpen) {
+          return;
+        }
         unawaited(() async {
           final hydrated = await _ensureActiveSubscriptionHydratedForRuntime();
-          if (mounted && hydrated) {
+          if (mounted && hydrated && _proxyPanelOpen) {
             _ensureFullProxyListCache();
           }
         }());

@@ -202,6 +202,7 @@ void main() {
     tester,
   ) async {
     var closeCount = 0;
+    var openedCount = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: StatefulBuilder(
@@ -213,6 +214,7 @@ void main() {
             visibleRows: 20,
             hasActiveProfile: true,
             onOpenRequested: () => rebuildHost(() {}),
+            onOpened: () => openedCount++,
             onClosed: () => closeCount++,
             homeBuilder: (context, metrics, gestures) {
               return ColoredBox(
@@ -275,6 +277,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('panel:1.00'), findsOneWidget);
+    expect(openedCount, 1);
 
     await tester.tap(find.byKey(const ValueKey('proxy-panel-header')));
     await tester.pumpAndSettle();
@@ -286,6 +289,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('panel:1.00'), findsOneWidget);
+    expect(openedCount, 2);
 
     await tester.tap(find.byKey(const ValueKey('proxy-panel-header')));
     await tester.pumpAndSettle();
@@ -513,6 +517,58 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('proxy 79'), findsOneWidget);
+  });
+
+  testWidgets('collapsed proxy panel releases mounted runtime rows', (
+    tester,
+  ) async {
+    final runtimeStates = ProxyRuntimeVisualStore();
+    final metrics = ValueNotifier<ProxyPanelMetrics>(
+      _proxyPanelMetrics(progress: 1, atMaxExtent: true),
+    );
+    addTearDown(runtimeStates.dispose);
+    addTearDown(metrics.dispose);
+    final proxies = <AppProxySummary>[
+      for (var i = 0; i < 80; i++)
+        _proxy('proxy-$i', 'proxy $i', latency: i + 1),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SizedBox(
+            height: 720,
+            child: ProxiesPage(
+              proxies: proxies,
+              selectedTag: 'proxy-0',
+              connected: false,
+              progressiveBlurEnabled: false,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+              embedded: true,
+              sheetMetricsListenable: metrics,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+              collapsedSheetExtent: 0,
+              expandedHeaderExtent: 1,
+              runtimeStates: runtimeStates,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(runtimeStates.retainedNotifierCount, greaterThan(0));
+
+    metrics.value = _proxyPanelMetrics(progress: 0, atMaxExtent: false);
+    await tester.pump();
+    await tester.pump();
+    runtimeStates.pruneUnobserved();
+
+    expect(runtimeStates.retainedNotifierCount, 0);
   });
 
   testWidgets('embedded proxy list uses SVG flag badges when expanded', (
@@ -1688,6 +1744,26 @@ AppProxySummary _proxy(String tag, String name, {int? latency}) {
     latencyError: null,
     protocolLabel: 'VLESS',
     endpointLabel: '$tag.example.com',
+  );
+}
+
+ProxyPanelMetrics _proxyPanelMetrics({
+  required double progress,
+  required bool atMaxExtent,
+}) {
+  return ProxyPanelMetrics(
+    bottomInset: 0,
+    panelHeight: progress * 720,
+    maxPanelHeight: 720,
+    viewportHeight: 720,
+    viewportLimit: 720,
+    progress: progress,
+    backdropProgress: progress,
+    atMaxExtent: atMaxExtent,
+    canFillScreen: true,
+    collapseOnAnyDownwardDrag: atMaxExtent,
+    dragging: false,
+    animating: false,
   );
 }
 
