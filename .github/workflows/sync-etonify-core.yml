@@ -7,6 +7,7 @@ on:
       - master
     paths:
       - etonify-core
+      - scripts/verify_libbox.py
       - .github/workflows/sync-etonify-core.yml
   workflow_dispatch:
     inputs:

@@ -32,7 +32,7 @@ LIBBOX_ANDROID_API_ENTRIES = (
     "io/nekohasekai/libbox/SetupOptions.java",
 )
 LIBBOX_ANDROID_API_SHA256 = (
-    "9e8de8846dd170353f25f48426f943cada44f9f3aac9601d8e02839110f7ac18"
+    "8023c3f48dcfe1870edcaff66fdb3bcd72c5f027232e630920fca393666510fa"
 )
 
 
