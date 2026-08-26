@@ -26,32 +26,6 @@ void main() {
     );
   });
 
-  test('startup issues one selector-wide HTTP URLTest request', () async {
-    final requests = <LatencyTestRequest>[];
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final coordinator = _coordinator(
-      runTest: (request) async => requests.add(request),
-      eventBaselineTimes: () => <String, int>{'proxy-1': now - 10},
-    );
-    addTearDown(coordinator.dispose);
-
-    final result = coordinator.runStartup(reason: 'test');
-    await Future<void>.delayed(Duration.zero);
-
-    expect(requests, hasLength(1));
-    expect(requests.single.groupTag, 'select');
-    expect(requests.single.targetOutboundTag, isEmpty);
-    expect(requests.single.priorityOutboundTag, 'proxy-1');
-    expect(requests.single.excludeOutboundTag, isEmpty);
-    expect(coordinator.phase, LatencySessionPhase.collectingEvents);
-    expect(
-      coordinator.handleGroupEvent(tag: 'proxy-1', timeSeconds: now),
-      isTrue,
-    );
-    expect(await result, isTrue);
-    expect(coordinator.phase, LatencySessionPhase.settled);
-  });
-
   test('targeted session checks only the selected concrete outbound', () async {
     final requests = <LatencyTestRequest>[];
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -259,27 +233,6 @@ void main() {
     expect(await result, isFalse);
     expect(coordinator.isRunning, isFalse);
   });
-
-  test(
-    'large subscriptions skip startup but allow manual group tests',
-    () async {
-      var calls = 0;
-      final coordinator = _coordinator(
-        runTest: (_) async => calls++,
-        outboundCount: () => 1000,
-      );
-      addTearDown(coordinator.dispose);
-
-      expect(await coordinator.runStartup(reason: 'startup'), isFalse);
-
-      final manual = coordinator.runFull(reason: 'manual');
-      await Future<void>.delayed(Duration.zero);
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      coordinator.handleGroupEvent(tag: 'proxy-1', timeSeconds: now);
-      expect(await manual, isTrue);
-      expect(calls, 1);
-    },
-  );
 
   test('manual cancellation waits for the native command lane', () async {
     final blocker = Completer<void>();

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
-enum LatencySessionKind { full, startup, targeted }
+enum LatencySessionKind { full, targeted }
 
 enum LatencySessionPhase { idle, startingRpc, collectingEvents, settled }
 
@@ -86,7 +86,6 @@ class LatencyCoordinator {
 
   static const perOutboundTimeoutMillis = 15000;
   static const fullDeadlineMillis = 60000;
-  static const automaticFullTestMaxOutbounds = 250;
 
   final LatencyTestRunner _runTest;
   final LatencyBoolReader _isConnected;
@@ -165,18 +164,6 @@ class LatencyCoordinator {
     return timeSeconds < _sessionStartedAtSeconds ||
         (baseline > 0 && timeSeconds <= baseline) ||
         timeSeconds <= (_acceptedEventTimes[tag] ?? 0);
-  }
-
-  Future<bool> runStartup({required String reason}) {
-    if (_outboundCount() > automaticFullTestMaxOutbounds) {
-      AppLogStore.info(
-        'latency',
-        'startup group test skipped: outbounds=${_outboundCount()} '
-            'limit=$automaticFullTestMaxOutbounds',
-      );
-      return Future<bool>.value(false);
-    }
-    return _runGroupSession(kind: LatencySessionKind.startup, reason: reason);
   }
 
   Future<bool> runFull({required String reason}) {

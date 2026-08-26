@@ -215,8 +215,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final LatencyCoordinator _latencyCoordinator;
   CoreConfigMigrationResult? _pendingCoreConfigMigration;
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
-  final RuntimeStartupUrlTestGate _runtimeStartupUrlTestGate =
-      RuntimeStartupUrlTestGate();
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
@@ -925,9 +923,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _networkRecovery.recordRestart(DateTime.now());
     _groupUrlTestScheduler.cancel();
     _latencyCoordinator.cancel();
-    _runtimeStartupUrlTestGate.markRecoveryRestart(
-      currentGeneration: _runtimeOperations.nativeRuntimeGeneration,
-    );
     AppLogStore.warning(
       'network',
       'recovery_restart reason=$reason '
@@ -3638,7 +3633,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _invalidatedLatencyTags.clear();
       _latencyErrors.clear();
       _latencyFailureCounts.clear();
-      _runtimeStartupUrlTestGate.reset();
       _networkRecovery.cancelDecision();
       _applyRuntimeStateToDerivedCaches();
     });
@@ -4011,7 +4005,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _scheduleGroupUrlTest({
     required String reason,
     Duration delay = const Duration(milliseconds: 2500),
-    bool startup = false,
   }) {
     if (!mounted || !_foregroundLifecycleActive) {
       return;
@@ -4019,7 +4012,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     AppLogStore.debug(
       'latency',
       'automatic group URLTest scheduled reason=$reason '
-          'delayMs=${delay.inMilliseconds} startup=$startup',
+          'delayMs=${delay.inMilliseconds}',
     );
     _groupUrlTestScheduler.schedule(
       delay: delay,
@@ -4042,11 +4035,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       run: () {
         AppLogStore.info(
           'latency',
-          'automatic group URLTest start reason=$reason startup=$startup',
+          'automatic group URLTest start reason=$reason',
         );
-        return startup
-            ? _latencyCoordinator.runStartup(reason: reason)
-            : _latencyCoordinator.runFull(reason: reason);
+        return _latencyCoordinator.runFull(reason: reason);
       },
     );
   }
@@ -5865,7 +5856,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _latencyErrors.clear();
         _latencyFailureCounts.clear();
         _groupUrlTestScheduler.cancel();
-        _runtimeStartupUrlTestGate.reset();
         _networkRecovery.cancelDecision();
         _applyRuntimeStateToDerivedCaches();
       }
@@ -6086,7 +6076,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
         } else if (!nativeRecoveryPending) {
           _resetTrafficDashboardData();
           _groupUrlTestScheduler.cancel();
-          _runtimeStartupUrlTestGate.reset();
         }
       });
       _publishTrafficDashboardSnapshot();
@@ -6678,25 +6667,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // Diagnostics are not a startup requirement. Let real application traffic
     // use the newly established TUN before opening probe/provider connections.
     _scheduleActiveOutboundIpRefresh(delay: const Duration(seconds: 5));
-    final nativeRuntimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
-    switch (_runtimeStartupUrlTestGate.decide(nativeRuntimeGeneration)) {
-      case RuntimeStartupUrlTestDecision.ignore:
-        return;
-      case RuntimeStartupUrlTestDecision.skipAfterRecovery:
-        AppLogStore.info(
-          'latency',
-          'startup group URLTest skipped after network recovery '
-              'nativeGeneration=$nativeRuntimeGeneration',
-        );
-        return;
-      case RuntimeStartupUrlTestDecision.run:
-        break;
-    }
-    _scheduleGroupUrlTest(
-      reason: 'runtime_started',
-      delay: const Duration(milliseconds: 2500),
-      startup: true,
-    );
   }
 
   void _recordGroupsDiagnostics(int groupCount) {
