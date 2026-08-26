@@ -1,14 +1,18 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "8fc18165eb9ce7156dc1d871b7bee0d44b92d64c291a7f0b7f91d642e7787c88",
-  "source_commit": "085303a3373cd8f6bd04c03fd038feb5ea1aeb27",
-  "source_version": "v1.13.19-etonify.1",
-  "etonify_version": "v1.13.19-etonify.1",
-  "upstream_commit": "b5ebaa1fc0f2b94256180b95468e73ef53caa27d",
+  "sha256": "52669a38b2977c1bcb1425c198bd2bfd53a3166598f7b4b4513e6f45035f0c84",
+  "source_commit": "8e89bbed043a9db18925ccb6197171484ed6bb73",
+  "source_version": "v1.14.0-rc.1-etonify.2",
+  "etonify_version": "v1.14.0-rc.1-etonify.2",
+  "upstream_commit": "8dd67a1e49711ce8a9a884bef60a2139ef36446f",
   "go": "go version go1.26.6 linux/amd64",
-  "gomobile": "v0.1.12",
-  "java": "openjdk 17.0.20 2026-07-21",
+  "gomobile": "v0.1.13",
+  "java": "openjdk 17.0.20.1 2026-08-18",
   "android_ndk": "r28",
-  "android_api": 23,
-  "build_tags": "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0,with_tailscale,ts_omit_logtail,ts_omit_ssh,ts_omit_drive,ts_omit_taildrop,ts_omit_webclient,ts_omit_doctor,ts_omit_capture,ts_omit_kube,ts_omit_aws,ts_omit_synology,ts_omit_bird"
+  "android_api": 24,
+  "android_abis": [
+    "armeabi-v7a",
+    "arm64-v8a"
+  ],
+  "build_tags": "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0"
 }
