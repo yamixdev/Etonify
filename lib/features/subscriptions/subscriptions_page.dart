@@ -23,6 +23,7 @@ import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -36,19 +37,39 @@ part 'subscriptions_page_qr.dart';
 const _kSubscriptionProxyPreviewLimit = 50;
 const _kSubscriptionOperationSoftWarningDelay = Duration(seconds: 15);
 const _kSubscriptionOperationTimeout = Duration(seconds: 30);
-const _kSubscriptionSheetMinExtent = .28;
 const _kSubscriptionSheetListExtent = .38;
 const _kSubscriptionSheetAddQuickExtent = .44;
 const _kSubscriptionSheetAddManualExtent = .92;
 const _kSubscriptionSheetMaxExtent = .92;
 const _kSubscriptionSheetHeaderHeight = 104.0;
 const _kAddSubscriptionSheetHeaderHeight = 132.0;
-const _kSubscriptionSheetAnimationDuration = Duration(milliseconds: 260);
+const _kSubscriptionCardHeight = 92.0;
+const _kSubscriptionCardGap = 10.0;
+const _kSubscriptionSheetDragThreshold = appBottomSheetDragThreshold;
+const _kAddSubscriptionSecondaryRowHeight = 48.0;
+const _kSubscriptionSheetAnimationDuration = appBottomSheetAnimationDuration;
 const _kSubscriptionSummaryHydrationDelay = Duration(milliseconds: 420);
 const _kAutoRefreshOptions = <int>[0, 60, 180, 360, 720, 1440];
 final _kSingleLineFormatter = FilteringTextInputFormatter.deny(
   RegExp(r'[\r\n]'),
 );
+
+double _addSubscriptionQuickButtonHeight(double availableWidth) {
+  return ((availableWidth - 18 * 2 - 10 * 2) / 3).clamp(124.0, 132.0);
+}
+
+double _addSubscriptionQuickContentHeight({
+  required double availableWidth,
+  required double bottomPadding,
+}) {
+  return _kAddSubscriptionSheetHeaderHeight +
+      8 +
+      _addSubscriptionQuickButtonHeight(availableWidth) +
+      16 +
+      _kAddSubscriptionSecondaryRowHeight +
+      18 +
+      bottomPadding;
+}
 
 String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
   final locale = Localizations.localeOf(context);
@@ -103,9 +124,7 @@ class SubscriptionsPage extends StatefulWidget {
 }
 
 class _SubscriptionsPageState extends State<SubscriptionsPage> {
-  final DraggableScrollableController _sheetController =
-      DraggableScrollableController();
-  ScrollController? _sheetScrollController;
+  final ScrollController _sheetScrollController = ScrollController();
   List<Subscription> _subscriptions = [];
   final Set<String> _selectedIds = <String>{};
   final Set<String> _refreshingIds = <String>{};
@@ -115,8 +134,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   Timer? _countHydrationTimer;
   late _SubscriptionsSheetMode _sheetMode;
   _AddSubscriptionSheetMode _addSheetMode = _AddSubscriptionSheetMode.quick;
-  int _addModeTransitionGeneration = 0;
-  bool _closingFromMinExtent = false;
+  double _sheetHeaderDragDeltaY = 0;
   bool _loading = false;
   int _refreshAllCompleted = 0;
   int _refreshAllTotal = 0;
@@ -125,11 +143,6 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 
   bool get _addOnly => widget.openAddOnStart;
   bool get _selectionMode => _selectedIds.isNotEmpty;
-  double get _sheetMaxExtent =>
-      _sheetMode == _SubscriptionsSheetMode.add &&
-          _addSheetMode == _AddSubscriptionSheetMode.quick
-      ? _kSubscriptionSheetAddQuickExtent
-      : _kSubscriptionSheetMaxExtent;
 
   void _haptic() {
     if (widget.hapticEnabled) {
@@ -169,7 +182,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   @override
   void dispose() {
     _countHydrationTimer?.cancel();
-    _sheetController.dispose();
+    _sheetScrollController.dispose();
     super.dispose();
   }
 
@@ -340,14 +353,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     _haptic();
     _countHydrationTimer?.cancel();
     _countHydrationGeneration++;
-    _addModeTransitionGeneration++;
     setState(() {
       _sheetMode = _SubscriptionsSheetMode.add;
       _addSheetMode = _AddSubscriptionSheetMode.quick;
     });
-    unawaited(
-      _animateSheetTo(_kSubscriptionSheetAddQuickExtent, resetScroll: true),
-    );
+    _resetSheetScroll();
   }
 
   void _closeAddSubscription({required bool changed}) {
@@ -355,127 +365,52 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       Navigator.of(context).pop(changed);
       return;
     }
-    _addModeTransitionGeneration++;
     setState(() => _sheetMode = _SubscriptionsSheetMode.list);
-    unawaited(
-      _animateSheetTo(
-        _kSubscriptionSheetListExtent,
-        resetScroll: true,
-      ).whenComplete(() {
-        if (changed && mounted && _sheetMode == _SubscriptionsSheetMode.list) {
-          _reload();
-        }
-      }),
-    );
+    _resetSheetScroll();
+    if (changed) {
+      _reload();
+    }
   }
 
   void _handleAddModeChanged(_AddSubscriptionSheetMode mode) {
-    final generation = ++_addModeTransitionGeneration;
-    if (mode == _AddSubscriptionSheetMode.manual) {
-      setState(() => _addSheetMode = mode);
-    }
-    unawaited(
-      _animateSheetTo(
-        mode == _AddSubscriptionSheetMode.manual
-            ? _kSubscriptionSheetAddManualExtent
-            : _kSubscriptionSheetAddQuickExtent,
-        resetScroll: true,
-      ).whenComplete(() {
-        if (!mounted ||
-            generation != _addModeTransitionGeneration ||
-            _sheetMode != _SubscriptionsSheetMode.add ||
-            mode != _AddSubscriptionSheetMode.quick) {
-          return;
-        }
-        setState(() => _addSheetMode = mode);
-      }),
-    );
-  }
-
-  Future<void> _animateSheetTo(
-    double extent, {
-    bool resetScroll = false,
-  }) async {
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || !_sheetController.isAttached) {
+    if (_addSheetMode == mode) {
       return;
     }
-    if (resetScroll) {
-      final scrollController = _sheetScrollController;
-      if (scrollController != null && scrollController.hasClients) {
-        scrollController.jumpTo(scrollController.position.minScrollExtent);
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted || !_sheetController.isAttached) {
-          return;
-        }
+    setState(() => _addSheetMode = mode);
+    _resetSheetScroll();
+  }
+
+  void _resetSheetScroll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_sheetScrollController.hasClients) {
+        return;
       }
-    }
-    await _sheetController.animateTo(
-      extent.clamp(_kSubscriptionSheetMinExtent, _sheetMaxExtent),
-      duration: _kSubscriptionSheetAnimationDuration,
-      curve: Curves.easeOutCubic,
-    );
+      final position = _sheetScrollController.position;
+      if ((position.pixels - position.minScrollExtent).abs() > .5) {
+        position.jumpTo(position.minScrollExtent);
+      }
+    });
+  }
+
+  void _handleSheetHeaderDragStart(DragStartDetails details) {
+    _sheetHeaderDragDeltaY = 0;
   }
 
   void _handleSheetHeaderDragUpdate(DragUpdateDetails details) {
-    if (!_sheetController.isAttached) {
-      return;
-    }
-    final availableHeight = MediaQuery.sizeOf(context).height;
-    if (availableHeight <= 0) {
-      return;
-    }
-    final nextExtent =
-        (_sheetController.size - details.delta.dy / availableHeight).clamp(
-          _kSubscriptionSheetMinExtent,
-          _sheetMaxExtent,
-        );
-    _sheetController.jumpTo(nextExtent);
+    _sheetHeaderDragDeltaY += details.primaryDelta ?? details.delta.dy;
   }
 
   void _handleSheetHeaderDragEnd(DragEndDetails details) {
-    if (!_sheetController.isAttached) {
+    final dragDelta = _sheetHeaderDragDeltaY;
+    _sheetHeaderDragDeltaY = 0;
+    if (dragDelta < _kSubscriptionSheetDragThreshold) {
       return;
     }
-    final velocity = details.primaryVelocity ?? 0;
-    final current = _sheetController.size;
-    final addMode = _sheetMode == _SubscriptionsSheetMode.add;
-    final compactExtent = addMode
-        ? _kSubscriptionSheetAddQuickExtent
-        : _kSubscriptionSheetListExtent;
-    if (current <= _kSubscriptionSheetMinExtent + .015 ||
-        (velocity > 900 && current <= compactExtent + .08)) {
-      if (addMode && !_addOnly) {
-        _closeAddSubscription(changed: false);
-      } else {
-        Navigator.of(context).maybePop();
-      }
-      return;
+    if (_sheetMode == _SubscriptionsSheetMode.add && !_addOnly) {
+      _closeAddSubscription(changed: false);
+    } else {
+      Navigator.of(context).maybePop();
     }
-    final target = velocity < -650 || current > (compactExtent + .18)
-        ? _sheetMaxExtent
-        : compactExtent;
-    unawaited(_animateSheetTo(target));
-  }
-
-  bool _handleSheetNotification(DraggableScrollableNotification notification) {
-    if (notification.extent > _kSubscriptionSheetMinExtent + .002 ||
-        _closingFromMinExtent) {
-      return false;
-    }
-    _closingFromMinExtent = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _closingFromMinExtent = false;
-      if (_sheetMode == _SubscriptionsSheetMode.add && !_addOnly) {
-        _closeAddSubscription(changed: false);
-      } else {
-        Navigator.of(context).maybePop();
-      }
-    });
-    return false;
   }
 
   Future<bool> _importAddResult(_AddResult result) async {
@@ -1052,213 +987,252 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     }
   }
 
+  double _subscriptionListContentHeight(double bottomPadding) {
+    if (_subscriptions.isEmpty) {
+      return 0;
+    }
+    final cardsHeight = _subscriptions.length * _kSubscriptionCardHeight;
+    final gapsHeight = (_subscriptions.length - 1) * _kSubscriptionCardGap;
+    final errorHeight = _error == null ? 0.0 : 72.0;
+    return _kSubscriptionSheetHeaderHeight +
+        8 +
+        cardsHeight +
+        gapsHeight +
+        errorHeight +
+        bottomPadding +
+        14;
+  }
+
+  double _targetSheetHeight(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final availableHeight = mediaQuery.size.height;
+    final maxHeight = availableHeight * _kSubscriptionSheetMaxExtent;
+    if (_sheetMode == _SubscriptionsSheetMode.add) {
+      if (_addSheetMode == _AddSubscriptionSheetMode.manual) {
+        return availableHeight * _kSubscriptionSheetAddManualExtent;
+      }
+      final requiredHeight = _addSubscriptionQuickContentHeight(
+        availableWidth: mediaQuery.size.width,
+        bottomPadding: mediaQuery.padding.bottom,
+      );
+      return requiredHeight
+          .clamp(availableHeight * _kSubscriptionSheetAddQuickExtent, maxHeight)
+          .toDouble();
+    }
+    if (_subscriptions.isEmpty) {
+      return availableHeight * .40;
+    }
+    return _subscriptionListContentHeight(mediaQuery.padding.bottom)
+        .clamp(availableHeight * _kSubscriptionSheetListExtent, maxHeight)
+        .toDouble();
+  }
+
+  bool _subscriptionListCanScroll(BuildContext context, double sheetHeight) {
+    if (_subscriptions.isEmpty) {
+      return false;
+    }
+    return _subscriptionListContentHeight(
+          MediaQuery.paddingOf(context).bottom,
+        ) >
+        sheetHeight + .5;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    final initialExtent = _addOnly
-        ? _kSubscriptionSheetAddQuickExtent
-        : _subscriptions.isEmpty
-        ? .40
-        : _kSubscriptionSheetListExtent;
+    final sheetHeight = _targetSheetHeight(context);
+    final listCanScroll = _subscriptionListCanScroll(context, sheetHeight);
 
-    return NotificationListener<DraggableScrollableNotification>(
-      onNotification: _handleSheetNotification,
-      child: DraggableScrollableSheet(
-        controller: _sheetController,
-        expand: false,
-        initialChildSize: initialExtent,
-        minChildSize: _kSubscriptionSheetMinExtent,
-        maxChildSize: _sheetMaxExtent,
-        builder: (context, scrollController) {
-          _sheetScrollController = scrollController;
-          return Theme(
-            data: settingsTileTheme(context),
-            child: RepaintBoundary(
-              child: Material(
-                key: const ValueKey('subscriptions_sheet_clip'),
-                color: cs.surface,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                ),
-                clipBehavior: Clip.hardEdge,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: cs.outlineVariant)),
-                  ),
-                  child: _sheetMode == _SubscriptionsSheetMode.add
-                      ? _AddSubscriptionSheet(
-                          onAdd: _importAddResult,
-                          scrollController: scrollController,
-                          onClose: (changed) =>
-                              _closeAddSubscription(changed: changed),
-                          onModeChanged: _handleAddModeChanged,
-                          onHeaderDragUpdate: _handleSheetHeaderDragUpdate,
-                          onHeaderDragEnd: _handleSheetHeaderDragEnd,
-                        )
-                      : Stack(
-                          children: [
-                            CustomScrollView(
-                              controller: scrollController,
-                              slivers: [
-                                const SliverToBoxAdapter(
-                                  child: SizedBox(
-                                    height: _kSubscriptionSheetHeaderHeight,
-                                  ),
-                                ),
-                                if (_error != null)
-                                  SliverToBoxAdapter(
-                                    child: Container(
-                                      width: double.infinity,
-                                      margin: const EdgeInsets.fromLTRB(
-                                        18,
-                                        8,
-                                        18,
-                                        2,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: cs.errorContainer,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        _error!,
-                                        style: TextStyle(
-                                          color: cs.onErrorContainer,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (_subscriptions.isEmpty)
-                                  SliverFillRemaining(
-                                    hasScrollBody: false,
-                                    child: _EmptySubscriptionsPanel(
-                                      onAdd: _addSubscription,
-                                    ),
-                                  )
-                                else
-                                  SliverPadding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      8,
-                                      14,
-                                      0,
-                                    ),
-                                    sliver: SliverList(
-                                      delegate: SliverChildBuilderDelegate(
-                                        (context, itemIndex) {
-                                          if (itemIndex.isOdd) {
-                                            return const Gap(10);
-                                          }
-                                          final index = itemIndex ~/ 2;
-                                          final sub = _subscriptions[index];
-                                          final hydratedServerCount =
-                                              _subscriptionServerCounts[sub.id];
-                                          final serverCount =
-                                              hydratedServerCount ??
-                                              _visibleProxyCount(sub.outbounds);
-                                          final rawLooksNonEmpty =
-                                              _subscriptionsWithRawPayload
-                                                  .contains(sub.id) ||
-                                              (sub.rawContent
-                                                      .trim()
-                                                      .isNotEmpty &&
-                                                  sub.rawContent.trim().length >
-                                                      16);
-                                          return _SubscriptionCard(
-                                            subscription: sub,
-                                            serverCount: serverCount,
-                                            rawLooksNonEmpty: rawLooksNonEmpty,
-                                            active:
-                                                sub.id ==
-                                                widget.activeSubscriptionId,
-                                            multiSelected: _selectedIds
-                                                .contains(sub.id),
-                                            selectionMode: _selectionMode,
-                                            loading:
-                                                _loading ||
-                                                _refreshingIds.contains(sub.id),
-                                            onSelect: () {
-                                              if (_selectionMode) {
-                                                _toggleSelection(sub.id);
-                                              } else {
-                                                Navigator.of(
-                                                  context,
-                                                ).pop(sub.id);
-                                              }
-                                            },
-                                            onLongPress: () =>
-                                                _toggleSelection(sub.id),
-                                            onRefresh: () =>
-                                                _refreshSubscription(sub.id),
-                                            onCopyUrl: () =>
-                                                _copySubscriptionUrl(sub),
-                                            onShowQr: () => _showSubscriptionQr(
-                                              sub,
-                                              title: sub.name,
-                                            ),
-                                            onCopyJson: () =>
-                                                _copySubscriptionJson(sub),
-                                            onEdit: () =>
-                                                _openSubscriptionDetails(
-                                                  sub,
-                                                  index: index,
-                                                ),
-                                            onDelete: () =>
-                                                _deleteSubscription(sub.id),
-                                          );
-                                        },
-                                        childCount:
-                                            _subscriptions.length * 2 - 1,
-                                      ),
-                                    ),
-                                  ),
-                                SliverToBoxAdapter(
-                                  child: SizedBox(height: bottomPadding + 14),
-                                ),
-                              ],
-                            ),
-                            Align(
-                              alignment: Alignment.topCenter,
-                              child: _SubscriptionsSheetHeader(
-                                title: _selectionMode
-                                    ? '${_selectedIds.length}'
-                                    : _loading && _refreshAllTotal > 0
-                                    ? l10n.subscriptionsRefreshAllProgress(
-                                        _refreshAllCompleted,
-                                        _refreshAllTotal,
-                                      )
-                                    : l10n.subscriptionsTitle,
-                                selectionMode: _selectionMode,
-                                loading: _loading,
-                                canSort: _subscriptions.length > 1,
-                                canRefreshAll: _subscriptions.isNotEmpty,
-                                onSortSelected: (mode) {
-                                  _haptic();
-                                  unawaited(_sortSubscriptions(mode));
-                                },
-                                onRefreshAll: _refreshAll,
-                                onAdd: _addSubscription,
-                                onDeleteSelected: _deleteSelected,
-                                onClearSelection: _clearSelection,
-                                onClose: () => Navigator.of(context).pop(),
-                                onVerticalDragUpdate:
-                                    _handleSheetHeaderDragUpdate,
-                                onVerticalDragEnd: _handleSheetHeaderDragEnd,
+    return AnimatedContainer(
+      height: sheetHeight,
+      duration: _kSubscriptionSheetAnimationDuration,
+      curve: Curves.easeOutCubic,
+      child: Theme(
+        data: settingsTileTheme(context),
+        child: RepaintBoundary(
+          child: Material(
+            key: const ValueKey('subscriptions_sheet_clip'),
+            color: cs.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(appBottomSheetCornerRadius),
+              ),
+            ),
+            clipBehavior: Clip.hardEdge,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: cs.outlineVariant)),
+              ),
+              child: _sheetMode == _SubscriptionsSheetMode.add
+                  ? _AddSubscriptionSheet(
+                      onAdd: _importAddResult,
+                      scrollController: _sheetScrollController,
+                      onClose: (changed) =>
+                          _closeAddSubscription(changed: changed),
+                      onModeChanged: _handleAddModeChanged,
+                      onHeaderDragStart: _handleSheetHeaderDragStart,
+                      onHeaderDragUpdate: _handleSheetHeaderDragUpdate,
+                      onHeaderDragEnd: _handleSheetHeaderDragEnd,
+                    )
+                  : Stack(
+                      children: [
+                        CustomScrollView(
+                          controller: _sheetScrollController,
+                          physics: listCanScroll
+                              ? const ClampingScrollPhysics()
+                              : const NeverScrollableScrollPhysics(),
+                          slivers: [
+                            const SliverToBoxAdapter(
+                              child: SizedBox(
+                                height: _kSubscriptionSheetHeaderHeight,
                               ),
+                            ),
+                            if (_error != null)
+                              SliverToBoxAdapter(
+                                child: Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.fromLTRB(
+                                    18,
+                                    8,
+                                    18,
+                                    2,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: cs.errorContainer,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    _error!,
+                                    style: TextStyle(
+                                      color: cs.onErrorContainer,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if (_subscriptions.isEmpty)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: _EmptySubscriptionsPanel(
+                                  onAdd: _addSubscription,
+                                ),
+                              )
+                            else
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  8,
+                                  14,
+                                  0,
+                                ),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate((
+                                    context,
+                                    itemIndex,
+                                  ) {
+                                    if (itemIndex.isOdd) {
+                                      return const Gap(10);
+                                    }
+                                    final index = itemIndex ~/ 2;
+                                    final sub = _subscriptions[index];
+                                    final hydratedServerCount =
+                                        _subscriptionServerCounts[sub.id];
+                                    final serverCount =
+                                        hydratedServerCount ??
+                                        _visibleProxyCount(sub.outbounds);
+                                    final rawLooksNonEmpty =
+                                        _subscriptionsWithRawPayload.contains(
+                                          sub.id,
+                                        ) ||
+                                        (sub.rawContent.trim().isNotEmpty &&
+                                            sub.rawContent.trim().length > 16);
+                                    return _SubscriptionCard(
+                                      subscription: sub,
+                                      serverCount: serverCount,
+                                      rawLooksNonEmpty: rawLooksNonEmpty,
+                                      active:
+                                          sub.id == widget.activeSubscriptionId,
+                                      multiSelected: _selectedIds.contains(
+                                        sub.id,
+                                      ),
+                                      selectionMode: _selectionMode,
+                                      loading:
+                                          _loading ||
+                                          _refreshingIds.contains(sub.id),
+                                      onSelect: () {
+                                        if (_selectionMode) {
+                                          _toggleSelection(sub.id);
+                                        } else {
+                                          Navigator.of(context).pop(sub.id);
+                                        }
+                                      },
+                                      onLongPress: () =>
+                                          _toggleSelection(sub.id),
+                                      onRefresh: () =>
+                                          _refreshSubscription(sub.id),
+                                      onCopyUrl: () =>
+                                          _copySubscriptionUrl(sub),
+                                      onShowQr: () => _showSubscriptionQr(
+                                        sub,
+                                        title: sub.name,
+                                      ),
+                                      onCopyJson: () =>
+                                          _copySubscriptionJson(sub),
+                                      onEdit: () => _openSubscriptionDetails(
+                                        sub,
+                                        index: index,
+                                      ),
+                                      onDelete: () =>
+                                          _deleteSubscription(sub.id),
+                                    );
+                                  }, childCount: _subscriptions.length * 2 - 1),
+                                ),
+                              ),
+                            SliverToBoxAdapter(
+                              child: SizedBox(height: bottomPadding + 14),
                             ),
                           ],
                         ),
-                ),
-              ),
+                        Align(
+                          alignment: Alignment.topCenter,
+                          child: _SubscriptionsSheetHeader(
+                            title: _selectionMode
+                                ? '${_selectedIds.length}'
+                                : _loading && _refreshAllTotal > 0
+                                ? l10n.subscriptionsRefreshAllProgress(
+                                    _refreshAllCompleted,
+                                    _refreshAllTotal,
+                                  )
+                                : l10n.subscriptionsTitle,
+                            selectionMode: _selectionMode,
+                            loading: _loading,
+                            canSort: _subscriptions.length > 1,
+                            canRefreshAll: _subscriptions.isNotEmpty,
+                            onSortSelected: (mode) {
+                              _haptic();
+                              unawaited(_sortSubscriptions(mode));
+                            },
+                            onRefreshAll: _refreshAll,
+                            onAdd: _addSubscription,
+                            onDeleteSelected: _deleteSelected,
+                            onClearSelection: _clearSelection,
+                            onClose: () => Navigator.of(context).pop(),
+                            onVerticalDragStart: _handleSheetHeaderDragStart,
+                            onVerticalDragUpdate: _handleSheetHeaderDragUpdate,
+                            onVerticalDragEnd: _handleSheetHeaderDragEnd,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

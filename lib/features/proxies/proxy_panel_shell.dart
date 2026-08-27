@@ -2,18 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 const proxyPanelMinHeight = 108.0;
-const proxyPanelScreenCornerRadius = 32.0;
+const proxyPanelScreenCornerRadius = appBottomSheetCornerRadius;
 
 const _proxyPanelHeaderHeight = 108.0;
 const _proxyPanelRowHeight = 66.0;
 const _proxyPanelContentBottomPadding = 60.0;
 const _proxyPanelStatusBarGap = 8.0;
-const _proxyPanelSettleVelocity = 320.0;
-const _proxyPanelOpenThreshold = .36;
-const _proxyPanelAnimationDuration = Duration(milliseconds: 260);
+const _proxyPanelDragThreshold = appBottomSheetDragThreshold;
+const _proxyPanelAnimationDuration = appBottomSheetAnimationDuration;
 
 @immutable
 class ProxyPanelMetrics {
@@ -146,31 +146,25 @@ class ProxyPanelShell extends StatefulWidget {
   State<ProxyPanelShell> createState() => _ProxyPanelShellState();
 }
 
-class _ProxyPanelShellState extends State<ProxyPanelShell> {
-  final DraggableScrollableController _sheetController =
-      DraggableScrollableController();
+class _ProxyPanelShellState extends State<ProxyPanelShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _panelController;
   late final ValueNotifier<ProxyPanelMetrics> _metricsNotifier =
       ValueNotifier<ProxyPanelMetrics>(_fallbackMetrics);
 
-  ScrollController? _listController;
+  final ScrollController _listController = ScrollController();
   bool _interactionActive = false;
   bool _animating = false;
+  bool _open = false;
   bool _resetAfterWidgetUpdateScheduled = false;
   int _animationGeneration = 0;
   double _parentHeight = proxyPanelMinHeight;
   double _viewportHeight = proxyPanelMinHeight;
   double _topInset = 0;
   double _bottomInset = 0;
-  double _minSize = 1;
-  double _maxSize = 1;
-  double _lastSize = 1;
   bool _layoutReady = false;
   int? _sheetPointer;
-  bool _rawSheetDragMoved = false;
-  bool _rawSheetOpenRequested = false;
-  double _rawSheetStartProgress = 0;
-  double _rawSheetTotalDeltaY = 0;
-  bool _externalOpenRequested = false;
+  double _sheetDragDeltaY = 0;
   double _externalDragDeltaY = 0;
 
   static const ProxyPanelMetrics _fallbackMetrics = ProxyPanelMetrics(
@@ -191,7 +185,10 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
   @override
   void initState() {
     super.initState();
-    _sheetController.addListener(_handleSheetExtentChanged);
+    _panelController = AnimationController(
+      vsync: this,
+      duration: _proxyPanelAnimationDuration,
+    )..addListener(_publishMetrics);
   }
 
   @override
@@ -209,24 +206,13 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
 
   @override
   void dispose() {
-    _sheetController
-      ..removeListener(_handleSheetExtentChanged)
-      ..dispose();
+    _panelController.dispose();
+    _listController.dispose();
     _metricsNotifier.dispose();
     super.dispose();
   }
 
-  bool get _isClosed =>
-      _metricsNotifier.value.progress <= .02 &&
-      !_metricsNotifier.value.animating;
-
-  void _handleSheetExtentChanged() {
-    if (!_sheetController.isAttached || !_layoutReady) {
-      return;
-    }
-    _lastSize = _sheetController.size.clamp(_minSize, _maxSize).toDouble();
-    _publishMetrics();
-  }
+  bool get _isClosed => !_open && _panelController.value <= .02 && !_animating;
 
   void _markInteractionActive() {
     if (!_interactionActive) {
@@ -256,16 +242,13 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
         return;
       }
       ++_animationGeneration;
+      _panelController.stop();
+      _panelController.value = 0;
       _animating = false;
+      _open = false;
       _sheetPointer = null;
-      _rawSheetDragMoved = false;
-      _rawSheetOpenRequested = false;
-      _rawSheetTotalDeltaY = 0;
+      _sheetDragDeltaY = 0;
       _externalDragDeltaY = 0;
-      if (_sheetController.isAttached) {
-        _sheetController.jumpTo(_minSize);
-      }
-      _lastSize = _minSize;
       _resetListScroll();
       _finishInteraction();
       widget.onClosed?.call();
@@ -273,22 +256,11 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_sheetPointer != null) {
+    if (_sheetPointer != null || _animating) {
       return;
     }
     _sheetPointer = event.pointer;
-    if (_animating) {
-      ++_animationGeneration;
-      _animating = false;
-      if (_sheetController.isAttached) {
-        _sheetController.jumpTo(_currentSize());
-      }
-    }
-    _rawSheetDragMoved = false;
-    _rawSheetOpenRequested = false;
-    _rawSheetTotalDeltaY = 0;
-    final progress = _currentMetrics().progress;
-    _rawSheetStartProgress = progress;
+    _sheetDragDeltaY = 0;
     _markInteractionActive();
   }
 
@@ -300,66 +272,38 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     if (deltaY.abs() < 0.01) {
       return;
     }
-    _rawSheetTotalDeltaY += deltaY;
-    _rawSheetDragMoved = _rawSheetTotalDeltaY.abs() >= 2;
-    if (!_layoutReady || !_sheetController.isAttached || _parentHeight <= 0) {
-      return;
+    if (_open) {
+      final draggingHeader = event.localPosition.dy <= _proxyPanelHeaderHeight;
+      if (deltaY > 0 && (draggingHeader || _listIsAtTop)) {
+        _sheetDragDeltaY += deltaY;
+      }
+    } else {
+      _sheetDragDeltaY += deltaY;
     }
-    final progress = _currentMetrics().progress;
-    final controlsExtent =
-        progress < .985 ||
-        event.localPosition.dy <= _proxyPanelHeaderHeight ||
-        (deltaY > 0 && _listIsAtTop);
-    if (!controlsExtent) {
-      return;
-    }
-    if (!_rawSheetOpenRequested && deltaY < 0 && _isClosed) {
-      _rawSheetOpenRequested = true;
-      widget.onOpenRequested?.call();
-    }
-    _markInteractionActive();
-    final target = (_sheetController.size - deltaY / _parentHeight)
-        .clamp(_minSize, _maxSize)
-        .toDouble();
-    _sheetController.jumpTo(target);
   }
 
   void _handlePointerEnd(PointerEvent event) {
     if (event.pointer != _sheetPointer) {
       return;
     }
-    final totalDeltaY = _rawSheetTotalDeltaY;
-    final extentChanged =
-        (_currentMetrics().progress - _rawSheetStartProgress).abs() >= .015;
-    final shouldSettle =
-        _rawSheetDragMoved &&
-        _layoutReady &&
-        (extentChanged ||
-            (_currentMetrics().progress > .02 &&
-                _currentMetrics().progress < .985 &&
-                totalDeltaY.abs() >= 12));
+    final totalDeltaY = _sheetDragDeltaY;
     _sheetPointer = null;
-    _rawSheetDragMoved = false;
-    _rawSheetOpenRequested = false;
-    _rawSheetStartProgress = 0;
-    _rawSheetTotalDeltaY = 0;
-    if (shouldSettle) {
-      _settleAfterPointer(
-        open: totalDeltaY.abs() >= 12
-            ? totalDeltaY < 0
-            : _currentMetrics().progress >= _proxyPanelOpenThreshold,
-      );
+    _sheetDragDeltaY = 0;
+    final targetOpen = _open
+        ? totalDeltaY < _proxyPanelDragThreshold
+        : totalDeltaY <= -_proxyPanelDragThreshold;
+    if (targetOpen != _open) {
+      _settleAfterPointer(open: targetOpen);
       return;
     }
     _finishInteraction();
   }
 
   bool get _listIsAtTop {
-    final controller = _listController;
-    if (controller == null || !controller.hasClients) {
+    if (!_listController.hasClients) {
       return true;
     }
-    return controller.positions.every(
+    return _listController.positions.every(
       (position) => position.pixels <= position.minScrollExtent + 0.5,
     );
   }
@@ -371,11 +315,10 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
   }
 
   void _resetListScroll() {
-    final controller = _listController;
-    if (controller == null || !controller.hasClients) {
+    if (!_listController.hasClients) {
       return;
     }
-    for (final position in controller.positions) {
+    for (final position in _listController.positions) {
       if ((position.pixels - position.minScrollExtent).abs() > 0.5) {
         position.jumpTo(position.minScrollExtent);
       }
@@ -401,9 +344,6 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     if (rowCount <= 0) {
       return proxyPanelMinHeight;
     }
-    if (widget.hasActiveProfile && rowCount <= 1) {
-      return viewportLimit;
-    }
     final contentHeight =
         _proxyPanelHeaderHeight +
         rowCount * _proxyPanelRowHeight +
@@ -426,76 +366,28 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
         .clamp(proxyPanelMinHeight, double.infinity)
         .toDouble();
     final nextTopInset = MediaQuery.paddingOf(context).top;
-    final nextMaxHeight = _maxHeight(
-      nextViewportHeight,
-      topInset: nextTopInset,
-    );
-    final nextMinTotalHeight = (proxyPanelMinHeight + nextBottomInset)
-        .clamp(0.0, nextParentHeight)
-        .toDouble();
-    final nextMaxTotalHeight = (nextMaxHeight + nextBottomInset)
-        .clamp(nextMinTotalHeight, nextParentHeight)
-        .toDouble();
-    final nextMinSize = nextParentHeight <= 0
-        ? 1.0
-        : nextMinTotalHeight / nextParentHeight;
-    final nextMaxSize = nextParentHeight <= 0
-        ? 1.0
-        : nextMaxTotalHeight / nextParentHeight;
-
     final layoutChanged =
         !_layoutReady ||
         (nextParentHeight - _parentHeight).abs() > 0.5 ||
         (nextViewportHeight - _viewportHeight).abs() > 0.5 ||
         (nextTopInset - _topInset).abs() > 0.5 ||
-        (nextBottomInset - _bottomInset).abs() > 0.5 ||
-        (nextMinSize - _minSize).abs() > 0.0001 ||
-        (nextMaxSize - _maxSize).abs() > 0.0001;
+        (nextBottomInset - _bottomInset).abs() > 0.5;
     if (!layoutChanged) {
       return;
     }
 
-    final previousProgress = _layoutReady
-        ? _normalizedProgress(_currentSize())
-        : 0.0;
     _parentHeight = nextParentHeight;
     _viewportHeight = nextViewportHeight;
     _topInset = nextTopInset;
     _bottomInset = nextBottomInset;
-    _minSize = nextMinSize;
-    _maxSize = nextMaxSize;
-    _lastSize = _minSize + (_maxSize - _minSize) * previousProgress;
     _layoutReady = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      if (_sheetController.isAttached) {
-        final current = _sheetController.size;
-        final target = current.clamp(_minSize, _maxSize).toDouble();
-        if ((target - current).abs() > 0.0001) {
-          _sheetController.jumpTo(target);
-        }
-        _lastSize = target;
-      }
       _publishMetrics();
     });
-  }
-
-  double _currentSize() {
-    if (_sheetController.isAttached) {
-      return _sheetController.size.clamp(_minSize, _maxSize).toDouble();
-    }
-    return _lastSize.clamp(_minSize, _maxSize).toDouble();
-  }
-
-  double _normalizedProgress(double size) {
-    final range = _maxSize - _minSize;
-    if (range <= 0.0001) {
-      return 0;
-    }
-    return ((size - _minSize) / range).clamp(0.0, 1.0).toDouble();
   }
 
   ProxyPanelMetrics _currentMetrics() {
@@ -504,12 +396,9 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     }
     final maxPanelHeight = _maxHeight(_viewportHeight, topInset: _topInset);
     final viewportLimit = _viewportLimit(_viewportHeight, topInset: _topInset);
-    final size = _currentSize();
-    final totalHeight = size * _parentHeight;
-    final panelHeight = (totalHeight - _bottomInset)
-        .clamp(proxyPanelMinHeight, maxPanelHeight)
-        .toDouble();
-    final progress = _normalizedProgress(size);
+    final progress = _panelController.value.clamp(0.0, 1.0).toDouble();
+    final panelHeight =
+        proxyPanelMinHeight + (maxPanelHeight - proxyPanelMinHeight) * progress;
     return ProxyPanelMetrics(
       bottomInset: _bottomInset,
       panelHeight: panelHeight,
@@ -536,16 +425,13 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
 
   Future<void> _animateTo({
     required bool open,
-    bool retryIfDetached = true,
+    bool retryIfNotReady = true,
   }) async {
     if (!_layoutReady) {
-      return;
-    }
-    if (!_sheetController.isAttached) {
-      if (retryIfDetached) {
+      if (retryIfNotReady) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            unawaited(_animateTo(open: open, retryIfDetached: false));
+            unawaited(_animateTo(open: open, retryIfNotReady: false));
           }
         });
       }
@@ -554,8 +440,9 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     if (open) {
       widget.onOpenRequested?.call();
     }
-    final target = open ? _maxSize : _minSize;
-    final current = _currentSize();
+    _open = open;
+    final target = open ? 1.0 : 0.0;
+    final current = _panelController.value;
     if ((target - current).abs() <= 0.0001) {
       if (open) {
         widget.onOpened?.call();
@@ -572,7 +459,7 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     _markInteractionActive();
     _publishMetrics();
     try {
-      await _sheetController.animateTo(
+      await _panelController.animateTo(
         target,
         duration: _proxyPanelAnimationDuration,
         curve: Curves.easeOutCubic,
@@ -582,20 +469,13 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     } finally {
       if (mounted && generation == _animationGeneration) {
         _animating = false;
-        if (_sheetController.isAttached) {
-          _lastSize = _sheetController.size
-              .clamp(_minSize, _maxSize)
-              .toDouble();
-        }
         if (!open) {
           _resetListScroll();
           widget.onClosed?.call();
         }
         _publishMetrics();
         _finishInteraction();
-        if (open &&
-            _sheetController.isAttached &&
-            (_sheetController.size - _maxSize).abs() <= 0.0001) {
+        if (open && (_panelController.value - 1).abs() <= 0.0001) {
           widget.onOpened?.call();
         }
       }
@@ -603,36 +483,25 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
   }
 
   void _handleHeaderDragUpdate(DragUpdateDetails details) {
-    if (!_layoutReady || !_sheetController.isAttached || _parentHeight <= 0) {
+    if (!_layoutReady || _animating) {
       return;
-    }
-    if (_isClosed && !_externalOpenRequested) {
-      _externalOpenRequested = true;
-      widget.onOpenRequested?.call();
     }
     _markInteractionActive();
     final deltaY = details.primaryDelta ?? details.delta.dy;
     _externalDragDeltaY += deltaY;
-    final target = (_sheetController.size - deltaY / _parentHeight)
-        .clamp(_minSize, _maxSize)
-        .toDouble();
-    _sheetController.jumpTo(target);
   }
 
   void _handleHeaderDragEnd(DragEndDetails details) {
-    _externalOpenRequested = false;
     final totalDeltaY = _externalDragDeltaY;
     _externalDragDeltaY = 0;
-    final velocity = details.primaryVelocity ?? 0;
-    final progress = _currentMetrics().progress;
-    final open = totalDeltaY.abs() >= 12
-        ? totalDeltaY < 0
-        : velocity < -_proxyPanelSettleVelocity
-        ? true
-        : velocity > _proxyPanelSettleVelocity
-        ? false
-        : progress >= _proxyPanelOpenThreshold;
-    _settleAfterPointer(open: open);
+    final targetOpen = _open
+        ? totalDeltaY < _proxyPanelDragThreshold
+        : totalDeltaY <= -_proxyPanelDragThreshold;
+    if (targetOpen != _open) {
+      _settleAfterPointer(open: targetOpen);
+    } else {
+      _finishInteraction();
+    }
   }
 
   void _toggle() {
@@ -700,7 +569,6 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
           }
           final gestures = ProxyPanelGestures(
             onInteractionStart: () {
-              _externalOpenRequested = false;
               _externalDragDeltaY = 0;
               _markInteractionActive();
             },
@@ -736,32 +604,32 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
                   );
                 },
               ),
-              DraggableScrollableSheet(
-                controller: _sheetController,
-                initialChildSize: _minSize,
-                minChildSize: _minSize,
-                maxChildSize: _maxSize,
-                snap: false,
-                shouldCloseOnMinExtent: false,
-                builder: (context, scrollController) {
-                  _listController = scrollController;
-                  return Listener(
-                    behavior: HitTestBehavior.translucent,
-                    onPointerDown: _handlePointerDown,
-                    onPointerMove: _handlePointerMove,
-                    onPointerUp: _handlePointerEnd,
-                    onPointerCancel: _handlePointerEnd,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(proxyPanelScreenCornerRadius),
-                      ),
-                      clipBehavior: Clip.hardEdge,
-                      child: widget.sheetBuilder(
-                        context,
-                        metrics,
-                        _metricsNotifier,
-                        scrollController,
-                        gestures,
+              ValueListenableBuilder<ProxyPanelMetrics>(
+                valueListenable: _metricsNotifier,
+                builder: (context, liveMetrics, _) {
+                  return Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: liveMetrics.panelHeight + liveMetrics.bottomInset,
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: _handlePointerDown,
+                      onPointerMove: _handlePointerMove,
+                      onPointerUp: _handlePointerEnd,
+                      onPointerCancel: _handlePointerEnd,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(proxyPanelScreenCornerRadius),
+                        ),
+                        clipBehavior: Clip.hardEdge,
+                        child: widget.sheetBuilder(
+                          context,
+                          liveMetrics,
+                          _metricsNotifier,
+                          _listController,
+                          gestures,
+                        ),
                       ),
                     ),
                   );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/settings/settings_about_page.dart';
 import 'package:meow_client/features/settings/settings_documentation_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -20,30 +21,43 @@ void main() {
   ) async {
     await tester.pumpWidget(_documentationApp(const Locale('ru')));
 
-    expect(find.text('Справочник Etonify'), findsOneWidget);
+    expect(find.text('Документация'), findsOneWidget);
     expect(find.text('Начало работы'), findsOneWidget);
     expect(find.text('Быстрый старт'), findsOneWidget);
-    expect(find.text('Что такое Etonify'), findsOneWidget);
+    expect(find.text('О Etonify'), findsOneWidget);
     expect(find.text('VPN и локальный прокси'), findsOneWidget);
-    expect(find.textContaining('Etonify — VPN-клиент'), findsNothing);
+    expect(find.textContaining('Etonify работает на Android'), findsNothing);
+    expect(find.text('Нужна помощь?'), findsNothing);
 
-    await tester.tap(find.text('Что такое Etonify'));
+    await tester.tap(find.text('О Etonify'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Etonify — VPN-клиент'), findsOneWidget);
+    expect(find.textContaining('Etonify работает на Android'), findsOneWidget);
+    final aboutTile = tester.widget<ExpansionTile>(
+      find.ancestor(
+        of: find.text('О Etonify'),
+        matching: find.byType(ExpansionTile),
+      ),
+    );
+    expect(aboutTile.shape, const RoundedRectangleBorder());
+    expect(aboutTile.collapsedShape, const RoundedRectangleBorder());
 
     await tester.tap(find.text('Быстрый старт'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Добавьте подписку'), findsOneWidget);
+    expect(
+      find.textContaining('1. Добавьте подписку или отдельный сервер.'),
+      findsOneWidget,
+    );
 
     await tester.pumpWidget(_documentationApp(const Locale('en')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Etonify guide'), findsOneWidget);
+    expect(find.text('Documentation'), findsOneWidget);
     expect(find.text('Getting started'), findsOneWidget);
     expect(find.text('Quick start'), findsOneWidget);
-    expect(find.text('What Etonify is'), findsOneWidget);
+    expect(find.text('About Etonify'), findsOneWidget);
     expect(find.text('VPN and local proxy'), findsOneWidget);
-    expect(find.textContaining('Etonify is an Android client'), findsNothing);
+    expect(find.textContaining('Etonify works on Android'), findsNothing);
+    expect(find.text('Need help?'), findsNothing);
   });
 
   testWidgets('about page opens the embedded documentation', (tester) async {
@@ -56,10 +70,65 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('yamixdev/etonify-core'), findsNothing);
+    expect(find.text('Terms of Use'), findsNothing);
+    expect(find.text('Privacy Policy'), findsNothing);
+    expect(find.text('@etonify'), findsOneWidget);
+
+    final updatesTop = tester.getTopLeft(find.text('Updates')).dy;
+    final documentationTop = tester
+        .getTopLeft(find.text('Etonify documentation'))
+        .dy;
+    final diagnosticsTop = tester
+        .getTopLeft(find.text('Resources & diagnostics'))
+        .dy;
+    expect(updatesTop, lessThan(documentationTop));
+    expect(documentationTop, lessThan(diagnosticsTop));
+
     await tester.tap(find.text('Etonify documentation'));
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsDocumentationPage), findsOneWidget);
-    expect(find.text('Etonify guide'), findsOneWidget);
+    expect(find.text('Documentation'), findsOneWidget);
+    expect(find.text('Documents'), findsOneWidget);
+    expect(find.text('Terms of Use'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Terms of Use'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Terms of Use'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LegalDocumentPage), findsOneWidget);
+    expect(find.text('Terms of Use'), findsWidgets);
+  });
+
+  testWidgets('about overview stays readable on a narrow phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 760);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsAboutPage(
+          versionLabel: '0.3.1-rc.1',
+          onShowOnboarding: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Client version'), findsOneWidget);
+    expect(find.text('0.3.1-rc.1'), findsOneWidget);
+    expect(find.text('@etonify'), findsOneWidget);
+    expect(find.text('MeowTeam'), findsOneWidget);
   });
 }

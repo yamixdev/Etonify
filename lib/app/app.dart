@@ -4941,9 +4941,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentNotificationTrafficRefreshSeconds:
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
-          currentMemoryLimitEnabled: _memoryLimitEnabled,
-          currentMemoryLimitWarningDismissed: _memoryLimitWarningDismissed,
-          currentUpdateInstallMode: _updateInstallMode,
           onAccentColorChanged: _setAccentColor,
           onHapticChanged: _setHapticEnabled,
           onStatusNotificationChanged: _setStatusNotificationEnabled,
@@ -4952,8 +4949,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           onNotificationTrafficRefreshSecondsChanged:
               _setNotificationTrafficRefreshSeconds,
           onHideServerIpChanged: _setHideServerIp,
-          onMemoryLimitChanged: _setMemoryLimitEnabled,
-          onUpdateInstallModeChanged: _setUpdateInstallMode,
         ),
       ),
     );
@@ -5132,6 +5127,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         builder: (context) => SettingsAboutPage(
           versionLabel: _clientVersionLabel,
           onShowOnboarding: _resetOnboarding,
+          updateInstallMode: _updateInstallMode,
+          updateChannel: _updateChannel,
+          onUpdateInstallModeChanged: _setUpdateInstallMode,
+          onUpdateChannelChanged: _setUpdateChannel,
           readCoreIntegrationDiagnostics: _readCoreIntegrationDiagnostics,
         ),
       ),
@@ -5415,6 +5414,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _vpnInboundEnabled &&
               _splitRoutingMode == SplitRoutingMode.disabled,
           currentTlsFragmentationMode: _tlsFragmentationMode,
+          currentMemoryLimitEnabled: _memoryLimitEnabled,
+          currentMemoryLimitWarningDismissed: _memoryLimitWarningDismissed,
           onTcpFastOpenChanged: _setExperimentalTcpFastOpen,
           onTcpMultiPathChanged: _setExperimentalTcpMultiPath,
           onInterruptExistingConnectionsChanged:
@@ -5423,6 +5424,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _setExperimentalUrlTestStrictTolerance,
           onFakeIpEnabledChanged: _setExperimentalFakeIpEnabled,
           onTlsFragmentationModeChanged: _setTlsFragmentationMode,
+          onMemoryLimitChanged: _setMemoryLimitEnabled,
         ),
       ),
     );

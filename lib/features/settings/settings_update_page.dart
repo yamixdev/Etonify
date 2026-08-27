@@ -138,6 +138,63 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
         AppUpdateChannel.beta => l10n.updatesChannelBeta,
       };
 
+  String _installModeName(AppLocalizations l10n, AppUpdateInstallMode mode) =>
+      switch (mode) {
+        AppUpdateInstallMode.ask => l10n.updatesInstallModeAsk,
+        AppUpdateInstallMode.manual => l10n.updatesInstallModeManual,
+        AppUpdateInstallMode.auto => l10n.updatesInstallModeAuto,
+      };
+
+  String _installModeSubtitle(
+    AppLocalizations l10n,
+    AppUpdateInstallMode mode,
+  ) => switch (mode) {
+    AppUpdateInstallMode.ask => l10n.updatesInstallModeAskSubtitle,
+    AppUpdateInstallMode.manual => l10n.updatesInstallModeManualSubtitle,
+    AppUpdateInstallMode.auto => l10n.updatesInstallModeAutoSubtitle,
+  };
+
+  Future<void> _chooseInstallMode() async {
+    if (_checking || _downloading || _installing || _clearingUpdateCache) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    final selected = await showModalBottomSheet<AppUpdateInstallMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  l10n.updatesInstallModeTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+            ),
+            for (final mode in AppUpdateInstallMode.values)
+              ListTile(
+                selected: mode == _installMode,
+                title: Text(_installModeName(l10n, mode)),
+                subtitle: Text(_installModeSubtitle(l10n, mode)),
+                trailing: mode == _installMode
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.of(context).pop(mode),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == _installMode || !mounted) return;
+    setState(() => _installMode = selected);
+    widget.onInstallModeChanged?.call(selected);
+  }
+
   Future<void> _chooseUpdateChannel() async {
     if (_checking || _downloading || _installing || _clearingUpdateCache) {
       return;
@@ -585,6 +642,21 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
             checking: _checking,
             title: _titleFor(context, result),
             subtitle: _subtitleFor(context, result),
+          ),
+          const Gap(12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              key: const ValueKey('update-install-mode-setting'),
+              leading: SettingsLeadingIcon(
+                icon: Icons.system_update_alt_rounded,
+                color: theme.colorScheme.primary,
+              ),
+              title: Text(l10n.updatesInstallModeTitle),
+              subtitle: Text(_installModeName(l10n, _installMode)),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: _chooseInstallMode,
+            ),
           ),
           const Gap(18),
           _UpdateInfoCard(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
@@ -11,6 +12,18 @@ import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 /// view on every device.
 class SettingsDocumentationPage extends StatelessWidget {
   const SettingsDocumentationPage({super.key});
+
+  void _openLegalDocument(BuildContext context, {required bool privacy}) {
+    final l10n = AppLocalizations.of(context);
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => LegalDocumentPage(
+          title: privacy ? l10n.legalPrivacyTitle : l10n.legalTermsTitle,
+          body: privacy ? l10n.legalPrivacyBody : l10n.legalTermsBody,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,11 +142,6 @@ class SettingsDocumentationPage extends StatelessWidget {
             title: l10n.documentationLimitsTitle,
             body: l10n.documentationLimitsBody,
           ),
-          _DocumentationSectionData(
-            icon: Icons.support_agent_rounded,
-            title: l10n.documentationSupportTitle,
-            body: l10n.documentationSupportBody,
-          ),
         ],
       ),
     ];
@@ -161,10 +169,58 @@ class SettingsDocumentationPage extends StatelessWidget {
                   for (final section in group.sections)
                     _DocumentationSection(data: section),
                 ],
+                const Gap(20),
+                _DocumentationGroupTitle(
+                  title: l10n.documentationGroupDocuments,
+                ),
+                const Gap(8),
+                _DocumentationLinkCard(
+                  icon: Icons.description_outlined,
+                  title: l10n.legalTermsTitle,
+                  onTap: () => _openLegalDocument(context, privacy: false),
+                ),
+                _DocumentationLinkCard(
+                  icon: Icons.privacy_tip_outlined,
+                  title: l10n.legalPrivacyTitle,
+                  onTap: () => _openLegalDocument(context, privacy: true),
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DocumentationLinkCard extends StatelessWidget {
+  const _DocumentationLinkCard({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        leading: Icon(icon, color: colors.primary),
+        title: Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded),
       ),
     );
   }
@@ -259,6 +315,8 @@ class _DocumentationSection extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ExpansionTile(
         key: PageStorageKey<String>(data.title),
+        shape: const RoundedRectangleBorder(),
+        collapsedShape: const RoundedRectangleBorder(),
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,

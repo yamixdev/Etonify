@@ -267,13 +267,22 @@ void main() {
     expect(find.text('panel:0.00'), findsOneWidget);
     expect(closeCount, 0);
 
-    final partialOpen = await tester.startGesture(
+    final shortSwipe = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('proxy-panel-header'))),
     );
-    await partialOpen.moveBy(const Offset(0, -70));
+    await shortSwipe.moveBy(const Offset(0, -70));
     await tester.pump();
-    expect(find.text('panel:0.00'), findsNothing);
-    await partialOpen.up();
+    expect(find.text('panel:0.00'), findsOneWidget);
+    await shortSwipe.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('panel:0.00'), findsOneWidget);
+    expect(openedCount, 0);
+
+    await tester.drag(
+      find.byKey(const ValueKey('proxy-panel-header')),
+      const Offset(0, -120),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('panel:1.00'), findsOneWidget);
@@ -371,21 +380,25 @@ void main() {
     final openGesture = await tester.startGesture(
       tester.getCenter(find.text('Amsterdam')),
     );
-    var previousProgress = panelProgress;
     for (var step = 0; step < 8; step++) {
       await openGesture.moveBy(const Offset(0, -10));
       await tester.pump();
-      expect(panelProgress, greaterThan(previousProgress));
-      previousProgress = panelProgress;
+      expect(panelProgress, closeTo(0, .01));
     }
     await openGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(panelProgress, closeTo(0, .01));
+    expect(find.text('Paris'), findsNothing);
+
+    await tester.drag(find.text('Amsterdam'), const Offset(0, -120));
     await tester.pumpAndSettle();
 
     expect(panelProgress, greaterThan(.95));
     expect(find.text('Proxies'), findsOneWidget);
     expect(find.text('Paris'), findsOneWidget);
 
-    await tester.drag(find.text('Proxies'), const Offset(0, 80));
+    await tester.drag(find.text('Proxies'), const Offset(0, 120));
     await tester.pumpAndSettle();
 
     expect(panelProgress, closeTo(0, .01));
@@ -447,6 +460,14 @@ void main() {
       expect(find.text('Lowest · unrestricted'), findsNothing);
       expect(find.text('chain · Germany'), findsOneWidget);
       expect(find.text('+ Add proxy chain'), findsOneWidget);
+      final divider = find.byKey(const ValueKey('proxy-list-divider'));
+      final dividerLine = find.descendant(
+        of: divider,
+        matching: find.byType(Container),
+      );
+      expect(divider, findsOneWidget);
+      expect(dividerLine, findsOneWidget);
+      expect(tester.getSize(dividerLine).height, 1);
 
       await tester.tap(find.text('Lowest'));
       await tester.pump();
@@ -670,6 +691,12 @@ void main() {
     await pumpAt(.70);
     expect(opacityFor('Active Poland'), 0);
     expect(opacityFor('Proxies'), greaterThan(0));
+
+    await pumpAt(1);
+    expect(
+      tester.getBottomLeft(find.text('Proxies')).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.text('Austria')).dy),
+    );
   });
 
   testWidgets('closed proxy panel does not build proxy rows', (tester) async {
@@ -1617,7 +1644,10 @@ void main() {
     expect(find.text('Client version'), findsOneWidget);
     expect(find.text('0.1.1'), findsOneWidget);
     expect(find.text('MeowVPN'), findsNothing);
-    expect(find.text('yamixdev/etonify-core'), findsOneWidget);
+    expect(find.text('yamixdev/etonify-core'), findsNothing);
+    expect(find.text('@etonify'), findsOneWidget);
+    expect(find.text('Terms of Use'), findsNothing);
+    expect(find.text('Privacy Policy'), findsNothing);
 
     final teamAction = find.ancestor(
       of: find.text('MeowTeam'),
@@ -1681,6 +1711,8 @@ void main() {
     expect(find.text('Etonify documentation'), findsOneWidget);
     expect(find.text('Process memory'), findsNothing);
 
+    await tester.ensureVisible(find.text('Resources & diagnostics'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Resources & diagnostics'));
     await tester.pumpAndSettle();
 

@@ -506,6 +506,12 @@ abstract class AppLocalizations {
   /// **'Etonify is developed by the small independent MeowTeam.'**
   String get aboutDevelopedBy;
 
+  /// No description provided for @aboutTeamLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Team'**
+  String get aboutTeamLabel;
+
   /// No description provided for @aboutContactLabel.
   ///
   /// In en, this message translates to:
@@ -527,19 +533,19 @@ abstract class AppLocalizations {
   /// No description provided for @aboutDocumentationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Step-by-step guides for subscriptions, VPN, routing, and diagnostics.'**
+  /// **'Set up and use Etonify.'**
   String get aboutDocumentationSubtitle;
 
   /// No description provided for @documentationPageTitle.
   ///
   /// In en, this message translates to:
-  /// **'Etonify guide'**
+  /// **'Documentation'**
   String get documentationPageTitle;
 
   /// No description provided for @documentationPageSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Step-by-step help for connections, subscriptions, routing, security, and diagnostics. Available offline.'**
+  /// **'Short instructions for setting up and using Etonify.'**
   String get documentationPageSubtitle;
 
   /// No description provided for @documentationGroupGettingStarted.
@@ -569,8 +575,14 @@ abstract class AppLocalizations {
   /// No description provided for @documentationGroupHelp.
   ///
   /// In en, this message translates to:
-  /// **'Diagnostics and help'**
+  /// **'Diagnostics'**
   String get documentationGroupHelp;
+
+  /// No description provided for @documentationGroupDocuments.
+  ///
+  /// In en, this message translates to:
+  /// **'Documents'**
+  String get documentationGroupDocuments;
 
   /// No description provided for @documentationQuickStartTitle.
   ///
@@ -581,19 +593,19 @@ abstract class AppLocalizations {
   /// No description provided for @documentationQuickStartBody.
   ///
   /// In en, this message translates to:
-  /// **'1. Add a subscription, file, QR code, or individual server.\n2. Open the server list and run a check.\n3. Select a server manually or use Lowest.\n4. Tap the connect button and approve the Android VPN request.\n5. If the connection fails, try another server first, then open Logs.'**
+  /// **'1. Add a subscription or individual server.\n2. Run a server check.\n3. Select a server or Lowest.\n4. Tap connect and allow the VPN connection.\n5. If it does not connect, try another server and open Logs.'**
   String get documentationQuickStartBody;
 
   /// No description provided for @documentationWhatTitle.
   ///
   /// In en, this message translates to:
-  /// **'What Etonify is'**
+  /// **'About Etonify'**
   String get documentationWhatTitle;
 
   /// No description provided for @documentationWhatBody.
   ///
   /// In en, this message translates to:
-  /// **'Etonify is a sing-box VPN client for Android 8.0 and newer. It does not sell or provide servers: you obtain a subscription, profile, or individual key from your provider and add it yourself. Settings, subscriptions, and logs are stored on the device.'**
+  /// **'Etonify works on Android 8.0 and newer. It is a sing-box client, not a VPN service. Add a subscription or server from your provider. Settings, subscriptions, and logs stay on the device.'**
   String get documentationWhatBody;
 
   /// No description provided for @documentationModesTitle.
@@ -605,7 +617,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationModesBody.
   ///
   /// In en, this message translates to:
-  /// **'VPN TUN creates an Android system VPN and can handle traffic from apps on the phone.\n\nThe local HTTP/SOCKS proxy is for apps and devices where a proxy address is configured manually. By itself, it does not route all phone traffic or control per-app split tunneling.\n\nYou can also enable the local proxy while using VPN mode. LAN access requires the address, port, username, and password shown by Etonify.'**
+  /// **'VPN TUN routes app traffic through the Android system VPN.\n\nThe local HTTP/SOCKS proxy works only in apps configured to use its address. VPN and local proxy can run together. Enable LAN access for other devices on your network.'**
   String get documentationModesBody;
 
   /// No description provided for @documentationProtocolsTitle.
@@ -617,7 +629,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationProtocolsBody.
   ///
   /// In en, this message translates to:
-  /// **'Etonify imports links, QR codes, sing-box and Xray configurations, WireGuard files, and supported Happ links.\n\nMain protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, WireGuard, AnyTLS, Naive, HTTP, and SOCKS. A provider-specific extension may depend on the profile format and bundled core version. A successful import means the configuration was recognized, not that its server is reachable.'**
+  /// **'You can import links, QR codes, WireGuard files, and sing-box, Xray, or Happ configurations.\n\nSupported protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, WireGuard, AnyTLS, Naive, HTTP, and SOCKS. Import confirms the format, not server availability.'**
   String get documentationProtocolsBody;
 
   /// No description provided for @documentationChainsTitle.
@@ -629,7 +641,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationChainsBody.
   ///
   /// In en, this message translates to:
-  /// **'A chain uses a first proxy and then an exit proxy. Both nodes must work, and latency will usually increase.\n\nA chain is not automatic failover: if either node is unavailable, the complete chain stops working. Lowest checks and selects ordinary servers, but does not measure a chain as one route.'**
+  /// **'A chain routes traffic through a first proxy and an exit proxy. Both servers must work. Latency is usually higher. Chains do not provide automatic failover.'**
   String get documentationChainsBody;
 
   /// No description provided for @documentationSubscriptionsTitle.
@@ -641,19 +653,19 @@ abstract class AppLocalizations {
   /// No description provided for @documentationSubscriptionsBody.
   ///
   /// In en, this message translates to:
-  /// **'A profile keeps its name, subscription sources, servers, and last selected server together. One profile can contain several URLs; refresh keeps them inside that profile.\n\nAdd data from the clipboard, a file, a QR code, or manually. Automatic refresh updates subscription content on a schedule but does not start the VPN. If a source returns an empty response, HTML, or an HTTP error, Etonify reports the cause and keeps the previous working data.'**
+  /// **'A profile stores subscription sources, servers, and the last selection. Add data from the clipboard, a file, a QR code, or manually. Automatic refresh updates the subscription on schedule. Previous data stays available if an update fails.'**
   String get documentationSubscriptionsBody;
 
   /// No description provided for @documentationChecksTitle.
   ///
   /// In en, this message translates to:
-  /// **'Servers and URLTest'**
+  /// **'Server checks'**
   String get documentationChecksTitle;
 
   /// No description provided for @documentationChecksBody.
   ///
   /// In en, this message translates to:
-  /// **'URLTest makes an HTTP request through the proxy. It is not an ICMP ping, so the result includes proxy connection setup, TLS, and the test website response.\n\nThe check on the home screen targets the selected server. A full check in the server list updates entries as results arrive. Results may differ between Wi-Fi and mobile data. Lowest selects an available server with the best latest result. “No result” means the check has not returned a value yet or the previous result was cleared after a network change. A red warning icon means the check failed; the detailed cause remains in Logs.'**
+  /// **'URLTest sends an HTTP request through the server. It is not an ICMP ping. The result depends on the server, TLS, test website, and network.\n\nA dash means there is no result or it was cleared after a network change. A red warning icon means the check failed. Lowest selects an available server with the lowest delay.'**
   String get documentationChecksBody;
 
   /// No description provided for @documentationBackgroundTitle.
@@ -665,7 +677,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationBackgroundBody.
   ///
   /// In en, this message translates to:
-  /// **'While VPN is active, Android displays the Etonify service notification. It shows the server, latency, traffic, and a stop action. You can change the traffic view and refresh interval in General settings.\n\nTurning off the screen or closing the interface should not stop the VPN. However, force-stopping the app in Android settings prevents the service from starting until Etonify is opened manually. Firmware with aggressive battery management may require background activity and auto-start permission.'**
+  /// **'While VPN is active, Android shows a notification with the server, delay, traffic, and a stop action.\n\nClosing the interface does not stop the VPN. Force-stopping the app disables the service until Etonify is opened again. Some devices require background activity and auto-start permission.'**
   String get documentationBackgroundBody;
 
   /// No description provided for @documentationRoutingTitle.
@@ -677,7 +689,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationRoutingBody.
   ///
   /// In en, this message translates to:
-  /// **'Split tunneling works only in VPN TUN mode. “Via VPN” sends only selected apps into the tunnel. “Outside VPN” leaves selected apps on their direct connection. Android Always-on VPN with connection blocking can prevent direct access.\n\nMixed uses the Android system stack for TCP and gVisor for UDP. System uses Android for both TCP and UDP. gVisor handles both in userspace. There is no universally best choice: keep Mixed and change the stack only for a confirmed compatibility problem.'**
+  /// **'Split tunneling works in VPN TUN mode. Via VPN sends selected apps into the tunnel. Outside VPN leaves them on a direct connection.\n\nMixed uses Android for TCP and gVisor for UDP. System uses Android for TCP and UDP. gVisor handles both inside the client. Keep Mixed unless you have a compatibility problem.'**
   String get documentationRoutingBody;
 
   /// No description provided for @documentationTrafficRulesTitle.
@@ -689,7 +701,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationTrafficRulesBody.
   ///
   /// In en, this message translates to:
-  /// **'Traffic rules route domains and IP ranges inside the VPN—for example, Russian services directly and AI services through the proxy. Only one prepared preset can be active at a time.\n\nSplit tunneling and traffic rules are separate layers. Android first decides whether an app enters the TUN; the traffic rule then chooses a route for its connections. Prepared rule files work locally.'**
+  /// **'A preset chooses a direct or proxy route for domains and IP addresses. One preset can be active at a time.\n\nSplit tunneling first selects which apps enter the VPN. Traffic rules then select the route for their connections.'**
   String get documentationTrafficRulesBody;
 
   /// No description provided for @documentationDnsTitle.
@@ -701,7 +713,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationDnsBody.
   ///
   /// In en, this message translates to:
-  /// **'Etonify supports device DNS, UDP, TCP, DoT, and DoH. For ordinary DNS, enter an address such as 1.1.1.1 or 8.8.8.8 and select UDP or TCP. For hostname-based DoH and DoT, the client prepares bootstrap resolution.\n\nDirect DNS uses the direct route; Proxy DNS uses the selected proxy. These routes should match the traffic rules. FakeIP is an experimental option and may be incompatible with some apps.'**
+  /// **'Etonify supports device DNS, UDP, TCP, DoT, and DoH. Direct uses the regular connection. Via proxy uses the selected server.\n\nFakeIP is an experimental option and may not work with some apps.'**
   String get documentationDnsBody;
 
   /// No description provided for @documentationRuleFilesTitle.
@@ -713,7 +725,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationRuleFilesBody.
   ///
   /// In en, this message translates to:
-  /// **'Traffic presets use local .srs files containing domain and IP ranges. After preparation, they work offline. An update replaces files only after a successful download; the previous version remains available on failure.\n\nAd blocking uses a separate local AdGuard filter. Download, enable, and update it in Routing settings. Applying new files may require a VPN restart.'**
+  /// **'Traffic presets use local .srs files and work offline. A new version replaces the old one only after a successful download.\n\nAd blocking uses a separate AdGuard filter. Update files and the filter in Routing settings.'**
   String get documentationRuleFilesBody;
 
   /// No description provided for @documentationSecurityTitle.
@@ -725,19 +737,19 @@ abstract class AppLocalizations {
   /// No description provided for @documentationSecurityBody.
   ///
   /// In en, this message translates to:
-  /// **'By default, Etonify verifies TLS certificates for proxy servers and HTTPS subscriptions. Security settings let you disable verification separately for proxies and subscriptions.\n\nAllow untrusted certificates only for a known source: without verification, a self-signed, expired, or intercepted certificate cannot be distinguished safely. Disabling verification increases the risk of intercepted keys and traffic. Plain HTTP remote subscriptions are discouraged and restricted to local addresses.'**
+  /// **'Etonify verifies TLS certificates for servers and HTTPS subscriptions by default. Verification can be disabled separately for servers and subscriptions. Do this only for a trusted source. Otherwise, keys and traffic can be intercepted.'**
   String get documentationSecurityBody;
 
   /// No description provided for @documentationUpdatesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Updates and network route'**
+  /// **'Downloads and updates'**
   String get documentationUpdatesTitle;
 
   /// No description provided for @documentationUpdatesBody.
   ///
   /// In en, this message translates to:
-  /// **'Subscriptions, geo-resources, the ad-blocking filter, and client updates use an available network path. With an active VPN, Etonify uses a suitable tunnel path and falls back to the physical Wi-Fi or mobile network on failure. If another app owns the system VPN, requests follow that VPN\'s rules.\n\nDownloads have time and size limits. APK files are additionally verified before being handed to the Android system installer.'**
+  /// **'Subscriptions, geo-resources, the ad-blocking filter, and client updates first download through the active VPN. On failure, Etonify tries Wi-Fi or mobile data. If another VPN is active, its rules apply.\n\nDownloads have time and size limits. APK files are verified before installation.'**
   String get documentationUpdatesBody;
 
   /// No description provided for @documentationBackupTitle.
@@ -749,7 +761,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationBackupBody.
   ///
   /// In en, this message translates to:
-  /// **'Settings export stores client preferences without subscriptions or VPN keys. Subscription export stores profiles, servers, and selections.\n\nUse password-protected export: an unencrypted file contains access keys in plain text. A forgotten backup password cannot be recovered. Before a major update or reset, create a fresh encrypted backup and keep it separately from the phone.'**
+  /// **'Settings export does not include subscriptions or keys. Subscription export contains profiles and servers.\n\nProtect backups with a password. An unencrypted file stores keys in plain text. A forgotten password cannot be recovered.'**
   String get documentationBackupBody;
 
   /// No description provided for @documentationExperimentalTitle.
@@ -761,19 +773,19 @@ abstract class AppLocalizations {
   /// No description provided for @documentationExperimentalBody.
   ///
   /// In en, this message translates to:
-  /// **'FakeIP, TLS fragmentation, TCP Fast Open, TCP MultiPath, and multiplexing change network behavior and may not suit every network or configuration. They are not required for an ordinary subscription.\n\nChange one option at a time and test the same server on the same network. Do not guess SNI, ALPN, or QUIC values. If the connection becomes unstable, restore the changed option to its default.'**
+  /// **'FakeIP, TLS fragmentation, TCP Fast Open, TCP MultiPath, and multiplexing change network behavior. They are not required for a normal connection.\n\nChange one option at a time. Restore the default if the connection becomes worse.'**
   String get documentationExperimentalBody;
 
   /// No description provided for @documentationDiagnosticsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Resources, logs, and versions'**
+  /// **'Logs and resources'**
   String get documentationDiagnosticsTitle;
 
   /// No description provided for @documentationDiagnosticsBody.
   ///
   /// In en, this message translates to:
-  /// **'Resources and debugging show VPN service state, client and core versions, and process memory. PSS, RSS, Private Dirty, Swap, heap, code, and graphics are different memory views and must not be added together.\n\nRuntime measurement records memory and load over time. Logs include config build, core startup, network change, and URLTest events. Export them immediately after reproducing a problem and review the file before sharing it.'**
+  /// **'Resources and diagnostics show VPN status, versions, and process memory. PSS, RSS, Private Dirty, Swap, heap, code, and graphics must not be added together.\n\nExport logs immediately after an error. Check the file for private data before sharing it.'**
   String get documentationDiagnosticsBody;
 
   /// No description provided for @documentationLimitsTitle.
@@ -785,20 +797,8 @@ abstract class AppLocalizations {
   /// No description provided for @documentationLimitsBody.
   ///
   /// In en, this message translates to:
-  /// **'Etonify is released only for Android and does not include free VPN servers. Operation depends on the provider configuration, server availability, DNS, carrier, and device firmware.\n\nA successful URLTest does not guarantee access to every website because it checks one address. Large subscriptions, full checks of thousands of servers, and frequent updates temporarily increase memory, CPU, battery, and data use.'**
+  /// **'Etonify works only on Android and does not include VPN servers. Availability depends on the server, subscription, DNS, carrier, and device.\n\nURLTest checks one address and does not guarantee access to every website. Large subscriptions and full server checks temporarily increase memory, CPU, battery, and data use.'**
   String get documentationLimitsBody;
-
-  /// No description provided for @documentationSupportTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Need help?'**
-  String get documentationSupportTitle;
-
-  /// No description provided for @documentationSupportBody.
-  ///
-  /// In en, this message translates to:
-  /// **'1. Reproduce the problem while changing only one setting at a time.\n2. Record the connection mode, selected server, and network type.\n3. Include the device model, Android version, Etonify version, and core version.\n4. Describe the exact steps and expected result.\n5. Export logs immediately and remove private keys from the report.\n\nSend the report to the support chat: https://t.me/etonify?direct'**
-  String get documentationSupportBody;
 
   /// No description provided for @telegramChannelLabel.
   ///
@@ -1211,7 +1211,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Process memory, core state and tools for investigating problems.'**
+  /// **'Memory, core status, and diagnostics.'**
   String get diagnosticsSubtitle;
 
   /// No description provided for @aboutResourcesTitle.
@@ -1373,7 +1373,7 @@ abstract class AppLocalizations {
   /// No description provided for @updatesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Check GitHub Releases and download the matching APK.'**
+  /// **'Check for and install a new version.'**
   String get updatesSubtitle;
 
   /// No description provided for @updatesChecking.
@@ -2135,6 +2135,18 @@ abstract class AppLocalizations {
   /// **'Shows the selected server, speed, and latency while VPN is active.'**
   String get statusNotificationSubtitle;
 
+  /// No description provided for @notificationSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'VPN notification'**
+  String get notificationSettingsTitle;
+
+  /// No description provided for @notificationSettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server, traffic, latency, and refresh rate.'**
+  String get notificationSettingsSubtitle;
+
   /// No description provided for @notificationTrafficDisplayTitle.
   ///
   /// In en, this message translates to:
@@ -2302,6 +2314,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'TUN interface packet size'**
   String get mtuSubtitle;
+
+  /// No description provided for @mtuInputRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a value from 1280 to 9000.'**
+  String get mtuInputRange;
+
+  /// No description provided for @mtuInvalidValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a value from 1280 to 9000.'**
+  String get mtuInvalidValue;
 
   /// No description provided for @strictRouteTitle.
   ///
@@ -2476,6 +2500,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Additional HTTP/SOCKS endpoint for manually configured apps'**
   String get localProxySubtitle;
+
+  /// No description provided for @localProxySettingsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Address, port, and access credentials'**
+  String get localProxySettingsSubtitle;
 
   /// No description provided for @lanProxySecurityTitle.
   ///

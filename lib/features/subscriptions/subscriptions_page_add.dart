@@ -6,6 +6,7 @@ class _AddSubscriptionSheet extends StatefulWidget {
     required this.scrollController,
     required this.onClose,
     required this.onModeChanged,
+    required this.onHeaderDragStart,
     required this.onHeaderDragUpdate,
     required this.onHeaderDragEnd,
   });
@@ -14,6 +15,7 @@ class _AddSubscriptionSheet extends StatefulWidget {
   final ScrollController scrollController;
   final ValueChanged<bool> onClose;
   final ValueChanged<_AddSubscriptionSheetMode> onModeChanged;
+  final ValueChanged<DragStartDetails> onHeaderDragStart;
   final ValueChanged<DragUpdateDetails> onHeaderDragUpdate;
   final ValueChanged<DragEndDetails> onHeaderDragEnd;
 
@@ -330,8 +332,16 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final quickButtonHeight = ((constraints.maxWidth - 18 * 2 - 10 * 2) / 3)
-            .clamp(124.0, 132.0);
+        final quickButtonHeight = _addSubscriptionQuickButtonHeight(
+          constraints.maxWidth,
+        );
+        final quickContentHeight = _addSubscriptionQuickContentHeight(
+          availableWidth: constraints.maxWidth,
+          bottomPadding: bottomPadding,
+        );
+        final contentCanScroll =
+            _mode == _AddSubscriptionSheetMode.manual ||
+            quickContentHeight > constraints.maxHeight + .5;
         return PopScope(
           canPop: _mode == _AddSubscriptionSheetMode.quick || _busy,
           onPopInvokedWithResult: (didPop, result) {
@@ -347,6 +357,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             children: [
               SingleChildScrollView(
                 controller: widget.scrollController,
+                physics: contentCanScroll
+                    ? const ClampingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   18,
                   _kAddSubscriptionSheetHeaderHeight + 8,
@@ -447,6 +460,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                 alignment: Alignment.topCenter,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
+                  onVerticalDragStart: widget.onHeaderDragStart,
                   onVerticalDragUpdate: widget.onHeaderDragUpdate,
                   onVerticalDragEnd: widget.onHeaderDragEnd,
                   child: SizedBox(
@@ -465,19 +479,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                         ),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
+                        padding: const EdgeInsets.fromLTRB(16, 10, 8, 12),
                         child: Column(
                           children: [
-                            Container(
-                              width: 48,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                color: cs.onSurfaceVariant.withValues(
-                                  alpha: .38,
-                                ),
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
+                            const AppBottomSheetDragHandle(),
                             const Gap(14),
                             Row(
                               children: [

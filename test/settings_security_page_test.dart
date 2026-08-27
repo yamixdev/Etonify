@@ -91,4 +91,23 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('risk explanations are shown only in confirmation dialogs', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_securityApp());
+
+    final switches = tester.widgetList<SwitchListTile>(
+      find.byType(SwitchListTile),
+    );
+    expect(switches, hasLength(2));
+    expect(switches.every((tile) => tile.subtitle == null), isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('security-untrusted-proxy-certificates')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Allow untrusted proxy certificates?'), findsOneWidget);
+  });
 }

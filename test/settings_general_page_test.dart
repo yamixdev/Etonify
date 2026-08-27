@@ -25,9 +25,6 @@ Widget _generalSettingsApp({
       currentNotificationTrafficDisplayMode: trafficDisplayMode,
       currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
-      currentMemoryLimitEnabled: true,
-      currentMemoryLimitWarningDismissed: false,
-      currentUpdateInstallMode: AppUpdateInstallMode.ask,
       onLocaleChanged: (_) {},
       onThemePreferenceChanged: (_) {},
       onAccentColorChanged: (_) {},
@@ -38,10 +35,16 @@ Widget _generalSettingsApp({
       onNotificationTrafficRefreshSecondsChanged:
           onTrafficRefreshChanged ?? (_) {},
       onHideServerIpChanged: (_) {},
-      onMemoryLimitChanged: (_, {warningDismissed = false}) {},
-      onUpdateInstallModeChanged: (_) {},
     ),
   );
+}
+
+Future<void> _openNotificationSettings(WidgetTester tester) async {
+  final entry = find.byKey(const ValueKey('notification-settings-entry'));
+  await tester.ensureVisible(entry);
+  await tester.pumpAndSettle();
+  await tester.tap(entry);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -49,12 +52,49 @@ void main() {
     'notification-traffic-display-setting',
   );
 
+  testWidgets('general settings shows one notification entry and no OTA mode', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _generalSettingsApp(statusNotificationEnabled: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('notification-settings-entry')),
+      findsOneWidget,
+    );
+    expect(find.text('Update installation'), findsNothing);
+  });
+
+  testWidgets('soft core memory limit is not shown in general settings', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _generalSettingsApp(statusNotificationEnabled: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Soft core memory limit'), findsNothing);
+  });
+
   testWidgets(
     'notification display setting remains visible but disabled with status off',
     (tester) async {
       await tester.pumpWidget(
         _generalSettingsApp(statusNotificationEnabled: false),
       );
+      await _openNotificationSettings(tester);
       await tester.scrollUntilVisible(
         find.byKey(trafficDisplaySetting),
         240,
@@ -76,6 +116,7 @@ void main() {
         onTrafficDisplayChanged: (value) => selected = value,
       ),
     );
+    await _openNotificationSettings(tester);
 
     await tester.scrollUntilVisible(
       find.byKey(trafficDisplaySetting),
@@ -109,6 +150,7 @@ void main() {
           trafficDisplayMode: NotificationTrafficDisplayMode.both,
         ),
       );
+      await _openNotificationSettings(tester);
       await tester.scrollUntilVisible(
         find.byKey(trafficDisplaySetting),
         240,
@@ -130,6 +172,7 @@ void main() {
       await tester.pumpWidget(
         _generalSettingsApp(statusNotificationEnabled: false),
       );
+      await _openNotificationSettings(tester);
 
       final slider = tester.widget<Slider>(find.byType(Slider));
       expect(slider.min, 1);
@@ -149,6 +192,7 @@ void main() {
         onTrafficRefreshChanged: (value) => selected = value,
       ),
     );
+    await _openNotificationSettings(tester);
 
     final slider = tester.widget<Slider>(find.byType(Slider));
     slider.onChanged!(7);

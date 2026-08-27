@@ -45,6 +45,7 @@ void main() {
     final quickSheetTop = tester
         .getTopLeft(find.byKey(const ValueKey('subscriptions_sheet_clip')))
         .dy;
+    final quickContentTop = tester.getTopLeft(find.text('Manual')).dy;
 
     await tester.drag(find.text('Manual'), const Offset(0, -320));
     await _pumpUi(tester, const Duration(milliseconds: 320));
@@ -55,6 +56,7 @@ void main() {
           .dy,
       closeTo(quickSheetTop, .1),
     );
+    expect(tester.getTopLeft(find.text('Manual')).dy, quickContentTop);
 
     await tester.tap(find.text('Manual'));
     await _pumpUi(tester, const Duration(milliseconds: 420));
@@ -76,6 +78,81 @@ void main() {
     await tester.drag(find.text('Add profile'), const Offset(0, 420));
     await _pumpUi(tester, const Duration(milliseconds: 400));
     expect(find.text('Add profile'), findsNothing);
+  });
+
+  testWidgets('one subscription keeps the compact sheet extent', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => SubscriptionStore.save(
+        Subscription(
+          id: 'only-subscription',
+          name: 'Only profile',
+          url: 'https://example.com/only',
+          lastUpdated: DateTime(2026, 8, 27).millisecondsSinceEpoch,
+          outbounds: const [
+            Outbound(
+              tag: 'only-proxy',
+              name: 'Only proxy',
+              config: {'type': 'vless'},
+            ),
+          ],
+          cachedVisibleProxyCount: 1,
+        ),
+      ),
+    );
+    await _openSheet(tester, activeSubscriptionId: 'only-subscription');
+    await _pumpUntilFound(tester, find.text('Only profile'));
+    await _pumpUi(tester);
+
+    final sheet = find.byKey(const ValueKey('subscriptions_sheet_clip'));
+    final initialTop = tester.getTopLeft(sheet).dy;
+
+    await tester.drag(find.text('Subscriptions'), const Offset(0, -420));
+    await _pumpUi(tester);
+
+    expect(tester.getTopLeft(sheet).dy, closeTo(initialTop, .1));
+  });
+
+  testWidgets('subscriptions grow to content before enabling list scrolling', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      for (var index = 0; index < 3; index++) {
+        await SubscriptionStore.save(
+          Subscription(
+            id: 'compact-$index',
+            name: 'Compact profile $index',
+            url: 'https://example.com/compact-$index',
+            lastUpdated: DateTime(2026, 8, 27).millisecondsSinceEpoch,
+            outbounds: [
+              Outbound(
+                tag: 'compact-proxy-$index',
+                name: 'Compact proxy $index',
+                config: const {'type': 'vless'},
+              ),
+            ],
+            cachedVisibleProxyCount: 1,
+          ),
+        );
+      }
+    });
+    await _openSheet(tester, activeSubscriptionId: 'compact-0');
+    await _pumpUntilFound(tester, find.text('Compact profile 2'));
+    await _pumpUi(tester);
+
+    final sheet = find.byKey(const ValueKey('subscriptions_sheet_clip'));
+    final sheetTop = tester.getTopLeft(sheet).dy;
+    final firstCardTop = tester.getTopLeft(find.text('Compact profile 0')).dy;
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -260));
+    await _pumpUi(tester);
+
+    expect(tester.getTopLeft(sheet).dy, closeTo(sheetTop, .1));
+    expect(
+      tester.getTopLeft(find.text('Compact profile 0')).dy,
+      closeTo(firstCardTop, .1),
+    );
   });
 
   testWidgets(
@@ -131,6 +208,8 @@ void main() {
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -360));
       await _pumpUi(tester, const Duration(milliseconds: 80));
       expect(tester.getTopLeft(find.text('Subscriptions')).dy, headerTop);
+      expect(find.text('FurkVPN'), findsNothing);
+      expect(find.text('Profile 7'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.sort_rounded));
       await tester.pump();
       expect(find.text('By name'), findsOneWidget);

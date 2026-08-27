@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
-import 'package:meow_client/features/legal/legal_consent_page.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/features/settings/developer_profile_sheet.dart';
 import 'package:meow_client/features/settings/settings_documentation_page.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
@@ -23,19 +24,24 @@ class SettingsAboutPage extends StatefulWidget {
     super.key,
     required this.versionLabel,
     required this.onShowOnboarding,
+    this.updateInstallMode = AppUpdateInstallMode.ask,
+    this.updateChannel = AppUpdateChannel.stable,
+    this.onUpdateInstallModeChanged,
+    this.onUpdateChannelChanged,
     this.readCoreIntegrationDiagnostics,
     this.loadCoreCapabilities,
     this.readRuntimeStatus,
   });
 
-  static final Uri _coreSourceUri = Uri.parse(
-    'https://github.com/yamixdev/etonify-core/tree/etonify-dev',
-  );
   static final Uri _telegramUri = Uri.parse('https://t.me/etonify');
   static final Uri _contactUri = Uri.parse('https://t.me/etonify?direct');
 
   final String versionLabel;
   final VoidCallback onShowOnboarding;
+  final AppUpdateInstallMode updateInstallMode;
+  final AppUpdateChannel updateChannel;
+  final ValueChanged<AppUpdateInstallMode>? onUpdateInstallModeChanged;
+  final ValueChanged<AppUpdateChannel>? onUpdateChannelChanged;
   final CoreIntegrationDiagnosticsSnapshot Function()?
   readCoreIntegrationDiagnostics;
   final Future<LibboxCapabilities> Function()? loadCoreCapabilities;
@@ -46,20 +52,6 @@ class SettingsAboutPage extends StatefulWidget {
 }
 
 class _SettingsAboutPageState extends State<SettingsAboutPage> {
-  String? _coreVersion;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCoreVersion();
-  }
-
-  Future<void> _loadCoreVersion() async {
-    final version = await SingboxRuntime.instance.getCoreVersion();
-    if (!mounted) return;
-    setState(() => _coreVersion = version);
-  }
-
   Future<void> _openUri(Uri uri) async {
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
@@ -76,8 +68,13 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
   void _openUpdatePage() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (context) =>
-            SettingsUpdatePage(currentVersion: widget.versionLabel),
+        builder: (context) => SettingsUpdatePage(
+          currentVersion: widget.versionLabel,
+          installMode: widget.updateInstallMode,
+          updateChannel: widget.updateChannel,
+          onInstallModeChanged: widget.onUpdateInstallModeChanged,
+          onUpdateChannelChanged: widget.onUpdateChannelChanged,
+        ),
       ),
     );
   }
@@ -103,18 +100,6 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
     );
   }
 
-  void _openLegalDocument({required bool privacy}) {
-    final l10n = AppLocalizations.of(context);
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (context) => LegalDocumentPage(
-          title: privacy ? l10n.legalPrivacyTitle : l10n.legalTermsTitle,
-          body: privacy ? l10n.legalPrivacyBody : l10n.legalTermsBody,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -136,24 +121,19 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
               children: [
                 _AboutInfoCard(
                   versionLabel: widget.versionLabel,
-                  coreVersion: _coreVersion,
-                  onOpenCoreSource: () =>
-                      _openUri(SettingsAboutPage._coreSourceUri),
                   onOpenTelegram: () =>
                       _openUri(SettingsAboutPage._telegramUri),
                   onOpenContact: () => _openUri(SettingsAboutPage._contactUri),
-                  onOpenTerms: () => _openLegalDocument(privacy: false),
-                  onOpenPrivacy: () => _openLegalDocument(privacy: true),
                   onOpenTeam: _openTeamPage,
                 ),
+                const Gap(12),
+                _AboutUpdatesCard(onOpenUpdates: _openUpdatePage),
                 const Gap(12),
                 _AboutDocumentationCard(
                   onOpenDocumentation: _openDocumentationPage,
                 ),
                 const Gap(12),
                 _AboutDiagnosticsCard(onOpenDiagnostics: _openDiagnosticsPage),
-                const Gap(12),
-                _AboutUpdatesCard(onOpenUpdates: _openUpdatePage),
               ],
             ),
           ),
@@ -490,97 +470,117 @@ class _CoreIntegrationCard extends StatelessWidget {
 class _AboutInfoCard extends StatelessWidget {
   const _AboutInfoCard({
     required this.versionLabel,
-    required this.coreVersion,
-    required this.onOpenCoreSource,
     required this.onOpenTelegram,
     required this.onOpenContact,
-    required this.onOpenTerms,
-    required this.onOpenPrivacy,
     required this.onOpenTeam,
   });
 
   final String versionLabel;
-  final String? coreVersion;
-  final VoidCallback onOpenCoreSource;
   final VoidCallback onOpenTelegram;
   final VoidCallback onOpenContact;
-  final VoidCallback onOpenTerms;
-  final VoidCallback onOpenPrivacy;
   final VoidCallback onOpenTeam;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final cs = theme.colorScheme;
-
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            child: Text(
               'Etonify',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0,
               ),
             ),
-            const Gap(14),
-            _AboutInfoRow(label: l10n.appVersionLabel, value: versionLabel),
-            const Gap(8),
-            _AboutInfoRow(
-              label: l10n.coreVersionLabel,
-              value: coreVersion ?? l10n.loading,
-            ),
-            const Gap(16),
-            Text(
-              l10n.aboutDevelopedBy,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-                height: 1.4,
+          ),
+          const Divider(height: 1),
+          _AboutOverviewRow(label: l10n.appVersionLabel, value: versionLabel),
+          const Divider(height: 1, indent: 18, endIndent: 18),
+          _AboutOverviewRow(
+            label: l10n.telegramChannelLabel,
+            value: '@etonify',
+            trailingIcon: Icons.open_in_new_rounded,
+            onTap: onOpenTelegram,
+          ),
+          const Divider(height: 1, indent: 18, endIndent: 18),
+          _AboutOverviewRow(
+            label: l10n.aboutTeamLabel,
+            value: 'MeowTeam',
+            trailingIcon: Icons.chevron_right_rounded,
+            onTap: onOpenTeam,
+          ),
+          const Divider(height: 1, indent: 18, endIndent: 18),
+          _AboutOverviewRow(
+            label: l10n.aboutContactLabel,
+            trailingIcon: Icons.forum_outlined,
+            onTap: onOpenContact,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AboutOverviewRow extends StatelessWidget {
+  const _AboutOverviewRow({
+    required this.label,
+    this.value,
+    this.trailingIcon,
+    this.onTap,
+  });
+
+  final String label;
+  final String? value;
+  final IconData? trailingIcon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 58),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ),
-            ),
-            const Gap(10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _AboutActionChip(
-                  icon: Icons.groups_rounded,
-                  label: 'MeowTeam',
-                  onTap: onOpenTeam,
-                ),
-                _AboutActionChip(
-                  icon: Icons.code_rounded,
-                  label: 'yamixdev/etonify-core',
-                  onTap: onOpenCoreSource,
-                ),
-                _AboutActionChip(
-                  icon: Icons.send_rounded,
-                  label: l10n.telegramChannelLabel,
-                  onTap: onOpenTelegram,
-                ),
-                _AboutActionChip(
-                  icon: Icons.forum_rounded,
-                  label: l10n.aboutContactLabel,
-                  onTap: onOpenContact,
-                ),
-                _AboutActionChip(
-                  icon: Icons.description_rounded,
-                  label: l10n.legalTermsTitle,
-                  onTap: onOpenTerms,
-                ),
-                _AboutActionChip(
-                  icon: Icons.privacy_tip_rounded,
-                  label: l10n.legalPrivacyTitle,
-                  onTap: onOpenPrivacy,
+              if (value != null) ...[
+                const Gap(12),
+                Flexible(
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
-            ),
-          ],
+              if (trailingIcon != null) ...[
+                const Gap(8),
+                Icon(trailingIcon, size: 20, color: colors.onSurfaceVariant),
+              ],
+            ],
+          ),
         ),
       ),
     );

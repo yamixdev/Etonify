@@ -57,9 +57,11 @@ class SettingsInboundPage extends StatefulWidget {
 }
 
 class _SettingsInboundPageState extends State<SettingsInboundPage> {
-  static const _mtuOptions = <int>[1280, 1400, 1450, 1500, 3400, 9000];
+  static const _minimumMtu = 1280;
+  static const _maximumMtu = 9000;
   late final TextEditingController _portController;
   late InboundConnectionMode _connectionMode;
+  late int _vpnMtu;
   late bool _proxyEnabled;
   late bool _proxyAllowLan;
   late String _proxyUsername;
@@ -75,6 +77,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     _connectionMode = widget.currentVpnInboundEnabled
         ? InboundConnectionMode.vpn
         : InboundConnectionMode.proxy;
+    _vpnMtu = widget.currentVpnMtu;
     _proxyEnabled = widget.currentProxyInboundEnabled;
     _proxyAllowLan = widget.currentProxyAllowLan;
     _proxyUsername = normalizeProxyUsername(widget.currentProxyUsername);
@@ -93,6 +96,9 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     _connectionMode = widget.currentVpnInboundEnabled
         ? InboundConnectionMode.vpn
         : InboundConnectionMode.proxy;
+    if (widget.currentVpnMtu != oldWidget.currentVpnMtu) {
+      _vpnMtu = widget.currentVpnMtu;
+    }
     _proxyEnabled = widget.currentProxyInboundEnabled;
     _proxyAllowLan = widget.currentProxyAllowLan;
     if (widget.currentProxyUsername != oldWidget.currentProxyUsername &&
@@ -139,22 +145,65 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     };
   }
 
-  Future<void> _showMtuPicker(BuildContext context) async {
+  bool _isValidMtu(String value) {
+    final mtu = int.tryParse(value.trim());
+    return mtu != null && mtu >= _minimumMtu && mtu <= _maximumMtu;
+  }
+
+  Future<void> _showMtuEditor(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
-    final result = await showModalBottomSheet<int>(
+    var draft = _vpnMtu.toString();
+    var showError = false;
+    final result = await showDialog<int>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => _RadioSheet<int>(
-        title: l10n.mtuTitle,
-        current: widget.currentVpnMtu,
-        items: _mtuOptions
-            .map((value) => _RadioItem(value: value, label: value.toString()))
-            .toList(growable: false),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          void submit() {
+            if (!_isValidMtu(draft)) {
+              setDialogState(() => showError = true);
+              return;
+            }
+            Navigator.of(dialogContext).pop(int.parse(draft.trim()));
+          }
+
+          return AlertDialog(
+            title: Text(l10n.mtuTitle),
+            content: TextFormField(
+              key: const ValueKey('vpn-mtu-input'),
+              initialValue: draft,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: l10n.mtuTitle,
+                helperText: l10n.mtuInputRange,
+                errorText: showError ? l10n.mtuInvalidValue : null,
+              ),
+              onChanged: (value) {
+                draft = value;
+                if (showError) {
+                  setDialogState(() => showError = false);
+                }
+              },
+              onFieldSubmitted: (_) => submit(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(onPressed: submit, child: Text(l10n.saveAction)),
+            ],
+          );
+        },
       ),
     );
-    if (result != null) {
-      widget.onVpnMtuChanged(result);
+    if (!mounted || result == null || result == _vpnMtu) {
+      return;
     }
+    setState(() => _vpnMtu = result);
+    widget.onVpnMtuChanged(result);
   }
 
   Future<void> _showTunImplementationPicker(BuildContext context) async {
@@ -360,14 +409,15 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
         subtitle: Text(l10n.advancedTunSubtitle),
         children: [
           ListTile(
+            key: const ValueKey('vpn-mtu-setting'),
             leading: SettingsLeadingIcon(
               icon: Icons.swap_vert_rounded,
               color: colors.primary,
             ),
             title: Text(l10n.mtuTitle),
-            subtitle: Text('${widget.currentVpnMtu} • ${l10n.mtuSubtitle}'),
+            subtitle: Text('$_vpnMtu • ${l10n.mtuSubtitle}'),
             trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _showMtuPicker(context),
+            onTap: () => _showMtuEditor(context),
           ),
           SwitchListTile(
             secondary: SettingsLeadingIcon(
@@ -435,7 +485,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
                 color: colors.primary,
               ),
               title: Text(l10n.localProxyTitle),
-              subtitle: Text(l10n.connectionModeProxySubtitle),
+              subtitle: Text(l10n.localProxySettingsSubtitle),
             ),
           AnimatedSize(
             duration: const Duration(milliseconds: 220),
@@ -617,65 +667,6 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     );
   }
 
-  Widget _buildActiveModeStatus(
-    BuildContext context,
-    AppLocalizations l10n,
-    ColorScheme colors,
-  ) {
-    final vpnActive = _connectionMode == InboundConnectionMode.vpn;
-    final label = l10n.connectionModeActiveStatus(
-      vpnActive
-          ? l10n.connectionModeVpnStatusName
-          : l10n.connectionModeProxyStatusName,
-    );
-
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      label: label,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          layoutBuilder: (currentChild, previousChildren) => Stack(
-            alignment: Alignment.centerLeft,
-            children: [...previousChildren, ?currentChild],
-          ),
-          child: DecoratedBox(
-            key: ValueKey(_connectionMode),
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    vpnActive ? Icons.shield_rounded : Icons.lan_rounded,
-                    size: 18,
-                    color: colors.onPrimaryContainer,
-                  ),
-                  const Gap(8),
-                  Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: colors.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -693,11 +684,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
             appBottomSafePadding(context, settingsScreenPadding.bottom),
           ),
           children: [
-            _buildActiveModeStatus(context, l10n, colors),
-            const Gap(settingsSectionGap),
             _SectionLabel(label: l10n.connectionModeTitle),
-            const Gap(settingsSectionLabelGap),
-            _SectionDescription(label: l10n.connectionModeSubtitle),
             const Gap(settingsSectionLabelGap),
             Card(
               margin: EdgeInsets.zero,
@@ -789,26 +776,6 @@ class _SectionLabel extends StatelessWidget {
       child: Text(
         label,
         style: theme.textTheme.titleSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionDescription extends StatelessWidget {
-  const _SectionDescription({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(
-        label,
-        style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),

@@ -13,6 +13,7 @@ class _SubscriptionsSheetHeader extends StatelessWidget {
     required this.onDeleteSelected,
     required this.onClearSelection,
     required this.onClose,
+    required this.onVerticalDragStart,
     required this.onVerticalDragUpdate,
     required this.onVerticalDragEnd,
   });
@@ -28,6 +29,7 @@ class _SubscriptionsSheetHeader extends StatelessWidget {
   final VoidCallback onDeleteSelected;
   final VoidCallback onClearSelection;
   final VoidCallback onClose;
+  final ValueChanged<DragStartDetails> onVerticalDragStart;
   final ValueChanged<DragUpdateDetails> onVerticalDragUpdate;
   final ValueChanged<DragEndDetails> onVerticalDragEnd;
 
@@ -37,6 +39,7 @@ class _SubscriptionsSheetHeader extends StatelessWidget {
     final cs = theme.colorScheme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: onVerticalDragStart,
       onVerticalDragUpdate: onVerticalDragUpdate,
       onVerticalDragEnd: onVerticalDragEnd,
       child: SizedBox(
@@ -55,17 +58,10 @@ class _SubscriptionsSheetHeader extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 8, 12),
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 12),
             child: Column(
               children: [
-                Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: cs.onSurfaceVariant.withValues(alpha: .34),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
+                const AppBottomSheetDragHandle(),
                 const Gap(12),
                 Row(
                   children: [

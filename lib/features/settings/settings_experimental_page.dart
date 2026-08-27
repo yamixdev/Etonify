@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -15,12 +17,15 @@ class SettingsExperimentalPage extends StatelessWidget {
     required this.currentFakeIpEnabled,
     required this.fakeIpAvailable,
     required this.currentTlsFragmentationMode,
+    required this.currentMemoryLimitEnabled,
+    required this.currentMemoryLimitWarningDismissed,
     required this.onTcpFastOpenChanged,
     required this.onTcpMultiPathChanged,
     required this.onInterruptExistingConnectionsChanged,
     required this.onUrlTestStrictToleranceChanged,
     required this.onFakeIpEnabledChanged,
     required this.onTlsFragmentationModeChanged,
+    required this.onMemoryLimitChanged,
   });
 
   final bool currentTcpFastOpen;
@@ -30,12 +35,15 @@ class SettingsExperimentalPage extends StatelessWidget {
   final bool currentFakeIpEnabled;
   final bool fakeIpAvailable;
   final TlsFragmentationMode currentTlsFragmentationMode;
+  final bool currentMemoryLimitEnabled;
+  final bool currentMemoryLimitWarningDismissed;
   final ValueChanged<bool> onTcpFastOpenChanged;
   final ValueChanged<bool> onTcpMultiPathChanged;
   final ValueChanged<bool> onInterruptExistingConnectionsChanged;
   final ValueChanged<bool> onUrlTestStrictToleranceChanged;
   final ValueChanged<bool> onFakeIpEnabledChanged;
   final ValueChanged<TlsFragmentationMode> onTlsFragmentationModeChanged;
+  final void Function(bool value, {bool warningDismissed}) onMemoryLimitChanged;
 
   String _tlsFragmentationModeLabel(
     AppLocalizations l10n,
@@ -92,6 +100,34 @@ class SettingsExperimentalPage extends StatelessWidget {
     );
     if (result != null) {
       onTlsFragmentationModeChanged(result);
+    }
+  }
+
+  Future<void> _setMemoryLimitEnabled(BuildContext context, bool value) async {
+    final l10n = AppLocalizations.of(context);
+    if (value || currentMemoryLimitWarningDismissed) {
+      onMemoryLimitChanged(value);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.memoryLimitDisableWarningTitle),
+        content: Text(l10n.memoryLimitDisableWarningMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.memoryLimitDisableConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      onMemoryLimitChanged(false, warningDismissed: true);
     }
   }
 
@@ -194,6 +230,21 @@ class SettingsExperimentalPage extends StatelessWidget {
                     ),
                     value: currentUrlTestStrictTolerance,
                     onChanged: onUrlTestStrictToleranceChanged,
+                  ),
+                  SwitchListTile(
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.memory_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.memoryLimitTitle),
+                    subtitle: Text(
+                      currentMemoryLimitEnabled
+                          ? l10n.memoryLimitEnabledSubtitle
+                          : l10n.memoryLimitDisabledSubtitle,
+                    ),
+                    value: currentMemoryLimitEnabled,
+                    onChanged: (value) =>
+                        unawaited(_setMemoryLimitEnabled(context, value)),
                   ),
                 ],
               ),

@@ -1013,6 +1013,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                               decoration: InputDecoration(
                                 labelText: l10n.customUserAgentTitle,
                                 helperText: l10n.customUserAgentSubtitle,
+                                helperMaxLines: 3,
                                 hintText: SubscriptionFetcher.defaultUserAgent,
                               ),
                             ),
@@ -1034,6 +1035,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                               decoration: InputDecoration(
                                 labelText: l10n.customRequestHeadersTitle,
                                 helperText: l10n.customRequestHeadersSubtitle,
+                                helperMaxLines: 3,
                                 hintText:
                                     'Authorization: Bearer ...\nX-Token: ...',
                               ),

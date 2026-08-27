@@ -17,24 +17,24 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = theme.scaffoldBackgroundColor;
+    final maskGradient = LinearGradient(
+      colors: [
+        color,
+        color.withValues(alpha: .98),
+        color.withValues(alpha: .84),
+        Colors.transparent,
+      ],
+      stops: const [0, .58, .86, 1],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
     if (!enabled) {
       return ClipRRect(
         borderRadius: BorderRadius.vertical(top: Radius.circular(cornerRadius)),
         child: SizedBox(
           height: height,
           child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  color.withValues(alpha: .36),
-                  color.withValues(alpha: .22),
-                  Colors.transparent,
-                ],
-                stops: const [0, 1, 1],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+            decoration: BoxDecoration(gradient: maskGradient),
             child: child,
           ),
         ),
@@ -61,18 +61,7 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
               Positioned.fill(
                 child: IgnorePointer(
                   child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          color.withValues(alpha: enabled ? .54 : .36),
-                          color.withValues(alpha: enabled ? .32 : .22),
-                          Colors.transparent,
-                        ],
-                        stops: const [0, 1, 1],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
+                    decoration: BoxDecoration(gradient: maskGradient),
                   ),
                 ),
               ),
@@ -179,16 +168,7 @@ class _ProxySheetHeader extends StatelessWidget {
                 alignment: Alignment.topCenter,
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  child: Container(
-                    width: 38,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(
-                        alpha: .34,
-                      ),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
+                  child: const AppBottomSheetDragHandle(),
                 ),
               ),
             if (activeProxy != null)
@@ -581,12 +561,16 @@ class _ProxyListDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 14),
-      child: Container(
-        height: 1,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: .5),
-          borderRadius: BorderRadius.circular(999),
+      key: const ValueKey('proxy-list-divider'),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Align(
+        alignment: Alignment.center,
+        child: Container(
+          height: 1,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: .5),
+            borderRadius: BorderRadius.circular(999),
+          ),
         ),
       ),
     );

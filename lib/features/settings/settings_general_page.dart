@@ -1,8 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/features/settings/settings_notification_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
@@ -67,9 +66,6 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentNotificationTrafficDisplayMode,
     required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
-    required this.currentMemoryLimitEnabled,
-    required this.currentMemoryLimitWarningDismissed,
-    required this.currentUpdateInstallMode,
     required this.onLocaleChanged,
     required this.onThemePreferenceChanged,
     required this.onAccentColorChanged,
@@ -78,8 +74,6 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.onNotificationTrafficDisplayModeChanged,
     required this.onNotificationTrafficRefreshSecondsChanged,
     required this.onHideServerIpChanged,
-    required this.onMemoryLimitChanged,
-    required this.onUpdateInstallModeChanged,
   });
 
   final String currentLocaleCode;
@@ -91,9 +85,6 @@ class SettingsGeneralPage extends StatelessWidget {
   final NotificationTrafficDisplayMode currentNotificationTrafficDisplayMode;
   final int currentNotificationTrafficRefreshSeconds;
   final bool currentHideServerIp;
-  final bool currentMemoryLimitEnabled;
-  final bool currentMemoryLimitWarningDismissed;
-  final AppUpdateInstallMode currentUpdateInstallMode;
   final ValueChanged<String> onLocaleChanged;
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final ValueChanged<String> onAccentColorChanged;
@@ -103,8 +94,6 @@ class SettingsGeneralPage extends StatelessWidget {
   onNotificationTrafficDisplayModeChanged;
   final ValueChanged<int> onNotificationTrafficRefreshSecondsChanged;
   final ValueChanged<bool> onHideServerIpChanged;
-  final void Function(bool value, {bool warningDismissed}) onMemoryLimitChanged;
-  final ValueChanged<AppUpdateInstallMode> onUpdateInstallModeChanged;
 
   String _localeName(AppLocalizations l10n, String code) => switch (code) {
     'en' => l10n.languageEnglish,
@@ -128,113 +117,6 @@ class SettingsGeneralPage extends StatelessWidget {
       ),
     );
     if (result != null) onLocaleChanged(result);
-  }
-
-  Future<void> _showUpdateInstallModePicker(BuildContext context) async {
-    final l10n = AppLocalizations.of(context);
-    final result = await showModalBottomSheet<AppUpdateInstallMode>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => _RadioSheet<AppUpdateInstallMode>(
-        title: l10n.updatesInstallModeTitle,
-        current: currentUpdateInstallMode,
-        items: [
-          _RadioItem(
-            value: AppUpdateInstallMode.ask,
-            label: l10n.updatesInstallModeAsk,
-            subtitle: l10n.updatesInstallModeAskSubtitle,
-          ),
-          _RadioItem(
-            value: AppUpdateInstallMode.manual,
-            label: l10n.updatesInstallModeManual,
-            subtitle: l10n.updatesInstallModeManualSubtitle,
-          ),
-          _RadioItem(
-            value: AppUpdateInstallMode.auto,
-            label: l10n.updatesInstallModeAuto,
-            subtitle: l10n.updatesInstallModeAutoSubtitle,
-          ),
-        ],
-      ),
-    );
-    if (result != null) onUpdateInstallModeChanged(result);
-  }
-
-  String _updateInstallModeName(
-    AppLocalizations l10n,
-    AppUpdateInstallMode mode,
-  ) => switch (mode) {
-    AppUpdateInstallMode.ask => l10n.updatesInstallModeAsk,
-    AppUpdateInstallMode.manual => l10n.updatesInstallModeManual,
-    AppUpdateInstallMode.auto => l10n.updatesInstallModeAuto,
-  };
-
-  String _notificationTrafficDisplayModeName(
-    AppLocalizations l10n,
-    NotificationTrafficDisplayMode value,
-  ) => switch (value) {
-    NotificationTrafficDisplayMode.speed =>
-      l10n.notificationTrafficDisplaySpeed,
-    NotificationTrafficDisplayMode.total =>
-      l10n.notificationTrafficDisplayTotal,
-    NotificationTrafficDisplayMode.both => l10n.notificationTrafficDisplayBoth,
-  };
-
-  Future<void> _showNotificationTrafficDisplayPicker(
-    BuildContext context,
-  ) async {
-    final l10n = AppLocalizations.of(context);
-    final result = await showModalBottomSheet<NotificationTrafficDisplayMode>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => _RadioSheet<NotificationTrafficDisplayMode>(
-        title: l10n.notificationTrafficDisplayTitle,
-        current: currentNotificationTrafficDisplayMode,
-        items: [
-          _RadioItem(
-            value: NotificationTrafficDisplayMode.speed,
-            label: l10n.notificationTrafficDisplaySpeed,
-          ),
-          _RadioItem(
-            value: NotificationTrafficDisplayMode.total,
-            label: l10n.notificationTrafficDisplayTotal,
-          ),
-          _RadioItem(
-            value: NotificationTrafficDisplayMode.both,
-            label: l10n.notificationTrafficDisplayBoth,
-          ),
-        ],
-      ),
-    );
-    if (result != null) onNotificationTrafficDisplayModeChanged(result);
-  }
-
-  Future<void> _setMemoryLimitEnabled(BuildContext context, bool value) async {
-    final l10n = AppLocalizations.of(context);
-    if (value || currentMemoryLimitWarningDismissed) {
-      onMemoryLimitChanged(value);
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.memoryLimitDisableWarningTitle),
-        content: Text(l10n.memoryLimitDisableWarningMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.memoryLimitDisableConfirm),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      onMemoryLimitChanged(false, warningDismissed: true);
-    }
   }
 
   @override
@@ -368,155 +250,37 @@ class SettingsGeneralPage extends StatelessWidget {
               ),
             ),
 
-            const Gap(settingsIslandGap),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _NotificationTrafficRefreshSetting(
-                enabled: currentStatusNotificationEnabled,
-                currentSeconds: currentNotificationTrafficRefreshSeconds,
-                onChanged: onNotificationTrafficRefreshSecondsChanged,
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: SwitchListTile(
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.notifications_active_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.statusNotificationTitle),
-                  subtitle: Text(l10n.statusNotificationSubtitle),
-                  value: currentStatusNotificationEnabled,
-                  onChanged: onStatusNotificationChanged,
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Semantics(
-                  enabled: currentStatusNotificationEnabled,
-                  button: true,
-                  child: InkWell(
-                    key: const ValueKey('notification-traffic-display-setting'),
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: currentStatusNotificationEnabled
-                        ? () => unawaited(
-                            _showNotificationTrafficDisplayPicker(context),
-                          )
-                        : null,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SettingsLeadingIcon(
-                            icon: Icons.speed_rounded,
-                            color: currentStatusNotificationEnabled
-                                ? cs.primary
-                                : cs.onSurface.withValues(alpha: 0.38),
-                          ),
-                          const Gap(16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  l10n.notificationTrafficDisplayTitle,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: currentStatusNotificationEnabled
-                                        ? cs.onSurface
-                                        : cs.onSurface.withValues(alpha: 0.38),
-                                  ),
-                                ),
-                                const Gap(3),
-                                Text(
-                                  l10n.notificationTrafficDisplaySubtitle,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: currentStatusNotificationEnabled
-                                        ? cs.onSurfaceVariant
-                                        : cs.onSurface.withValues(alpha: 0.38),
-                                  ),
-                                ),
-                                const Gap(6),
-                                Text(
-                                  _notificationTrafficDisplayModeName(
-                                    l10n,
-                                    currentNotificationTrafficDisplayMode,
-                                  ),
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: currentStatusNotificationEnabled
-                                        ? cs.primary
-                                        : cs.onSurface.withValues(alpha: 0.38),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Gap(8),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: currentStatusNotificationEnabled
-                                ? cs.onSurfaceVariant
-                                : cs.onSurface.withValues(alpha: 0.38),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: SwitchListTile(
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.memory_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.memoryLimitTitle),
-                  subtitle: Text(
-                    currentMemoryLimitEnabled
-                        ? l10n.memoryLimitEnabledSubtitle
-                        : l10n.memoryLimitDisabledSubtitle,
-                  ),
-                  value: currentMemoryLimitEnabled,
-                  onChanged: (value) =>
-                      unawaited(_setMemoryLimitEnabled(context, value)),
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Card(
                 margin: EdgeInsets.zero,
                 child: ListTile(
+                  key: const ValueKey('notification-settings-entry'),
                   leading: SettingsLeadingIcon(
-                    icon: Icons.system_update_alt_rounded,
+                    icon: Icons.notifications_none_rounded,
                     color: cs.primary,
                   ),
-                  title: Text(l10n.updatesInstallModeTitle),
-                  subtitle: Text(
-                    _updateInstallModeName(l10n, currentUpdateInstallMode),
-                  ),
+                  title: Text(l10n.notificationSettingsTitle),
+                  subtitle: Text(l10n.notificationSettingsSubtitle),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _showUpdateInstallModePicker(context),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (context) => SettingsNotificationPage(
+                        currentStatusNotificationEnabled:
+                            currentStatusNotificationEnabled,
+                        currentTrafficDisplayMode:
+                            currentNotificationTrafficDisplayMode,
+                        currentTrafficRefreshSeconds:
+                            currentNotificationTrafficRefreshSeconds,
+                        onStatusNotificationChanged:
+                            onStatusNotificationChanged,
+                        onTrafficDisplayModeChanged:
+                            onNotificationTrafficDisplayModeChanged,
+                        onTrafficRefreshSecondsChanged:
+                            onNotificationTrafficRefreshSecondsChanged,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -538,116 +302,6 @@ class SettingsGeneralPage extends StatelessWidget {
                   value: currentHideServerIp,
                   onChanged: onHideServerIpChanged,
                 ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationTrafficRefreshSetting extends StatefulWidget {
-  const _NotificationTrafficRefreshSetting({
-    required this.enabled,
-    required this.currentSeconds,
-    required this.onChanged,
-  });
-
-  final bool enabled;
-  final int currentSeconds;
-  final ValueChanged<int> onChanged;
-
-  @override
-  State<_NotificationTrafficRefreshSetting> createState() =>
-      _NotificationTrafficRefreshSettingState();
-}
-
-class _NotificationTrafficRefreshSettingState
-    extends State<_NotificationTrafficRefreshSetting> {
-  late int _seconds;
-
-  @override
-  void initState() {
-    super.initState();
-    _seconds = widget.currentSeconds.clamp(1, 10).toInt();
-  }
-
-  @override
-  void didUpdateWidget(covariant _NotificationTrafficRefreshSetting oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.currentSeconds != oldWidget.currentSeconds) {
-      _seconds = widget.currentSeconds.clamp(1, 10).toInt();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final l10n = AppLocalizations.of(context);
-    final disabledColor = cs.onSurface.withValues(alpha: 0.38);
-    final foregroundColor = widget.enabled ? cs.primary : disabledColor;
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SettingsLeadingIcon(
-              icon: Icons.timer_outlined,
-              color: foregroundColor,
-            ),
-            const Gap(16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l10n.notificationTrafficRefreshTitle,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                      Text(
-                        l10n.notificationTrafficRefreshSeconds(_seconds),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: widget.enabled ? cs.primary : disabledColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Gap(4),
-                  Text(
-                    l10n.notificationTrafficRefreshSubtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: widget.enabled
-                          ? cs.onSurfaceVariant
-                          : disabledColor,
-                    ),
-                  ),
-                  const Gap(4),
-                  Slider(
-                    value: _seconds.toDouble(),
-                    min: 1,
-                    max: 10,
-                    divisions: 9,
-                    label: l10n.notificationTrafficRefreshSeconds(_seconds),
-                    onChanged: widget.enabled
-                        ? (value) {
-                            final seconds = value.round().clamp(1, 10).toInt();
-                            if (seconds == _seconds) return;
-                            setState(() => _seconds = seconds);
-                            widget.onChanged(seconds);
-                          }
-                        : null,
-                  ),
-                ],
               ),
             ),
           ],

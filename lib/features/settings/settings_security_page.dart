@@ -131,9 +131,6 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                       color: colorScheme.error,
                     ),
                     title: Text(l10n.securityUntrustedProxyCertificatesTitle),
-                    subtitle: Text(
-                      l10n.securityUntrustedProxyCertificatesSubtitle,
-                    ),
                     value: _allowUntrustedProxyCertificates,
                     onChanged: _setProxyCertificates,
                   ),
@@ -147,9 +144,6 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                     ),
                     title: Text(
                       l10n.securityUntrustedSubscriptionCertificatesTitle,
-                    ),
-                    subtitle: Text(
-                      l10n.securityUntrustedSubscriptionCertificatesSubtitle,
                     ),
                     value: _allowUntrustedSubscriptionCertificates,
                     onChanged: _setSubscriptionCertificates,

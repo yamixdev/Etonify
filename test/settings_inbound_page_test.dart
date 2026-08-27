@@ -6,10 +6,11 @@ import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
-  testWidgets('header status follows the selected connection mode', (
+  testWidgets('connection mode is concise and MTU accepts manual input', (
     tester,
   ) async {
     InboundConnectionMode? selectedMode;
+    int? changedMtu;
     String? changedUsername;
 
     await tester.binding.setSurfaceSize(const Size(420, 1200));
@@ -36,7 +37,7 @@ void main() {
           currentProxyUsername: defaultProxyUsername,
           currentProxyPassword: '',
           onConnectionModeChanged: (mode) => selectedMode = mode,
-          onVpnMtuChanged: (_) {},
+          onVpnMtuChanged: (value) => changedMtu = value,
           onVpnStrictRouteChanged: (_) {},
           onVpnTunImplementationChanged: (_) {},
           onProxyInboundEnabledChanged: (_) {},
@@ -49,9 +50,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Активно: VPN TUN'), findsOneWidget);
+    expect(find.text('Активно: VPN TUN'), findsNothing);
+    expect(find.text('Режим подключения'), findsOneWidget);
+    expect(
+      find.text('Системный Android VPN для всего трафика телефона'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Расширенные параметры TUN'));
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('vpn-mtu-setting')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('vpn-mtu-input')), '1000');
+    await tester.tap(find.text('Сохранить').last);
+    await tester.pump();
+
+    expect(changedMtu, isNull);
+    expect(find.text('Укажите значение от 1280 до 9000.'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('vpn-mtu-input')), '1460');
+    await tester.tap(find.text('Сохранить').last);
+    await tester.pumpAndSettle();
+
+    expect(changedMtu, 1460);
+    expect(find.textContaining('1460'), findsOneWidget);
     expect(find.textContaining('Смешанный (Mixed)'), findsOneWidget);
     expect(
       find.textContaining('TCP обрабатывает системный стек Android'),
@@ -75,8 +97,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(selectedMode, InboundConnectionMode.proxy);
-    expect(find.text('Активно: Прокси'), findsOneWidget);
+    expect(find.text('Активно: Прокси'), findsNothing);
     expect(find.text('Активно: VPN TUN'), findsNothing);
+    expect(
+      find.text('Локальный HTTP/SOCKS без системного VPN'),
+      findsOneWidget,
+    );
 
     await tester.scrollUntilVisible(
       find.text(defaultProxyUsername),
