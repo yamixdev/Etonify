@@ -23,18 +23,12 @@ class HomePage extends StatelessWidget {
     required this.state,
     required this.actions,
     required this.bottomInset,
-    this.onProxyPanelInteractionStart,
-    this.onProxyPanelDragUpdate,
-    this.onProxyPanelDragEnd,
     this.showActiveProxyFooter = true,
   });
 
   final HomeViewState state;
   final HomeViewActions actions;
   final double bottomInset;
-  final VoidCallback? onProxyPanelInteractionStart;
-  final ValueChanged<DragUpdateDetails>? onProxyPanelDragUpdate;
-  final ValueChanged<DragEndDetails>? onProxyPanelDragEnd;
   final bool showActiveProxyFooter;
 
   bool get connected => state.connected;
@@ -127,22 +121,17 @@ class HomePage extends StatelessWidget {
                           (constraints.maxWidth >= 560 &&
                               constraints.maxWidth >
                                   constraints.maxHeight * 1.35);
-                      return _HomeProxyPanelGestureRelay(
-                        onInteractionStart: onProxyPanelInteractionStart,
-                        onDragUpdate: onProxyPanelDragUpdate,
-                        onDragEnd: onProxyPanelDragEnd,
-                        child: wideLayout
-                            ? _buildWideContent(
-                                profile,
-                                proxy,
-                                constraints.maxWidth,
-                              )
-                            : _buildCompactContent(
-                                profile,
-                                proxy,
-                                connectionOccupied,
-                              ),
-                      );
+                      return wideLayout
+                          ? _buildWideContent(
+                              profile,
+                              proxy,
+                              constraints.maxWidth,
+                            )
+                          : _buildCompactContent(
+                              profile,
+                              proxy,
+                              connectionOccupied,
+                            );
                     },
                   ),
           ),
@@ -400,89 +389,6 @@ class _HomeBrandTitle extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _HomeProxyPanelGestureRelay extends StatefulWidget {
-  const _HomeProxyPanelGestureRelay({
-    required this.child,
-    this.onInteractionStart,
-    this.onDragUpdate,
-    this.onDragEnd,
-  });
-
-  final Widget child;
-  final VoidCallback? onInteractionStart;
-  final ValueChanged<DragUpdateDetails>? onDragUpdate;
-  final ValueChanged<DragEndDetails>? onDragEnd;
-
-  @override
-  State<_HomeProxyPanelGestureRelay> createState() =>
-      _HomeProxyPanelGestureRelayState();
-}
-
-class _HomeProxyPanelGestureRelayState
-    extends State<_HomeProxyPanelGestureRelay> {
-  static const _startThreshold = 6.0;
-
-  bool _dragStarted = false;
-  double _totalDeltaY = 0;
-
-  void _handlePointerDown(PointerDownEvent event) {
-    _dragStarted = false;
-    _totalDeltaY = 0;
-  }
-
-  void _handlePointerMove(PointerMoveEvent event) {
-    _totalDeltaY += event.delta.dy;
-    if (!_dragStarted && _totalDeltaY.abs() < _startThreshold) {
-      return;
-    }
-    final deltaY = _dragStarted ? event.delta.dy : _totalDeltaY;
-    if (!_dragStarted) {
-      widget.onInteractionStart?.call();
-    }
-    _dragStarted = true;
-    widget.onDragUpdate?.call(
-      DragUpdateDetails(
-        sourceTimeStamp: event.timeStamp,
-        delta: Offset(0, deltaY),
-        primaryDelta: deltaY,
-        globalPosition: event.position,
-        localPosition: event.localPosition,
-      ),
-    );
-  }
-
-  void _handlePointerEnd(PointerUpEvent event) {
-    if (_dragStarted) {
-      widget.onDragEnd?.call(DragEndDetails());
-    }
-    _reset();
-  }
-
-  void _handlePointerCancel(PointerCancelEvent event) {
-    if (_dragStarted) {
-      widget.onDragEnd?.call(DragEndDetails());
-    }
-    _reset();
-  }
-
-  void _reset() {
-    _dragStarted = false;
-    _totalDeltaY = 0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _handlePointerDown,
-      onPointerMove: _handlePointerMove,
-      onPointerUp: _handlePointerEnd,
-      onPointerCancel: _handlePointerCancel,
-      child: widget.child,
     );
   }
 }

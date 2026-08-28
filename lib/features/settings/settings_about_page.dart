@@ -955,8 +955,11 @@ class _AboutInfoRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
+          flex: 4,
           child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: cs.onSurfaceVariant,
             ),
@@ -964,7 +967,7 @@ class _AboutInfoRow extends StatelessWidget {
         ),
         const Gap(12),
         Flexible(
-          flex: 2,
+          flex: 5,
           child: Align(
             alignment: Alignment.centerRight,
             child: FittedBox(

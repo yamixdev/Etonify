@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -948,22 +947,6 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     );
   }
 
-  Future<void> _copySubscriptionJson(Subscription subscription) async {
-    final hydrated =
-        await SubscriptionStore.getInBackground(subscription.id) ??
-        subscription;
-    const encoder = JsonEncoder.withIndent('  ');
-    await SensitiveClipboard.copy(encoder.convert(hydrated.toMap()));
-    if (!mounted) {
-      return;
-    }
-    AppNotice.show(
-      context,
-      AppLocalizations.of(context).subscriptionJsonCopied,
-      tone: AppNoticeTone.success,
-    );
-  }
-
   Future<void> _openSubscriptionDetails(
     Subscription subscription, {
     required int index,
@@ -1182,8 +1165,6 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                                         sub,
                                         title: sub.name,
                                       ),
-                                      onCopyJson: () =>
-                                          _copySubscriptionJson(sub),
                                       onEdit: () => _openSubscriptionDetails(
                                         sub,
                                         index: index,

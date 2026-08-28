@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
+import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 Widget _generalSettingsApp({
@@ -70,6 +71,36 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Update installation'), findsNothing);
+  });
+
+  testWidgets('VPN notification entry is separated from vibration', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _generalSettingsApp(statusNotificationEnabled: true),
+    );
+    final notification = find.byKey(
+      const ValueKey('notification-settings-entry'),
+    );
+    await tester.ensureVisible(notification);
+    await tester.pumpAndSettle();
+
+    final vibrationCard = find
+        .ancestor(of: find.text('Vibration'), matching: find.byType(Card))
+        .first;
+    final notificationCard = find
+        .ancestor(of: notification, matching: find.byType(Card))
+        .first;
+    final gap =
+        tester.getTopLeft(notificationCard).dy -
+        tester.getBottomLeft(vibrationCard).dy;
+
+    expect(gap, greaterThanOrEqualTo(settingsIslandGap));
   });
 
   testWidgets('soft core memory limit is not shown in general settings', (

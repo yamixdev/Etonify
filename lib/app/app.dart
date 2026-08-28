@@ -7303,7 +7303,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Widget _buildHomePresentation(
     BuildContext context, {
     required ProxyPanelMetrics panelMetrics,
-    required ProxyPanelGestures panelGestures,
   }) {
     final activeSubscription = _activeSubscription;
     final canRefreshActiveSubscription =
@@ -7348,7 +7347,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
             ? _refreshActiveSubscription
             : null,
       ),
-    ).build(panelMetrics: panelMetrics, panelGestures: panelGestures);
+    ).build(panelMetrics: panelMetrics);
   }
 
   Widget _buildProxiesPresentation(
@@ -7466,11 +7465,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _proxyPanelOpen = false;
         _scheduleProxyListCacheRelease();
       },
-      homeBuilder: (context, metrics, gestures) => _buildHomePresentation(
-        context,
-        panelMetrics: metrics,
-        panelGestures: gestures,
-      ),
+      homeBuilder: (context, metrics) =>
+          _buildHomePresentation(context, panelMetrics: metrics),
       sheetBuilder:
           (context, metrics, metricsListenable, scrollController, gestures) =>
               _buildProxiesPresentation(

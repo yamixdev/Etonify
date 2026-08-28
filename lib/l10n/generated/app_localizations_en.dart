@@ -1769,13 +1769,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionShowUrlQr => 'Show URL QR code';
 
   @override
-  String get subscriptionCopyJson => 'JSON to clipboard';
-
-  @override
   String get subscriptionUrlCopied => 'Subscription URL copied';
-
-  @override
-  String get subscriptionJsonCopied => 'Subscription JSON copied';
 
   @override
   String get subscriptionImportHelpTitle => 'How to add a subscription';

@@ -261,6 +261,42 @@ void main() {
     expect(find.textContaining('Работают:'), findsNothing);
   });
 
+  testWidgets('share menu exposes URL actions without raw JSON export', (
+    tester,
+  ) async {
+    await tester.runAsync(
+      () => SubscriptionStore.save(
+        Subscription(
+          id: 'share-subscription',
+          name: 'Share profile',
+          url: 'https://example.com/subscription',
+          lastUpdated: DateTime(2026, 8, 27).millisecondsSinceEpoch,
+          outbounds: const [
+            Outbound(
+              tag: 'share-proxy',
+              name: 'Share proxy',
+              config: {'type': 'vless'},
+            ),
+          ],
+          cachedVisibleProxyCount: 1,
+          hasRawPayload: true,
+          rawContent: 'vless://payload',
+        ),
+      ),
+    );
+
+    await _openSheet(tester, activeSubscriptionId: 'share-subscription');
+    await _pumpUntilFound(tester, find.text('Share profile'));
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+    await tester.pump();
+    await tester.tap(find.text('Share'));
+    await _pumpUi(tester, const Duration(milliseconds: 250));
+
+    expect(find.text('URL to clipboard'), findsOneWidget);
+    expect(find.text('Show URL QR code'), findsOneWidget);
+    expect(find.text('JSON to clipboard'), findsNothing);
+  });
+
   test('URL metadata repair preserves the subscription payload', () async {
     const subscriptionId = 'legacy-url-metadata';
     await SubscriptionStore.save(

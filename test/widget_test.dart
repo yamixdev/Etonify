@@ -216,7 +216,7 @@ void main() {
             onOpenRequested: () => rebuildHost(() {}),
             onOpened: () => openedCount++,
             onClosed: () => closeCount++,
-            homeBuilder: (context, metrics, gestures) {
+            homeBuilder: (context, metrics) {
               return ColoredBox(
                 color: Colors.white,
                 child: Align(
@@ -243,6 +243,9 @@ void main() {
                           onTap: gestures.onHeaderTap,
                           child: ListView.builder(
                             controller: scrollController,
+                            physics: liveMetrics.atMaxExtent
+                                ? const ClampingScrollPhysics()
+                                : const NeverScrollableScrollPhysics(),
                             padding: EdgeInsets.zero,
                             itemCount: 24,
                             itemBuilder: (context, index) => SizedBox(
@@ -268,7 +271,7 @@ void main() {
     expect(closeCount, 0);
 
     final shortSwipe = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('proxy-panel-header'))),
+      tester.getCenter(find.byKey(const ValueKey('proxy-panel-collapsed'))),
     );
     await shortSwipe.moveBy(const Offset(0, -70));
     await tester.pump();
@@ -280,7 +283,7 @@ void main() {
     expect(openedCount, 0);
 
     await tester.drag(
-      find.byKey(const ValueKey('proxy-panel-header')),
+      find.byKey(const ValueKey('proxy-panel-collapsed')),
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
@@ -288,7 +291,7 @@ void main() {
     expect(find.text('panel:1.00'), findsOneWidget);
     expect(openedCount, 1);
 
-    await tester.tap(find.byKey(const ValueKey('proxy-panel-header')));
+    await tester.tap(find.byKey(const ValueKey('proxy-panel-header')).last);
     await tester.pumpAndSettle();
 
     expect(find.text('panel:0.00'), findsOneWidget);
@@ -300,11 +303,54 @@ void main() {
     expect(find.text('panel:1.00'), findsOneWidget);
     expect(openedCount, 2);
 
-    await tester.tap(find.byKey(const ValueKey('proxy-panel-header')));
+    await tester.tap(find.byKey(const ValueKey('proxy-panel-header')).last);
     await tester.pumpAndSettle();
 
     expect(find.text('panel:0.00'), findsOneWidget);
     expect(closeCount, 2);
+  });
+
+  testWidgets('proxy panel is hidden without an active subscription', (
+    tester,
+  ) async {
+    var hasActiveProfile = false;
+    late StateSetter rebuildHost;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuildHost = setState;
+            return ProxyPanelShell(
+              ready: true,
+              onboardingCompleted: true,
+              loading: const SizedBox.shrink(),
+              welcome: const SizedBox.shrink(),
+              visibleRows: hasActiveProfile ? 1 : 0,
+              hasActiveProfile: hasActiveProfile,
+              homeBuilder: (_, _) => const ColoredBox(
+                color: Colors.white,
+                child: SizedBox.expand(),
+              ),
+              sheetBuilder: (_, _, _, _, _) => const ColoredBox(
+                key: ValueKey('proxy-panel-surface'),
+                color: Colors.black,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('proxy-panel-surface')), findsNothing);
+
+    rebuildHost(() => hasActiveProfile = true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('proxy-panel-surface')), findsOneWidget);
+
+    rebuildHost(() => hasActiveProfile = false);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('proxy-panel-surface')), findsNothing);
   });
 
   testWidgets('real proxy panel opens from the collapsed header swipe', (
@@ -314,19 +360,10 @@ void main() {
       _proxy('proxy-1', 'Amsterdam', latency: 42),
       _proxy('proxy-2', 'Paris', latency: 58),
     ];
-    var panelProgress = 0.0;
-
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            padding: const EdgeInsets.only(bottom: 48),
-            viewPadding: const EdgeInsets.only(bottom: 48),
-          ),
-          child: child!,
-        ),
         home: ProxyPanelShell(
           ready: true,
           onboardingCompleted: true,
@@ -334,10 +371,8 @@ void main() {
           welcome: const SizedBox.shrink(),
           visibleRows: proxies.length,
           hasActiveProfile: true,
-          homeBuilder: (_, metrics, _) {
-            panelProgress = metrics.progress;
-            return const ColoredBox(color: Colors.white);
-          },
+          homeBuilder: (_, _) =>
+              const ColoredBox(color: Colors.white, child: SizedBox.expand()),
           sheetBuilder:
               (
                 context,
@@ -348,7 +383,6 @@ void main() {
               ) => ValueListenableBuilder<ProxyPanelMetrics>(
                 valueListenable: metricsListenable,
                 builder: (context, liveMetrics, _) {
-                  panelProgress = liveMetrics.progress;
                   return ProxiesPage(
                     proxies: proxies,
                     selectedTag: proxies.first.tag,
@@ -378,41 +412,47 @@ void main() {
     expect(find.text('Paris'), findsNothing);
 
     final openGesture = await tester.startGesture(
-      tester.getCenter(find.text('Amsterdam')),
+      tester.getCenter(find.byKey(const ValueKey('proxy-panel-collapsed'))),
     );
     for (var step = 0; step < 8; step++) {
       await openGesture.moveBy(const Offset(0, -10));
       await tester.pump();
-      expect(panelProgress, closeTo(0, .01));
+      expect(find.text('Paris'), findsNothing);
     }
     await openGesture.up();
     await tester.pumpAndSettle();
 
-    expect(panelProgress, closeTo(0, .01));
+    expect(find.byKey(const ValueKey('proxy-panel-expanded')), findsNothing);
     expect(find.text('Paris'), findsNothing);
 
-    await tester.drag(find.text('Amsterdam'), const Offset(0, -120));
+    await tester.drag(
+      find.byKey(const ValueKey('proxy-panel-collapsed')),
+      const Offset(0, -120),
+    );
     await tester.pumpAndSettle();
 
-    expect(panelProgress, greaterThan(.95));
-    expect(find.text('Proxies'), findsOneWidget);
+    final expandedPanel = find.byKey(const ValueKey('proxy-panel-expanded'));
+    final expandedTitle = find.descendant(
+      of: expandedPanel,
+      matching: find.text('Proxies'),
+    );
+    expect(expandedPanel, findsOneWidget);
+    expect(expandedTitle, findsOneWidget);
     expect(find.text('Paris'), findsOneWidget);
 
-    await tester.drag(find.text('Proxies'), const Offset(0, 120));
+    await tester.drag(expandedTitle, const Offset(0, 320));
     await tester.pumpAndSettle();
 
-    expect(panelProgress, closeTo(0, .01));
     expect(find.text('Amsterdam'), findsOneWidget);
     expect(find.text('Paris'), findsNothing);
 
     await tester.tap(find.text('Amsterdam'));
     await tester.pumpAndSettle();
-    expect(panelProgress, greaterThan(.95));
+    expect(find.text('Paris'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(panelProgress, closeTo(0, .01));
     expect(find.text('Amsterdam'), findsOneWidget);
     expect(find.text('Paris'), findsNothing);
   });
@@ -1721,6 +1761,56 @@ void main() {
     expect(find.text('Applied'), findsOneWidget);
     expect(find.text('4'), findsWidgets);
     expect(find.text('Process memory'), findsOneWidget);
+  });
+
+  testWidgets('diagnostics keeps compatibility on one line in Russian', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsAboutPage(
+          versionLabel: '0.3.1',
+          onShowOnboarding: () {},
+          readCoreIntegrationDiagnostics: () =>
+              const CoreIntegrationDiagnosticsSnapshot(
+                applyStatus: 'applied',
+                applyReason: 'settings_changed',
+                applyError: '',
+                configGeneration: 7,
+                configRuntimeGeneration: 4,
+                configSchemaVersion: 4,
+                settingsApplyPending: false,
+                lastApplyAtMillis: 1,
+              ),
+          loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+          readRuntimeStatus: () async => const <String, dynamic>{
+            'running': true,
+            'runtimeGeneration': 4,
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final diagnostics = find.text('Ресурсы и диагностика');
+    await tester.ensureVisible(diagnostics);
+    await tester.pumpAndSettle();
+    await tester.tap(diagnostics);
+    await tester.pumpAndSettle();
+
+    final compatibility = find.text('Совместимость');
+    expect(compatibility, findsOneWidget);
+    expect(tester.widget<Text>(compatibility).maxLines, 1);
+    expect(tester.getSize(compatibility).height, lessThan(24));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('unsupported system locale falls back to English', (

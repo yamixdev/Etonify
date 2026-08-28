@@ -199,7 +199,6 @@ class _SubscriptionCard extends StatelessWidget {
     required this.onRefresh,
     required this.onCopyUrl,
     required this.onShowQr,
-    required this.onCopyJson,
     required this.onEdit,
     required this.onDelete,
   });
@@ -216,7 +215,6 @@ class _SubscriptionCard extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onCopyUrl;
   final VoidCallback onShowQr;
-  final VoidCallback onCopyJson;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -313,7 +311,6 @@ class _SubscriptionCard extends StatelessWidget {
                         onRefresh: onRefresh,
                         onCopyUrl: onCopyUrl,
                         onShowQr: onShowQr,
-                        onCopyJson: onCopyJson,
                         onEdit: onEdit,
                         onDelete: onDelete,
                       ),
@@ -443,7 +440,6 @@ class _SubscriptionActionsMenu extends StatelessWidget {
     required this.onRefresh,
     required this.onCopyUrl,
     required this.onShowQr,
-    required this.onCopyJson,
     required this.onEdit,
     required this.onDelete,
   });
@@ -453,7 +449,6 @@ class _SubscriptionActionsMenu extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onCopyUrl;
   final VoidCallback onShowQr;
-  final VoidCallback onCopyJson;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -478,10 +473,6 @@ class _SubscriptionActionsMenu extends StatelessWidget {
             MenuItemButton(
               onPressed: refreshable ? onShowQr : null,
               child: Text(l10n.subscriptionShowUrlQr),
-            ),
-            MenuItemButton(
-              onPressed: onCopyJson,
-              child: Text(l10n.subscriptionCopyJson),
             ),
           ],
           child: Text(l10n.shareProxyTitle),

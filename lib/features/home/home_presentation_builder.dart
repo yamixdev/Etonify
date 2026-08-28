@@ -121,17 +121,11 @@ class HomePresentationBuilder {
   final HomePresentationData data;
   final HomePresentationCallbacks callbacks;
 
-  Widget build({
-    required ProxyPanelMetrics panelMetrics,
-    required ProxyPanelGestures panelGestures,
-  }) {
+  Widget build({required ProxyPanelMetrics panelMetrics}) {
     return HomePage(
       state: data.toViewState(),
       actions: callbacks.toViewActions(),
       bottomInset: panelMetrics.bottomInset + proxyPanelMinHeight + 20,
-      onProxyPanelInteractionStart: panelGestures.onInteractionStart,
-      onProxyPanelDragUpdate: panelGestures.onDragUpdate,
-      onProxyPanelDragEnd: panelGestures.onDragEnd,
       showActiveProxyFooter: false,
     );
   }

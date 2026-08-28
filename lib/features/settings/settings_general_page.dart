@@ -250,6 +250,8 @@ class SettingsGeneralPage extends StatelessWidget {
               ),
             ),
 
+            const Gap(settingsIslandGap),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Card(

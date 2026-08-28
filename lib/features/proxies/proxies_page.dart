@@ -33,7 +33,7 @@ part 'proxy_tile.dart';
 const _kProxySheetHeaderHeight = 108.0;
 const _kProxySheetCompactHeaderHeight = 72.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
-const _kProxySheetRowExtent = 72.0;
+const _kProxySheetRowExtent = proxyPanelRowExtent;
 const _kProxySheetHeaderCollapseDistance = 48.0;
 const _kProxySheetHeaderBlurStart = 0.0;
 
@@ -192,7 +192,7 @@ class _ProxyLatencyLabel extends StatelessWidget {
       fontWeight: emphasized ? FontWeight.w700 : FontWeight.w600,
     );
     if (checking) {
-      return Center(child: _LatencyDots(color: color));
+      return Center(child: ProxyLatencyDots(color: color));
     }
     final content = unavailable
         ? Icon(
@@ -235,31 +235,47 @@ String? _latencyErrorTooltip(String? error) {
   return text.length <= 180 ? text : '${text.substring(0, 177)}...';
 }
 
-class _LatencyDots extends StatefulWidget {
-  const _LatencyDots({required this.color});
+class ProxyLatencyDots extends StatefulWidget {
+  const ProxyLatencyDots({super.key, required this.color});
 
   final Color color;
 
   @override
-  State<_LatencyDots> createState() => _LatencyDotsState();
+  State<ProxyLatencyDots> createState() => _ProxyLatencyDotsState();
 }
 
-class _LatencyDotsState extends State<_LatencyDots>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+class _ProxyLatencyDotsState extends State<ProxyLatencyDots> {
+  static const _stepDuration = Duration(milliseconds: 300);
+
+  Timer? _timer;
+  int _visibleCount = 1;
+  bool _active = false;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _setActive(TickerMode.valuesOf(context).enabled);
+  }
+
+  void _setActive(bool active) {
+    if (_active == active) {
+      return;
+    }
+    _active = active;
+    _timer?.cancel();
+    _timer = active ? Timer.periodic(_stepDuration, _advance) : null;
+  }
+
+  void _advance(Timer _) {
+    if (!mounted || !_active) {
+      return;
+    }
+    setState(() => _visibleCount = _visibleCount % 3 + 1);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -269,18 +285,11 @@ class _LatencyDotsState extends State<_LatencyDots>
       color: widget.color,
       fontWeight: FontWeight.w700,
     );
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final count = (_controller.value * 3).floor() + 1;
-        final visibleCount = count > 3 ? 3 : count;
-        return Text(
-          '.' * visibleCount,
-          key: ValueKey(visibleCount),
-          textAlign: TextAlign.center,
-          style: style,
-        );
-      },
+    return Text(
+      '.' * _visibleCount,
+      key: ValueKey(_visibleCount),
+      textAlign: TextAlign.center,
+      style: style,
     );
   }
 }
@@ -963,9 +972,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ListView.builder(
         controller: widget.scrollController,
-        physics: const ClampingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
+        physics: listMounted
+            ? const ClampingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              )
+            : const NeverScrollableScrollPhysics(),
         itemExtent: _kProxySheetRowExtent,
         scrollCacheExtent: const ScrollCacheExtent.pixels(0),
         addAutomaticKeepAlives: false,

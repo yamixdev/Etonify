@@ -3239,23 +3239,11 @@ abstract class AppLocalizations {
   /// **'Show URL QR code'**
   String get subscriptionShowUrlQr;
 
-  /// No description provided for @subscriptionCopyJson.
-  ///
-  /// In en, this message translates to:
-  /// **'JSON to clipboard'**
-  String get subscriptionCopyJson;
-
   /// No description provided for @subscriptionUrlCopied.
   ///
   /// In en, this message translates to:
   /// **'Subscription URL copied'**
   String get subscriptionUrlCopied;
-
-  /// No description provided for @subscriptionJsonCopied.
-  ///
-  /// In en, this message translates to:
-  /// **'Subscription JSON copied'**
-  String get subscriptionJsonCopied;
 
   /// No description provided for @subscriptionImportHelpTitle.
   ///

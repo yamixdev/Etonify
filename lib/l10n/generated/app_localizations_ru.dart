@@ -1769,13 +1769,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionShowUrlQr => 'Показать QR-код URL';
 
   @override
-  String get subscriptionCopyJson => 'Скопировать JSON';
-
-  @override
   String get subscriptionUrlCopied => 'URL подписки скопирован';
-
-  @override
-  String get subscriptionJsonCopied => 'JSON подписки скопирован';
 
   @override
   String get subscriptionImportHelpTitle => 'Как добавить подписку';
