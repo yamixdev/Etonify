@@ -24,15 +24,10 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules">
-        <!--
-             Work around flutter/flutter#169585: Impeller's Vulkan surface
-             teardown can leave the Android main thread waiting for the raster
-             thread while an Activity is being stopped. Keep Android on Skia
-             until the Flutter engine fixes this production ANR path.
-        -->
+        <!-- Impeller keeps shader work predictable on supported Android devices. -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
-            android:value="false" />
+            android:value="true" />
         <!-- Required for release-like Macrobenchmark traces without making the app debuggable. -->
         <profileable android:shell="true" />
         <activity

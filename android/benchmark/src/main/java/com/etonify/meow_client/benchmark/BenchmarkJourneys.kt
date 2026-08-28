@@ -75,6 +75,20 @@ internal fun MacrobenchmarkScope.openAndScrollProxyList() {
     device.waitForIdle()
 }
 
+internal fun MacrobenchmarkScope.exerciseProxyPanel(repetitions: Int = 20) {
+    val width = device.displayWidth
+    val height = device.displayHeight
+    repeat(repetitions) {
+        device.swipe(width / 2, height - 24, width / 2, height / 3, 12)
+        device.waitForIdle()
+        repeat(3) {
+            device.swipe(width / 2, height * 4 / 5, width / 2, height / 3, 10)
+        }
+        device.pressBack()
+        device.waitForIdle()
+    }
+}
+
 private fun UiDevice.clickFirst(vararg selectors: androidx.test.uiautomator.BySelector) {
     findFirst(*selectors)?.click()
     waitForIdle()

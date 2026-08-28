@@ -32,4 +32,22 @@ class CriticalJourneyBenchmark {
             },
         )
     }
+
+    @Test
+    fun repeatedProxyPanelOpenCloseAndScroll() {
+        benchmarkRule.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            compilationMode = CompilationMode.Partial(),
+            startupMode = StartupMode.WARM,
+            iterations = 3,
+            setupBlock = { pressHome() },
+            measureBlock = {
+                prepareMainScreen()
+                // Run once at 60 Hz and once at 120 Hz. FrameTimingMetric
+                // records the actual frame cost for each device configuration.
+                exerciseProxyPanel(repetitions = 20)
+            },
+        )
+    }
 }

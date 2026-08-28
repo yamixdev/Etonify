@@ -14,12 +14,12 @@ import kotlin.math.max
 /**
  * An opt-in, bounded runtime probe for diagnosing VPN background behaviour.
  *
- * The probe samples once per five seconds only while explicitly running. It
+ * The probe samples twice per second only while explicitly running. It
  * reuses the status values already received from libbox and never changes the
  * active VPN configuration, network routing, or URLTest state.
  */
 internal object RuntimeMeasurement {
-    private const val SAMPLE_INTERVAL_MS = 5_000L
+    private const val SAMPLE_INTERVAL_MS = 500L
     private const val LOG_TAG = "MeowRuntimeProbe"
 
     private val lock = Any()
@@ -150,6 +150,7 @@ internal object RuntimeMeasurement {
         return linkedMapOf(
             "state" to active.state.wireName,
             "durationSeconds" to active.durationSeconds,
+            "sampleIntervalMillis" to SAMPLE_INTERVAL_MS,
             "elapsedSeconds" to elapsedSeconds(active),
             "startedAtMillis" to active.startedAtEpochMs,
             "finishedAtMillis" to active.finishedAtEpochMs,
@@ -200,7 +201,7 @@ internal object RuntimeMeasurement {
             appendLine("started_at_ms: ${active.startedAtEpochMs}")
             appendLine("duration_seconds: ${snapshot["durationSeconds"]}")
             appendLine("elapsed_seconds: ${snapshot["elapsedSeconds"]}")
-            appendLine("sample_interval_seconds: ${SAMPLE_INTERVAL_MS / 1_000L}")
+            appendLine("sample_interval_ms: $SAMPLE_INTERVAL_MS")
             appendLine("samples: ${snapshot["sampleCount"]}")
             appendLine("cpu_average_percent: ${formatNumber(snapshot["cpuAveragePercent"])}")
             appendLine("cpu_peak_percent: ${formatNumber(snapshot["cpuPeakPercent"])}")
@@ -221,7 +222,7 @@ internal object RuntimeMeasurement {
             appendLine()
             appendLine("samples:")
             appendLine(
-                "elapsed_s,cpu_percent,pss_kb,rss_kb,swap_pss_kb,private_dirty_kb," +
+                "elapsed_ms,elapsed_s,cpu_percent,pss_kb,rss_kb,swap_pss_kb,private_dirty_kb," +
                     "dalvik_pss_kb,native_pss_kb,graphics_pss_kb,code_pss_kb," +
                     "native_heap_kb,core_memory_bytes,goroutines,connections_in," +
                     "connections_out,traffic_bps",
@@ -229,6 +230,7 @@ internal object RuntimeMeasurement {
             active.samples.forEach { sample ->
                 appendLine(
                     listOf(
+                        sample.elapsedRealtimeMs - active.startedAtElapsedMs,
                         sample.elapsedSeconds,
                         formatNumber(sample.cpuPercent),
                         sample.totalPssKb,
