@@ -1,13 +1,13 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "40b8e885a932dee64d4298b9b842f7d5e1420b204e8a49790d103c4e82e2d451",
-  "source_commit": "0fc084ab22b62a2500e5fd5b7d38eda6229cd1e5",
-  "source_version": "v1.14.0-rc.1-etonify.3",
-  "etonify_version": "v1.14.0-rc.1-etonify.3",
+  "sha256": "c35c2f235bf12c5ac96b2d49d5e49e08552e3d098773909ef8148eed7870ba0c",
+  "source_commit": "cda880ae53c3b071aacf983c143fb355f6200ddc",
+  "source_version": "v1.14.0-rc.1-etonify.4",
+  "etonify_version": "v1.14.0-rc.1-etonify.4",
   "upstream_commit": "8dd67a1e49711ce8a9a884bef60a2139ef36446f",
   "go": "go version go1.26.6 linux/amd64",
   "gomobile": "v0.1.13",
-  "java": "openjdk 17.0.20 2026-07-21",
+  "java": "openjdk 17.0.20.1 2026-08-18",
   "android_ndk": "r28",
   "android_api": 24,
   "android_abis": [
