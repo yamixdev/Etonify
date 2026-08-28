@@ -60,50 +60,46 @@ class _ConnectionButtonState extends State<ConnectionButton> {
             ),
             duration: const Duration(milliseconds: 680),
             curve: Curves.easeInOutCubicEmphasized,
+            child: SizedBox(
+              width: _kConnectionButtonSize,
+              height: _kConnectionButtonSize,
+              child: Material(
+                color: Colors.white,
+                child: InkWell(
+                  onTap: widget.connecting ? null : widget.onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.all(34),
+                    child: SvgPicture.asset(
+                      'assets/images/logo.svg',
+                      key: const ValueKey('connection-button-logo'),
+                      colorFilter: ColorFilter.mode(
+                        buttonColor,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             builder: (context, shape, child) {
               final scale = 1 + (shape.emphasis * 0.06);
               final glow = 16 + (shape.emphasis * 12);
-              final inset = 36 - (shape.emphasis * 4);
-              // Busy state must stay visually calm. A stuck native transition
-              // should not keep Flutter rendering at display refresh rate.
-              const rotationAngle = 0.0;
+              final path = _connectionButtonCookiePath(
+                const Size.square(_kConnectionButtonSize),
+                shape,
+              );
               return Transform.scale(
                 scale: scale,
-                child: Transform.rotate(
-                  angle: rotationAngle,
-                  child: CustomPaint(
-                    painter: _ConnectionButtonShadowPainter(
-                      shape: shape,
-                      color: buttonColor.withValues(alpha: .45),
-                      blur: glow,
-                      spread: shape.emphasis * 2,
-                    ),
-                    child: ClipPath(
-                      clipper: _ConnectionButtonShapeClipper(shape),
-                      child: SizedBox(
-                        width: 148,
-                        height: 148,
-                        child: Material(
-                          color: Colors.white,
-                          child: InkWell(
-                            onTap: widget.connecting ? null : widget.onTap,
-                            child: Transform.rotate(
-                              angle: -rotationAngle,
-                              child: Padding(
-                                padding: EdgeInsets.all(inset),
-                                child: SvgPicture.asset(
-                                  'assets/images/logo.svg',
-                                  colorFilter: ColorFilter.mode(
-                                    buttonColor,
-                                    BlendMode.srcIn,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                child: CustomPaint(
+                  painter: _ConnectionButtonShadowPainter(
+                    path: path,
+                    color: buttonColor.withValues(alpha: .45),
+                    blur: glow,
+                    spread: shape.emphasis * 2,
+                  ),
+                  child: ClipPath(
+                    clipper: _ConnectionButtonShapeClipper(path),
+                    child: child,
                   ),
                 ),
               );
@@ -226,58 +222,56 @@ class _ConnectionButtonShapeTween extends Tween<_ConnectionButtonShape> {
 }
 
 class _ConnectionButtonShapeClipper extends CustomClipper<Path> {
-  const _ConnectionButtonShapeClipper(this.shape);
+  const _ConnectionButtonShapeClipper(this.path);
 
-  final _ConnectionButtonShape shape;
+  final Path path;
 
   @override
-  Path getClip(Size size) => _connectionButtonCookiePath(size, shape);
+  Path getClip(Size size) => path;
 
   @override
   bool shouldReclip(_ConnectionButtonShapeClipper oldClipper) {
-    return oldClipper.shape != shape;
+    return !identical(oldClipper.path, path);
   }
 }
 
 class _ConnectionButtonShadowPainter extends CustomPainter {
   const _ConnectionButtonShadowPainter({
-    required this.shape,
+    required this.path,
     required this.color,
     required this.blur,
     required this.spread,
   });
 
-  final _ConnectionButtonShape shape;
+  final Path path;
   final Color color;
   final double blur;
   final double spread;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = _connectionButtonCookiePath(
-      size,
-      shape,
-      radiusAdjustment: spread,
-    );
+    final radius = math.min(size.width, size.height) / 2;
+    final shadowScale = radius <= 0 ? 1.0 : (radius + spread) / radius;
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.scale(shadowScale);
+    canvas.translate(-size.width / 2, -size.height / 2);
     canvas.drawShadow(path, color, blur, true);
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(_ConnectionButtonShadowPainter oldDelegate) {
-    return oldDelegate.shape != shape ||
+    return !identical(oldDelegate.path, path) ||
         oldDelegate.color != color ||
         oldDelegate.blur != blur ||
         oldDelegate.spread != spread;
   }
 }
 
-Path _connectionButtonCookiePath(
-  Size size,
-  _ConnectionButtonShape shape, {
-  double radiusAdjustment = 0,
-}) {
+Path _connectionButtonCookiePath(Size size, _ConnectionButtonShape shape) {
   final center = Offset(size.width / 2, size.height / 2);
-  final radius = math.min(size.width, size.height) / 2 + radiusAdjustment;
+  final radius = math.min(size.width, size.height) / 2;
   const samples = _kConnectionButtonPathSamples;
   final points = <Offset>[];
   final phase = shape.phase.clamp(0.0, 3.0);
@@ -330,6 +324,7 @@ Path _connectionButtonCookiePath(
 }
 
 const _kConnectionButtonPathSamples = 96;
+const _kConnectionButtonSize = 148.0;
 
 final List<double> _kConnectionCircle = List<double>.filled(
   _kConnectionButtonPathSamples,
