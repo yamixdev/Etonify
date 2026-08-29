@@ -44,3 +44,31 @@ class SettingsLeadingIcon extends StatelessWidget {
     );
   }
 }
+
+class SettingsTileGroup extends StatelessWidget {
+  const SettingsTileGroup({
+    super.key,
+    required this.children,
+    this.dividerIndent = 74,
+  });
+
+  final List<Widget> children;
+  final double dividerIndent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index != children.length - 1)
+              Divider(height: 1, indent: dividerIndent, endIndent: 16),
+          ],
+        ],
+      ),
+    );
+  }
+}

@@ -212,11 +212,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dnsIpPreferenceTitle => 'IP version';
 
   @override
-  String get aboutSectionTitle => 'About client';
+  String get aboutSectionTitle => 'About';
 
   @override
   String get aboutSectionSubtitle =>
-      'Client version, core, team, and service information.';
+      'App version, core, team, and service information.';
 
   @override
   String get aboutHeroSubtitle =>
@@ -394,7 +394,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Etonify works only on Android and does not include VPN servers. Availability depends on the server, subscription, DNS, carrier, and device.\n\nURLTest checks one address and does not guarantee access to every website. Large subscriptions and full server checks temporarily increase memory, CPU, battery, and data use.';
 
   @override
-  String get telegramChannelLabel => 'Etonify Telegram';
+  String get telegramChannelLabel => 'Telegram channel';
 
   @override
   String get legalTermsTitle => 'Terms of Use';
@@ -708,10 +708,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutResourceBatteryTemp => 'Battery temperature';
 
   @override
-  String get updatesTitle => 'Updates';
+  String get updatesTitle => 'App updates';
 
   @override
-  String get updatesSubtitle => 'Check for and install a new version.';
+  String get updatesSubtitle => 'Check for a new version and install it.';
 
   @override
   String get updatesChecking => 'Checking for updates…';
@@ -983,7 +983,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updatesUnknownSize => 'Unknown size';
 
   @override
-  String get appVersionLabel => 'Client version';
+  String get appVersionLabel => 'App version';
 
   @override
   String get currentProfileLabel => 'Current profile';

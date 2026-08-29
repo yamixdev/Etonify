@@ -73,9 +73,7 @@ void main() {
     expect(find.text('Update installation'), findsNothing);
   });
 
-  testWidgets('VPN notification entry is separated from vibration', (
-    tester,
-  ) async {
+  testWidgets('common controls are compact and grouped', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -96,11 +94,28 @@ void main() {
     final notificationCard = find
         .ancestor(of: notification, matching: find.byType(Card))
         .first;
-    final gap =
-        tester.getTopLeft(notificationCard).dy -
-        tester.getBottomLeft(vibrationCard).dy;
+    expect(
+      vibrationCard.evaluate().single,
+      same(notificationCard.evaluate().single),
+    );
 
-    expect(gap, greaterThanOrEqualTo(settingsIslandGap));
+    final vibrationTile = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Vibration'),
+    );
+    expect(vibrationTile.subtitle, isNull);
+  });
+
+  testWidgets('language value is shown alongside its title', (tester) async {
+    await tester.pumpWidget(
+      _generalSettingsApp(statusNotificationEnabled: true),
+    );
+    await tester.pumpAndSettle();
+
+    final languageTile = tester.widget<ListTile>(
+      find.ancestor(of: find.text('Language'), matching: find.byType(ListTile)),
+    );
+    expect(languageTile.subtitle, isNull);
+    expect(find.text('English'), findsOneWidget);
   });
 
   testWidgets('soft core memory limit is not shown in general settings', (
@@ -196,6 +211,23 @@ void main() {
       expect(find.text('Скорость и общий объём'), findsOneWidget);
     },
   );
+
+  testWidgets('notification controls share one compact group', (tester) async {
+    await tester.pumpWidget(
+      _generalSettingsApp(statusNotificationEnabled: true),
+    );
+    await _openNotificationSettings(tester);
+
+    expect(find.byType(SettingsTileGroup), findsOneWidget);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Notification status'),
+          )
+          .subtitle,
+      isNull,
+    );
+  });
 
   testWidgets(
     'notification traffic refresh slider is disabled with status off',

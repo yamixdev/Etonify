@@ -75,7 +75,7 @@ void main() {
     expect(find.text('Privacy Policy'), findsNothing);
     expect(find.text('@etonify'), findsOneWidget);
 
-    final updatesTop = tester.getTopLeft(find.text('Updates')).dy;
+    final updatesTop = tester.getTopLeft(find.text('App updates')).dy;
     final documentationTop = tester
         .getTopLeft(find.text('Etonify documentation'))
         .dy;
@@ -85,6 +85,8 @@ void main() {
     expect(updatesTop, lessThan(documentationTop));
     expect(documentationTop, lessThan(diagnosticsTop));
 
+    await tester.ensureVisible(find.text('Etonify documentation'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Etonify documentation'));
     await tester.pumpAndSettle();
 
@@ -126,9 +128,44 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Client version'), findsOneWidget);
+    expect(find.text('App version'), findsOneWidget);
     expect(find.text('0.3.1-rc.1'), findsOneWidget);
     expect(find.text('@etonify'), findsOneWidget);
     expect(find.text('MeowTeam'), findsOneWidget);
+  });
+
+  testWidgets('about page follows the compact reference hierarchy in Russian', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsAboutPage(versionLabel: '0.3.1', onShowOnboarding: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('О приложении'), findsOneWidget);
+    expect(find.text('Версия приложения'), findsOneWidget);
+    expect(find.text('Телеграм-канал'), findsOneWidget);
+    expect(find.text('Telegram Etonify'), findsNothing);
+    expect(find.text('Обновления приложения'), findsOneWidget);
+
+    final brand = find.byKey(const ValueKey('about-brand'));
+    final overview = find.byKey(const ValueKey('about-overview-card'));
+    expect(brand, findsOneWidget);
+    expect(overview, findsOneWidget);
+    expect(
+      tester.getBottomLeft(brand).dy,
+      lessThan(tester.getTopLeft(overview).dy),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

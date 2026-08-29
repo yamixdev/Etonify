@@ -139,18 +139,31 @@ class SettingsGeneralPage extends StatelessWidget {
             // ── Language ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  leading: SettingsLeadingIcon(
-                    icon: Icons.language_rounded,
-                    color: cs.primary,
+              child: SettingsTileGroup(
+                children: [
+                  ListTile(
+                    leading: SettingsLeadingIcon(
+                      icon: Icons.language_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(l10n.languageSettingTitle)),
+                        const Gap(12),
+                        Text(
+                          _localeName(l10n, currentLocaleCode),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => _showLanguagePicker(context),
                   ),
-                  title: Text(l10n.languageSettingTitle),
-                  subtitle: Text(_localeName(l10n, currentLocaleCode)),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => _showLanguagePicker(context),
-                ),
+                ],
               ),
             ),
 
@@ -232,78 +245,57 @@ class SettingsGeneralPage extends StatelessWidget {
 
             const Gap(settingsSectionGap),
 
-            // ── Vibration ──
+            // ── Everyday controls ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: SwitchListTile(
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.vibration_rounded,
-                    color: cs.primary,
+              child: SettingsTileGroup(
+                children: [
+                  SwitchListTile(
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.vibration_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.hapticTitle),
+                    value: currentHapticEnabled,
+                    onChanged: onHapticChanged,
                   ),
-                  title: Text(l10n.hapticTitle),
-                  subtitle: Text(l10n.hapticSubtitle),
-                  value: currentHapticEnabled,
-                  onChanged: onHapticChanged,
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  key: const ValueKey('notification-settings-entry'),
-                  leading: SettingsLeadingIcon(
-                    icon: Icons.notifications_none_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.notificationSettingsTitle),
-                  subtitle: Text(l10n.notificationSettingsSubtitle),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(
-                      builder: (context) => SettingsNotificationPage(
-                        currentStatusNotificationEnabled:
-                            currentStatusNotificationEnabled,
-                        currentTrafficDisplayMode:
-                            currentNotificationTrafficDisplayMode,
-                        currentTrafficRefreshSeconds:
-                            currentNotificationTrafficRefreshSeconds,
-                        onStatusNotificationChanged:
-                            onStatusNotificationChanged,
-                        onTrafficDisplayModeChanged:
-                            onNotificationTrafficDisplayModeChanged,
-                        onTrafficRefreshSecondsChanged:
-                            onNotificationTrafficRefreshSecondsChanged,
+                  ListTile(
+                    key: const ValueKey('notification-settings-entry'),
+                    leading: SettingsLeadingIcon(
+                      icon: Icons.notifications_none_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.notificationSettingsTitle),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (context) => SettingsNotificationPage(
+                          currentStatusNotificationEnabled:
+                              currentStatusNotificationEnabled,
+                          currentTrafficDisplayMode:
+                              currentNotificationTrafficDisplayMode,
+                          currentTrafficRefreshSeconds:
+                              currentNotificationTrafficRefreshSeconds,
+                          onStatusNotificationChanged:
+                              onStatusNotificationChanged,
+                          onTrafficDisplayModeChanged:
+                              onNotificationTrafficDisplayModeChanged,
+                          onTrafficRefreshSecondsChanged:
+                              onNotificationTrafficRefreshSecondsChanged,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-
-            const Gap(settingsIslandGap),
-
-            // ── Hide server IP ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: SwitchListTile(
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.visibility_off_rounded,
-                    color: cs.primary,
+                  SwitchListTile(
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.visibility_off_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.hideServerIpTitle),
+                    value: currentHideServerIp,
+                    onChanged: onHideServerIpChanged,
                   ),
-                  title: Text(l10n.hideServerIpTitle),
-                  subtitle: Text(l10n.hideServerIpSubtitle),
-                  value: currentHideServerIp,
-                  onChanged: onHideServerIpChanged,
-                ),
+                ],
               ),
             ),
           ],

@@ -15,8 +15,6 @@ Widget _settingsApp({
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: SettingsPage(
-      currentLocaleLabel: 'System',
-      currentThemeLabel: 'System',
       onOpenGeneral: () {},
       onOpenDns: () {},
       onOpenSubscriptions: () {},
@@ -41,6 +39,28 @@ Future<void> _openSettingsMenu(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('settings destinations are compact and omit descriptions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_settingsApp());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Card), findsNWidgets(3));
+    expect(find.byType(ListTile), findsNWidgets(9));
+    expect(find.text('General'), findsOneWidget);
+    expect(find.text('About'), findsOneWidget);
+    expect(find.textContaining('Language: System'), findsNothing);
+    expect(find.text('VPN · Proxy'), findsNothing);
+    expect(find.text('Direct · Via proxy'), findsNothing);
+    expect(tester.getBottomLeft(find.text('About')).dy, lessThan(800));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('settings menu exposes import, export, and reset', (
     tester,
   ) async {

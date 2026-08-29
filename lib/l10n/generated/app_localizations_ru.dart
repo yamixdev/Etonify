@@ -215,11 +215,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dnsIpPreferenceTitle => 'Версия IP';
 
   @override
-  String get aboutSectionTitle => 'О клиенте';
+  String get aboutSectionTitle => 'О приложении';
 
   @override
   String get aboutSectionSubtitle =>
-      'Версия клиента, ядро, команда и служебная информация.';
+      'Версия приложения, ядро, команда и служебная информация.';
 
   @override
   String get aboutHeroSubtitle =>
@@ -396,7 +396,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Etonify работает только на Android и не содержит VPN-серверов. Доступность зависит от сервера, подписки, DNS, оператора и устройства.\n\nURLTest проверяет один адрес и не гарантирует доступ ко всем сайтам. Большие подписки и массовая проверка временно увеличивают расход памяти, процессора, батареи и трафика.';
 
   @override
-  String get telegramChannelLabel => 'Telegram Etonify';
+  String get telegramChannelLabel => 'Телеграм-канал';
 
   @override
   String get legalTermsTitle => 'Пользовательское соглашение';
@@ -709,10 +709,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutResourceBatteryTemp => 'Температура батареи';
 
   @override
-  String get updatesTitle => 'Обновления';
+  String get updatesTitle => 'Обновления приложения';
 
   @override
-  String get updatesSubtitle => 'Проверить и установить новую версию.';
+  String get updatesSubtitle => 'Проверить новую версию и установить её.';
 
   @override
   String get updatesChecking => 'Проверка обновлений…';
@@ -982,7 +982,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updatesUnknownSize => 'Размер неизвестен';
 
   @override
-  String get appVersionLabel => 'Версия клиента';
+  String get appVersionLabel => 'Версия приложения';
 
   @override
   String get currentProfileLabel => 'Текущий профиль';

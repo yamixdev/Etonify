@@ -6,8 +6,6 @@ import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
-    required this.currentLocaleLabel,
-    required this.currentThemeLabel,
     required this.onOpenGeneral,
     required this.onOpenDns,
     required this.onOpenSubscriptions,
@@ -24,8 +22,6 @@ class SettingsPage extends StatelessWidget {
     required this.onOpenAbout,
   });
 
-  final String currentLocaleLabel;
-  final String currentThemeLabel;
   final VoidCallback onOpenGeneral;
   final VoidCallback onOpenDns;
   final VoidCallback onOpenSubscriptions;
@@ -150,68 +146,64 @@ class SettingsPage extends StatelessWidget {
           appBottomSafePadding(context, settingsScreenPadding.bottom),
         ),
         children: [
-          _SettingsEntryTile(
-            icon: Icons.tune_rounded,
-            title: l10n.generalSectionTitle,
-            subtitle:
-                '${l10n.languageSettingTitle}: $currentLocaleLabel · ${l10n.themeSettingTitle}: $currentThemeLabel',
-            onTap: onOpenGeneral,
+          SettingsTileGroup(
+            children: [
+              _SettingsEntryTile(
+                icon: Icons.tune_rounded,
+                title: l10n.generalSectionTitle,
+                onTap: onOpenGeneral,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.settings_ethernet_rounded,
+                title: l10n.inboundTitle,
+                onTap: onOpenInbound,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.alt_route_rounded,
+                title: l10n.routingTitle,
+                onTap: onOpenRouting,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.dns_rounded,
+                title: l10n.dnsTitle,
+                onTap: onOpenDns,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.security_rounded,
+                title: l10n.securityTitle,
+                onTap: onOpenSecurity,
+              ),
+            ],
           ),
           const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.settings_ethernet_rounded,
-            title: l10n.inboundTitle,
-            subtitle: '${l10n.vpnInTitle} · ${l10n.proxyInTitle}',
-            onTap: onOpenInbound,
+          SettingsTileGroup(
+            children: [
+              _SettingsEntryTile(
+                icon: Icons.science_rounded,
+                title: l10n.experimentalTitle,
+                onTap: onOpenExperimental,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.speed_rounded,
+                title: l10n.settingsProfilesChecksTitle,
+                onTap: onOpenSubscriptions,
+              ),
+              _SettingsEntryTile(
+                icon: Icons.article_rounded,
+                title: l10n.logsTitle,
+                onTap: onOpenLogs,
+              ),
+            ],
           ),
           const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.alt_route_rounded,
-            title: l10n.routingTitle,
-            subtitle: l10n.routingSubtitle,
-            onTap: onOpenRouting,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.dns_rounded,
-            title: l10n.dnsTitle,
-            subtitle: '${l10n.dnsDirectTitle} · ${l10n.dnsProxyTitle}',
-            onTap: onOpenDns,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.security_rounded,
-            title: l10n.securityTitle,
-            subtitle: l10n.securitySubtitle,
-            onTap: onOpenSecurity,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.science_rounded,
-            title: l10n.experimentalTitle,
-            subtitle: l10n.experimentalSubtitle,
-            onTap: onOpenExperimental,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.speed_rounded,
-            title: l10n.settingsProfilesChecksTitle,
-            subtitle: l10n.settingsProfilesChecksSubtitle,
-            onTap: onOpenSubscriptions,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.article_rounded,
-            title: l10n.logsTitle,
-            subtitle: l10n.logsSubtitle,
-            onTap: onOpenLogs,
-          ),
-          const SizedBox(height: settingsIslandGap),
-          _SettingsEntryTile(
-            icon: Icons.info_outline_rounded,
-            title: l10n.aboutSectionTitle,
-            subtitle: l10n.aboutSectionSubtitle,
-            onTap: onOpenAbout,
+          SettingsTileGroup(
+            children: [
+              _SettingsEntryTile(
+                icon: Icons.info_outline_rounded,
+                title: l10n.aboutSectionTitle,
+                onTap: onOpenAbout,
+              ),
+            ],
           ),
         ],
       ),
@@ -223,39 +215,32 @@ class _SettingsEntryTile extends StatelessWidget {
   const _SettingsEntryTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: SettingsLeadingIcon(
-          icon: icon,
-          color: theme.colorScheme.primary,
-        ),
-        title: Text(
-          title,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(subtitle),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded),
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: SettingsLeadingIcon(
+        icon: icon,
+        color: theme.colorScheme.primary,
+        size: 40,
+        iconSize: 20,
       ),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 }

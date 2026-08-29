@@ -270,22 +270,16 @@ void main() {
     expect(find.text('panel:0.00'), findsOneWidget);
     expect(closeCount, 0);
 
-    final shortSwipe = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('proxy-panel-collapsed'))),
+    final panelSurface = find.byKey(const ValueKey('proxy-panel-drag-surface'));
+    final collapsedHeight = tester.getSize(panelSurface).height;
+    final openGesture = await tester.startGesture(
+      tester.getCenter(panelSurface),
     );
-    await shortSwipe.moveBy(const Offset(0, -70));
+    await openGesture.moveBy(const Offset(0, -70));
     await tester.pump();
-    expect(find.text('panel:0.00'), findsOneWidget);
-    await shortSwipe.up();
-    await tester.pumpAndSettle();
-
-    expect(find.text('panel:0.00'), findsOneWidget);
-    expect(openedCount, 0);
-
-    await tester.drag(
-      find.byKey(const ValueKey('proxy-panel-collapsed')),
-      const Offset(0, -120),
-    );
+    expect(tester.getSize(panelSurface).height, greaterThan(collapsedHeight));
+    expect(find.text('panel:0.00'), findsNothing);
+    await openGesture.up();
     await tester.pumpAndSettle();
 
     expect(find.text('panel:1.00'), findsOneWidget);
@@ -359,6 +353,8 @@ void main() {
     final proxies = <AppProxySummary>[
       _proxy('proxy-1', 'Amsterdam', latency: 42),
       _proxy('proxy-2', 'Paris', latency: 58),
+      for (var index = 3; index <= 12; index++)
+        _proxy('proxy-$index', 'Proxy $index', latency: 58 + index),
     ];
     await tester.pumpWidget(
       MaterialApp(
@@ -411,34 +407,30 @@ void main() {
     expect(find.text('Amsterdam'), findsOneWidget);
     expect(find.text('Paris'), findsNothing);
 
+    final panelSurface = find.byKey(const ValueKey('proxy-panel-drag-surface'));
+    final collapsedHeight = tester.getSize(panelSurface).height;
     final openGesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('proxy-panel-collapsed'))),
+      tester.getCenter(panelSurface),
     );
     for (var step = 0; step < 8; step++) {
       await openGesture.moveBy(const Offset(0, -10));
       await tester.pump();
       expect(find.text('Paris'), findsNothing);
     }
+    expect(tester.getSize(panelSurface).height, greaterThan(collapsedHeight));
+    expect(find.byType(ProxiesPage), findsOneWidget);
     await openGesture.up();
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('proxy-panel-expanded')), findsNothing);
-    expect(find.text('Paris'), findsNothing);
-
-    await tester.drag(
-      find.byKey(const ValueKey('proxy-panel-collapsed')),
-      const Offset(0, -120),
-    );
-    await tester.pumpAndSettle();
-
-    final expandedPanel = find.byKey(const ValueKey('proxy-panel-expanded'));
-    final expandedTitle = find.descendant(
-      of: expandedPanel,
-      matching: find.text('Proxies'),
-    );
-    expect(expandedPanel, findsOneWidget);
+    final expandedTitle = find.text('Proxies');
     expect(expandedTitle, findsOneWidget);
     expect(find.text('Paris'), findsOneWidget);
+    expect(find.byType(ProxiesPage), findsOneWidget);
+
+    final expandedHeight = tester.getSize(panelSurface).height;
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panelSurface).height, expandedHeight);
 
     await tester.drag(expandedTitle, const Offset(0, 320));
     await tester.pumpAndSettle();
@@ -1681,7 +1673,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Etonify v0.1.1'), findsNothing);
-    expect(find.text('Client version'), findsOneWidget);
+    expect(find.text('App version'), findsOneWidget);
     expect(find.text('0.1.1'), findsOneWidget);
     expect(find.text('MeowVPN'), findsNothing);
     expect(find.text('yamixdev/etonify-core'), findsNothing);

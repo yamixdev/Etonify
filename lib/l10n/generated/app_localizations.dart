@@ -485,13 +485,13 @@ abstract class AppLocalizations {
   /// No description provided for @aboutSectionTitle.
   ///
   /// In en, this message translates to:
-  /// **'About client'**
+  /// **'About'**
   String get aboutSectionTitle;
 
   /// No description provided for @aboutSectionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Client version, core, team, and service information.'**
+  /// **'App version, core, team, and service information.'**
   String get aboutSectionSubtitle;
 
   /// No description provided for @aboutHeroSubtitle.
@@ -803,7 +803,7 @@ abstract class AppLocalizations {
   /// No description provided for @telegramChannelLabel.
   ///
   /// In en, this message translates to:
-  /// **'Etonify Telegram'**
+  /// **'Telegram channel'**
   String get telegramChannelLabel;
 
   /// No description provided for @legalTermsTitle.
@@ -1367,13 +1367,13 @@ abstract class AppLocalizations {
   /// No description provided for @updatesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Updates'**
+  /// **'App updates'**
   String get updatesTitle;
 
   /// No description provided for @updatesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Check for and install a new version.'**
+  /// **'Check for a new version and install it.'**
   String get updatesSubtitle;
 
   /// No description provided for @updatesChecking.
@@ -1826,7 +1826,7 @@ abstract class AppLocalizations {
   /// No description provided for @appVersionLabel.
   ///
   /// In en, this message translates to:
-  /// **'Client version'**
+  /// **'App version'**
   String get appVersionLabel;
 
   /// No description provided for @currentProfileLabel.

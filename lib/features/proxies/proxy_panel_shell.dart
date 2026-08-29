@@ -1,15 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 const proxyPanelMinHeight = 108.0;
 const proxyPanelRowExtent = 72.0;
+const proxyPanelListBottomPadding = 20.0;
 const proxyPanelScreenCornerRadius = appBottomSheetCornerRadius;
 
-const _proxyPanelContentBottomPadding = 60.0;
 const _proxyPanelStatusBarGap = 8.0;
 
 @immutable
@@ -131,20 +132,33 @@ class ProxyPanelShell extends StatefulWidget {
   State<ProxyPanelShell> createState() => _ProxyPanelShellState();
 }
 
-class _ProxyPanelShellState extends State<ProxyPanelShell> {
-  late final ValueNotifier<ProxyPanelMetrics> _collapsedMetricsNotifier =
+class _ProxyPanelShellState extends State<ProxyPanelShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _panelController;
+  late final ValueNotifier<ProxyPanelMetrics> _metricsNotifier =
       ValueNotifier<ProxyPanelMetrics>(_fallbackMetrics);
-  final ValueNotifier<int> _contentRevision = ValueNotifier<int>(0);
-  final ScrollController _collapsedListController = ScrollController();
+  final ScrollController _listController = ScrollController();
 
   bool _interactionActive = false;
-  bool _panelRouteOpen = false;
+  bool _animating = false;
+  bool _open = false;
+  bool _openRequested = false;
   bool _openedNotified = false;
-  bool _contentRefreshScheduled = false;
-  bool _dismissWhenRouteReady = false;
-  BuildContext? _panelRouteContext;
-  double _collapsedDragStartY = 0;
-  double _collapsedDragDistance = 0;
+  bool _resetAfterWidgetUpdateScheduled = false;
+  int _animationGeneration = 0;
+  double _parentHeight = proxyPanelMinHeight;
+  double _viewportHeight = proxyPanelMinHeight;
+  double _topInset = 0;
+  double _bottomInset = 0;
+  bool _layoutReady = false;
+
+  int? _sheetPointer;
+  double _pointerStartY = 0;
+  double _pointerDeltaY = 0;
+  double _dragStartProgress = 0;
+  double _dragRange = 0;
+  bool _pointerStartedInHeader = false;
+  bool _draggingPanel = false;
 
   static const ProxyPanelMetrics _fallbackMetrics = ProxyPanelMetrics(
     bottomInset: 0,
@@ -162,40 +176,41 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    _panelController = AnimationController(
+      vsync: this,
+      duration: appBottomSheetAnimationDuration,
+    )..addListener(_publishMetrics);
+  }
+
+  @override
   void didUpdateWidget(covariant ProxyPanelShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _scheduleRouteContentRefresh();
-
     final panelUnavailable =
         !widget.ready ||
         !widget.onboardingCompleted ||
         !widget.hasActiveProfile;
     if (panelUnavailable || oldWidget.resetListKey != widget.resetListKey) {
-      _resetCollapsedListScroll();
-      _dismissPanel();
+      _resetListScroll();
+      _scheduleCollapsedReset();
+      return;
+    }
+    if (oldWidget.visibleRows != widget.visibleRows && _isClosed) {
+      _resetListScroll();
     }
   }
 
   @override
   void dispose() {
-    _collapsedListController.dispose();
-    _collapsedMetricsNotifier.dispose();
-    _contentRevision.dispose();
+    _panelController.dispose();
+    _listController.dispose();
+    _metricsNotifier.dispose();
     super.dispose();
   }
 
-  void _scheduleRouteContentRefresh() {
-    if (!_panelRouteOpen || _contentRefreshScheduled) {
-      return;
-    }
-    _contentRefreshScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _contentRefreshScheduled = false;
-      if (mounted && _panelRouteOpen) {
-        _contentRevision.value++;
-      }
-    });
-  }
+  bool get _isClosed =>
+      !_open && _panelController.value <= 0.001 && !_animating;
 
   void _markInteractionActive() {
     if (_interactionActive) {
@@ -203,6 +218,7 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     }
     _interactionActive = true;
     widget.onInteractionActiveChanged?.call(true);
+    _publishMetrics();
   }
 
   void _finishInteraction() {
@@ -211,17 +227,55 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     }
     _interactionActive = false;
     widget.onInteractionActiveChanged?.call(false);
+    _publishMetrics();
   }
 
-  void _resetCollapsedListScroll() {
-    if (!_collapsedListController.hasClients) {
+  void _scheduleCollapsedReset() {
+    if (_resetAfterWidgetUpdateScheduled) {
       return;
     }
-    for (final position in _collapsedListController.positions) {
+    _resetAfterWidgetUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resetAfterWidgetUpdateScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      final notifyClosed = _openRequested;
+      ++_animationGeneration;
+      _panelController.stop();
+      _panelController.value = 0;
+      _animating = false;
+      _open = false;
+      _draggingPanel = false;
+      _resetPointerTracking();
+      _resetListScroll();
+      _finishInteraction();
+      if (notifyClosed) {
+        _openRequested = false;
+        _openedNotified = false;
+        widget.onClosed?.call();
+      }
+    });
+  }
+
+  void _resetListScroll() {
+    if (!_listController.hasClients) {
+      return;
+    }
+    for (final position in _listController.positions) {
       if ((position.pixels - position.minScrollExtent).abs() > 0.5) {
         position.jumpTo(position.minScrollExtent);
       }
     }
+  }
+
+  bool get _listIsAtTop {
+    if (!_listController.hasClients) {
+      return true;
+    }
+    return _listController.positions.every(
+      (position) => position.pixels <= position.minScrollExtent + 0.5,
+    );
   }
 
   double _viewportLimit(double viewportHeight, {double topInset = 0}) {
@@ -242,203 +296,219 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
     final contentHeight =
         proxyPanelMinHeight +
         widget.visibleRows * proxyPanelRowExtent +
-        _proxyPanelContentBottomPadding;
-    final maxForContent = contentHeight
-        .clamp(proxyPanelMinHeight, viewportLimit)
-        .toDouble();
-    return maxForContent >= viewportLimit * .88 ? viewportLimit : maxForContent;
+        proxyPanelListBottomPadding;
+    return contentHeight.clamp(proxyPanelMinHeight, viewportLimit).toDouble();
   }
 
-  ProxyPanelMetrics _metricsFor(
-    BuildContext context, {
-    required double availableHeight,
-    required bool expanded,
-  }) {
-    final bottomInset = appSystemNavigationBarInset(
+  void _updateLayout(BuildContext context, BoxConstraints constraints) {
+    final mediaSize = MediaQuery.sizeOf(context);
+    final nextParentHeight = constraints.maxHeight.isFinite
+        ? constraints.maxHeight
+        : mediaSize.height;
+    final nextBottomInset = appSystemNavigationBarInset(
       context,
-    ).clamp(0.0, availableHeight - proxyPanelMinHeight).toDouble();
-    final viewportHeight = (availableHeight - bottomInset)
+    ).clamp(0.0, nextParentHeight - proxyPanelMinHeight).toDouble();
+    final nextViewportHeight = (nextParentHeight - nextBottomInset)
         .clamp(proxyPanelMinHeight, double.infinity)
         .toDouble();
-    final topInset = MediaQuery.paddingOf(context).top;
-    final viewportLimit = _viewportLimit(viewportHeight, topInset: topInset);
-    final maxPanelHeight = _maxHeight(viewportHeight, topInset: topInset);
+    final nextTopInset = MediaQuery.paddingOf(context).top;
+    final layoutChanged =
+        !_layoutReady ||
+        (nextParentHeight - _parentHeight).abs() > 0.5 ||
+        (nextViewportHeight - _viewportHeight).abs() > 0.5 ||
+        (nextTopInset - _topInset).abs() > 0.5 ||
+        (nextBottomInset - _bottomInset).abs() > 0.5;
+    if (!layoutChanged) {
+      return;
+    }
+
+    _parentHeight = nextParentHeight;
+    _viewportHeight = nextViewportHeight;
+    _topInset = nextTopInset;
+    _bottomInset = nextBottomInset;
+    _layoutReady = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _publishMetrics();
+      }
+    });
+  }
+
+  ProxyPanelMetrics _currentMetrics() {
+    if (!_layoutReady) {
+      return _fallbackMetrics;
+    }
+    final maxPanelHeight = _maxHeight(_viewportHeight, topInset: _topInset);
+    final viewportLimit = _viewportLimit(_viewportHeight, topInset: _topInset);
+    final progress = _panelController.value.clamp(0.0, 1.0).toDouble();
+    final panelHeight =
+        proxyPanelMinHeight + (maxPanelHeight - proxyPanelMinHeight) * progress;
     return ProxyPanelMetrics(
-      bottomInset: bottomInset,
-      panelHeight: expanded ? maxPanelHeight : proxyPanelMinHeight,
+      bottomInset: _bottomInset,
+      panelHeight: panelHeight,
       maxPanelHeight: maxPanelHeight,
-      viewportHeight: viewportHeight,
+      viewportHeight: _viewportHeight,
       viewportLimit: viewportLimit,
-      progress: expanded ? 1 : 0,
-      backdropProgress: expanded ? 1 : 0,
-      atMaxExtent: expanded,
+      progress: progress,
+      backdropProgress: Curves.easeOutCubic.transform(progress),
+      atMaxExtent: progress >= 0.999 && !_draggingPanel,
       canFillScreen: maxPanelHeight >= viewportLimit - 0.5,
       collapseOnAnyDownwardDrag:
           maxPanelHeight < viewportLimit - 0.5 || widget.visibleRows <= 3,
-      dragging: false,
-      animating: false,
+      dragging: _draggingPanel,
+      animating: _animating,
     );
   }
 
-  void _publishCollapsedMetrics(ProxyPanelMetrics metrics) {
-    if (_collapsedMetricsNotifier.value == metrics) {
+  void _publishMetrics() {
+    final metrics = _currentMetrics();
+    if (_metricsNotifier.value != metrics) {
+      _metricsNotifier.value = metrics;
+    }
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_sheetPointer != null) {
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _collapsedMetricsNotifier.value != metrics) {
-        _collapsedMetricsNotifier.value = metrics;
+    if (_animating) {
+      ++_animationGeneration;
+      _panelController.stop();
+      _animating = false;
+    }
+    final metrics = _currentMetrics();
+    _sheetPointer = event.pointer;
+    _pointerStartY = event.position.dy;
+    _pointerDeltaY = 0;
+    _dragStartProgress = _panelController.value;
+    _dragRange = metrics.maxPanelHeight - proxyPanelMinHeight;
+    _pointerStartedInHeader = event.localPosition.dy <= proxyPanelMinHeight;
+    _draggingPanel = false;
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _sheetPointer || _dragRange <= 0) {
+      return;
+    }
+    final deltaY = event.position.dy - _pointerStartY;
+    _pointerDeltaY = deltaY;
+
+    if (!_draggingPanel) {
+      if (deltaY.abs() < kTouchSlop) {
+        return;
       }
-    });
-  }
-
-  void _handleCollapsedDragStart(DragStartDetails details) {
-    _collapsedDragStartY = details.globalPosition.dy;
-    _collapsedDragDistance = 0;
-    _markInteractionActive();
-  }
-
-  void _handleCollapsedDragUpdate(DragUpdateDetails details) {
-    _collapsedDragDistance = details.globalPosition.dy - _collapsedDragStartY;
-  }
-
-  void _handleCollapsedDragEnd(DragEndDetails details) {
-    final shouldOpen = _collapsedDragDistance <= -appBottomSheetDragThreshold;
-    _collapsedDragStartY = 0;
-    _collapsedDragDistance = 0;
-    if (shouldOpen) {
-      unawaited(_openPanel());
-    } else {
-      _finishInteraction();
+      final panelBelowMax = _panelController.value < 0.999;
+      final pullingDownAtListTop = deltaY > 0 && _listIsAtTop;
+      if (!panelBelowMax && !_pointerStartedInHeader && !pullingDownAtListTop) {
+        // Let the list consume this gesture. Reset the hand-off origin while
+        // it scrolls so reaching the top cannot make the sheet jump by the
+        // distance already consumed by the list.
+        _pointerStartY = event.position.dy;
+        _pointerDeltaY = 0;
+        _dragStartProgress = _panelController.value;
+        return;
+      }
+      _draggingPanel = true;
+      _markInteractionActive();
     }
+
+    _panelController.value = (_dragStartProgress - deltaY / _dragRange)
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
 
-  void _handleCollapsedDragCancel() {
-    _collapsedDragStartY = 0;
-    _collapsedDragDistance = 0;
-    _finishInteraction();
-  }
-
-  void _dismissPanel() {
-    if (!_panelRouteOpen) {
+  void _handlePointerEnd(PointerEvent event) {
+    if (event.pointer != _sheetPointer) {
+      return;
+    }
+    final wasDragging = _draggingPanel;
+    final deltaY = _pointerDeltaY;
+    final cancelled = event is PointerCancelEvent;
+    _resetPointerTracking();
+    if (!wasDragging) {
       _finishInteraction();
       return;
     }
-    final routeContext = _panelRouteContext;
-    if (routeContext == null) {
-      _dismissWhenRouteReady = true;
-      return;
-    }
-    _dismissWhenRouteReady = false;
-    unawaited(Navigator.of(routeContext).maybePop());
+    final targetOpen = cancelled
+        ? _open
+        : deltaY.abs() < kTouchSlop
+        ? _panelController.value >= 0.5
+        : deltaY < 0;
+    unawaited(_animateTo(open: targetOpen));
   }
 
-  void _notifyPanelOpened() {
-    if (_openedNotified || !_panelRouteOpen) {
+  void _resetPointerTracking() {
+    _sheetPointer = null;
+    _pointerStartY = 0;
+    _pointerDeltaY = 0;
+    _dragStartProgress = 0;
+    _dragRange = 0;
+    _pointerStartedInHeader = false;
+  }
+
+  void _notifyOpened() {
+    if (_openedNotified) {
       return;
     }
     _openedNotified = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_panelRouteOpen) {
-        return;
-      }
-      _finishInteraction();
-      widget.onOpened?.call();
-    });
+    widget.onOpened?.call();
   }
 
-  Future<void> _openPanel() async {
-    if (_panelRouteOpen ||
-        !mounted ||
-        !widget.ready ||
-        !widget.onboardingCompleted ||
-        !widget.hasActiveProfile) {
-      _finishInteraction();
+  void _notifyClosed() {
+    _resetListScroll();
+    if (!_openRequested) {
       return;
     }
-
-    _panelRouteOpen = true;
+    _openRequested = false;
     _openedNotified = false;
-    _dismissWhenRouteReady = false;
+    widget.onClosed?.call();
+  }
+
+  Future<void> _animateTo({required bool open}) async {
+    if (!_layoutReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_animateTo(open: open));
+        }
+      });
+      return;
+    }
+    if (open && !_openRequested) {
+      _openRequested = true;
+      widget.onOpenRequested?.call();
+    }
+    _open = open;
+    final target = open ? 1.0 : 0.0;
+    final generation = ++_animationGeneration;
+    _animating = true;
+    _draggingPanel = false;
     _markInteractionActive();
-    widget.onOpenRequested?.call();
-
-    final routeListController = ScrollController();
-    final routeMetricsNotifier = ValueNotifier<ProxyPanelMetrics>(
-      _fallbackMetrics,
-    );
-
+    _publishMetrics();
     try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        enableDrag: true,
-        isDismissible: true,
-        useSafeArea: false,
-        showDragHandle: false,
-        backgroundColor: Colors.transparent,
-        clipBehavior: Clip.none,
-        builder: (routeContext) {
-          _panelRouteContext = routeContext;
-          _notifyPanelOpened();
-          if (_dismissWhenRouteReady) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _panelRouteOpen) {
-                _dismissPanel();
-              }
-            });
-          }
-
-          return ValueListenableBuilder<int>(
-            valueListenable: _contentRevision,
-            builder: (context, _, _) {
-              final metrics = _metricsFor(
-                context,
-                availableHeight: MediaQuery.sizeOf(context).height,
-                expanded: true,
-              );
-              if (routeMetricsNotifier.value != metrics) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_panelRouteOpen &&
-                      routeMetricsNotifier.value != metrics) {
-                    routeMetricsNotifier.value = metrics;
-                  }
-                });
-              }
-              final gestures = ProxyPanelGestures(onHeaderTap: _dismissPanel);
-              return SizedBox(
-                key: const ValueKey('proxy-panel-expanded'),
-                height: metrics.panelHeight + metrics.bottomInset,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(proxyPanelScreenCornerRadius),
-                  ),
-                  clipBehavior: Clip.hardEdge,
-                  child: widget.sheetBuilder(
-                    context,
-                    metrics,
-                    routeMetricsNotifier,
-                    routeListController,
-                    gestures,
-                  ),
-                ),
-              );
-            },
-          );
-        },
+      await _panelController.animateTo(
+        target,
+        duration: appBottomSheetAnimationDuration,
+        curve: Curves.easeOutCubic,
       );
+    } catch (_) {
+      // The panel can detach while the app route or profile changes.
     } finally {
-      routeListController.dispose();
-      routeMetricsNotifier.dispose();
-      _panelRouteContext = null;
-      _panelRouteOpen = false;
-      _openedNotified = false;
-      _dismissWhenRouteReady = false;
-      _resetCollapsedListScroll();
-      _finishInteraction();
-      if (mounted) {
-        widget.onClosed?.call();
+      if (mounted && generation == _animationGeneration) {
+        _animating = false;
+        _publishMetrics();
+        _finishInteraction();
+        if (open && (_panelController.value - 1).abs() <= 0.001) {
+          _notifyOpened();
+        } else if (!open && _panelController.value <= 0.001) {
+          _notifyClosed();
+        }
       }
     }
+  }
+
+  void _toggle() {
+    unawaited(_animateTo(open: !_open));
   }
 
   @override
@@ -449,75 +519,127 @@ class _ProxyPanelShellState extends State<ProxyPanelShell> {
         ? widget.welcome
         : _buildShell(context);
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 360),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 0.04),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
-          ),
+    return ValueListenableBuilder<ProxyPanelMetrics>(
+      valueListenable: _metricsNotifier,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 360),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          );
+        },
+        child: rootChild,
+      ),
+      builder: (context, metrics, child) {
+        final panelOpen = metrics.progress > 0.001 || metrics.animating;
+        return PopScope(
+          canPop: !panelOpen,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && panelOpen) {
+              unawaited(_animateTo(open: false));
+            }
+          },
+          child: child!,
         );
       },
-      child: rootChild,
     );
   }
 
   Widget _buildShell(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       key: const ValueKey('shell'),
       extendBody: true,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final availableHeight = constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : MediaQuery.sizeOf(context).height;
-          final metrics = _metricsFor(
-            context,
-            availableHeight: availableHeight,
-            expanded: false,
-          );
-          _publishCollapsedMetrics(metrics);
+          _updateLayout(context, constraints);
+          final metrics = _currentMetrics();
+          if (_metricsNotifier.value != metrics) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _publishMetrics();
+              }
+            });
+          }
+
+          final gestures = ProxyPanelGestures(onHeaderTap: _toggle);
+          final sheet = widget.hasActiveProfile
+              ? RepaintBoundary(
+                  child: widget.sheetBuilder(
+                    context,
+                    metrics,
+                    _metricsNotifier,
+                    _listController,
+                    gestures,
+                  ),
+                )
+              : null;
 
           return Stack(
             children: [
               RepaintBoundary(child: widget.homeBuilder(context, metrics)),
-              if (widget.hasActiveProfile)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: proxyPanelMinHeight + metrics.bottomInset,
-                  child: GestureDetector(
-                    key: const ValueKey('proxy-panel-collapsed'),
+              if (sheet != null) ...[
+                ValueListenableBuilder<ProxyPanelMetrics>(
+                  valueListenable: _metricsNotifier,
+                  builder: (context, liveMetrics, _) {
+                    final visible =
+                        liveMetrics.progress > 0.001 || liveMetrics.animating;
+                    return IgnorePointer(
+                      ignoring: !visible,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => unawaited(_animateTo(open: false)),
+                        child: ColoredBox(
+                          color: Colors.black.withValues(
+                            alpha:
+                                liveMetrics.backdropProgress *
+                                (theme.brightness == Brightness.dark
+                                    ? 0.22
+                                    : 0.16),
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                ValueListenableBuilder<ProxyPanelMetrics>(
+                  valueListenable: _metricsNotifier,
+                  child: Listener(
+                    key: const ValueKey('proxy-panel-drag-surface'),
                     behavior: HitTestBehavior.translucent,
-                    onVerticalDragStart: _handleCollapsedDragStart,
-                    onVerticalDragUpdate: _handleCollapsedDragUpdate,
-                    onVerticalDragEnd: _handleCollapsedDragEnd,
-                    onVerticalDragCancel: _handleCollapsedDragCancel,
+                    onPointerDown: _handlePointerDown,
+                    onPointerMove: _handlePointerMove,
+                    onPointerUp: _handlePointerEnd,
+                    onPointerCancel: _handlePointerEnd,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(proxyPanelScreenCornerRadius),
                       ),
                       clipBehavior: Clip.hardEdge,
-                      child: widget.sheetBuilder(
-                        context,
-                        metrics,
-                        _collapsedMetricsNotifier,
-                        _collapsedListController,
-                        ProxyPanelGestures(
-                          onHeaderTap: () => unawaited(_openPanel()),
-                        ),
-                      ),
+                      child: sheet,
                     ),
                   ),
+                  builder: (context, liveMetrics, child) {
+                    return Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: liveMetrics.panelHeight + liveMetrics.bottomInset,
+                      child: child!,
+                    );
+                  },
                 ),
+              ],
             ],
           );
         },

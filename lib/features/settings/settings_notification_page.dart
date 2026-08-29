@@ -131,85 +131,75 @@ class _SettingsNotificationPageState extends State<SettingsNotificationPage> {
             appBottomSafePadding(context, settingsScreenPadding.bottom),
           ),
           children: [
-            Card(
-              margin: EdgeInsets.zero,
-              child: SwitchListTile(
-                secondary: SettingsLeadingIcon(
-                  icon: Icons.notifications_active_rounded,
-                  color: cs.primary,
+            SettingsTileGroup(
+              children: [
+                SwitchListTile(
+                  secondary: SettingsLeadingIcon(
+                    icon: Icons.notifications_active_rounded,
+                    color: cs.primary,
+                  ),
+                  title: Text(l10n.statusNotificationTitle),
+                  value: _enabled,
+                  onChanged: _setEnabled,
                 ),
-                title: Text(l10n.statusNotificationTitle),
-                subtitle: Text(l10n.statusNotificationSubtitle),
-                value: _enabled,
-                onChanged: _setEnabled,
-              ),
-            ),
-            const Gap(settingsIslandGap),
-            _NotificationTrafficRefreshSetting(
-              enabled: _enabled,
-              currentSeconds: widget.currentTrafficRefreshSeconds,
-              onChanged: widget.onTrafficRefreshSecondsChanged,
-            ),
-            const Gap(settingsIslandGap),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Semantics(
-                enabled: _enabled,
-                button: true,
-                child: InkWell(
-                  key: const ValueKey('notification-traffic-display-setting'),
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: _enabled ? _showDisplayModePicker : null,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                    child: Row(
-                      children: [
-                        SettingsLeadingIcon(
-                          icon: Icons.speed_rounded,
-                          color: _enabled ? cs.primary : disabledColor,
-                        ),
-                        const Gap(16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.notificationTrafficDisplayTitle,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: _enabled
-                                      ? cs.onSurface
-                                      : disabledColor,
-                                ),
-                              ),
-                              const Gap(3),
-                              Text(
-                                l10n.notificationTrafficDisplaySubtitle,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: _enabled
-                                      ? cs.onSurfaceVariant
-                                      : disabledColor,
-                                ),
-                              ),
-                              const Gap(6),
-                              Text(
-                                _displayModeName(l10n),
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: _enabled ? cs.primary : disabledColor,
-                                ),
-                              ),
-                            ],
+                _NotificationTrafficRefreshSetting(
+                  enabled: _enabled,
+                  currentSeconds: widget.currentTrafficRefreshSeconds,
+                  onChanged: widget.onTrafficRefreshSecondsChanged,
+                ),
+                Semantics(
+                  enabled: _enabled,
+                  button: true,
+                  child: InkWell(
+                    key: const ValueKey('notification-traffic-display-setting'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _enabled ? _showDisplayModePicker : null,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                      child: Row(
+                        children: [
+                          SettingsLeadingIcon(
+                            icon: Icons.speed_rounded,
+                            color: _enabled ? cs.primary : disabledColor,
                           ),
-                        ),
-                        const Gap(8),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: _enabled ? cs.onSurfaceVariant : disabledColor,
-                        ),
-                      ],
+                          const Gap(16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.notificationTrafficDisplayTitle,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: _enabled
+                                        ? cs.onSurface
+                                        : disabledColor,
+                                  ),
+                                ),
+                                const Gap(4),
+                                Text(
+                                  _displayModeName(l10n),
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: _enabled
+                                        ? cs.primary
+                                        : disabledColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Gap(8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: _enabled
+                                ? cs.onSurfaceVariant
+                                : disabledColor,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -260,69 +250,57 @@ class _NotificationTrafficRefreshSettingState
     final disabledColor = cs.onSurface.withValues(alpha: 0.38);
     final foregroundColor = widget.enabled ? cs.primary : disabledColor;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SettingsLeadingIcon(
-              icon: Icons.timer_outlined,
-              color: foregroundColor,
-            ),
-            const Gap(16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l10n.notificationTrafficRefreshTitle,
-                          style: theme.textTheme.titleMedium,
-                        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsLeadingIcon(
+            icon: Icons.timer_outlined,
+            color: foregroundColor,
+          ),
+          const Gap(16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n.notificationTrafficRefreshTitle,
+                        style: theme.textTheme.titleMedium,
                       ),
-                      Text(
-                        l10n.notificationTrafficRefreshSeconds(_seconds),
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: widget.enabled ? cs.primary : disabledColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Gap(4),
-                  Text(
-                    l10n.notificationTrafficRefreshSubtitle,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: widget.enabled
-                          ? cs.onSurfaceVariant
-                          : disabledColor,
                     ),
-                  ),
-                  const Gap(4),
-                  Slider(
-                    value: _seconds.toDouble(),
-                    min: 1,
-                    max: 10,
-                    divisions: 9,
-                    label: l10n.notificationTrafficRefreshSeconds(_seconds),
-                    onChanged: widget.enabled
-                        ? (value) {
-                            final seconds = value.round().clamp(1, 10).toInt();
-                            if (seconds == _seconds) return;
-                            setState(() => _seconds = seconds);
-                            widget.onChanged(seconds);
-                          }
-                        : null,
-                  ),
-                ],
-              ),
+                    Text(
+                      l10n.notificationTrafficRefreshSeconds(_seconds),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: widget.enabled ? cs.primary : disabledColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(4),
+                Slider(
+                  value: _seconds.toDouble(),
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  label: l10n.notificationTrafficRefreshSeconds(_seconds),
+                  onChanged: widget.enabled
+                      ? (value) {
+                          final seconds = value.round().clamp(1, 10).toInt();
+                          if (seconds == _seconds) return;
+                          setState(() => _seconds = seconds);
+                          widget.onChanged(seconds);
+                        }
+                      : null,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

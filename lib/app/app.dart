@@ -4835,12 +4835,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  SettingsPage _buildSettingsPresentation(BuildContext context) {
+  SettingsPage _buildSettingsPresentation(BuildContext _) {
     return SettingsPresentationBuilder(
-      data: SettingsPresentationData(
-        localeCode: _locale?.languageCode ?? 'system',
-        themePreference: _themePreference,
-      ),
       callbacks: SettingsPresentationCallbacks(
         openGeneral: _showGeneralSettingsPage,
         openDns: _showDnsSettingsPage,
@@ -4865,7 +4861,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         openLogs: _showLogsPage,
         openAbout: _showAboutSettingsPage,
       ),
-    ).build(context);
+    ).build();
   }
 
   Future<List<Map<String, dynamic>>> _warmInstalledApps() {

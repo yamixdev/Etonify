@@ -1,31 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
-
-@immutable
-class SettingsPresentationData {
-  const SettingsPresentationData({
-    required this.localeCode,
-    required this.themePreference,
-  });
-
-  final String localeCode;
-  final AppThemePreference themePreference;
-
-  String localeLabel(AppLocalizations l10n) => switch (localeCode) {
-    'ru' => l10n.languageRussian,
-    'en' => l10n.languageEnglish,
-    _ => l10n.languageSystem,
-  };
-
-  String themeLabel(AppLocalizations l10n) => switch (themePreference) {
-    AppThemePreference.light => l10n.themeLight,
-    AppThemePreference.dark => l10n.themeDark,
-    AppThemePreference.amoled => l10n.themeAmoled,
-    AppThemePreference.system => l10n.themeSystem,
-  };
-}
 
 @immutable
 class SettingsPresentationCallbacks {
@@ -63,19 +37,12 @@ class SettingsPresentationCallbacks {
 }
 
 class SettingsPresentationBuilder {
-  const SettingsPresentationBuilder({
-    required this.data,
-    required this.callbacks,
-  });
+  const SettingsPresentationBuilder({required this.callbacks});
 
-  final SettingsPresentationData data;
   final SettingsPresentationCallbacks callbacks;
 
-  SettingsPage build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+  SettingsPage build() {
     return SettingsPage(
-      currentLocaleLabel: data.localeLabel(l10n),
-      currentThemeLabel: data.themeLabel(l10n),
       onOpenGeneral: callbacks.openGeneral,
       onOpenDns: callbacks.openDns,
       onOpenSubscriptions: callbacks.openSubscriptions,

@@ -63,27 +63,30 @@ void main() {
     expect(dots, findsOneWidget);
   });
 
-  testWidgets(
-    'proxy panel releases its route after repeated open-close cycles',
-    (tester) async {
-      var opened = 0;
-      var closed = 0;
-      var interactionActive = false;
+  testWidgets('proxy panel keeps one sheet during repeated open-close cycles', (
+    tester,
+  ) async {
+    var opened = 0;
+    var closed = 0;
+    var interactionActive = false;
+    var sheetBuilds = 0;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ProxyPanelShell(
-            ready: true,
-            onboardingCompleted: true,
-            loading: const SizedBox.shrink(),
-            welcome: const SizedBox.shrink(),
-            visibleRows: 40,
-            hasActiveProfile: true,
-            onOpened: () => opened++,
-            onClosed: () => closed++,
-            onInteractionActiveChanged: (value) => interactionActive = value,
-            homeBuilder: (_, _) => const SizedBox.expand(),
-            sheetBuilder: (_, _, _, controller, gestures) => Material(
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProxyPanelShell(
+          ready: true,
+          onboardingCompleted: true,
+          loading: const SizedBox.shrink(),
+          welcome: const SizedBox.shrink(),
+          visibleRows: 40,
+          hasActiveProfile: true,
+          onOpened: () => opened++,
+          onClosed: () => closed++,
+          onInteractionActiveChanged: (value) => interactionActive = value,
+          homeBuilder: (_, _) => const SizedBox.expand(),
+          sheetBuilder: (_, _, _, controller, gestures) {
+            sheetBuilds++;
+            return Material(
               child: Column(
                 children: [
                   GestureDetector(
@@ -102,38 +105,32 @@ void main() {
                   ),
                 ],
               ),
-            ),
-          ),
+            );
+          },
         ),
-      );
+      ),
+    );
+    await tester.pumpAndSettle();
+    final panelSurface = find.byKey(const ValueKey('proxy-panel-drag-surface'));
+    final collapsedHeight = tester.getSize(panelSurface).height;
+
+    for (var cycle = 0; cycle < 20; cycle++) {
+      await tester.drag(panelSurface, const Offset(0, -80));
       await tester.pumpAndSettle();
+      expect(tester.getSize(panelSurface).height, greaterThan(collapsedHeight));
 
-      for (var cycle = 0; cycle < 20; cycle++) {
-        await tester.drag(
-          find.byKey(const ValueKey('proxy-panel-collapsed')),
-          const Offset(0, -120),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('proxy-panel-expanded')),
-          findsOneWidget,
-        );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(panelSurface, findsOneWidget);
+    }
 
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('proxy-panel-expanded')),
-          findsNothing,
-        );
-      }
+    expect(opened, 20);
+    expect(closed, 20);
+    expect(interactionActive, isFalse);
+    expect(sheetBuilds, 1);
 
-      expect(opened, 20);
-      expect(closed, 20);
-      expect(interactionActive, isFalse);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 }

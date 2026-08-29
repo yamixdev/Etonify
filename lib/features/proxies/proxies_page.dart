@@ -983,7 +983,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
         addRepaintBoundaries: true,
         addSemanticIndexes: false,
         padding: listMounted
-            ? EdgeInsets.only(top: listTopPadding, bottom: 20)
+            ? EdgeInsets.only(
+                top: listTopPadding,
+                bottom: proxyPanelListBottomPadding,
+              )
             : EdgeInsets.zero,
         itemCount: !listMounted
             ? 0

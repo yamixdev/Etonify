@@ -119,6 +119,8 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const _AboutBrandHero(),
+                const Gap(20),
                 _AboutInfoCard(
                   versionLabel: widget.versionLabel,
                   onOpenTelegram: () =>
@@ -467,6 +469,33 @@ class _CoreIntegrationCard extends StatelessWidget {
   }
 }
 
+class _AboutBrandHero extends StatelessWidget {
+  const _AboutBrandHero();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final heroHeight = (viewportHeight * .28).clamp(176.0, 232.0).toDouble();
+
+    return SizedBox(
+      height: heroHeight,
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: Text(
+          'Etonify',
+          key: const ValueKey('about-brand'),
+          maxLines: 1,
+          style: theme.textTheme.displaySmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1.2,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AboutInfoCard extends StatelessWidget {
   const _AboutInfoCard({
     required this.versionLabel,
@@ -482,41 +511,30 @@ class _AboutInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     return Card(
+      key: const ValueKey('about-overview-card'),
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-            child: Text(
-              'Etonify',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-          const Divider(height: 1),
           _AboutOverviewRow(label: l10n.appVersionLabel, value: versionLabel),
-          const Divider(height: 1, indent: 18, endIndent: 18),
+          const Divider(height: 1),
           _AboutOverviewRow(
             label: l10n.telegramChannelLabel,
             value: '@etonify',
             trailingIcon: Icons.open_in_new_rounded,
             onTap: onOpenTelegram,
           ),
-          const Divider(height: 1, indent: 18, endIndent: 18),
+          const Divider(height: 1),
           _AboutOverviewRow(
             label: l10n.aboutTeamLabel,
             value: 'MeowTeam',
             trailingIcon: Icons.chevron_right_rounded,
             onTap: onOpenTeam,
           ),
-          const Divider(height: 1, indent: 18, endIndent: 18),
+          const Divider(height: 1),
           _AboutOverviewRow(
             label: l10n.aboutContactLabel,
             trailingIcon: Icons.forum_outlined,
@@ -594,35 +612,12 @@ class _AboutDocumentationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final cs = theme.colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        onTap: onOpenDocumentation,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        leading: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: cs.tertiaryContainer,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(Icons.menu_book_rounded, color: cs.onTertiaryContainer),
-        ),
-        title: Text(
-          l10n.aboutDocumentationTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(l10n.aboutDocumentationSubtitle),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-      ),
+    return _AboutNavigationCard(
+      icon: Icons.menu_book_rounded,
+      title: l10n.aboutDocumentationTitle,
+      subtitle: l10n.aboutDocumentationSubtitle,
+      onTap: onOpenDocumentation,
     );
   }
 }
@@ -634,38 +629,12 @@ class _AboutUpdatesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final cs = theme.colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        onTap: onOpenUpdates,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        leading: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: cs.primaryContainer,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            Icons.system_update_rounded,
-            color: cs.onPrimaryContainer,
-          ),
-        ),
-        title: Text(
-          l10n.updatesTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(l10n.updatesSubtitle),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-      ),
+    return _AboutNavigationCard(
+      icon: Icons.system_update_rounded,
+      title: l10n.updatesTitle,
+      subtitle: l10n.updatesSubtitle,
+      onTap: onOpenUpdates,
     );
   }
 }
@@ -677,32 +646,53 @@ class _AboutDiagnosticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    return _AboutNavigationCard(
+      icon: Icons.memory_rounded,
+      title: l10n.diagnosticsTitle,
+      subtitle: l10n.diagnosticsSubtitle,
+      onTap: onOpenDiagnostics,
+    );
+  }
+}
+
+class _AboutNavigationCard extends StatelessWidget {
+  const _AboutNavigationCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        onTap: onOpenDiagnostics,
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        leading: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: cs.secondaryContainer,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(Icons.memory_rounded, color: cs.onSecondaryContainer),
+        leading: SettingsLeadingIcon(
+          icon: icon,
+          color: cs.onSurfaceVariant,
+          size: 46,
+          iconSize: 22,
         ),
         title: Text(
-          l10n.diagnosticsTitle,
+          title,
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text(l10n.diagnosticsSubtitle),
+          child: Text(subtitle),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
       ),
