@@ -17,14 +17,13 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = theme.scaffoldBackgroundColor;
-    final maskGradient = LinearGradient(
+    final fallbackGradient = LinearGradient(
       colors: [
-        color,
-        color.withValues(alpha: .98),
-        color.withValues(alpha: .84),
+        color.withValues(alpha: .36),
+        color.withValues(alpha: .18),
         Colors.transparent,
       ],
-      stops: const [0, .58, .86, 1],
+      stops: const [0, .72, 1],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
     );
@@ -34,7 +33,7 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
         child: SizedBox(
           height: height,
           child: DecoratedBox(
-            decoration: BoxDecoration(gradient: maskGradient),
+            decoration: BoxDecoration(gradient: fallbackGradient),
             child: child,
           ),
         ),
@@ -58,13 +57,6 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
                     child: _ProxySheetProgressiveBlur(),
                   ),
                 ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(gradient: maskGradient),
-                  ),
-                ),
-              ),
               Positioned(left: 0, right: 0, top: 0, child: child),
             ],
           ),
