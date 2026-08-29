@@ -2027,7 +2027,13 @@ class _RussiaRouteDataStatusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final verifiedAt = status.verifiedAt;
+    final releaseTimestamp = parseRussiaRouteVersionTimestamp(
+      status.releaseTag ?? status.versionTag,
+    );
+    final verifiedAt = releaseTimestamp ?? status.verifiedAt;
+    final versionLabel = releaseTimestamp == null
+        ? status.versionTag.replaceFirst('bundled-', '')
+        : _AdBlockStatusPanel._formatDateTime(releaseTimestamp);
     final routeSource =
         status.sourceKind == RussiaRouteDataService.sourceKindLive
         ? l10n.russiaRoutesLiveSource
@@ -2089,7 +2095,7 @@ class _RussiaRouteDataStatusPanel extends StatelessWidget {
             busy
                 ? _stageLabel(l10n, progress?.stage)
                 : status.available
-                ? l10n.russiaRoutesReadyStatus(status.versionTag)
+                ? l10n.russiaRoutesReadyStatus(versionLabel)
                 : l10n.russiaRoutesMissingStatus,
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
@@ -2171,6 +2177,9 @@ class _RussiaRouteDataStatusPanel extends StatelessWidget {
         progress.completedItems,
         progress.totalItems,
       );
+    }
+    if (progress.completedItems > 0) {
+      return l10n.russiaRoutesItemsProcessed(progress.completedItems);
     }
     return l10n.russiaRoutesPreparingHint;
   }

@@ -2211,6 +2211,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String russiaRoutesItemsProcessed(int completed) {
+    return 'Processed lists: $completed.';
+  }
+
+  @override
   String get russiaRoutesMissingStatus => 'Rules are not installed yet';
 
   @override
@@ -2873,7 +2878,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get routingRuleFilesReadySubtitle =>
-      'Local SRS files are used by traffic rules and work without an internet connection.';
+      'SRS files are stored on this device and work offline.';
 
   @override
   String get routingRuleFilesPreparingTitle => 'Preparing bundled files';
@@ -2883,7 +2888,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'Preparing local SRS files for traffic rules.';
 
   @override
-  String get routingRuleFilesSourceTitle => 'Source and status';
+  String get routingRuleFilesSourceTitle => 'Source';
+
+  @override
+  String get routingRuleFilesVersionTitle => 'Version';
+
+  @override
+  String get routingRuleFilesCountTitle => 'Files';
+
+  @override
+  String get routingRuleFilesTotalSizeTitle => 'Total size';
+
+  @override
+  String get routingRuleFilesScopeTitle => 'Russia is the current priority';
+
+  @override
+  String get routingRuleFilesScopeSubtitle =>
+      'The current set focuses on Russian networks and services. More regions will be added in future updates.';
+
+  @override
+  String get routingRuleFilesOpenSourceFailed =>
+      'Unable to open the source page. Try again.';
 
   @override
   String routingRuleFilesSourceMeta(String source, String version, int count) {

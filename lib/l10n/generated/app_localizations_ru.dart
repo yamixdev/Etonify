@@ -2213,6 +2213,11 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String russiaRoutesItemsProcessed(int completed) {
+    return 'Обработано списков: $completed.';
+  }
+
+  @override
   String get russiaRoutesMissingStatus => 'Правила ещё не установлены';
 
   @override
@@ -2879,7 +2884,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get routingRuleFilesReadySubtitle =>
-      'Локальные файлы георесурсов используются правилами трафика и работают без интернета.';
+      'Файлы SRS хранятся на устройстве и работают без интернета.';
 
   @override
   String get routingRuleFilesPreparingTitle => 'Готовим встроенные георесурсы';
@@ -2889,7 +2894,27 @@ class AppLocalizationsRu extends AppLocalizations {
       'Подготавливаем локальные файлы георесурсов для правил трафика.';
 
   @override
-  String get routingRuleFilesSourceTitle => 'Источник и состояние';
+  String get routingRuleFilesSourceTitle => 'Источник';
+
+  @override
+  String get routingRuleFilesVersionTitle => 'Версия';
+
+  @override
+  String get routingRuleFilesCountTitle => 'Файлы';
+
+  @override
+  String get routingRuleFilesTotalSizeTitle => 'Общий размер';
+
+  @override
+  String get routingRuleFilesScopeTitle => 'Сейчас в приоритете Россия';
+
+  @override
+  String get routingRuleFilesScopeSubtitle =>
+      'Набор пока содержит правила для российских сетей и сервисов. География будет расширяться в следующих обновлениях.';
+
+  @override
+  String get routingRuleFilesOpenSourceFailed =>
+      'Не удалось открыть страницу источника. Попробуйте ещё раз.';
 
   @override
   String routingRuleFilesSourceMeta(String source, String version, int count) {

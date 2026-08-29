@@ -28,6 +28,26 @@ bool shouldRebuildRussiaRouteDomainLists({
 String? normalizeRussiaRouteDomainForTest(String value) =>
     _normalizeDomainValue(value);
 
+DateTime? parseRussiaRouteVersionTimestamp(String value) {
+  final match = RegExp(r'\d{12}').firstMatch(value.trim());
+  if (match == null) return null;
+  final digits = match.group(0)!;
+  final year = int.parse(digits.substring(0, 4));
+  final month = int.parse(digits.substring(4, 6));
+  final day = int.parse(digits.substring(6, 8));
+  final hour = int.parse(digits.substring(8, 10));
+  final minute = int.parse(digits.substring(10, 12));
+  final parsed = DateTime(year, month, day, hour, minute);
+  if (parsed.year != year ||
+      parsed.month != month ||
+      parsed.day != day ||
+      parsed.hour != hour ||
+      parsed.minute != minute) {
+    return null;
+  }
+  return parsed;
+}
+
 class RussiaRouteDataStatus {
   const RussiaRouteDataStatus({
     required this.available,
@@ -138,15 +158,10 @@ class RussiaRouteDataStatus {
 }
 
 class RussiaRouteDataFile {
-  const RussiaRouteDataFile({
-    required this.name,
-    required this.sizeBytes,
-    required this.updatedAt,
-  });
+  const RussiaRouteDataFile({required this.name, required this.sizeBytes});
 
   final String name;
   final int sizeBytes;
-  final DateTime updatedAt;
 
   bool get isGeoIp => name.startsWith('geoip-');
 }
@@ -237,9 +252,11 @@ class RussiaRouteDataService {
   static final RussiaRouteDataService instance = RussiaRouteDataService._();
 
   static const sourceName = 'runetfreedom + domain-list-community';
+  static const sourceRepositoryUrl =
+      'https://github.com/runetfreedom/russia-v2ray-rules-dat';
   static const sourceKindLive = 'live';
   static const sourceKindBundled = 'bundled';
-  static const bundledTag = 'bundled-20260327';
+  static const bundledTag = 'bundled-202608291020';
   static const livePackageName = 'runetfreedom sing-box.zip';
   static const _latestReleaseUrl =
       'https://api.github.com/repos/runetfreedom/russia-v2ray-rules-dat/releases/latest';
@@ -442,11 +459,7 @@ class RussiaRouteDataService {
           continue;
         }
         installed.add(
-          RussiaRouteDataFile(
-            name: candidate.name,
-            sizeBytes: stat.size,
-            updatedAt: stat.modified,
-          ),
+          RussiaRouteDataFile(name: candidate.name, sizeBytes: stat.size),
         );
       } on FileSystemException {
         // A concurrent atomic update may replace a file between lookup and stat.
@@ -812,20 +825,22 @@ class RussiaRouteDataService {
       ),
     );
     _emitProgress(RussiaRouteUpdateStage.verifyingPackage);
-    crypto.sha256.convert(bytes);
     _emitProgress(RussiaRouteUpdateStage.extractingPackage);
-    final extracted = _extractRequiredRuleSetsFromZip(bytes);
-    await _writeRoutePackage(paths, extracted);
+    final prepared = await Isolate.run(
+      () => _prepareRoutePackageArchive(bytes),
+      debugName: 'route-package-extract',
+    );
+    await _writeRoutePackage(paths, prepared.files);
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     return _InstalledRoutePackageInfo(
       sourceKind: sourceKindLive,
       versionTag: release.tagName,
       releaseTag: release.tagName,
-      packageSha256: crypto.sha256.convert(bytes).toString(),
+      packageSha256: prepared.sha256,
       assetSizeBytes: release.assetSizeBytes ?? bytes.length,
       verifiedAtMillis: nowMillis,
       lastUpdateCheckAtMillis: nowMillis,
-      verifiedFiles: extracted.keys.toList()..sort(),
+      verifiedFiles: prepared.files.keys.toList()..sort(),
     );
   }
 
@@ -844,11 +859,13 @@ class RussiaRouteDataService {
       'geoipRu': await _loadBundledAsset(_assetGeoipRu),
     };
     await _writeRoutePackage(paths, files);
+    final bundledTimestamp = parseRussiaRouteVersionTimestamp(bundledTag);
     return _InstalledRoutePackageInfo(
       sourceKind: sourceKindBundled,
       versionTag: bundledTag,
       releaseTag: bundledTag,
-      verifiedAtMillis: checkedAtMillis,
+      verifiedAtMillis:
+          bundledTimestamp?.millisecondsSinceEpoch ?? checkedAtMillis,
       lastUpdateCheckAtMillis: checkedAtMillis,
       verifiedFiles: files.keys.toList()..sort(),
     );
@@ -921,7 +938,9 @@ class RussiaRouteDataService {
     return result.bytes ?? Uint8List(0);
   }
 
-  Map<String, Uint8List> _extractRequiredRuleSetsFromZip(Uint8List zipBytes) {
+  static Map<String, Uint8List> _extractRequiredRuleSetsFromZip(
+    Uint8List zipBytes,
+  ) {
     final extracted = <String, Uint8List>{};
     final view = ByteData.sublistView(zipBytes);
     final eocdOffset = _findZipEndOfCentralDirectory(zipBytes);
@@ -977,7 +996,7 @@ class RussiaRouteDataService {
     return extracted;
   }
 
-  int _findZipEndOfCentralDirectory(Uint8List bytes) {
+  static int _findZipEndOfCentralDirectory(Uint8List bytes) {
     final view = ByteData.sublistView(bytes);
     final minOffset = bytes.length > 0xFFFF + 22
         ? bytes.length - 0xFFFF - 22
@@ -990,7 +1009,7 @@ class RussiaRouteDataService {
     return -1;
   }
 
-  Uint8List _readZipEntry(
+  static Uint8List _readZipEntry(
     Uint8List zipBytes,
     ByteData view, {
     required int localHeaderOffset,
@@ -1062,7 +1081,7 @@ class RussiaRouteDataService {
     await _writeAtomically(paths.geoipRuPath, files['geoipRu']!);
   }
 
-  void _validateRoutePackageFiles(Map<String, Uint8List> files) {
+  static void _validateRoutePackageFiles(Map<String, Uint8List> files) {
     for (final key in _releaseZipEntries.values) {
       final bytes = files[key];
       if (bytes == null || bytes.length <= 4) {
@@ -1095,7 +1114,6 @@ class RussiaRouteDataService {
     _emitProgress(
       RussiaRouteUpdateStage.downloadingCategories,
       completedItems: 0,
-      totalItems: pending.length,
     );
     while (pending.isNotEmpty) {
       final category = pending.removeLast();
@@ -1121,7 +1139,6 @@ class RussiaRouteDataService {
       _emitProgress(
         RussiaRouteUpdateStage.downloadingCategories,
         completedItems: completed,
-        totalItems: completed + pending.length,
       );
     }
     return _DownloadedDomainListCommunity(
@@ -1289,6 +1306,20 @@ class RussiaRouteDataService {
 
     return path;
   }
+}
+
+class _PreparedRoutePackage {
+  const _PreparedRoutePackage({required this.files, required this.sha256});
+
+  final Map<String, Uint8List> files;
+  final String sha256;
+}
+
+_PreparedRoutePackage _prepareRoutePackageArchive(Uint8List bytes) {
+  return _PreparedRoutePackage(
+    files: RussiaRouteDataService._extractRequiredRuleSetsFromZip(bytes),
+    sha256: crypto.sha256.convert(bytes).toString(),
+  );
 }
 
 class _RussiaRouteDataFilePath {

@@ -83,6 +83,24 @@ void main() {
     expect(normalizeRussiaRouteDomainForTest('regexp:^example'), isNull);
   });
 
+  group('route data version timestamp', () {
+    test('parses release tags with and without bundled prefix', () {
+      expect(
+        parseRussiaRouteVersionTimestamp('202608261635'),
+        DateTime(2026, 8, 26, 16, 35),
+      );
+      expect(
+        parseRussiaRouteVersionTimestamp('bundled-202608291020'),
+        DateTime(2026, 8, 29, 10, 20),
+      );
+    });
+
+    test('rejects missing and invalid timestamps', () {
+      expect(parseRussiaRouteVersionTimestamp('latest'), isNull);
+      expect(parseRussiaRouteVersionTimestamp('202613401280'), isNull);
+    });
+  });
+
   test(
     'bundled smart routing installs offline and remains due for refresh',
     () async {
@@ -92,6 +110,11 @@ void main() {
 
         expect(status.available, isTrue);
         expect(status.sourceKind, RussiaRouteDataService.sourceKindBundled);
+        expect(status.versionTag, RussiaRouteDataService.bundledTag);
+        expect(
+          status.verifiedAt,
+          parseRussiaRouteVersionTimestamp(RussiaRouteDataService.bundledTag),
+        );
         expect(status.needsDailyUpdate, isTrue);
         expect(status.verifiedFiles, hasLength(6));
         expect(status.curatedDirectServicesPath, isNull);
@@ -150,6 +173,13 @@ void main() {
     expect(
       const RussiaRouteUpdateProgress(
         stage: RussiaRouteUpdateStage.verifyingPackage,
+      ).fraction,
+      isNull,
+    );
+    expect(
+      const RussiaRouteUpdateProgress(
+        stage: RussiaRouteUpdateStage.downloadingCategories,
+        completedItems: 12,
       ).fraction,
       isNull,
     );

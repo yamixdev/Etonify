@@ -3971,6 +3971,12 @@ abstract class AppLocalizations {
   /// **'Processed lists: {completed} of {total}.'**
   String russiaRoutesItemsProgress(int completed, int total);
 
+  /// No description provided for @russiaRoutesItemsProcessed.
+  ///
+  /// In en, this message translates to:
+  /// **'Processed lists: {completed}.'**
+  String russiaRoutesItemsProcessed(int completed);
+
   /// No description provided for @russiaRoutesMissingStatus.
   ///
   /// In en, this message translates to:
@@ -5103,7 +5109,7 @@ abstract class AppLocalizations {
   /// No description provided for @routingRuleFilesReadySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Local SRS files are used by traffic rules and work without an internet connection.'**
+  /// **'SRS files are stored on this device and work offline.'**
   String get routingRuleFilesReadySubtitle;
 
   /// No description provided for @routingRuleFilesPreparingTitle.
@@ -5121,8 +5127,44 @@ abstract class AppLocalizations {
   /// No description provided for @routingRuleFilesSourceTitle.
   ///
   /// In en, this message translates to:
-  /// **'Source and status'**
+  /// **'Source'**
   String get routingRuleFilesSourceTitle;
+
+  /// No description provided for @routingRuleFilesVersionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get routingRuleFilesVersionTitle;
+
+  /// No description provided for @routingRuleFilesCountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get routingRuleFilesCountTitle;
+
+  /// No description provided for @routingRuleFilesTotalSizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Total size'**
+  String get routingRuleFilesTotalSizeTitle;
+
+  /// No description provided for @routingRuleFilesScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Russia is the current priority'**
+  String get routingRuleFilesScopeTitle;
+
+  /// No description provided for @routingRuleFilesScopeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The current set focuses on Russian networks and services. More regions will be added in future updates.'**
+  String get routingRuleFilesScopeSubtitle;
+
+  /// No description provided for @routingRuleFilesOpenSourceFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open the source page. Try again.'**
+  String get routingRuleFilesOpenSourceFailed;
 
   /// No description provided for @routingRuleFilesSourceMeta.
   ///
