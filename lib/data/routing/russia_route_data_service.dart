@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -27,6 +26,11 @@ bool shouldRebuildRussiaRouteDomainLists({
 @visibleForTesting
 String? normalizeRussiaRouteDomainForTest(String value) =>
     _normalizeDomainValue(value);
+
+@visibleForTesting
+Future<Map<String, Uint8List>> extractRussiaRouteArchiveForTest(
+  Uint8List bytes,
+) async => (await _prepareRoutePackageArchiveInBackground(bytes)).files;
 
 DateTime? parseRussiaRouteVersionTimestamp(String value) {
   final match = RegExp(r'\d{12}').firstMatch(value.trim());
@@ -660,14 +664,20 @@ class RussiaRouteDataService {
       if (shouldRebuildDomainLists) {
         _emitProgress(RussiaRouteUpdateStage.compiling);
         final categoryFiles = downloaded.categoryFiles;
-        final compiledCuratedDirectServices = await Isolate.run(
-          () => _compileCuratedDirectServicesArtifact(categoryFiles),
+        final compiledCuratedDirectServices = await compute(
+          _compileCuratedDirectServicesArtifact,
+          categoryFiles,
+          debugLabel: 'route-curated-services-compile',
         );
-        final compiledAiServices = await Isolate.run(
-          () => _compileAiServicesArtifact(categoryFiles),
+        final compiledAiServices = await compute(
+          _compileAiServicesArtifact,
+          categoryFiles,
+          debugLabel: 'route-ai-services-compile',
         );
-        final compiledSocialServices = await Isolate.run(
-          () => _compileSocialServicesArtifact(categoryFiles),
+        final compiledSocialServices = await compute(
+          _compileSocialServicesArtifact,
+          categoryFiles,
+          debugLabel: 'route-social-services-compile',
         );
         await _writeAtomically(
           paths.curatedDirectServicesPath,
@@ -826,10 +836,7 @@ class RussiaRouteDataService {
     );
     _emitProgress(RussiaRouteUpdateStage.verifyingPackage);
     _emitProgress(RussiaRouteUpdateStage.extractingPackage);
-    final prepared = await Isolate.run(
-      () => _prepareRoutePackageArchive(bytes),
-      debugName: 'route-package-extract',
-    );
+    final prepared = await _prepareRoutePackageArchiveInBackground(bytes);
     await _writeRoutePackage(paths, prepared.files);
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     return _InstalledRoutePackageInfo(
@@ -1319,6 +1326,16 @@ _PreparedRoutePackage _prepareRoutePackageArchive(Uint8List bytes) {
   return _PreparedRoutePackage(
     files: RussiaRouteDataService._extractRequiredRuleSetsFromZip(bytes),
     sha256: crypto.sha256.convert(bytes).toString(),
+  );
+}
+
+Future<_PreparedRoutePackage> _prepareRoutePackageArchiveInBackground(
+  Uint8List bytes,
+) {
+  return compute(
+    _prepareRoutePackageArchive,
+    bytes,
+    debugLabel: 'route-package-extract',
   );
 }
 

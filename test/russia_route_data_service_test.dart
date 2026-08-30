@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +82,26 @@ void main() {
     );
     expect(normalizeRussiaRouteDomainForTest('example..com'), isNull);
     expect(normalizeRussiaRouteDomainForTest('regexp:^example'), isNull);
+  });
+
+  test('release archive is extracted in a background isolate', () async {
+    final archive = base64Decode(
+      'UEsDBBQAAAAIAAAAHl2jVcmtCAAAABAAAAAnAAAAcnVsZS1zZXQtZ2Vvc2l0ZS9nZW9zaXRlLXJ1LWJsb2NrZWQuc3JzCw4KZmRAAgBQSwMEFAAAAAgAAAAeXctE2EQHAAAAEAAAADUAAABydWxlLXNldC1nZW9zaXRlL2dlb3NpdGUtcnUtYXZhaWxhYmxlLW9ubHktaW5zaWRlLnNycwsOCmZEBgBQSwMEFAAAAAgAAAAeXTJxmqQIAAAAEAAAACgAAABydWxlLXNldC1nZW9zaXRlL2dlb3NpdGUtY2F0ZWdvcnktcnUuc3JzCw4KZmRCAgBQSwMEFAAAAAgAAAAeXVpgi00IAAAAEAAAACMAAABydWxlLXNldC1nZW9pcC9nZW9pcC1ydS1ibG9ja2VkLnNycwsOCmZkRgIAUEsDBBQAAAAIAAAAHl2BHG+/CAAAABAAAAAlAAAAcnVsZS1zZXQtZ2VvaXAvZ2VvaXAtcnUtd2hpdGVsaXN0LnNycwsOCmZkQQIAUEsDBBQAAAAIAAAAHl3pDX5WCAAAABAAAAAbAAAAcnVsZS1zZXQtZ2VvaXAvZ2VvaXAtcnUuc3JzCw4KZmRFAgBQSwECFAAUAAAACAAAAB5do1XJrQgAAAAQAAAAJwAAAAAAAAAAAAAAgAEAAAAAcnVsZS1zZXQtZ2Vvc2l0ZS9nZW9zaXRlLXJ1LWJsb2NrZWQuc3JzUEsBAhQAFAAAAAgAAAAeXctE2EQHAAAAEAAAADUAAAAAAAAAAAAAAIABTQAAAHJ1bGUtc2V0LWdlb3NpdGUvZ2Vvc2l0ZS1ydS1hdmFpbGFibGUtb25seS1pbnNpZGUuc3JzUEsBAhQAFAAAAAgAAAAeXTJxmqQIAAAAEAAAACgAAAAAAAAAAAAAAIABpwAAAHJ1bGUtc2V0LWdlb3NpdGUvZ2Vvc2l0ZS1jYXRlZ29yeS1ydS5zcnNQSwECFAAUAAAACAAAAB5dWmCLTQgAAAAQAAAAIwAAAAAAAAAAAAAAgAH1AAAAcnVsZS1zZXQtZ2VvaXAvZ2VvaXAtcnUtYmxvY2tlZC5zcnNQSwECFAAUAAAACAAAAB5dgRxvvwgAAAAQAAAAJQAAAAAAAAAAAAAAgAE+AQAAcnVsZS1zZXQtZ2VvaXAvZ2VvaXAtcnUtd2hpdGVsaXN0LnNyc1BLAQIUABQAAAAIAAAAHl3pDX5WCAAAABAAAAAbAAAAAAAAAAAAAACAAYkBAABydWxlLXNldC1nZW9pcC9nZW9pcC1ydS5zcnNQSwUGAAAAAAYABgD7AQAAygEAAAAA',
+    );
+
+    final extracted = await extractRussiaRouteArchiveForTest(archive);
+
+    expect(extracted.keys, {
+      'geositeRuBlocked',
+      'geositeRuAvailableOnlyInside',
+      'geositeCategoryRu',
+      'geoipRuBlocked',
+      'geoipRuWhitelist',
+      'geoipRu',
+    });
+    for (final bytes in extracted.values) {
+      expect(bytes.sublist(0, 3), [0x53, 0x52, 0x53]);
+    }
   });
 
   group('route data version timestamp', () {
