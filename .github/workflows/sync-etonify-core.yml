@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_core_version:
-        description: "Optional exact core version, for example v1.14.0-rc.1-etonify.2"
+        description: "Optional exact core version, for example v1.14.0-rc.5-etonify.1"
         required: false
         type: string
 
@@ -69,10 +69,11 @@ jobs:
           fi
 
           core_version="$(tr -d '\r\n' < release/ETONIFY_VERSION)"
-          core_version_prefix="${UPSTREAM_TAG}-etonify."
+          core_version_tag="${ETONIFY_COMPAT_TAG:-${UPSTREAM_TAG}}"
+          core_version_prefix="${core_version_tag}-etonify."
           core_version_suffix="${core_version#"${core_version_prefix}"}"
           if [[ "$core_version" != "${core_version_prefix}"* || ! "$core_version_suffix" =~ ^[0-9]+$ ]]; then
-            echo "::error title=Invalid Etonify core version::Expected ${UPSTREAM_TAG}-etonify.N, got '$core_version'"
+            echo "::error title=Invalid Etonify core version::Expected ${core_version_tag}-etonify.N, got '$core_version'"
             exit 1
           fi
           if [ -n "$EXPECTED_CORE_VERSION" ] && [ "$EXPECTED_CORE_VERSION" != "$core_version" ]; then
