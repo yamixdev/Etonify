@@ -1,9 +1,9 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "56f27037fc758026f2b7423a8ad0d58f2baa89ca05c32cdb3159aa8cd556c125",
-  "source_commit": "d184feb350727840c9dafd9a98a6af55bce6485e",
-  "source_version": "v1.14.0-rc.1-etonify.5",
-  "etonify_version": "v1.14.0-rc.1-etonify.5",
+  "sha256": "124ef89a415364bab977ba8ccd16973104d9f955a641fa7e2e2b847d836e6501",
+  "source_commit": "bf8baec997b138dd0e5aa30cdb2300451ea3193e",
+  "source_version": "v1.14.0-rc.5-etonify.1",
+  "etonify_version": "v1.14.0-rc.5-etonify.1",
   "upstream_commit": "8dd67a1e49711ce8a9a884bef60a2139ef36446f",
   "go": "go version go1.26.7 linux/amd64",
   "gomobile": "v0.1.13",
