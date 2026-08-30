@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app.dart';
+import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -15,6 +16,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
@@ -447,6 +449,83 @@ void main() {
 
     expect(find.text('Amsterdam'), findsOneWidget);
     expect(find.text('Paris'), findsNothing);
+  });
+
+  testWidgets('proxy list renders a compacted WireGuard endpoint', (
+    tester,
+  ) async {
+    const subscription = Subscription(
+      id: 'wireguard-sub',
+      name: 'WireGuard',
+      url: 'file:///wireguard.conf',
+      selectedProxyTag: 'wireguard-node',
+      outbounds: [
+        Outbound(
+          tag: 'wireguard-node',
+          name: 'WireGuard node',
+          config: {
+            'type': 'wireguard',
+            'peers': [
+              {'address': 'wg.example.com', 'port': 51820},
+            ],
+          },
+        ),
+      ],
+    );
+    final compact = compactSubscriptionForProxyCache(subscription);
+    final cache = buildProxyCache(
+      ProxyCacheBuildInput(
+        subscription: compact,
+        selectedProxyTag: 'wireguard-node',
+        lowestLatency: null,
+        runtimeLowestOutboundTag: null,
+        runtimeLowestSelections: const <String, String>{},
+        urlTestInFlight: false,
+        runtimeLatencies: const <String, int>{},
+        unavailableLatencyTags: const <String>{},
+        latencyErrors: const <String, String>{},
+        runtimeGroupSelections: const <String, String>{},
+        markAllServersRussia: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SizedBox(
+            height: 720,
+            child: ProxiesPage(
+              proxies: cache.activeProxies,
+              selectedTag: 'wireguard-node',
+              activeProxy: cache.displayProxy,
+              connected: false,
+              progressiveBlurEnabled: false,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+              embedded: true,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+              collapsedSheetExtent: 0,
+              expandedHeaderExtent: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(cache.activeProxies, hasLength(1));
+    final wireGuardTile = find.byType(ProxyTile);
+    expect(wireGuardTile, findsOneWidget);
+    expect(
+      find.descendant(of: wireGuardTile, matching: find.text('WireGuard node')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: wireGuardTile, matching: find.text('WIREGUARD')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

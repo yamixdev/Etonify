@@ -126,6 +126,26 @@ Map<String, dynamic> _compactOutboundPresentationConfig(
     }
   }
 
+  final peers = config['peers'];
+  final type = config['type']?.toString().trim().toLowerCase();
+  if (type == 'wireguard' && peers is List) {
+    final compactPeers = <Map<String, dynamic>>[];
+    for (final peer in peers) {
+      if (peer is! Map) {
+        continue;
+      }
+      final address = peer['address']?.toString().trim() ?? '';
+      final port = peer['port'];
+      if (address.isEmpty) {
+        continue;
+      }
+      compactPeers.add(<String, dynamic>{'address': address, 'port': ?port});
+    }
+    if (compactPeers.isNotEmpty) {
+      compact['peers'] = compactPeers;
+    }
+  }
+
   final tls = config['tls'];
   if (tls is Map) {
     final compactTls = <String, dynamic>{};

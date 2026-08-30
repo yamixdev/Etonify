@@ -682,7 +682,7 @@ void main() {
     expect(outbounds.any((entry) => entry['tag'] == mixedProxyTag), isFalse);
   });
 
-  test('emits WireGuard peer configs as selectable endpoints', () {
+  test('keeps WireGuard endpoints selectable and visible in proxy cache', () {
     const subscription = Subscription(
       id: 'wireguard-sub',
       name: 'WireGuard',
@@ -721,6 +721,36 @@ void main() {
         ),
       ],
     );
+
+    final compactSubscription = compactSubscriptionForProxyCache(subscription);
+    final compactWireGuard = compactSubscription.outbounds.first;
+    expect(compactWireGuard.server, 'wg.example.com');
+    expect(compactWireGuard.port, 51820);
+    expect(compactWireGuard.config['peers'], [
+      {'address': 'wg.example.com', 'port': 51820},
+    ]);
+
+    final cache = buildProxyCache(
+      const ProxyCacheBuildInput(
+        subscription: subscription,
+        selectedProxyTag: 'wireguard-node',
+        lowestLatency: null,
+        runtimeLowestOutboundTag: null,
+        runtimeLowestSelections: <String, String>{},
+        urlTestInFlight: false,
+        runtimeLatencies: <String, int>{},
+        unavailableLatencyTags: <String>{},
+        latencyErrors: <String, String>{},
+        runtimeGroupSelections: <String, String>{},
+        markAllServersRussia: false,
+      ),
+    );
+    final wireGuardSummary = cache.activeProxies.firstWhere(
+      (proxy) => proxy.tag == 'wireguard-node',
+    );
+    expect(wireGuardSummary.server, 'wg.example.com');
+    expect(wireGuardSummary.port, 51820);
+    expect(wireGuardSummary.endpointLabel, 'wg.example.com:51820');
 
     final config = _defaultBuilder(
       subscription,

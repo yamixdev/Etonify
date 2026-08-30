@@ -220,11 +220,56 @@ class Outbound {
   /// The protocol type extracted from config (vmess, vless, trojan, etc.)
   String get type => (config['type'] as String?) ?? 'unknown';
 
-  /// Server address from config
-  String get server => (config['server'] as String?) ?? '';
+  /// Server address from config.
+  ///
+  /// WireGuard is an endpoint in the current sing-box schema, so its remote
+  /// address lives in the first peer instead of the top-level `server` field.
+  String get server {
+    final direct = (config['server'] as String?)?.trim() ?? '';
+    if (direct.isNotEmpty) {
+      return direct;
+    }
+    return _wireGuardEndpointPeer?['address']?.toString().trim() ?? '';
+  }
 
-  /// Server port from config
-  int get port => (config['server_port'] as int?) ?? 0;
+  /// Server port from config, including WireGuard endpoint peers.
+  int get port {
+    final direct = _endpointPort(config['server_port']);
+    if (direct > 0) {
+      return direct;
+    }
+    return _endpointPort(_wireGuardEndpointPeer?['port']);
+  }
+
+  Map? get _wireGuardEndpointPeer {
+    if (type.trim().toLowerCase() != 'wireguard') {
+      return null;
+    }
+    final peers = config['peers'];
+    if (peers is! List) {
+      return null;
+    }
+    for (final peer in peers) {
+      if (peer is! Map) {
+        continue;
+      }
+      final address = peer['address']?.toString().trim() ?? '';
+      if (address.isNotEmpty) {
+        return peer;
+      }
+    }
+    return null;
+  }
+
+  static int _endpointPort(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 
   Map<String, dynamic> toMap() => {
     'tag': tag,
