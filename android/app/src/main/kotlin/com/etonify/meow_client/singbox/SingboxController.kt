@@ -917,34 +917,6 @@ object SingboxController {
         }
     }
 
-    fun addOutbound(selectorTag: String, outboundJson: String, callback: (Result<Unit>) -> Unit) {
-        val tag = runCatching { org.json.JSONObject(outboundJson).optString("tag") }.getOrDefault("")
-        val type = runCatching { org.json.JSONObject(outboundJson).optString("type") }.getOrDefault("")
-        val detour = runCatching { org.json.JSONObject(outboundJson).optString("detour") }.getOrDefault("")
-        log(
-            "info",
-            "libbox addOutbound selector=$selectorTag tag=$tag type=$type detour=$detour jsonChars=${outboundJson.length}",
-        )
-        callback(
-            Result.failure(
-                UnsupportedOperationException(
-                    "Dynamic outbound insertion is unavailable; rebuild and apply the runtime config",
-                ),
-            ),
-        )
-    }
-
-    fun removeOutbound(selectorTag: String, outboundTag: String, callback: (Result<Unit>) -> Unit) {
-        log("info", "libbox removeOutbound selector=$selectorTag outbound=$outboundTag")
-        callback(
-            Result.failure(
-                UnsupportedOperationException(
-                    "Dynamic outbound removal is unavailable; rebuild and apply the runtime config",
-                ),
-            ),
-        )
-    }
-
     fun urlTest(
         groupTag: String,
         targetOutboundTag: String,
@@ -994,20 +966,6 @@ object SingboxController {
             }
             mainHandler.post { callback(result.map { Unit }) }
         }
-    }
-
-    fun removeUrlTestOutbounds(groupTag: String, outboundTags: List<String>, callback: (Result<Unit>) -> Unit) {
-        log(
-            "info",
-            "libbox removeURLTestOutbounds group=$groupTag count=${outboundTags.size} tags=${outboundTags.take(12).joinToString(",")}",
-        )
-        callback(
-            Result.failure(
-                UnsupportedOperationException(
-                    "Dynamic URLTest group mutation is unavailable; rebuild and apply the runtime config",
-                ),
-            ),
-        )
     }
 
     fun lookupOutboundExternalInfo(outboundTag: String, callback: (Result<Map<String, String>>) -> Unit) {

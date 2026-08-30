@@ -12,7 +12,7 @@ class LatencyUiPolicy {
     this.nativeCommandTimeout = const Duration(seconds: 5),
     this.initialEventTimeout = const Duration(seconds: 12),
     this.eventInactivityTimeout = const Duration(seconds: 12),
-    this.hardWatchdog = const Duration(seconds: 45),
+    this.hardWatchdog = const Duration(seconds: 125),
   });
 
   /// These values bound UI state only. They never delay command dispatch or
@@ -64,6 +64,8 @@ class LatencyCoordinator {
     required LatencyStringReader activeOutboundTag,
     required LatencyStringReader testUrl,
     required LatencyIntReader outboundCount,
+    required LatencyIntReader timeoutSeconds,
+    required LatencyIntReader concurrency,
     required LatencySessionChanged onSessionChanged,
     LatencyBoolReader? canRunDiagnostics,
     LatencyIntReader? operationGeneration,
@@ -77,6 +79,8 @@ class LatencyCoordinator {
        _activeOutboundTag = activeOutboundTag,
        _testUrl = testUrl,
        _outboundCount = outboundCount,
+       _timeoutSeconds = timeoutSeconds,
+       _concurrency = concurrency,
        _onSessionChanged = onSessionChanged,
        _canRunDiagnostics = canRunDiagnostics ?? _alwaysReady,
        _operationGeneration = operationGeneration ?? _zeroGeneration,
@@ -84,8 +88,12 @@ class LatencyCoordinator {
        _expectedTags = expectedTags ?? _emptyExpectedTags,
        _capabilities = capabilities;
 
-  static const perOutboundTimeoutMillis = 15000;
-  static const fullDeadlineMillis = 60000;
+  static const _defaultTimeoutMillis = 15000;
+  static const _minimumTimeoutMillis = 500;
+  static const _maximumTimeoutMillis = 30000;
+  static const _defaultConcurrency = 8;
+  static const _maximumConcurrency = 16;
+  static const _maximumDeadlineMillis = 120000;
 
   final LatencyTestRunner _runTest;
   final LatencyBoolReader _isConnected;
@@ -93,6 +101,8 @@ class LatencyCoordinator {
   final LatencyStringReader _activeOutboundTag;
   final LatencyStringReader _testUrl;
   final LatencyIntReader _outboundCount;
+  final LatencyIntReader _timeoutSeconds;
+  final LatencyIntReader _concurrency;
   final LatencySessionChanged _onSessionChanged;
   final LatencyBoolReader _canRunDiagnostics;
   final LatencyIntReader _operationGeneration;
@@ -191,9 +201,9 @@ class LatencyCoordinator {
         targetOutboundTag: targetTag,
         priorityOutboundTag: targetTag,
         url: _testUrl(),
-        timeoutMillis: perOutboundTimeoutMillis,
+        timeoutMillis: _configuredTimeoutMillis,
         concurrency: 1,
-        deadlineMillis: perOutboundTimeoutMillis + 5000,
+        deadlineMillis: _targetDeadlineMillis,
       ),
     );
   }
@@ -278,12 +288,43 @@ class LatencyCoordinator {
     cancel();
   }
 
+  int get _configuredTimeoutMillis {
+    final seconds = _timeoutSeconds();
+    final milliseconds = seconds <= 0
+        ? _defaultTimeoutMillis
+        : seconds * Duration.millisecondsPerSecond;
+    return milliseconds
+        .clamp(_minimumTimeoutMillis, _maximumTimeoutMillis)
+        .toInt();
+  }
+
+  int get _configuredConcurrency {
+    final value = _concurrency();
+    return (value <= 0 ? _defaultConcurrency : value)
+        .clamp(1, _maximumConcurrency)
+        .toInt();
+  }
+
+  int get _targetDeadlineMillis => (_configuredTimeoutMillis + 5000)
+      .clamp(_configuredTimeoutMillis, _maximumDeadlineMillis)
+      .toInt();
+
+  int get _fullDeadlineMillis {
+    final timeoutMillis = _configuredTimeoutMillis;
+    final concurrency = _configuredConcurrency;
+    final outboundCount = _outboundCount().clamp(1, 100000).toInt();
+    final batchCount = (outboundCount + concurrency - 1) ~/ concurrency;
+    return (batchCount * timeoutMillis + 5000)
+        .clamp(timeoutMillis, _maximumDeadlineMillis)
+        .toInt();
+  }
+
   LatencyTestRequest _groupRequest() => LatencyTestRequest(
     priorityOutboundTag: _activeOutboundTag().trim(),
     url: _testUrl(),
-    timeoutMillis: perOutboundTimeoutMillis,
-    concurrency: 0,
-    deadlineMillis: fullDeadlineMillis,
+    timeoutMillis: _configuredTimeoutMillis,
+    concurrency: _configuredConcurrency,
+    deadlineMillis: _fullDeadlineMillis,
   );
 
   Future<bool> _runGroupSession({

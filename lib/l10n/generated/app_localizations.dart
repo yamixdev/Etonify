@@ -2687,6 +2687,12 @@ abstract class AppLocalizations {
   /// **'Interval, sec.'**
   String get urlTestIntervalTitle;
 
+  /// No description provided for @urlTestIntervalCompactTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check interval'**
+  String get urlTestIntervalCompactTitle;
+
   /// No description provided for @urlTestIntervalSubtitle.
   ///
   /// In en, this message translates to:
@@ -2698,6 +2704,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Timeout, sec.'**
   String get urlTestTimeoutTitle;
+
+  /// No description provided for @urlTestTimeoutCompactTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Test timeout'**
+  String get urlTestTimeoutCompactTitle;
 
   /// No description provided for @urlTestTimeoutSubtitle.
   ///
@@ -2722,6 +2734,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Quick retry delay, sec.'**
   String get urlTestSingleRetestTitle;
+
+  /// No description provided for @urlTestSingleRetestCompactTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick retry'**
+  String get urlTestSingleRetestCompactTitle;
 
   /// No description provided for @urlTestSingleRetestSubtitle.
   ///
@@ -2966,7 +2984,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsProfilesChecksTitle.
   ///
   /// In en, this message translates to:
-  /// **'Profiles and checks'**
+  /// **'Subscriptions and checks'**
   String get settingsProfilesChecksTitle;
 
   /// No description provided for @settingsProfilesChecksSubtitle.

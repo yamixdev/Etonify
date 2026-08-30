@@ -1968,6 +1968,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _ensureActiveLookupCaches();
         return _activeVisibleOutboundsLookup.length;
       },
+      timeoutSeconds: () => _urlTestTimeoutSeconds,
+      concurrency: () => _urlTestConcurrency,
       canRunDiagnostics: () => _runtimeOperations.diagnosticsReady,
       operationGeneration: () => _runtimeOperations.diagnosticGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,

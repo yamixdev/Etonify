@@ -65,6 +65,46 @@ void main() {
     expect(payload.groups.single['country'], 'EU');
   });
 
+  test('keeps a one-member Xray balancer through runtime config', () {
+    final result = SubscriptionParser.parse(
+      jsonEncode({
+        'remarks': 'Single fallback',
+        'routing': {
+          'balancers': [
+            {
+              'tag': 'Single_Balancer',
+              'selector': ['only-proxy'],
+              'strategy': {'type': 'leastPing'},
+            },
+          ],
+        },
+        'outbounds': [_xrayVlessOutbound('only-proxy', 'only.example.com')],
+      }),
+    );
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(result);
+
+    expect(result.groups, hasLength(1));
+    expect(result.groups.single.sourceOutboundTags, ['only-proxy']);
+    expect(payload.groups, hasLength(1));
+    expect(payload.groups.single['outbounds'], hasLength(1));
+
+    final subscription = Subscription(
+      id: 'single-group',
+      name: 'Single group',
+      url: 'https://example.com/sub',
+      outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+      groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+    );
+    final config = _defaultBuilder(subscription).build();
+    final groupTag = subscription.groups.single.tag;
+    final runtimeGroup = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>()
+        .singleWhere((outbound) => outbound['tag'] == groupTag);
+
+    expect(runtimeGroup['type'], 'urltest');
+    expect(runtimeGroup['outbounds'], subscription.groups.single.outboundTags);
+  });
+
   test('parses grouped Xray subscription array', () {
     final content = jsonEncode([
       {

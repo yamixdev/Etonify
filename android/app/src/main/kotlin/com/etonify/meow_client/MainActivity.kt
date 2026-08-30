@@ -1765,39 +1765,6 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
 
-                override fun addOutbound(
-                    selectorTag: String,
-                    outboundJson: String,
-                    callback: (Result<Unit>) -> Unit,
-                ) {
-                    if (outboundJson.isBlank()) {
-                        callback(errorResult("missing_outbound", "Outbound JSON is empty"))
-                        return
-                    }
-                    SingboxController.addOutbound(selectorTag.ifBlank { "select" }, outboundJson) { addResult ->
-                        addResult
-                            .onSuccess { callback(Result.success(Unit)) }
-                            .onFailure { callback(errorResult("add_outbound_failed", it.message)) }
-                    }
-                }
-
-                override fun removeOutbound(
-                    selectorTag: String,
-                    outboundTag: String,
-                    callback: (Result<Unit>) -> Unit,
-                ) {
-                    val normalizedTag = outboundTag.trim()
-                    if (normalizedTag.isEmpty()) {
-                        callback(errorResult("missing_outbound", "Outbound tag is empty"))
-                        return
-                    }
-                    SingboxController.removeOutbound(selectorTag.ifBlank { "select" }, normalizedTag) { removeResult ->
-                        removeResult
-                            .onSuccess { callback(Result.success(Unit)) }
-                            .onFailure { callback(errorResult("remove_outbound_failed", it.message)) }
-                    }
-                }
-
                 override fun urlTest(request: UrlTestRequestMessage, callback: (Result<Unit>) -> Unit) {
                     SingboxController.urlTest(
                         groupTag = request.groupTag.ifBlank { "select" },
@@ -1813,28 +1780,6 @@ class MainActivity : FlutterFragmentActivity() {
                         urlTestResult
                             .onSuccess { callback(Result.success(Unit)) }
                             .onFailure { callback(errorResult("urltest_failed", it.message)) }
-                    }
-                }
-
-                override fun removeUrlTestOutbounds(
-                    groupTag: String,
-                    outboundTags: List<String?>,
-                    callback: (Result<Unit>) -> Unit,
-                ) {
-                    val normalizedGroupTag = groupTag.trim()
-                    val normalizedTags = outboundTags.mapNotNull { it?.trim() }.filter { it.isNotEmpty() }
-                    if (normalizedGroupTag.isEmpty()) {
-                        callback(errorResult("missing_group", "Group tag is empty"))
-                        return
-                    }
-                    if (normalizedTags.isEmpty()) {
-                        callback(Result.success(Unit))
-                        return
-                    }
-                    SingboxController.removeUrlTestOutbounds(normalizedGroupTag, normalizedTags) { updateResult ->
-                        updateResult
-                            .onSuccess { callback(Result.success(Unit)) }
-                            .onFailure { callback(errorResult("remove_urltest_outbounds_failed", it.message)) }
                     }
                 }
 
@@ -2466,38 +2411,6 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
 
-                "addOutbound" -> {
-                    val selectorTag = call.argument<String>("selectorTag") ?: "select"
-                    val outboundJson = call.argument<String>("outboundJson")
-                    if (outboundJson.isNullOrBlank()) {
-                        result.error("missing_outbound", "Outbound JSON is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.addOutbound(selectorTag, outboundJson) { addResult ->
-                        addResult.onSuccess {
-                            result.success(true)
-                        }.onFailure {
-                            result.error("add_outbound_failed", it.message, null)
-                        }
-                    }
-                }
-
-                "removeOutbound" -> {
-                    val selectorTag = call.argument<String>("selectorTag") ?: "select"
-                    val outboundTag = call.argument<String>("outboundTag")
-                    if (outboundTag.isNullOrBlank()) {
-                        result.error("missing_outbound", "Outbound tag is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.removeOutbound(selectorTag, outboundTag) { removeResult ->
-                        removeResult.onSuccess {
-                            result.success(true)
-                        }.onFailure {
-                            result.error("remove_outbound_failed", it.message, null)
-                        }
-                    }
-                }
-
                 "urlTest" -> {
                     val groupTag = call.argument<String>("groupTag") ?: "select"
                     SingboxController.urlTest(
@@ -2515,28 +2428,6 @@ class MainActivity : FlutterFragmentActivity() {
                             result.success(true)
                         }.onFailure {
                             result.error("urltest_failed", it.message, null)
-                        }
-                    }
-                }
-
-                "removeUrlTestOutbounds" -> {
-                    val groupTag = call.argument<String>("groupTag")?.trim().orEmpty()
-                    val outboundTags = call.argument<List<*>>("outboundTags").orEmpty()
-                        .mapNotNull { it?.toString()?.trim() }
-                        .filter { it.isNotEmpty() }
-                    if (groupTag.isEmpty()) {
-                        result.error("missing_group", "Group tag is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    if (outboundTags.isEmpty()) {
-                        result.success(true)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.removeUrlTestOutbounds(groupTag, outboundTags) { updateResult ->
-                        updateResult.onSuccess {
-                            result.success(true)
-                        }.onFailure {
-                            result.error("remove_urltest_outbounds_failed", it.message, null)
                         }
                     }
                 }

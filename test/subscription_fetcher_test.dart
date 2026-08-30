@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,157 +19,25 @@ void main() {
       expect(SubscriptionFetcher.defaultUserAgent, 'Etonify/0.3.7');
     });
 
-    test('prefers the app route while the Android VPN runtime is ready', () {
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: true,
-          vpnRuntimeReady: true,
-        ),
-        const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying],
-      );
-    });
-
-    test(
-      'keeps the system route before physical fallback without Etonify VPN',
-      () {
-        expect(
-          SubscriptionFetcher.routeOrderForTest(
-            android: true,
-            vpnRuntimeReady: false,
-          ),
-          const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying],
+    test('keeps insecure TLS opt-in on the scoped app client', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      server.listen((request) async {
+        request.response.write(
+          'vless://uuid@server.com:443?type=tcp&security=tls#Node1',
         );
-      },
-    );
+        await request.response.close();
+      });
+      final attempts = <(SubscriptionFetchRoute, bool)>[];
 
-    test('unknown Android VPN state preserves tunnel-first routing', () {
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: true,
-          vpnRuntimeReady: null,
-        ),
-        const [SubscriptionFetchRoute.app, SubscriptionFetchRoute.underlying],
-      );
-    });
-
-    test('keeps non-Android subscription requests on the app route', () {
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: false,
-          vpnRuntimeReady: true,
-        ),
-        const [SubscriptionFetchRoute.app],
-      );
-    });
-
-    test('untrusted TLS exception stays on the scoped app client', () {
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: true,
-          vpnRuntimeReady: true,
-          allowInsecureTls: true,
-        ),
-        const [SubscriptionFetchRoute.app],
-      );
-      expect(
-        SubscriptionFetcher.routeOrderForTest(
-          android: true,
-          vpnRuntimeReady: false,
-          allowInsecureTls: true,
-        ),
-        const [SubscriptionFetchRoute.app],
-      );
-    });
-
-    test('falls back after a route-specific content failure', () async {
-      final attemptedRoutes = <SubscriptionFetchRoute>[];
-      final attemptTimeouts = <Duration>[];
-      final notifications = <(SubscriptionFetchRoute, bool)>[];
-
-      final result = await SubscriptionFetcher.runRouteAttemptsForTest<String>(
-        routes: const [
-          SubscriptionFetchRoute.app,
-          SubscriptionFetchRoute.underlying,
-        ],
-        totalTimeout: const Duration(seconds: 30),
-        onAttempt: (route, isFallback) {
-          notifications.add((route, isFallback));
-        },
-        attempt: (route, timeout) async {
-          attemptedRoutes.add(route);
-          attemptTimeouts.add(timeout);
-          if (route == SubscriptionFetchRoute.app) {
-            throw const SubscriptionContentException(
-              SubscriptionContentFailureKind.htmlResponse,
-            );
-          }
-          return 'updated';
-        },
+      final result = await SubscriptionFetcher.fetch(
+        'http://${server.address.host}:${server.port}/sub',
+        allowInsecureTls: true,
+        onRouteAttempt: (route, fallback) => attempts.add((route, fallback)),
       );
 
-      expect(result, 'updated');
-      expect(attemptedRoutes, const [
-        SubscriptionFetchRoute.app,
-        SubscriptionFetchRoute.underlying,
-      ]);
-      expect(attemptTimeouts.first, const Duration(seconds: 5));
-      expect(attemptTimeouts.last, greaterThan(const Duration(seconds: 20)));
-      expect(notifications, const <(SubscriptionFetchRoute, bool)>[
-        (SubscriptionFetchRoute.app, false),
-        (SubscriptionFetchRoute.underlying, true),
-      ]);
-    });
-
-    test('does not start a fallback after the first route succeeds', () async {
-      var attempts = 0;
-
-      final result = await SubscriptionFetcher.runRouteAttemptsForTest<String>(
-        routes: const [
-          SubscriptionFetchRoute.app,
-          SubscriptionFetchRoute.underlying,
-        ],
-        totalTimeout: const Duration(seconds: 30),
-        attempt: (route, timeout) async {
-          attempts++;
-          return route.name;
-        },
-      );
-
-      expect(result, SubscriptionFetchRoute.app.name);
-      expect(attempts, 1);
-    });
-
-    test('finalizes a fetched response outside the route timeout', () async {
-      final finalizeStarted = Completer<void>();
-      final releaseFinalize = Completer<void>();
-      var attempts = 0;
-
-      final result =
-          SubscriptionFetcher.runRouteAttemptsThenFinalizeForTest<
-            String,
-            String
-          >(
-            routes: const [
-              SubscriptionFetchRoute.app,
-              SubscriptionFetchRoute.underlying,
-            ],
-            totalTimeout: const Duration(milliseconds: 20),
-            attempt: (route, timeout) async {
-              attempts++;
-              return 'downloaded';
-            },
-            finalize: (response) async {
-              finalizeStarted.complete();
-              await releaseFinalize.future;
-              return '$response-and-parsed';
-            },
-          );
-
-      await finalizeStarted.future;
-      await Future<void>.delayed(const Duration(milliseconds: 40));
-      expect(attempts, 1);
-      releaseFinalize.complete();
-      expect(await result, 'downloaded-and-parsed');
+      expect(result.parseResult.outbounds, hasLength(1));
+      expect(attempts, const [(SubscriptionFetchRoute.app, false)]);
     });
 
     test('uses current Etonify user agent by default', () async {

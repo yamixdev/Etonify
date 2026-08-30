@@ -662,7 +662,7 @@ class SingboxConfigBuilder {
           final memberTags = group.outboundTags
               .where(visibleOutboundTags.contains)
               .toList(growable: false);
-          if (memberTags.length < 2) {
+          if (memberTags.isEmpty) {
             return null;
           }
           return group.copyWith(outboundTags: memberTags);

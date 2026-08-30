@@ -395,38 +395,6 @@ class SingboxRuntime {
     );
   }
 
-  Future<void> addOutbound({
-    required String selectorTag,
-    required String outboundJson,
-  }) {
-    if (!Platform.isAndroid) {
-      return Future<void>.value();
-    }
-    return _withMethodChannelFallback(
-      () => _hostApi.addOutbound(selectorTag, outboundJson),
-      () => _methods.invokeMethod<void>('addOutbound', {
-        'selectorTag': selectorTag,
-        'outboundJson': outboundJson,
-      }),
-    );
-  }
-
-  Future<void> removeOutbound({
-    required String selectorTag,
-    required String outboundTag,
-  }) {
-    if (!Platform.isAndroid) {
-      return Future<void>.value();
-    }
-    return _withMethodChannelFallback(
-      () => _hostApi.removeOutbound(selectorTag, outboundTag),
-      () => _methods.invokeMethod<void>('removeOutbound', {
-        'selectorTag': selectorTag,
-        'outboundTag': outboundTag,
-      }),
-    );
-  }
-
   Future<void> urlTest({
     required String groupTag,
     String targetOutboundTag = '',
@@ -467,30 +435,6 @@ class SingboxRuntime {
           'force': force,
         });
       },
-    );
-  }
-
-  Future<void> removeUrlTestOutbounds({
-    required String groupTag,
-    required Iterable<String> outboundTags,
-  }) {
-    if (!Platform.isAndroid) {
-      return Future<void>.value();
-    }
-    final normalizedGroupTag = groupTag.trim();
-    final normalizedTags = outboundTags
-        .map((tag) => tag.trim())
-        .where((tag) => tag.isNotEmpty)
-        .toList(growable: false);
-    if (normalizedGroupTag.isEmpty || normalizedTags.isEmpty) {
-      return Future<void>.value();
-    }
-    return _withMethodChannelFallback(
-      () => _hostApi.removeUrlTestOutbounds(normalizedGroupTag, normalizedTags),
-      () => _methods.invokeMethod<void>('removeUrlTestOutbounds', {
-        'groupTag': normalizedGroupTag,
-        'outboundTags': normalizedTags,
-      }),
     );
   }
 

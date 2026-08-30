@@ -288,16 +288,7 @@ abstract class SingboxHostApi {
   void selectOutbound(String groupTag, String outboundTag);
 
   @async
-  void addOutbound(String selectorTag, String outboundJson);
-
-  @async
-  void removeOutbound(String selectorTag, String outboundTag);
-
-  @async
   void urlTest(UrlTestRequestMessage request);
-
-  @async
-  void removeUrlTestOutbounds(String groupTag, List<String?> outboundTags);
 
   @async
   Map<String?, Object?> status();

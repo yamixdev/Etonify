@@ -1468,11 +1468,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get urlTestIntervalTitle => 'Interval, sec.';
 
   @override
+  String get urlTestIntervalCompactTitle => 'Check interval';
+
+  @override
   String get urlTestIntervalSubtitle =>
       'How often proxies are checked for automatic selection';
 
   @override
   String get urlTestTimeoutTitle => 'Timeout, sec.';
+
+  @override
+  String get urlTestTimeoutCompactTitle => 'Test timeout';
 
   @override
   String get urlTestTimeoutSubtitle =>
@@ -1487,6 +1493,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get urlTestSingleRetestTitle => 'Quick retry delay, sec.';
+
+  @override
+  String get urlTestSingleRetestCompactTitle => 'Quick retry';
 
   @override
   String get urlTestSingleRetestSubtitle =>
@@ -1622,7 +1631,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionsTitle => 'Subscriptions';
 
   @override
-  String get settingsProfilesChecksTitle => 'Profiles and checks';
+  String get settingsProfilesChecksTitle => 'Subscriptions and checks';
 
   @override
   String get settingsProfilesChecksSubtitle =>

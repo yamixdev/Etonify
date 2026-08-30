@@ -148,7 +148,7 @@ class XrayConfigParser {
     required String? remarks,
     required String sourceScope,
   }) {
-    if (convertedSourceTags.length < 2) {
+    if (convertedSourceTags.isEmpty) {
       return;
     }
     final routing = _map(json['routing']);
@@ -182,7 +182,7 @@ class XrayConfigParser {
                 selectors.any((selector) => _tagMatchesSelector(tag, selector)),
           )
           .toList(growable: false);
-      if (memberTags.length < 2) {
+      if (memberTags.isEmpty) {
         continue;
       }
       final strategy = _map(balancer['strategy']);

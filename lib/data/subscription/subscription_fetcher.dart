@@ -64,8 +64,6 @@ class SubscriptionFetcher {
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
   static const _defaultOperationTimeout = Duration(seconds: 20);
-  static const _firstRouteTimeout = Duration(seconds: 5);
-  static const _runtimeStatusTimeout = Duration(seconds: 1);
   static final RegExp _versionPrefixRegExp = RegExp(r'^v');
   static final RegExp _unicodeHttpUriRegExp = RegExp(
     r'^([A-Za-z][A-Za-z0-9+.\-]*):\/\/([^\/?#]*)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$',
@@ -106,76 +104,44 @@ class SubscriptionFetcher {
           operationTimeout != null && operationTimeout > Duration.zero
           ? operationTimeout
           : _defaultOperationTimeout;
-      if (!allowInsecureTls) {
-        final downloaded = await VpnAwareRemoteDownloader.instance.fetchBytes(
+      if (allowInsecureTls) {
+        // The trust exception must remain scoped to Dart's short-lived client.
+        // The native and outbound routes intentionally keep certificate checks.
+        onRouteAttempt?.call(SubscriptionFetchRoute.app, false);
+        final response = await _fetchViaAppRoute(
           uri: uri,
-          maximumBytes: _maxSubscriptionResponseBytes,
           headers: headers,
-          onRouteAttempt: (route, isFallback) {
-            onRouteAttempt?.call(switch (route) {
-              RemoteDownloadRoute.outbound => SubscriptionFetchRoute.outbound,
-              RemoteDownloadRoute.app => SubscriptionFetchRoute.app,
-              RemoteDownloadRoute.underlying =>
-                SubscriptionFetchRoute.underlying,
-            }, isFallback);
-          },
-        );
-        final rawContent = decodeResponseUtf8ForTest(
-          downloaded.bytes ?? Uint8List(0),
-        );
-        final response = _buildFetchedResponse(
-          rawContent: rawContent,
-          headerValue: (name) => downloaded.headers[name.toLowerCase()],
-        );
-        AppLogStore.info(
-          'subscription',
-          'fetch complete path=${downloaded.route.name} '
-              'bytes=${downloaded.downloadedBytes}',
+          timeout: totalTimeout,
+          allowInsecureTls: true,
         );
         return await _buildResult(url: url, response: response);
       }
-      final vpnRuntimeReady = await _isVpnRuntimeReady();
-      final routes = routeOrderForTest(
-        android: Platform.isAndroid,
-        vpnRuntimeReady: vpnRuntimeReady,
-        allowInsecureTls: allowInsecureTls,
+
+      final downloaded = await VpnAwareRemoteDownloader.instance.fetchBytes(
+        uri: uri,
+        maximumBytes: _maxSubscriptionResponseBytes,
+        headers: headers,
+        onRouteAttempt: (route, isFallback) {
+          onRouteAttempt?.call(switch (route) {
+            RemoteDownloadRoute.outbound => SubscriptionFetchRoute.outbound,
+            RemoteDownloadRoute.app => SubscriptionFetchRoute.app,
+            RemoteDownloadRoute.underlying => SubscriptionFetchRoute.underlying,
+          }, isFallback);
+        },
+      );
+      final rawContent = decodeResponseUtf8ForTest(
+        downloaded.bytes ?? Uint8List(0),
+      );
+      final response = _buildFetchedResponse(
+        rawContent: rawContent,
+        headerValue: (name) => downloaded.headers[name.toLowerCase()],
       );
       AppLogStore.info(
         'subscription',
-        'fetch route order=${routes.map((route) => route.name).join('->')} '
-            'vpnRuntimeReady=$vpnRuntimeReady',
+        'fetch complete path=${downloaded.route.name} '
+            'bytes=${downloaded.downloadedBytes}',
       );
-      return await runRouteAttemptsThenFinalizeForTest<
-        _FetchedSubscriptionResponse,
-        FetchResult
-      >(
-        routes: routes,
-        totalTimeout: totalTimeout,
-        onAttempt: onRouteAttempt,
-        attempt: (route, timeout) => switch (route) {
-          SubscriptionFetchRoute.outbound => throw StateError(
-            'Outbound fetch is handled by the VPN-aware downloader',
-          ),
-          SubscriptionFetchRoute.app => _fetchViaAppRoute(
-            uri: uri,
-            headers: headers,
-            timeout: timeout,
-            allowInsecureTls: allowInsecureTls,
-          ),
-          SubscriptionFetchRoute.underlying => _fetchViaUnderlyingNetwork(
-            uri: uri,
-            headers: headers,
-            timeout: timeout,
-          ),
-        },
-        finalize: (response) => _buildResult(url: url, response: response),
-        onFailure: (route, error) {
-          AppLogStore.warning(
-            'subscription',
-            'fetch path=${route.name} failed: $error',
-          );
-        },
-      );
+      return await _buildResult(url: url, response: response);
     } catch (error, stackTrace) {
       await _logFetchFailure(uri: uri, error: error, stackTrace: stackTrace);
       if (error is RemoteDownloadHttpException) {
@@ -191,57 +157,6 @@ class SubscriptionFetcher {
       }
       rethrow;
     }
-  }
-
-  static Future<bool?> _isVpnRuntimeReady() async {
-    if (!Platform.isAndroid) {
-      return false;
-    }
-    try {
-      final status = await SingboxRuntime.instance.status().timeout(
-        _runtimeStatusTimeout,
-      );
-      return status['running'] == true &&
-          status['mode']?.toString() == 'vpn' &&
-          status['nativeRecoveryPending'] != true;
-    } catch (error) {
-      AppLogStore.warning(
-        'subscription',
-        'runtime status unavailable before fetch: $error',
-      );
-      return null;
-    }
-  }
-
-  static Future<_FetchedSubscriptionResponse> _fetchViaUnderlyingNetwork({
-    required Uri uri,
-    required Map<String, String> headers,
-    required Duration timeout,
-  }) async {
-    final native = await SingboxRuntime.instance.fetchUrlOnUnderlyingNetwork(
-      uri: uri,
-      headers: headers,
-      maxBytes: _maxSubscriptionResponseBytes,
-      timeout: timeout,
-    );
-    final statusCode =
-        int.tryParse(native['statusCode']?.toString() ?? '') ?? 0;
-    if (statusCode != HttpStatus.ok) {
-      throw SubscriptionHttpStatusException(statusCode, uri: uri);
-    }
-    final rawContent = native['body']?.toString() ?? '';
-    final responseHeaders = <String, String>{
-      for (final entry in (native['headers'] as Map? ?? const {}).entries)
-        entry.key.toString().toLowerCase(): entry.value.toString(),
-    };
-    AppLogStore.info(
-      'subscription',
-      'fetch complete path=underlying bytes=${utf8.encode(rawContent).length}',
-    );
-    return _buildFetchedResponse(
-      rawContent: rawContent,
-      headerValue: (name) => responseHeaders[name.toLowerCase()],
-    );
   }
 
   static Future<_FetchedSubscriptionResponse> _fetchViaAppRoute({
@@ -294,113 +209,6 @@ class SubscriptionFetcher {
       timeoutTimer?.cancel();
       client.close(force: true);
     }
-  }
-
-  @visibleForTesting
-  static List<SubscriptionFetchRoute> routeOrderForTest({
-    required bool android,
-    required bool? vpnRuntimeReady,
-    bool allowInsecureTls = false,
-  }) {
-    // The native underlying-network fetcher intentionally retains Android's
-    // certificate verification. A trust-all X509TrustManager would weaken a
-    // wider native surface and is commonly flagged by security scanners.
-    if (allowInsecureTls) {
-      return const [SubscriptionFetchRoute.app];
-    }
-    if (!android) {
-      return const [SubscriptionFetchRoute.app];
-    }
-    if (vpnRuntimeReady == false) {
-      // Etonify is not the VPN owner, but the app route may belong to another
-      // Android VPN. Keep that route usable and bind directly to Wi-Fi/LTE only
-      // as a fallback after a real failure.
-      return const [
-        SubscriptionFetchRoute.app,
-        SubscriptionFetchRoute.underlying,
-      ];
-    }
-    // An unknown runtime state stays tunnel-first. A temporary status bridge
-    // failure must not silently bypass a VPN that may still be active.
-    return const [
-      SubscriptionFetchRoute.app,
-      SubscriptionFetchRoute.underlying,
-    ];
-  }
-
-  @visibleForTesting
-  static Future<T> runRouteAttemptsForTest<T>({
-    required List<SubscriptionFetchRoute> routes,
-    required Duration totalTimeout,
-    required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
-    attempt,
-    SubscriptionFetchRouteAttemptCallback? onAttempt,
-    void Function(SubscriptionFetchRoute route, Object error)? onFailure,
-  }) async {
-    if (routes.isEmpty) {
-      throw StateError('No subscription fetch routes are available');
-    }
-    final stopwatch = Stopwatch()..start();
-    Object? lastError;
-    StackTrace? lastStackTrace;
-    for (var index = 0; index < routes.length; index++) {
-      final remaining = totalTimeout - stopwatch.elapsed;
-      if (remaining <= Duration.zero) {
-        break;
-      }
-      final routesAfterThis = routes.length - index - 1;
-      final timeout = routesAfterThis == 0
-          ? remaining
-          : _firstAttemptBudget(remaining, routesAfterThis);
-      final route = routes[index];
-      onAttempt?.call(route, index > 0);
-      try {
-        // Every route owns and cancels its own timeout. Future.timeout does not
-        // cancel the source future and could otherwise leave the first HTTP
-        // request alive while the fallback route starts.
-        return await attempt(route, timeout);
-      } catch (error, stackTrace) {
-        lastError = error;
-        lastStackTrace = stackTrace;
-        onFailure?.call(route, error);
-      }
-    }
-    if (lastError != null && lastStackTrace != null) {
-      Error.throwWithStackTrace(lastError, lastStackTrace);
-    }
-    throw TimeoutException('Subscription request timed out');
-  }
-
-  @visibleForTesting
-  static Future<R> runRouteAttemptsThenFinalizeForTest<T, R>({
-    required List<SubscriptionFetchRoute> routes,
-    required Duration totalTimeout,
-    required Future<T> Function(SubscriptionFetchRoute route, Duration timeout)
-    attempt,
-    required Future<R> Function(T response) finalize,
-    SubscriptionFetchRouteAttemptCallback? onAttempt,
-    void Function(SubscriptionFetchRoute route, Object error)? onFailure,
-  }) async {
-    final response = await runRouteAttemptsForTest<T>(
-      routes: routes,
-      totalTimeout: totalTimeout,
-      attempt: attempt,
-      onAttempt: onAttempt,
-      onFailure: onFailure,
-    );
-    return finalize(response);
-  }
-
-  static Duration _firstAttemptBudget(Duration remaining, int routesAfterThis) {
-    const minimumFallbackBudget = Duration(seconds: 3);
-    final reserved = minimumFallbackBudget * routesAfterThis;
-    final available = remaining - reserved;
-    if (available <= Duration.zero) {
-      return Duration(
-        microseconds: max(1, remaining.inMicroseconds ~/ (routesAfterThis + 1)),
-      );
-    }
-    return available < _firstRouteTimeout ? available : _firstRouteTimeout;
   }
 
   static Future<Map<String, String>> _requestHeaders(

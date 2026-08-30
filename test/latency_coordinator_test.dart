@@ -59,6 +59,48 @@ void main() {
   });
 
   test(
+    'manual checks use configured and core-bounded URLTest limits',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        outboundCount: () => 10,
+        timeoutSeconds: () => 7,
+        concurrency: () => 3,
+      );
+      addTearDown(coordinator.dispose);
+
+      final result = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(requests, hasLength(1));
+      expect(requests.single.timeoutMillis, 7000);
+      expect(requests.single.concurrency, 3);
+      expect(requests.single.deadlineMillis, 33000);
+      coordinator.cancel();
+      expect(await result, isFalse);
+
+      final boundedRequests = <LatencyTestRequest>[];
+      final boundedCoordinator = _coordinator(
+        runTest: (request) async => boundedRequests.add(request),
+        outboundCount: () => 1000,
+        timeoutSeconds: () => 90,
+        concurrency: () => 99,
+      );
+      addTearDown(boundedCoordinator.dispose);
+
+      final boundedResult = boundedCoordinator.runFull(reason: 'bounded');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(boundedRequests.single.timeoutMillis, 30000);
+      expect(boundedRequests.single.concurrency, 16);
+      expect(boundedRequests.single.deadlineMillis, 120000);
+      boundedCoordinator.cancel();
+      expect(await boundedResult, isFalse);
+    },
+  );
+
+  test(
     'RPC acceptance without fresh events does not fabricate success',
     () async {
       var completed = false;
@@ -258,6 +300,8 @@ LatencyCoordinator _coordinator({
   LatencyBoolReader? isConnected,
   LatencyBoolReader? isForeground,
   LatencyIntReader? outboundCount,
+  LatencyIntReader? timeoutSeconds,
+  LatencyIntReader? concurrency,
   LatencyEventTimesReader? eventBaselineTimes,
   LatencyIntReader? operationGeneration,
   LatencyExpectedTagsReader? expectedTags,
@@ -270,6 +314,8 @@ LatencyCoordinator _coordinator({
     activeOutboundTag: () => 'proxy-1',
     testUrl: () => 'https://example.com/generate_204',
     outboundCount: outboundCount ?? () => 12,
+    timeoutSeconds: timeoutSeconds ?? () => 15,
+    concurrency: concurrency ?? () => 8,
     eventBaselineTimes: eventBaselineTimes,
     expectedTags: expectedTags,
     operationGeneration: operationGeneration,

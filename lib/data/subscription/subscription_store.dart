@@ -1275,7 +1275,7 @@ class SubscriptionStore {
           }
         }
       }
-      if (memberTags.length < 2) {
+      if (memberTags.isEmpty) {
         continue;
       }
 

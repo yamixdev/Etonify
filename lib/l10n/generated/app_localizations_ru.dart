@@ -1468,11 +1468,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get urlTestIntervalTitle => 'Интервал проверки, сек.';
 
   @override
+  String get urlTestIntervalCompactTitle => 'Интервал проверки';
+
+  @override
   String get urlTestIntervalSubtitle =>
       'Частота проверки прокси для автоматического выбора';
 
   @override
   String get urlTestTimeoutTitle => 'Таймаут проверки, сек.';
+
+  @override
+  String get urlTestTimeoutCompactTitle => 'Таймаут проверки';
 
   @override
   String get urlTestTimeoutSubtitle =>
@@ -1487,6 +1493,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get urlTestSingleRetestTitle => 'Быстрая перепроверка, сек.';
+
+  @override
+  String get urlTestSingleRetestCompactTitle => 'Быстрая перепроверка';
 
   @override
   String get urlTestSingleRetestSubtitle =>
@@ -1622,7 +1631,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionsTitle => 'Подписки';
 
   @override
-  String get settingsProfilesChecksTitle => 'Профили и проверка';
+  String get settingsProfilesChecksTitle => 'Подписки и проверка';
 
   @override
   String get settingsProfilesChecksSubtitle =>
