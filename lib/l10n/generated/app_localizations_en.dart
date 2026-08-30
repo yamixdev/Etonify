@@ -1451,6 +1451,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'DNS over HTTPS. Encrypted DNS over HTTPS, often best through proxy.';
 
   @override
+  String get dnsProtectionTitle => 'Protection';
+
+  @override
+  String get dnsSecureOnlyTitle => 'Encrypted DNS only';
+
+  @override
+  String get dnsSecureOnlySubtitle =>
+      'Allow only DoH and DoT. Plain UDP, TCP and device DNS are not used.';
+
+  @override
+  String get dnsDirectThroughProxyTitle => 'Direct DNS via proxy';
+
+  @override
+  String get dnsDirectThroughProxySubtitle =>
+      'Protect DNS for direct routes while website traffic stays direct.';
+
+  @override
   String get dnsPreferIpv6Title => 'Prefer IPv6';
 
   @override

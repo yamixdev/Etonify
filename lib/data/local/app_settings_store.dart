@@ -100,6 +100,17 @@ String normalizeDnsResolverInput(String value) {
   return 'udp://$normalized';
 }
 
+const defaultSecureDnsDirectResolver =
+    'tls://1.1.1.1?server_name=one.one.one.one';
+const defaultSecureDnsProxyResolver = 'https://dns.cloudflare.com/dns-query';
+
+bool isEncryptedDnsResolver(String value) {
+  final scheme = Uri.tryParse(
+    normalizeDnsResolverInput(value),
+  )?.scheme.toLowerCase();
+  return scheme == 'tls' || scheme == 'https';
+}
+
 final RegExp _androidPackageNamePattern = RegExp(
   r'^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$',
 );
@@ -170,6 +181,8 @@ class AppSettingsState {
     required this.dnsProxyPreset,
     required this.dnsProxyResolver,
     required this.dnsPreferIpv6,
+    this.dnsSecureOnly = false,
+    this.dnsDirectThroughProxy = false,
     this.russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
     required this.urlTestUrl,
     required this.urlTestIntervalSeconds,
@@ -233,6 +246,8 @@ class AppSettingsState {
   final String dnsProxyPreset;
   final String dnsProxyResolver;
   final bool dnsPreferIpv6;
+  final bool dnsSecureOnly;
+  final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
   final String urlTestUrl;
   final int urlTestIntervalSeconds;
@@ -296,6 +311,8 @@ class AppSettingsState {
     String? dnsProxyPreset,
     String? dnsProxyResolver,
     bool? dnsPreferIpv6,
+    bool? dnsSecureOnly,
+    bool? dnsDirectThroughProxy,
     String? russiaDnsDirectResolver,
     String? urlTestUrl,
     int? urlTestIntervalSeconds,
@@ -372,6 +389,9 @@ class AppSettingsState {
       dnsProxyPreset: dnsProxyPreset ?? this.dnsProxyPreset,
       dnsProxyResolver: dnsProxyResolver ?? this.dnsProxyResolver,
       dnsPreferIpv6: dnsPreferIpv6 ?? this.dnsPreferIpv6,
+      dnsSecureOnly: dnsSecureOnly ?? this.dnsSecureOnly,
+      dnsDirectThroughProxy:
+          dnsDirectThroughProxy ?? this.dnsDirectThroughProxy,
       russiaDnsDirectResolver:
           russiaDnsDirectResolver ?? this.russiaDnsDirectResolver,
       urlTestUrl: urlTestUrl ?? this.urlTestUrl,
@@ -464,6 +484,8 @@ abstract class AppSettingsStore {
   static const _dnsProxyPresetKey = 'dns_proxy_preset';
   static const _dnsProxyResolverKey = 'dns_proxy_resolver';
   static const _dnsPreferIpv6Key = 'dns_prefer_ipv6';
+  static const _dnsSecureOnlyKey = 'dns_secure_only';
+  static const _dnsDirectThroughProxyKey = 'dns_direct_through_proxy';
   static const _russiaDnsDirectResolverKey = 'russia_dns_direct_resolver';
   static const _urlTestUrlKey = 'urltest_url';
   static const _urlTestIntervalSecondsKey = 'urltest_interval_seconds';
@@ -526,6 +548,8 @@ abstract class AppSettingsStore {
     _dnsProxyPresetKey,
     _dnsProxyResolverKey,
     _dnsPreferIpv6Key,
+    _dnsSecureOnlyKey,
+    _dnsDirectThroughProxyKey,
     _russiaDnsDirectResolverKey,
     _urlTestUrlKey,
     _urlTestIntervalSecondsKey,
@@ -739,6 +763,11 @@ abstract class AppSettingsStore {
           ) ??
           'https://dns.cloudflare.com/dns-query',
       dnsPreferIpv6: map[_dnsPreferIpv6Key] == '1',
+      dnsSecureOnly: boolValue(_dnsSecureOnlyKey, defaultValue: false),
+      dnsDirectThroughProxy: boolValue(
+        _dnsDirectThroughProxyKey,
+        defaultValue: false,
+      ),
       russiaDnsDirectResolver:
           _resolverValue(
             map[_russiaDnsDirectResolverKey]?.toString(),
@@ -890,6 +919,8 @@ abstract class AppSettingsStore {
       _dnsProxyPresetKey: state.dnsProxyPreset,
       _dnsProxyResolverKey: state.dnsProxyResolver,
       _dnsPreferIpv6Key: state.dnsPreferIpv6 ? '1' : '0',
+      _dnsSecureOnlyKey: state.dnsSecureOnly ? '1' : '0',
+      _dnsDirectThroughProxyKey: state.dnsDirectThroughProxy ? '1' : '0',
       _russiaDnsDirectResolverKey: state.russiaDnsDirectResolver,
       _urlTestUrlKey: state.urlTestUrl,
       _urlTestIntervalSecondsKey: state.urlTestIntervalSeconds.toString(),

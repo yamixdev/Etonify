@@ -68,6 +68,8 @@ class SingboxConfigCoordinatorSnapshot {
     required this.dnsDirectResolver,
     required this.dnsProxyResolver,
     required this.dnsPreferIpv6,
+    this.dnsSecureOnly = false,
+    this.dnsDirectThroughProxy = false,
     required this.russiaDnsDirectResolver,
     required this.urlTestUrl,
     required this.urlTestIntervalSeconds,
@@ -124,6 +126,8 @@ class SingboxConfigCoordinatorSnapshot {
   final String dnsDirectResolver;
   final String dnsProxyResolver;
   final bool dnsPreferIpv6;
+  final bool dnsSecureOnly;
+  final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
   final String urlTestUrl;
   final int urlTestIntervalSeconds;
@@ -848,6 +852,8 @@ class SingboxConfigCoordinator {
       dnsDirectResolver: snapshot.dnsDirectResolver,
       dnsProxyResolver: snapshot.dnsProxyResolver,
       dnsPreferIpv6: snapshot.dnsPreferIpv6,
+      dnsSecureOnly: snapshot.dnsSecureOnly,
+      dnsDirectThroughProxy: snapshot.dnsDirectThroughProxy,
       russiaDnsDirectResolver: snapshot.russiaDnsDirectResolver,
       urlTestUrl: snapshot.urlTestUrl,
       urlTestIntervalSeconds: snapshot.urlTestIntervalSeconds,

@@ -15,6 +15,8 @@ class _DnsSettingsHarnessState extends State<_DnsSettingsHarness> {
   String directResolver = 'udp://1.1.1.1';
   int directResolverChanges = 0;
   int trafficTick = 0;
+  bool secureOnly = false;
+  bool directThroughProxy = false;
 
   void rebuildForTrafficTick() {
     setState(() => trafficTick++);
@@ -28,6 +30,8 @@ class _DnsSettingsHarnessState extends State<_DnsSettingsHarness> {
       currentProxyPreset: 'device',
       currentProxyResolver: 'device://network',
       currentPreferIpv6: false,
+      currentSecureOnly: secureOnly,
+      currentDirectThroughProxy: directThroughProxy,
       onDirectPresetChanged: (_) {},
       onDirectResolverChanged: (value) {
         setState(() {
@@ -38,6 +42,9 @@ class _DnsSettingsHarnessState extends State<_DnsSettingsHarness> {
       onProxyPresetChanged: (_) {},
       onProxyResolverChanged: (_) {},
       onPreferIpv6Changed: (_) {},
+      onSecureOnlyChanged: (value) => setState(() => secureOnly = value),
+      onDirectThroughProxyChanged: (value) =>
+          setState(() => directThroughProxy = value),
     );
   }
 }
@@ -91,4 +98,24 @@ void main() {
       expect(harnessKey.currentState!.directResolverChanges, 2);
     },
   );
+
+  testWidgets('secure DNS hides plaintext resolver presets', (tester) async {
+    final harnessKey = GlobalKey<_DnsSettingsHarnessState>();
+    await tester.pumpWidget(_dnsSettingsApp(harnessKey));
+
+    final secureOnly = find.text('Encrypted DNS only');
+    await tester.ensureVisible(secureOnly);
+    await tester.tap(secureOnly);
+    await tester.pumpAndSettle();
+    expect(harnessKey.currentState!.secureOnly, isTrue);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.bolt_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cloudflare DoT'), findsOneWidget);
+    expect(find.text('Cloudflare 1.1.1.1'), findsNothing);
+    expect(find.text('Device network'), findsNothing);
+  });
 }

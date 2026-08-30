@@ -2738,6 +2738,96 @@ void main() {
     );
   });
 
+  test(
+    'secure DNS policy upgrades plaintext resolvers and verifies DoT SNI',
+    () {
+      const subscription = Subscription(
+        id: 'secure-dns-sub',
+        name: 'Secure DNS',
+        url: 'https://example.com/sub',
+        outbounds: [
+          Outbound(
+            tag: 'node',
+            name: 'Node',
+            config: {
+              'type': 'vless',
+              'tag': 'node',
+              'server': 'node.example.com',
+              'server_port': 443,
+              'uuid': 'node-uuid',
+            },
+          ),
+        ],
+      );
+
+      final config = _defaultBuilder(
+        subscription,
+        dnsDirectResolver: 'udp://8.8.8.8',
+        dnsProxyResolver: 'device://network',
+        dnsSecureOnly: true,
+      ).build();
+      final servers = ((config['dns'] as Map)['servers'] as List)
+          .cast<Map<String, dynamic>>();
+      final direct = servers.firstWhere(
+        (server) => server['tag'] == 'dns-direct',
+      );
+      final remote = servers.firstWhere(
+        (server) => server['tag'] == 'dns-remote',
+      );
+
+      expect(direct, {
+        'type': 'tls',
+        'tag': 'dns-direct',
+        'server': '1.1.1.1',
+        'server_port': 853,
+        'tls': {'enabled': true, 'server_name': 'one.one.one.one'},
+      });
+      expect(remote['type'], 'https');
+      expect(remote['server'], 'dns.cloudflare.com');
+      expect(remote['detour'], 'select');
+    },
+  );
+
+  test(
+    'direct DNS can use the proxy without proxying direct website traffic',
+    () {
+      const subscription = Subscription(
+        id: 'dns-detour-sub',
+        name: 'DNS detour',
+        url: 'https://example.com/sub',
+        outbounds: [
+          Outbound(
+            tag: 'node',
+            name: 'Node',
+            config: {
+              'type': 'vless',
+              'tag': 'node',
+              'server': 'node.example.com',
+              'server_port': 443,
+              'uuid': 'node-uuid',
+            },
+          ),
+        ],
+      );
+
+      final config = _defaultBuilder(
+        subscription,
+        dnsDirectResolver: defaultSecureDnsDirectResolver,
+        dnsDirectThroughProxy: true,
+        trafficRulePreset: TrafficRulePreset.aiViaVpn,
+        russiaAiServicesPath: _russiaRuleSetPath('geosite-ru-blocked.srs'),
+      ).build();
+      final servers = ((config['dns'] as Map)['servers'] as List)
+          .cast<Map<String, dynamic>>();
+      final direct = servers.firstWhere(
+        (server) => server['tag'] == 'dns-direct',
+      );
+
+      expect(direct['detour'], 'select');
+      expect((config['route'] as Map)['final'], 'direct');
+    },
+  );
+
   test('Russia routes use configured direct RU DNS resolver', () {
     const subscription = Subscription(
       id: 'ru-dns-sub',
@@ -2930,6 +3020,8 @@ SingboxConfigBuilder _defaultBuilder(
   String? adBlockAllowRuleSetPath,
   String dnsDirectResolver = 'udp://1.1.1.1',
   String dnsProxyResolver = 'https://dns.cloudflare.com/dns-query',
+  bool dnsSecureOnly = false,
+  bool dnsDirectThroughProxy = false,
   String russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
   String? russiaAiServicesPath,
   String? russiaSocialServicesPath,
@@ -2950,6 +3042,8 @@ SingboxConfigBuilder _defaultBuilder(
     dnsDirectResolver: dnsDirectResolver,
     dnsProxyResolver: dnsProxyResolver,
     dnsPreferIpv6: false,
+    dnsSecureOnly: dnsSecureOnly,
+    dnsDirectThroughProxy: dnsDirectThroughProxy,
     russiaDnsDirectResolver: russiaDnsDirectResolver,
     urlTestUrl: urlTestUrl,
     urlTestIntervalSeconds: urlTestIntervalSeconds,

@@ -264,6 +264,36 @@ void main() {
     expect(controller.proxySort, 'working');
   });
 
+  test('secure DNS policy upgrades and keeps every resolver encrypted', () {
+    final controller = AppSettingsController();
+
+    final change = controller.setDnsSecureOnly(true);
+
+    expect(change.changed, isTrue);
+    expect(change.restartRuntime, isTrue);
+    expect(controller.dnsDirectPreset, 'cloudflare_dot');
+    expect(controller.dnsDirectResolver, defaultSecureDnsDirectResolver);
+    expect(controller.dnsProxyPreset, 'cloudflare_doh');
+    expect(controller.dnsProxyResolver, defaultSecureDnsProxyResolver);
+    expect(controller.russiaDnsDirectResolver, defaultSecureDnsDirectResolver);
+
+    controller.setDnsDirectResolver('udp://8.8.8.8');
+    controller.setDnsProxyResolver('device://network');
+    expect(controller.dnsDirectResolver, defaultSecureDnsDirectResolver);
+    expect(controller.dnsProxyResolver, defaultSecureDnsProxyResolver);
+  });
+
+  test('direct DNS proxy detour is an independent runtime setting', () {
+    final controller = AppSettingsController();
+
+    final change = controller.setDnsDirectThroughProxy(true);
+
+    expect(change.changed, isTrue);
+    expect(change.restartRuntime, isTrue);
+    expect(controller.dnsDirectThroughProxy, isTrue);
+    expect(controller.dnsSecureOnly, isFalse);
+  });
+
   test('traffic rules keep exactly one active preset and restart VPN', () {
     final controller = AppSettingsController();
 

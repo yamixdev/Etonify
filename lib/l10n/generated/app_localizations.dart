@@ -2657,6 +2657,36 @@ abstract class AppLocalizations {
   /// **'DNS over HTTPS. Encrypted DNS over HTTPS, often best through proxy.'**
   String get dnsPresetHttpsSubtitle;
 
+  /// No description provided for @dnsProtectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection'**
+  String get dnsProtectionTitle;
+
+  /// No description provided for @dnsSecureOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted DNS only'**
+  String get dnsSecureOnlyTitle;
+
+  /// No description provided for @dnsSecureOnlySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow only DoH and DoT. Plain UDP, TCP and device DNS are not used.'**
+  String get dnsSecureOnlySubtitle;
+
+  /// No description provided for @dnsDirectThroughProxyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct DNS via proxy'**
+  String get dnsDirectThroughProxyTitle;
+
+  /// No description provided for @dnsDirectThroughProxySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Protect DNS for direct routes while website traffic stays direct.'**
+  String get dnsDirectThroughProxySubtitle;
+
   /// No description provided for @dnsPreferIpv6Title.
   ///
   /// In en, this message translates to:

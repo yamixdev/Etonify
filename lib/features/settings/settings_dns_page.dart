@@ -39,11 +39,15 @@ class SettingsDnsPage extends StatefulWidget {
     required this.currentProxyPreset,
     required this.currentProxyResolver,
     required this.currentPreferIpv6,
+    this.currentSecureOnly = false,
+    this.currentDirectThroughProxy = false,
     required this.onDirectPresetChanged,
     required this.onDirectResolverChanged,
     required this.onProxyPresetChanged,
     required this.onProxyResolverChanged,
     required this.onPreferIpv6Changed,
+    this.onSecureOnlyChanged,
+    this.onDirectThroughProxyChanged,
   });
 
   final String currentDirectPreset;
@@ -51,11 +55,15 @@ class SettingsDnsPage extends StatefulWidget {
   final String currentProxyPreset;
   final String currentProxyResolver;
   final bool currentPreferIpv6;
+  final bool currentSecureOnly;
+  final bool currentDirectThroughProxy;
   final ValueChanged<String> onDirectPresetChanged;
   final ValueChanged<String> onDirectResolverChanged;
   final ValueChanged<String> onProxyPresetChanged;
   final ValueChanged<String> onProxyResolverChanged;
   final ValueChanged<bool> onPreferIpv6Changed;
+  final ValueChanged<bool>? onSecureOnlyChanged;
+  final ValueChanged<bool>? onDirectThroughProxyChanged;
 
   @override
   State<SettingsDnsPage> createState() => _SettingsDnsPageState();
@@ -122,6 +130,11 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
       value: 'udp://1.1.1.1',
     ),
     _DnsPreset(
+      id: 'cloudflare_dot',
+      label: 'Cloudflare DoT',
+      value: defaultSecureDnsDirectResolver,
+    ),
+    _DnsPreset(
       id: 'cloudflare_doh',
       label: 'Cloudflare DoH',
       value: 'https://dns.cloudflare.com/dns-query',
@@ -139,6 +152,11 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
       id: 'cloudflare',
       label: 'Cloudflare 1.1.1.1',
       value: 'udp://1.1.1.1',
+    ),
+    _DnsPreset(
+      id: 'cloudflare_dot',
+      label: 'Cloudflare DoT',
+      value: defaultSecureDnsDirectResolver,
     ),
     _DnsPreset(
       id: 'cloudflare_doh',
@@ -284,6 +302,8 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
     final proxyPreset = _presetById(_proxyPresets, widget.currentProxyPreset);
     final directIsCustom = directPreset.id == 'custom';
     final proxyIsCustom = proxyPreset.id == 'custom';
+    final directPresets = _availablePresets(_directPresets);
+    final proxyPresets = _availablePresets(_proxyPresets);
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.dnsTitle)),
@@ -314,7 +334,7 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                     onTap: () => _showPresetPicker(
                       context: context,
                       title: l10n.dnsDirectTitle,
-                      presets: _directPresets,
+                      presets: directPresets,
                       current: widget.currentDirectPreset,
                       onSelected: (preset) {
                         widget.onDirectPresetChanged(preset.id);
@@ -367,7 +387,7 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                     onTap: () => _showPresetPicker(
                       context: context,
                       title: l10n.dnsProxyTitle,
-                      presets: _proxyPresets,
+                      presets: proxyPresets,
                       current: widget.currentProxyPreset,
                       onSelected: (preset) {
                         widget.onProxyPresetChanged(preset.id);
@@ -401,6 +421,45 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
             ),
           ),
           const Gap(settingsSectionGap),
+          _SectionLabel(label: l10n.dnsProtectionTitle),
+          const Gap(settingsSectionLabelGap),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  secondary: SettingsLeadingIcon(
+                    icon: Icons.enhanced_encryption_rounded,
+                    color: cs.primary,
+                  ),
+                  title: Text(l10n.dnsSecureOnlyTitle),
+                  subtitle: Text(l10n.dnsSecureOnlySubtitle),
+                  value: widget.currentSecureOnly,
+                  onChanged: widget.onSecureOnlyChanged,
+                ),
+                const Divider(height: 1, indent: 72),
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  secondary: SettingsLeadingIcon(
+                    icon: Icons.route_rounded,
+                    color: cs.primary,
+                  ),
+                  title: Text(l10n.dnsDirectThroughProxyTitle),
+                  subtitle: Text(l10n.dnsDirectThroughProxySubtitle),
+                  value: widget.currentDirectThroughProxy,
+                  onChanged: widget.onDirectThroughProxyChanged,
+                ),
+              ],
+            ),
+          ),
+          const Gap(settingsSectionGap),
           _SectionLabel(label: l10n.dnsIpPreferenceTitle),
           const Gap(settingsSectionLabelGap),
           Card(
@@ -423,6 +482,18 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
         ],
       ),
     );
+  }
+
+  List<_DnsPreset> _availablePresets(List<_DnsPreset> presets) {
+    if (!widget.currentSecureOnly) {
+      return presets;
+    }
+    return presets
+        .where(
+          (preset) =>
+              preset.id == 'custom' || isEncryptedDnsResolver(preset.value),
+        )
+        .toList(growable: false);
   }
 }
 

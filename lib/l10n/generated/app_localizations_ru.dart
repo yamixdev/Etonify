@@ -1451,6 +1451,23 @@ class AppLocalizationsRu extends AppLocalizations {
       'DNS через HTTPS: шифрованные запросы, которые можно отправлять через прокси.';
 
   @override
+  String get dnsProtectionTitle => 'Защита';
+
+  @override
+  String get dnsSecureOnlyTitle => 'Только защищённый DNS';
+
+  @override
+  String get dnsSecureOnlySubtitle =>
+      'Разрешить только DoH и DoT. DNS устройства, UDP и TCP не используются.';
+
+  @override
+  String get dnsDirectThroughProxyTitle => 'Прямой DNS через прокси';
+
+  @override
+  String get dnsDirectThroughProxySubtitle =>
+      'DNS прямых маршрутов идёт через прокси, а сайты подключаются напрямую.';
+
+  @override
   String get dnsPreferIpv6Title => 'Предпочитать IPv6';
 
   @override

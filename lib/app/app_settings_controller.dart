@@ -119,6 +119,8 @@ class AppSettingsController {
   String dnsProxyPreset = 'cloudflare';
   String dnsProxyResolver = 'https://dns.cloudflare.com/dns-query';
   bool dnsPreferIpv6 = false;
+  bool dnsSecureOnly = false;
+  bool dnsDirectThroughProxy = false;
   String russiaDnsDirectResolver = defaultRussiaDnsDirectResolver;
   String urlTestUrl = defaultUrlTestUrl;
   int urlTestIntervalSeconds = appSettingsStandardUrlTestIntervalSeconds;
@@ -203,6 +205,8 @@ class AppSettingsController {
       dnsProxyPreset: dnsProxyPreset,
       dnsProxyResolver: dnsProxyResolver,
       dnsPreferIpv6: dnsPreferIpv6,
+      dnsSecureOnly: dnsSecureOnly,
+      dnsDirectThroughProxy: dnsDirectThroughProxy,
       russiaDnsDirectResolver: russiaDnsDirectResolver,
       urlTestUrl: urlTestUrl,
       urlTestIntervalSeconds: urlTestIntervalSeconds,
@@ -277,9 +281,12 @@ class AppSettingsController {
     dnsProxyPreset = state.dnsProxyPreset;
     dnsProxyResolver = state.dnsProxyResolver;
     dnsPreferIpv6 = state.dnsPreferIpv6;
+    dnsSecureOnly = state.dnsSecureOnly;
+    dnsDirectThroughProxy = state.dnsDirectThroughProxy;
     russiaDnsDirectResolver = normalizedRussiaDnsDirectResolver(
       state.russiaDnsDirectResolver,
     );
+    _enforceSecureDnsResolvers();
     urlTestUrl = normalizedUrlTestUrl(state.urlTestUrl);
     urlTestIntervalSeconds = state.urlTestIntervalSeconds;
     urlTestTimeoutSeconds = state.urlTestTimeoutSeconds;
@@ -597,6 +604,7 @@ class AppSettingsController {
     }
     dnsDirectPreset = value;
     syncDnsPresetValue(isDirect: true);
+    _enforceSecureDnsResolvers();
     return const AppSettingsChange(
       changed: true,
       configReason: 'dns direct preset changed',
@@ -604,7 +612,10 @@ class AppSettingsController {
   }
 
   AppSettingsChange setDnsDirectResolver(String value) {
-    final normalized = normalizeDnsResolverInput(value);
+    final requested = normalizeDnsResolverInput(value);
+    final normalized = dnsSecureOnly && !isEncryptedDnsResolver(requested)
+        ? defaultSecureDnsDirectResolver
+        : requested;
     if (dnsDirectResolver == normalized) {
       return const AppSettingsChange.none();
     }
@@ -621,6 +632,7 @@ class AppSettingsController {
     }
     dnsProxyPreset = value;
     syncDnsPresetValue(isDirect: false);
+    _enforceSecureDnsResolvers();
     return const AppSettingsChange(
       changed: true,
       configReason: 'dns proxy preset changed',
@@ -628,7 +640,10 @@ class AppSettingsController {
   }
 
   AppSettingsChange setDnsProxyResolver(String value) {
-    final normalized = normalizeDnsResolverInput(value);
+    final requested = normalizeDnsResolverInput(value);
+    final normalized = dnsSecureOnly && !isEncryptedDnsResolver(requested)
+        ? defaultSecureDnsProxyResolver
+        : requested;
     if (dnsProxyResolver == normalized) {
       return const AppSettingsChange.none();
     }
@@ -647,6 +662,29 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'dns ip preference changed',
+    );
+  }
+
+  AppSettingsChange setDnsSecureOnly(bool value) {
+    if (dnsSecureOnly == value) {
+      return const AppSettingsChange.none();
+    }
+    dnsSecureOnly = value;
+    _enforceSecureDnsResolvers();
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'secure DNS policy changed',
+    );
+  }
+
+  AppSettingsChange setDnsDirectThroughProxy(bool value) {
+    if (dnsDirectThroughProxy == value) {
+      return const AppSettingsChange.none();
+    }
+    dnsDirectThroughProxy = value;
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'direct DNS detour changed',
     );
   }
 
@@ -946,11 +984,13 @@ class AppSettingsController {
     const directPresets = {
       'device': 'device://network',
       'cloudflare': 'udp://1.1.1.1',
+      'cloudflare_dot': defaultSecureDnsDirectResolver,
       'cloudflare_doh': 'https://dns.cloudflare.com/dns-query',
     };
     const proxyPresets = {
       'device': 'device://network',
       'cloudflare': 'udp://1.1.1.1',
+      'cloudflare_dot': defaultSecureDnsDirectResolver,
       'cloudflare_doh': 'https://dns.cloudflare.com/dns-query',
     };
     final preset = isDirect ? dnsDirectPreset : dnsProxyPreset;
@@ -965,6 +1005,27 @@ class AppSettingsController {
       dnsDirectResolver = value;
     } else {
       dnsProxyResolver = value;
+    }
+  }
+
+  void _enforceSecureDnsResolvers() {
+    if (!dnsSecureOnly) {
+      return;
+    }
+    if (!isEncryptedDnsResolver(dnsDirectResolver) ||
+        dnsDirectPreset == 'device' ||
+        dnsDirectPreset == 'cloudflare') {
+      dnsDirectPreset = 'cloudflare_dot';
+      dnsDirectResolver = defaultSecureDnsDirectResolver;
+    }
+    if (!isEncryptedDnsResolver(dnsProxyResolver) ||
+        dnsProxyPreset == 'device' ||
+        dnsProxyPreset == 'cloudflare') {
+      dnsProxyPreset = 'cloudflare_doh';
+      dnsProxyResolver = defaultSecureDnsProxyResolver;
+    }
+    if (!isEncryptedDnsResolver(russiaDnsDirectResolver)) {
+      russiaDnsDirectResolver = defaultSecureDnsDirectResolver;
     }
   }
 

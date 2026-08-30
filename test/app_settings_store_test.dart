@@ -349,6 +349,21 @@ void main() {
       'source',
     );
   });
+
+  test('persists and exports DNS protection parameters', () {
+    final store = _TestSettingsStore();
+    final state = store.mapState(const <String, dynamic>{
+      'dns_secure_only': '1',
+      'dns_direct_through_proxy': '1',
+    });
+
+    expect(state.dnsSecureOnly, isTrue);
+    expect(state.dnsDirectThroughProxy, isTrue);
+    expect(store.stateToMap(state)['dns_secure_only'], '1');
+    expect(store.stateToMap(state)['dns_direct_through_proxy'], '1');
+    expect(store.stateToSafeExportMap(state)['dns_secure_only'], '1');
+    expect(store.stateToSafeExportMap(state)['dns_direct_through_proxy'], '1');
+  });
 }
 
 final class _TestSettingsStore extends AppSettingsStore {

@@ -37,6 +37,8 @@ class SingboxConfigBuilder {
     required this.dnsDirectResolver,
     required this.dnsProxyResolver,
     required this.dnsPreferIpv6,
+    this.dnsSecureOnly = false,
+    this.dnsDirectThroughProxy = false,
     this.russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
     required this.urlTestUrl,
     required this.urlTestIntervalSeconds,
@@ -88,6 +90,8 @@ class SingboxConfigBuilder {
   final String dnsDirectResolver;
   final String dnsProxyResolver;
   final bool dnsPreferIpv6;
+  final bool dnsSecureOnly;
+  final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
   final String urlTestUrl;
   final int urlTestIntervalSeconds;
@@ -287,6 +291,24 @@ class SingboxConfigBuilder {
     final dnsRemoteDetour = hasProxies
         ? _dnsRemoteDetourFor(selectorDefault, selectableTags.toSet())
         : 'direct';
+    final dnsDirectDetour = dnsDirectThroughProxy && hasProxies
+        ? dnsRemoteDetour
+        : 'direct';
+    final effectiveDnsProxyResolver = _effectiveSecureDnsResolver(
+      dnsProxyResolver,
+      defaultSecureDnsProxyResolver,
+    );
+    final effectiveDnsDirectResolver = _effectiveSecureDnsResolver(
+      dnsDirectResolver,
+      defaultSecureDnsDirectResolver,
+    );
+    final effectiveRussiaDnsDirectResolver = _effectiveSecureDnsResolver(
+      _normalizedResolver(
+        russiaDnsDirectResolver,
+        defaultRussiaDnsDirectResolver,
+      ),
+      defaultSecureDnsDirectResolver,
+    );
 
     return SingboxBuildPlan(
       config: {
@@ -302,22 +324,19 @@ class SingboxConfigBuilder {
           'servers': [
             _buildDnsServer(
               tag: 'dns-remote',
-              value: dnsProxyResolver,
+              value: effectiveDnsProxyResolver,
               detour: dnsRemoteDetour,
             ),
             _buildDnsServer(
               tag: 'dns-direct',
-              value: dnsDirectResolver,
-              detour: 'direct',
+              value: effectiveDnsDirectResolver,
+              detour: dnsDirectDetour,
             ),
             if (russiaRouteDataActive)
               _buildDnsServer(
                 tag: 'dns-ru-direct',
-                value: _normalizedResolver(
-                  russiaDnsDirectResolver,
-                  defaultRussiaDnsDirectResolver,
-                ),
-                detour: 'direct',
+                value: effectiveRussiaDnsDirectResolver,
+                detour: dnsDirectDetour,
               ),
             if (fakeIpActive)
               const <String, Object>{
@@ -1124,6 +1143,14 @@ class SingboxConfigBuilder {
     return trimmed.isEmpty ? fallback : trimmed;
   }
 
+  String _effectiveSecureDnsResolver(String value, String fallback) {
+    final normalized = _normalizedResolver(value, fallback);
+    if (!dnsSecureOnly || isEncryptedDnsResolver(normalized)) {
+      return normalized;
+    }
+    return fallback;
+  }
+
   Map<String, dynamic> _buildDnsServer({
     required String tag,
     required String value,
@@ -1159,11 +1186,14 @@ class SingboxConfigBuilder {
         if (uri.host.isEmpty) {
           throw FormatException('DNS resolver host is empty for $tag');
         }
+        final serverName = uri.queryParameters['server_name']?.trim();
         return {
           'type': 'tls',
           'tag': tag,
           'server': uri.host,
           'server_port': uri.hasPort ? uri.port : 853,
+          if (serverName?.isNotEmpty == true)
+            'tls': {'enabled': true, 'server_name': serverName},
           ..._dnsDialFields(server: uri.host, detour: detour),
         };
       case 'https':

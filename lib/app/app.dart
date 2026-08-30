@@ -335,6 +335,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   String get _dnsProxyPreset => _settings.dnsProxyPreset;
   String get _dnsProxyResolver => _settings.dnsProxyResolver;
   bool get _dnsPreferIpv6 => _settings.dnsPreferIpv6;
+  bool get _dnsSecureOnly => _settings.dnsSecureOnly;
+  bool get _dnsDirectThroughProxy => _settings.dnsDirectThroughProxy;
   String get _russiaDnsDirectResolver => _settings.russiaDnsDirectResolver;
   String get _urlTestUrl => _settings.urlTestUrl;
   int get _urlTestIntervalSeconds => _settings.urlTestIntervalSeconds;
@@ -4420,6 +4422,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setDnsPreferIpv6(value));
   }
 
+  void _setDnsSecureOnly(bool value) {
+    _applySettingsChange(() => _settings.setDnsSecureOnly(value));
+  }
+
+  void _setDnsDirectThroughProxy(bool value) {
+    _applySettingsChange(() => _settings.setDnsDirectThroughProxy(value));
+  }
+
   void _setRussiaDnsDirectResolver(String value) {
     _applySettingsChange(() => _settings.setRussiaDnsDirectResolver(value));
   }
@@ -4993,11 +5003,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentProxyPreset: _dnsProxyPreset,
           currentProxyResolver: _dnsProxyResolver,
           currentPreferIpv6: _dnsPreferIpv6,
+          currentSecureOnly: _dnsSecureOnly,
+          currentDirectThroughProxy: _dnsDirectThroughProxy,
           onDirectPresetChanged: _setDnsDirectPreset,
           onDirectResolverChanged: _setDnsDirectResolver,
           onProxyPresetChanged: _setDnsProxyPreset,
           onProxyResolverChanged: _setDnsProxyResolver,
           onPreferIpv6Changed: _setDnsPreferIpv6,
+          onSecureOnlyChanged: _setDnsSecureOnly,
+          onDirectThroughProxyChanged: _setDnsDirectThroughProxy,
         ),
       ),
     );
@@ -5749,6 +5763,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       dnsDirectResolver: _dnsDirectResolver,
       dnsProxyResolver: _dnsProxyResolver,
       dnsPreferIpv6: _dnsPreferIpv6,
+      dnsSecureOnly: _dnsSecureOnly,
+      dnsDirectThroughProxy: _dnsDirectThroughProxy,
       russiaDnsDirectResolver: _russiaDnsDirectResolver,
       urlTestUrl: _urlTestUrl,
       urlTestIntervalSeconds: _urlTestIntervalSeconds,
