@@ -4,6 +4,7 @@ import 'package:meow_client/features/settings/settings_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 Widget _settingsApp({
+  VoidCallback? onOpenGeneral,
   VoidCallback? onImportBackup,
   VoidCallback? onExportSettings,
   VoidCallback? onExportEncryptedProfile,
@@ -15,7 +16,7 @@ Widget _settingsApp({
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     home: SettingsPage(
-      onOpenGeneral: () {},
+      onOpenGeneral: onOpenGeneral ?? () {},
       onOpenDns: () {},
       onOpenSubscriptions: () {},
       onOpenInbound: () {},
@@ -59,6 +60,23 @@ void main() {
     expect(find.text('Direct · Via proxy'), findsNothing);
     expect(tester.getBottomLeft(find.text('About')).dy, lessThan(800));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('settings destinations stay fixed and remain tappable', (
+    tester,
+  ) async {
+    var generalCalls = 0;
+    await tester.pumpWidget(_settingsApp(onOpenGeneral: () => generalCalls++));
+    await tester.pumpAndSettle();
+
+    final destinations = tester.widget<ListView>(
+      find.byKey(const ValueKey('settings-destinations')),
+    );
+    expect(destinations.physics, isA<NeverScrollableScrollPhysics>());
+
+    await tester.tap(find.text('General'));
+    await tester.pump();
+    expect(generalCalls, 1);
   });
 
   testWidgets('settings menu exposes import, export, and reset', (

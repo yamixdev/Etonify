@@ -139,6 +139,8 @@ class SettingsPage extends StatelessWidget {
         ],
       ),
       body: ListView(
+        key: const ValueKey('settings-destinations'),
+        physics: const NeverScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           settingsScreenPadding.left,
           progressiveHeaderTopPadding(context, settingsScreenPadding.top),
