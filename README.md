@@ -29,7 +29,7 @@ Etonify is built for people who already have a VPN subscription, share link, or 
 | --- | --- |
 | App source version | `0.3.1+21` |
 | Android support | Android 8.0 and newer (API 26+) |
-| Bundled core | `v1.14.0-rc.1-etonify.2`, based on sing-box 1.14.0-rc.1 |
+| Bundled core | `v1.14.0-etonify.1`, based on stable sing-box 1.14.0 |
 | App languages | English and Russian |
 | Release target | Android only |
 

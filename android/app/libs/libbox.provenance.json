@@ -1,18 +1,15 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "a95348380f6e22f0b056947f07642fcf175aaf0ebf86f9710ef7c84c5beae3fc",
-  "source_commit": "3b56b445c4597889a7961c87073afcd1cbe92d47",
-  "source_version": "v1.14.0-rc.5-etonify.1",
-  "etonify_version": "v1.14.0-rc.5-etonify.1",
-  "upstream_commit": "8dd67a1e49711ce8a9a884bef60a2139ef36446f",
+  "sha256": "e580a8e54229970037619dacc196add9da949af664a8f563992c42e681e9c2a9",
+  "source_commit": "cf8ec1828dd7f38b1ae0868bf1c024d73862dae8",
+  "source_version": "v1.13.14-667-gcf8ec182",
+  "etonify_version": "v1.14.0-etonify.1",
+  "upstream_commit": "0b8995879f29a9b98ee027bc17b75e101445b238",
   "go": "go version go1.26.7 linux/amd64",
   "gomobile": "v0.1.13",
   "java": "openjdk 17.0.20.1 2026-08-18",
   "android_ndk": "r28",
   "android_api": 24,
-  "android_abis": [
-    "armeabi-v7a",
-    "arm64-v8a"
-  ],
+  "android_abis": ["armeabi-v7a", "arm64-v8a"],
   "build_tags": "with_gvisor,with_quic,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0"
 }

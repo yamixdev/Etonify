@@ -151,12 +151,30 @@ class MeowApplication : Application() {
                 val tempDir = File(app.cacheDir, "singbox-tmp").apply { mkdirs() }
                 val memoryLimitFlag = memoryLimitEnabled
                 val memoryPolicy = LibboxMemoryPolicy.forAndroid(memoryLimitFlag)
+                val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    app.packageManager.getPackageInfo(
+                        app.packageName,
+                        android.content.pm.PackageManager.PackageInfoFlags.of(0),
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    app.packageManager.getPackageInfo(app.packageName, 0)
+                }
+                val appVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageInfo.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode.toLong()
+                }
                 val setupOptions = SetupOptions().apply {
                     basePath = baseDir.absolutePath
                     workingPath = workingDir.absolutePath
                     tempPath = tempDir.absolutePath
                     logMaxLines = 800
                     debug = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                    crashReportSource = "Etonify"
+                    appVersion = appVersionCode.toString()
+                    appMarketingVersion = packageInfo.versionName.orEmpty()
                     // Android already owns process-level memory pressure and
                     // termination. A libbox RSS killer must not reset the VPN
                     // network when Flutter and mapped libraries exceed a Go
