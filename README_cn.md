@@ -7,7 +7,7 @@
 <img width="1672" height="941" alt="Etonify 主界面" src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" />
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android)](https://github.com/yamixdev/Etonify/releases)
-[![Flutter](https://img.shields.io/badge/Flutter-3.47.0-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.2-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
 [![Core](https://img.shields.io/badge/etonify--core-1.14.0--rc.1-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-@etonify-26A5E4?style=flat-square&logo=telegram)](https://t.me/etonify)
@@ -139,7 +139,7 @@ URLTest 是通过代理发出的 HTTP 请求，并非 ICMP ping。结果包含�
 
 当前 CI 配置使用：
 
-- Flutter 3.47.0，Dart 3.11.4 或更高版本；
+- Flutter 3.47.2，Dart 3.11.4 或更高版本；
 - Android SDK 36；
 - JDK 21 构建客户端；
 - Gradle 9.1 与 Android Gradle Plugin 9.0.1。

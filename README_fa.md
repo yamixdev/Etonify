@@ -7,7 +7,7 @@
 <img width="1672" height="941" alt="صفحهٔ اصلی Etonify" src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" />
 
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android)](https://github.com/yamixdev/Etonify/releases)
-[![Flutter](https://img.shields.io/badge/Flutter-3.47.0-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.2-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
 [![Core](https://img.shields.io/badge/etonify--core-1.14.0--rc.1-blue?style=flat-square)](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-@etonify-26A5E4?style=flat-square&logo=telegram)](https://t.me/etonify)
@@ -139,7 +139,7 @@ APK را از [GitHub Releases](https://github.com/yamixdev/Etonify/releases) د
 
 پیکربندی فعلی CI از این موارد استفاده می‌کند:
 
-- Flutter 3.47.0 و Dart 3.11.4 یا جدیدتر؛
+- Flutter 3.47.2 و Dart 3.11.4 یا جدیدتر؛
 - Android SDK 36؛
 - JDK 21 برای build کلاینت؛
 - Gradle 9.1 و Android Gradle Plugin 9.0.1.
