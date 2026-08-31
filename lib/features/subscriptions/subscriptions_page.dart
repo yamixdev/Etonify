@@ -11,6 +11,7 @@ import 'package:meow_client/core/security/sensitive_clipboard.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/data/subscription/happ_crypto_link.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
@@ -85,6 +86,7 @@ String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
 int _visibleProxyCount(Iterable<Outbound> outbounds) {
   return outbounds
       .where((outbound) => !outbound.info.deleted)
+      .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .where((outbound) => outbound.config['_group_only'] != true)
       .length;
 }
@@ -139,6 +141,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   int _refreshAllTotal = 0;
   int _lastPhysicalFallbackNoticeAt = 0;
   String? _error;
+  bool _wireGuardNoticeShown = false;
 
   bool get _addOnly => widget.openAddOnStart;
   bool get _selectionMode => _selectedIds.isNotEmpty;
@@ -237,6 +240,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     final counts = <String, int>{};
     final rawPayloadIds = <String>{};
     final summaries = <String, ({int visibleProxyCount, bool hasRawPayload})>{};
+    var hasUnsupportedWireGuard = false;
     for (final subscription in snapshot) {
       if (generation != _countHydrationGeneration) {
         return;
@@ -248,6 +252,13 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         );
       }
       final visibleProxyCount = _visibleProxyCount(hydrated.outbounds);
+      hasUnsupportedWireGuard =
+          hasUnsupportedWireGuard ||
+          hydrated.outbounds.any(
+            (outbound) =>
+                !outbound.info.deleted &&
+                isWireGuardOutboundConfig(outbound.config),
+          );
       final hasRawPayload = hydrated.rawContent.trim().length > 16;
       counts[subscription.id] = visibleProxyCount;
       summaries[subscription.id] = (
@@ -266,6 +277,14 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       _subscriptionsWithRawPayload.addAll(rawPayloadIds);
     });
     unawaited(SubscriptionStore.cachePayloadSummaries(summaries));
+    if (hasUnsupportedWireGuard && !_wireGuardNoticeShown) {
+      _wireGuardNoticeShown = true;
+      AppNotice.show(
+        context,
+        AppLocalizations.of(context).wireGuardUnsupportedMessage,
+        tone: AppNoticeTone.warning,
+      );
+    }
   }
 
   Future<T> _runSubscriptionOperationWithWarning<T>(Future<T> operation) async {

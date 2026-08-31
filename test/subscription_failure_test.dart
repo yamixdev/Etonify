@@ -61,6 +61,14 @@ void main() {
       );
       expect(
         classifySubscriptionFailure(
+          const SubscriptionContentException(
+            SubscriptionContentFailureKind.wireGuardUnsupported,
+          ),
+        ).kind,
+        SubscriptionFailureKind.wireGuardUnsupported,
+      );
+      expect(
+        classifySubscriptionFailure(
           const UnsupportedHappCryptoLinkException('unsupported'),
         ).kind,
         SubscriptionFailureKind.happUnsupported,
@@ -115,6 +123,20 @@ void main() {
 
       expect(message, contains('Подписка сохранена без серверов'));
       expect(message, contains('пустой ответ'));
+    });
+
+    test('WireGuard warning explains the version and skips generic advice', () {
+      final message = subscriptionSavedWarningMessage(
+        const SubscriptionContentException(
+          SubscriptionContentFailureKind.wireGuardUnsupported,
+        ),
+        AppLocalizationsRu(),
+      );
+
+      expect(message, contains('WireGuard'));
+      expect(message, contains('0.3.1'));
+      expect(message, contains('пропущены'));
+      expect(message, isNot(contains('HWID')));
     });
 
     test('unknown errors do not expose raw exception text', () {

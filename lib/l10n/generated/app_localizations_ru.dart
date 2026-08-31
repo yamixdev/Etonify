@@ -295,7 +295,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get documentationProtocolsBody =>
-      'Можно импортировать ссылки, QR-коды, WireGuard-файлы и конфигурации sing-box, Xray и Happ.\n\nПоддерживаются VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, WireGuard, AnyTLS, Naive, HTTP и SOCKS. Импорт подтверждает формат, но не доступность сервера.';
+      'Можно импортировать ссылки, QR-коды и конфигурации sing-box, Xray и Happ.\n\nПоддерживаются VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, AnyTLS, Naive, HTTP и SOCKS. Импорт подтверждает формат, но не доступность сервера.';
 
   @override
   String get documentationChainsTitle => 'Цепочки прокси';
@@ -2040,6 +2040,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get subscriptionErrorNoUsableProxies =>
       'В подписке не найдено поддерживаемых прокси-серверов. Она может быть пустой, просроченной или иметь неподдерживаемый формат.';
+
+  @override
+  String get wireGuardUnsupportedMessage =>
+      'Начиная с версии 0.3.1 Etonify не поддерживает WireGuard из-за проблем со стабильностью протокола. Используйте сервер с другим протоколом.';
+
+  @override
+  String get wireGuardServersSkippedMessage =>
+      'Серверы WireGuard пропущены. Начиная с версии 0.3.1 Etonify не поддерживает WireGuard из-за проблем со стабильностью протокола.';
 
   @override
   String get subscriptionErrorInvalidContent =>

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
@@ -138,15 +139,6 @@ class SingboxConfigBuilder {
       throw StateError('Local proxy requires valid access credentials');
     }
     final outbounds = _visibleOutbounds();
-    // Since sing-box 1.13 WireGuard is an endpoint rather than an outbound.
-    // It is still exposed by the core's outbound manager, so selector and
-    // URLTest groups can reference its tag just like any other proxy.
-    final wireGuardEndpoints = outbounds
-        .where(_isWireGuardEndpoint)
-        .toList(growable: false);
-    final regularOutbounds = outbounds
-        .where((outbound) => !_isWireGuardEndpoint(outbound))
-        .toList(growable: false);
     final outboundTags = outbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);
@@ -274,8 +266,8 @@ class SingboxConfigBuilder {
               visibleGroups.length +
               chainOutbounds.length
         : 1;
-    for (var i = 0; i < regularOutbounds.length; i++) {
-      proxyOutboundIndexes[proxyStartIndex + i] = regularOutbounds[i].tag;
+    for (var i = 0; i < outbounds.length; i++) {
+      proxyOutboundIndexes[proxyStartIndex + i] = outbounds[i].tag;
     }
 
     final routeFinal = trafficRuleUsesDirectDefault
@@ -450,10 +442,6 @@ class SingboxConfigBuilder {
               ],
             },
         ],
-        if (wireGuardEndpoints.isNotEmpty)
-          'endpoints': wireGuardEndpoints
-              .map(_buildWireGuardEndpoint)
-              .toList(growable: false),
         'outbounds': [
           if (hasProxies)
             {
@@ -479,7 +467,7 @@ class SingboxConfigBuilder {
               (group) => _buildProxyGroupOutbound(group, outboundTags.toSet()),
             ),
           ...chainOutbounds,
-          ...regularOutbounds.map(_buildProxyOutbound),
+          ...outbounds.map(_buildProxyOutbound),
           {
             'type': 'direct',
             'tag': 'direct',
@@ -666,6 +654,7 @@ class SingboxConfigBuilder {
     }
     return subscription.outbounds
         .where((outbound) => !outbound.info.deleted)
+        .where((outbound) => isSupportedOutboundConfig(outbound.config))
         .where((outbound) => !excludedOutboundTags.contains(outbound.tag))
         .where(_isUsableOutbound)
         .toList(growable: false);
@@ -691,6 +680,9 @@ class SingboxConfigBuilder {
   }
 
   bool _isUsableOutbound(Outbound outbound) {
+    if (!isSupportedOutboundConfig(outbound.config)) {
+      return false;
+    }
     if (!_supportsOutboundConfigExtensions(outbound.config)) {
       return false;
     }
@@ -732,10 +724,6 @@ class SingboxConfigBuilder {
     };
   }
 
-  static bool _isWireGuardEndpoint(Outbound outbound) {
-    return outbound.type.trim().toLowerCase() == 'wireguard';
-  }
-
   bool _isGroupOnlyOutbound(Outbound outbound) {
     return outbound.config['_group_only'] == true;
   }
@@ -757,24 +745,6 @@ class SingboxConfigBuilder {
   static String _resolveServerAddress(Map<String, dynamic> config) {
     final current = (config['server'] as String?)?.trim() ?? '';
     if (current.isNotEmpty && current != '0.0.0.0') return current;
-
-    // WireGuard endpoints live inside peers rather than the top-level
-    // `server` field. Do not copy this value into the outbound: sing-box
-    // expects it in `peers`, but use it when deciding whether this is a
-    // selectable proxy. Without this branch imported .conf files were
-    // filtered out before the `select` selector was built.
-    if (config['type']?.toString().trim().toLowerCase() == 'wireguard') {
-      final peers = config['peers'];
-      if (peers is List) {
-        for (final peer in peers) {
-          if (peer is! Map) continue;
-          final address = peer['address']?.toString().trim() ?? '';
-          if (address.isNotEmpty && address != '0.0.0.0') {
-            return address;
-          }
-        }
-      }
-    }
 
     final tls = config['tls'];
     if (tls is Map) {
@@ -833,12 +803,6 @@ class SingboxConfigBuilder {
     return config;
   }
 
-  /// Creates a WireGuard endpoint with the same client-side transport options
-  /// as a regular proxy, but keeps it out of the deprecated `outbounds` list.
-  Map<String, dynamic> _buildWireGuardEndpoint(Outbound outbound) {
-    return _buildProxyOutbound(outbound);
-  }
-
   String _dnsRemoteDetourFor(
     String selectorDefault,
     Set<String> selectableTags,
@@ -874,7 +838,10 @@ class SingboxConfigBuilder {
   }) {
     final tag = chain.tag.trim();
     final detourTag = chain.detourTag.trim();
-    if (tag.isEmpty || detourTag.isEmpty || target.type == 'direct') {
+    if (tag.isEmpty ||
+        detourTag.isEmpty ||
+        target.type == 'direct' ||
+        !isSupportedOutboundConfig(target.config)) {
       return null;
     }
     final config = Map<String, dynamic>.from(target.config);
@@ -1396,30 +1363,6 @@ class SingboxConfigBuilder {
         config['encryption'] = encryption;
       }
     }
-    if (type == 'wireguard') {
-      final peers = config['peers'];
-      if (peers is List) {
-        config['peers'] = peers
-            .map(_normalizeWireGuardPeer)
-            .toList(growable: false);
-      }
-    }
-  }
-
-  static dynamic _normalizeWireGuardPeer(dynamic peer) {
-    if (peer is! Map) return peer;
-    final normalized = Map<String, dynamic>.from(peer);
-    final keepalive = normalized['persistent_keepalive_interval'];
-    if (keepalive is! String) return normalized;
-    final match = RegExp(
-      r'^(\d+)\s*s$',
-      caseSensitive: false,
-    ).firstMatch(keepalive.trim());
-    final seconds = match == null ? null : int.tryParse(match.group(1)!);
-    if (seconds != null) {
-      normalized['persistent_keepalive_interval'] = seconds;
-    }
-    return normalized;
   }
 }
 

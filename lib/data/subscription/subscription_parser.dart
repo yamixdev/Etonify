@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'outbound_schema.dart';
+import 'outbound_support.dart';
 import 'parsers/clash_parser.dart';
 import 'parsers/link_parser.dart';
 import 'parsers/singbox_config_parser.dart';
@@ -29,6 +30,7 @@ class ParseResult {
     required this.outbounds,
     this.groups = const [],
     this.bodyMeta = const {},
+    this.unsupportedWireGuardCount = 0,
   });
 
   final SubscriptionFormat format;
@@ -44,11 +46,18 @@ class ParseResult {
   /// (e.g. `#profile-title`, `#subscription-userinfo`, etc.)
   final Map<String, String> bodyMeta;
 
+  /// WireGuard entries detected and intentionally excluded from the result.
+  final int unsupportedWireGuardCount;
+
+  bool get hasUnsupportedWireGuard => unsupportedWireGuardCount > 0;
+
   Map<String, dynamic> toMap() => {
     'format': format.name,
     'outbounds': outbounds,
     if (groups.isNotEmpty) 'groups': groups.map((g) => g.toMap()).toList(),
     'bodyMeta': bodyMeta,
+    if (unsupportedWireGuardCount > 0)
+      'unsupportedWireGuardCount': unsupportedWireGuardCount,
   };
 
   factory ParseResult.fromMap(Map<String, dynamic> map) {
@@ -71,6 +80,8 @@ class ParseResult {
       bodyMeta: (map['bodyMeta'] as Map? ?? const <String, dynamic>{}).map(
         (key, value) => MapEntry(key.toString(), value.toString()),
       ),
+      unsupportedWireGuardCount:
+          (map['unsupportedWireGuardCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -209,18 +220,18 @@ class SubscriptionParser {
     if (_looksLikeJson(content)) {
       // Sing-box config
       if (SingboxConfigParser.canParse(content)) {
-        return ParseResult(
+        return _buildResult(
           format: SubscriptionFormat.singboxConfig,
-          outbounds: _normalizeOutbounds(SingboxConfigParser.parse(content)),
+          parsedOutbounds: SingboxConfigParser.parse(content),
         );
       }
 
       // Xray config
       if (XrayConfigParser.canParse(content)) {
         final parsed = XrayConfigParser.parseWithGroups(content);
-        return ParseResult(
+        return _buildResult(
           format: SubscriptionFormat.xrayConfig,
-          outbounds: _normalizeOutbounds(parsed.outbounds),
+          parsedOutbounds: parsed.outbounds,
           groups: parsed.groups
               .map(ParsedOutboundGroup.fromMap)
               .toList(growable: false),
@@ -229,26 +240,26 @@ class SubscriptionParser {
 
       // SIP008
       if (Sip008Parser.canParse(content)) {
-        return ParseResult(
+        return _buildResult(
           format: SubscriptionFormat.sip008,
-          outbounds: _normalizeOutbounds(Sip008Parser.parse(content)),
+          parsedOutbounds: Sip008Parser.parse(content),
         );
       }
     }
 
     // ── 2. Clash YAML ──
     if (ClashParser.canParse(content)) {
-      return ParseResult(
+      return _buildResult(
         format: SubscriptionFormat.clashYaml,
-        outbounds: _normalizeOutbounds(ClashParser.parse(content)),
+        parsedOutbounds: ClashParser.parse(content),
       );
     }
 
     // ── 3. WireGuard config ──
     if (WireGuardConfigParser.canParse(content)) {
-      return ParseResult(
+      return _buildResult(
         format: SubscriptionFormat.wireguardConfig,
-        outbounds: _normalizeOutbounds(WireGuardConfigParser.parse(content)),
+        parsedOutbounds: WireGuardConfigParser.parse(content),
       );
     }
 
@@ -258,9 +269,9 @@ class SubscriptionParser {
       final bodyMeta = _extractBodyMeta(decoded);
       final links = _parseLinks(decoded);
       if (links.isNotEmpty) {
-        return ParseResult(
+        return _buildResult(
           format: SubscriptionFormat.base64Links,
-          outbounds: _normalizeOutbounds(links),
+          parsedOutbounds: links,
           bodyMeta: bodyMeta,
         );
       }
@@ -270,9 +281,9 @@ class SubscriptionParser {
     final bodyMeta = _extractBodyMeta(content);
     final links = _parseLinks(content);
     if (links.isNotEmpty) {
-      return ParseResult(
+      return _buildResult(
         format: SubscriptionFormat.rawLinks,
-        outbounds: _normalizeOutbounds(links),
+        parsedOutbounds: links,
         bodyMeta: bodyMeta,
       );
     }
@@ -281,6 +292,28 @@ class SubscriptionParser {
   }
 
   // ─────────────────── helpers ───────────────────
+
+  static ParseResult _buildResult({
+    required SubscriptionFormat format,
+    required List<Map<String, dynamic>> parsedOutbounds,
+    List<ParsedOutboundGroup> groups = const [],
+    Map<String, String> bodyMeta = const {},
+  }) {
+    final unsupportedWireGuardCount = parsedOutbounds
+        .where(isWireGuardOutboundConfig)
+        .length;
+    return ParseResult(
+      format: format,
+      outbounds: _normalizeOutbounds(
+        parsedOutbounds
+            .where(isSupportedOutboundConfig)
+            .toList(growable: false),
+      ),
+      groups: groups,
+      bodyMeta: bodyMeta,
+      unsupportedWireGuardCount: unsupportedWireGuardCount,
+    );
+  }
 
   static bool _looksLikeJson(String s) {
     return s.startsWith('{') || s.startsWith('[');

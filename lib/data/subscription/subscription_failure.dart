@@ -17,6 +17,7 @@ enum SubscriptionFailureKind {
   htmlResponse,
   responseTooLarge,
   noUsableProxies,
+  wireGuardUnsupported,
   invalidContent,
   happUnsupported,
   happInvalid,
@@ -28,6 +29,7 @@ enum SubscriptionContentFailureKind {
   htmlResponse,
   responseTooLarge,
   noUsableProxies,
+  wireGuardUnsupported,
   invalidContent,
 }
 
@@ -66,6 +68,8 @@ class SubscriptionContentException implements Exception {
       'Subscription response is too large',
     SubscriptionContentFailureKind.noUsableProxies =>
       'Subscription contains no usable proxies',
+    SubscriptionContentFailureKind.wireGuardUnsupported =>
+      'WireGuard is not supported starting with Etonify 0.3.1',
     SubscriptionContentFailureKind.invalidContent =>
       'Subscription content is invalid',
   };
@@ -95,6 +99,8 @@ SubscriptionFailure classifySubscriptionFailure(Object error) {
         SubscriptionFailureKind.responseTooLarge,
       SubscriptionContentFailureKind.noUsableProxies =>
         SubscriptionFailureKind.noUsableProxies,
+      SubscriptionContentFailureKind.wireGuardUnsupported =>
+        SubscriptionFailureKind.wireGuardUnsupported,
       SubscriptionContentFailureKind.invalidContent =>
         SubscriptionFailureKind.invalidContent,
     });

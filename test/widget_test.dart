@@ -451,7 +451,7 @@ void main() {
     expect(find.text('Paris'), findsNothing);
   });
 
-  testWidgets('proxy list renders a compacted WireGuard endpoint', (
+  testWidgets('proxy list excludes a legacy WireGuard endpoint', (
     tester,
   ) async {
     const subscription = Subscription(
@@ -515,17 +515,10 @@ void main() {
       ),
     );
 
-    expect(cache.activeProxies, hasLength(1));
-    final wireGuardTile = find.byType(ProxyTile);
-    expect(wireGuardTile, findsOneWidget);
-    expect(
-      find.descendant(of: wireGuardTile, matching: find.text('WireGuard node')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: wireGuardTile, matching: find.text('WIREGUARD')),
-      findsOneWidget,
-    );
+    expect(cache.unsupportedWireGuardCount, 1);
+    expect(cache.activeProxies, isEmpty);
+    expect(find.byType(ProxyTile), findsNothing);
+    expect(find.text('WireGuard node'), findsNothing);
   });
 
   testWidgets(

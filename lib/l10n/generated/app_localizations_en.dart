@@ -292,7 +292,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get documentationProtocolsBody =>
-      'You can import links, QR codes, WireGuard files, and sing-box, Xray, or Happ configurations.\n\nSupported protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, WireGuard, AnyTLS, Naive, HTTP, and SOCKS. Import confirms the format, not server availability.';
+      'You can import links, QR codes, and sing-box, Xray, or Happ configurations.\n\nSupported protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, AnyTLS, Naive, HTTP, and SOCKS. Import confirms the format, not server availability.';
 
   @override
   String get documentationChainsTitle => 'Proxy chains';
@@ -2040,6 +2040,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get subscriptionErrorNoUsableProxies =>
       'No supported proxy servers were found in the subscription. It may be empty, expired, or use an unsupported format.';
+
+  @override
+  String get wireGuardUnsupportedMessage =>
+      'Starting with version 0.3.1, Etonify does not support WireGuard because of protocol stability issues. Use a server with another protocol.';
+
+  @override
+  String get wireGuardServersSkippedMessage =>
+      'WireGuard servers were skipped. Starting with version 0.3.1, Etonify does not support WireGuard because of protocol stability issues.';
 
   @override
   String get subscriptionErrorInvalidContent =>

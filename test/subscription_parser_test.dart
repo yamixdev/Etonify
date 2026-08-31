@@ -260,7 +260,7 @@ void main() {
           'private_key': 'broken',
           'address': ['10.0.0.2/32'],
         }),
-        'invalid wireguard private_key',
+        'unsupported outbound type: wireguard',
       );
     });
 
@@ -1260,6 +1260,60 @@ void main() {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   group('WireGuardConfigParser', () {
+    test('reports WireGuard configs as unsupported subscription entries', () {
+      const content = '''
+[Interface]
+PrivateKey = yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=
+Address = 10.0.0.2/32
+
+[Peer]
+PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+AllowedIPs = 0.0.0.0/0
+Endpoint = wg.server.com:51820
+''';
+
+      final result = SubscriptionParser.parse(content);
+
+      expect(result.format, SubscriptionFormat.wireguardConfig);
+      expect(result.outbounds, isEmpty);
+      expect(result.unsupportedWireGuardCount, 1);
+      expect(ParseResult.fromMap(result.toMap()).unsupportedWireGuardCount, 1);
+    });
+
+    test('keeps supported entries and counts WireGuard in mixed configs', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            {
+              'type': 'vless',
+              'tag': 'supported',
+              'server': 'server.example.com',
+              'server_port': 443,
+              'uuid': '11111111-1111-1111-1111-111111111111',
+            },
+            {
+              'type': 'wireguard',
+              'tag': 'unsupported',
+              'private_key': 'yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=',
+              'address': ['10.0.0.2/32'],
+              'peers': [
+                {
+                  'address': 'wg.example.com',
+                  'port': 51820,
+                  'public_key': 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=',
+                  'allowed_ips': ['0.0.0.0/0'],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      expect(result.outbounds, hasLength(1));
+      expect(result.outbounds.single['type'], 'vless');
+      expect(result.unsupportedWireGuardCount, 1);
+    });
+
     test('parses WireGuard .conf', () {
       const content = '''
 [Interface]
@@ -1327,7 +1381,7 @@ PersistentKeepalive = 15
       expect(peers[1]['persistent_keepalive_interval'], 15);
     });
 
-    test('migrates legacy keepalive durations to endpoint seconds', () {
+    test('rejects WireGuard from the supported outbound schema', () {
       final sanitized = ParsedOutboundSchema.sanitize({
         'type': 'wireguard',
         'private_key': 'yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=',
@@ -1343,9 +1397,7 @@ PersistentKeepalive = 15
         ],
       });
 
-      expect(sanitized, isNotNull);
-      final peer = (sanitized!['peers'] as List).single as Map<String, dynamic>;
-      expect(peer['persistent_keepalive_interval'], 25);
+      expect(sanitized, isNull);
     });
   });
 

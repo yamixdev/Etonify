@@ -86,6 +86,75 @@ void main() {
     expect(metadata.hasRawPayload, isTrue);
   });
 
+  test(
+    'file import rejects a WireGuard-only profile with a clear reason',
+    () async {
+      const content = '''
+[Interface]
+PrivateKey = yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=
+Address = 10.0.0.2/32
+
+[Peer]
+PublicKey = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=
+AllowedIPs = 0.0.0.0/0
+Endpoint = wg.example.com:51820
+''';
+
+      await expectLater(
+        SubscriptionStore.addFromContent(content, sourceName: 'wireguard.conf'),
+        throwsA(
+          isA<SubscriptionContentException>().having(
+            (error) => error.kind,
+            'kind',
+            SubscriptionContentFailureKind.wireGuardUnsupported,
+          ),
+        ),
+      );
+    },
+  );
+
+  test('mixed import skips WireGuard and keeps supported servers', () async {
+    final result = await SubscriptionStore.addFromContent(
+      jsonEncode({
+        'outbounds': [
+          {
+            'type': 'vless',
+            'tag': 'supported',
+            'server': 'server.example.com',
+            'server_port': 443,
+            'uuid': '11111111-1111-1111-1111-111111111111',
+          },
+          {
+            'type': 'wireguard',
+            'tag': 'unsupported',
+            'private_key': 'yGXGKezPjPNbRfHAJNmkDDT4hPsYRFJ+/GIOQ1kzIXM=',
+            'address': ['10.0.0.2/32'],
+            'peers': [
+              {
+                'address': 'wg.example.com',
+                'port': 51820,
+                'public_key': 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=',
+                'allowed_ips': ['0.0.0.0/0'],
+              },
+            ],
+          },
+        ],
+      }),
+      sourceName: 'mixed.json',
+    );
+
+    expect(result.subscription.outbounds, hasLength(1));
+    expect(result.subscription.outbounds.single.type, 'vless');
+    expect(
+      result.warning,
+      isA<SubscriptionContentException>().having(
+        (error) => error.kind,
+        'kind',
+        SubscriptionContentFailureKind.wireGuardUnsupported,
+      ),
+    );
+  });
+
   test('cancelled file import does not persist a subscription', () async {
     var cancellationChecks = 0;
 

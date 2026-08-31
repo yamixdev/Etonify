@@ -6,6 +6,7 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
@@ -126,26 +127,6 @@ Map<String, dynamic> _compactOutboundPresentationConfig(
     }
   }
 
-  final peers = config['peers'];
-  final type = config['type']?.toString().trim().toLowerCase();
-  if (type == 'wireguard' && peers is List) {
-    final compactPeers = <Map<String, dynamic>>[];
-    for (final peer in peers) {
-      if (peer is! Map) {
-        continue;
-      }
-      final address = peer['address']?.toString().trim() ?? '';
-      final port = peer['port'];
-      if (address.isEmpty) {
-        continue;
-      }
-      compactPeers.add(<String, dynamic>{'address': address, 'port': ?port});
-    }
-    if (compactPeers.isNotEmpty) {
-      compact['peers'] = compactPeers;
-    }
-  }
-
   final tls = config['tls'];
   if (tls is Map) {
     final compactTls = <String, dynamic>{};
@@ -176,6 +157,7 @@ class ProxyCacheBuildResult {
     this.groupChildrenByTag = const <String, List<AppProxySummary>>{},
     required this.totalTopLevelProxyCount,
     this.includesFullProxyList = true,
+    this.unsupportedWireGuardCount = 0,
   });
 
   final AppProfileSummary? activeProfile;
@@ -184,6 +166,7 @@ class ProxyCacheBuildResult {
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final int totalTopLevelProxyCount;
   final bool includesFullProxyList;
+  final int unsupportedWireGuardCount;
 }
 
 class SingboxConfigBuildInput {
@@ -398,8 +381,13 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     );
   }
 
+  final unsupportedWireGuardCount = subscription.outbounds
+      .where((outbound) => !outbound.info.deleted)
+      .where((outbound) => isWireGuardOutboundConfig(outbound.config))
+      .length;
   final visibleOutbounds = subscription.outbounds
       .where((outbound) => !outbound.info.deleted)
+      .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
   final selectableOutbounds = visibleOutbounds
       .where((outbound) => !_isGroupOnlyOutbound(outbound))
@@ -417,6 +405,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     activeProxies: const <AppProxySummary>[],
     totalTopLevelProxyCount: selectableOutbounds.length,
     includesFullProxyList: false,
+    unsupportedWireGuardCount: unsupportedWireGuardCount,
   );
 }
 
@@ -619,8 +608,13 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   }
 
   final activeProfile = _buildProfileSummary(subscription);
+  final unsupportedWireGuardCount = subscription.outbounds
+      .where((outbound) => !outbound.info.deleted)
+      .where((outbound) => isWireGuardOutboundConfig(outbound.config))
+      .length;
   final visibleOutbounds = subscription.outbounds
       .where((outbound) => !outbound.info.deleted)
+      .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
   final selectableOutbounds = visibleOutbounds
       .where((outbound) => !_isGroupOnlyOutbound(outbound))
@@ -705,7 +699,11 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
             proxySummariesByTag[input.selectedProxyTag];
 
   final displayProxy =
-      activeProxy ?? _fallbackDisplayProxy(subscription, selectableOutbounds);
+      activeProxy ??
+      (selectableOutbounds.isEmpty
+          ? null
+          : proxySummariesByTag[selectableOutbounds.first.tag]) ??
+      _fallbackDisplayProxy(subscription, selectableOutbounds);
 
   final standaloneProxySummaries = proxySummaries
       .where(
@@ -737,6 +735,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     activeProxies: topLevelSummaries,
     groupChildrenByTag: groupChildrenByTag,
     totalTopLevelProxyCount: topLevelSummaries.length,
+    unsupportedWireGuardCount: unsupportedWireGuardCount,
   );
 }
 
@@ -1316,6 +1315,9 @@ AppProxySummary? _buildProxyChainSnapshotTargetSummary(
     return null;
   }
   final config = Map<String, dynamic>.from(chain.targetConfig);
+  if (!isSupportedOutboundConfig(config)) {
+    return null;
+  }
   config['tag'] = chain.targetTag.trim();
   final outbound = Outbound(
     tag: chain.targetTag.trim(),
@@ -1475,8 +1477,6 @@ AppProxySummary _fallbackDisplayProxy(
   String fallbackName = subscription.name;
   if (visibleOutbounds.isNotEmpty) {
     fallbackName = visibleOutbounds.first.name;
-  } else if (subscription.outbounds.isNotEmpty) {
-    fallbackName = subscription.outbounds.first.name;
   }
   return AppProxySummary(
     tag: '',

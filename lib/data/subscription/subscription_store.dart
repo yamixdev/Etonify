@@ -676,8 +676,10 @@ class SubscriptionStore {
       _throwIfImportCancelled(isCancelled);
       final outbounds = payload.outbounds;
       if (!_hasUsableOutbounds(outbounds)) {
-        throw const SubscriptionContentException(
-          SubscriptionContentFailureKind.noUsableProxies,
+        throw SubscriptionContentException(
+          result.parseResult.hasUnsupportedWireGuard
+              ? SubscriptionContentFailureKind.wireGuardUnsupported
+              : SubscriptionContentFailureKind.noUsableProxies,
         );
       }
 
@@ -724,7 +726,14 @@ class SubscriptionStore {
         await delete(id);
         throw const SubscriptionImportCancelledException();
       }
-      return SubscriptionImportResult(subscription: sub);
+      return SubscriptionImportResult(
+        subscription: sub,
+        warning: result.parseResult.hasUnsupportedWireGuard
+            ? const SubscriptionContentException(
+                SubscriptionContentFailureKind.wireGuardUnsupported,
+              )
+            : null,
+      );
     } catch (error) {
       if (error is SubscriptionImportCancelledException ||
           (isCancelled?.call() ?? false)) {
@@ -796,8 +805,10 @@ class SubscriptionStore {
     _throwIfImportCancelled(isCancelled);
     final outbounds = payload.outbounds;
     if (!_hasUsableOutbounds(outbounds)) {
-      throw const SubscriptionContentException(
-        SubscriptionContentFailureKind.noUsableProxies,
+      throw SubscriptionContentException(
+        parseResult.hasUnsupportedWireGuard
+            ? SubscriptionContentFailureKind.wireGuardUnsupported
+            : SubscriptionContentFailureKind.noUsableProxies,
       );
     }
 
@@ -831,7 +842,14 @@ class SubscriptionStore {
       await delete(sub.id);
       throw const SubscriptionImportCancelledException();
     }
-    return SubscriptionImportResult(subscription: sub);
+    return SubscriptionImportResult(
+      subscription: sub,
+      warning: parseResult.hasUnsupportedWireGuard
+          ? const SubscriptionContentException(
+              SubscriptionContentFailureKind.wireGuardUnsupported,
+            )
+          : null,
+    );
   }
 
   static void _throwIfImportCancelled(bool Function()? isCancelled) {
@@ -908,8 +926,10 @@ class SubscriptionStore {
     );
     final outbounds = payload.outbounds;
     if (!_hasUsableOutbounds(outbounds)) {
-      throw const SubscriptionContentException(
-        SubscriptionContentFailureKind.noUsableProxies,
+      throw SubscriptionContentException(
+        result.parseResult.hasUnsupportedWireGuard
+            ? SubscriptionContentFailureKind.wireGuardUnsupported
+            : SubscriptionContentFailureKind.noUsableProxies,
       );
     }
 
@@ -982,8 +1002,10 @@ class SubscriptionStore {
 
     final parseResult = await SubscriptionParser.parseInBackground(rawContent);
     if (parseResult.outbounds.isEmpty) {
-      throw const SubscriptionContentException(
-        SubscriptionContentFailureKind.noUsableProxies,
+      throw SubscriptionContentException(
+        parseResult.hasUnsupportedWireGuard
+            ? SubscriptionContentFailureKind.wireGuardUnsupported
+            : SubscriptionContentFailureKind.noUsableProxies,
       );
     }
 

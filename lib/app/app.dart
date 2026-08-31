@@ -189,6 +189,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final ProxyCacheBuildCoordinator _proxyCacheBuildCoordinator =
       ProxyCacheBuildCoordinator();
   String? _lastEmptyAfterDropInvalidWarningSubscriptionId;
+  String? _lastWireGuardWarningSubscriptionId;
   ActiveProxyIpSnapshot _activeProxyIp = const ActiveProxyIpSnapshot.idle();
   final ProxySelectionController _proxySelection = ProxySelectionController();
   final ActiveProxyIpController _activeProxyIpController =
@@ -1179,6 +1180,32 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _publishProxyRuntimeVisualStates();
     _publishTrafficDashboardSnapshot();
     _preloadProxyFlags();
+    _showWireGuardUnsupportedNoticeIfNeeded(result);
+  }
+
+  void _showWireGuardUnsupportedNoticeIfNeeded(ProxyCacheBuildResult result) {
+    final subscriptionId = result.activeProfile?.id;
+    if (subscriptionId == null || result.unsupportedWireGuardCount == 0) {
+      return;
+    }
+    if (_lastWireGuardWarningSubscriptionId == subscriptionId) {
+      return;
+    }
+    _lastWireGuardWarningSubscriptionId = subscriptionId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _activeProfileId != subscriptionId) {
+        return;
+      }
+      final context = _navigatorKey.currentContext;
+      if (context == null) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        AppLocalizations.of(context).wireGuardUnsupportedMessage,
+        tone: AppNoticeTone.warning,
+      );
+    });
   }
 
   void _applyMetadataActiveProfile(

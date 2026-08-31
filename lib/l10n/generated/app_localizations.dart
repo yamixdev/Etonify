@@ -629,7 +629,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationProtocolsBody.
   ///
   /// In en, this message translates to:
-  /// **'You can import links, QR codes, WireGuard files, and sing-box, Xray, or Happ configurations.\n\nSupported protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, WireGuard, AnyTLS, Naive, HTTP, and SOCKS. Import confirms the format, not server availability.'**
+  /// **'You can import links, QR codes, and sing-box, Xray, or Happ configurations.\n\nSupported protocols include VLESS, VMess, Trojan, Shadowsocks, ShadowsocksR, Hysteria, Hysteria2, TUIC, AnyTLS, Naive, HTTP, and SOCKS. Import confirms the format, not server availability.'**
   String get documentationProtocolsBody;
 
   /// No description provided for @documentationChainsTitle.
@@ -3676,6 +3676,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No supported proxy servers were found in the subscription. It may be empty, expired, or use an unsupported format.'**
   String get subscriptionErrorNoUsableProxies;
+
+  /// No description provided for @wireGuardUnsupportedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting with version 0.3.1, Etonify does not support WireGuard because of protocol stability issues. Use a server with another protocol.'**
+  String get wireGuardUnsupportedMessage;
+
+  /// No description provided for @wireGuardServersSkippedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'WireGuard servers were skipped. Starting with version 0.3.1, Etonify does not support WireGuard because of protocol stability issues.'**
+  String get wireGuardServersSkippedMessage;
 
   /// No description provided for @subscriptionErrorInvalidContent.
   ///

@@ -25,6 +25,8 @@ String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
       l10n.subscriptionErrorResponseTooLarge,
     SubscriptionFailureKind.noUsableProxies =>
       l10n.subscriptionErrorNoUsableProxies,
+    SubscriptionFailureKind.wireGuardUnsupported =>
+      l10n.wireGuardUnsupportedMessage,
     SubscriptionFailureKind.invalidContent =>
       l10n.subscriptionErrorInvalidContent,
     SubscriptionFailureKind.happUnsupported => l10n.happCryptUnsupportedMessage,
@@ -36,6 +38,10 @@ String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
 String subscriptionSavedWarningMessage(Object? warning, AppLocalizations l10n) {
   if (warning == null) {
     return l10n.subscriptionSavedWithFetchWarning;
+  }
+  if (classifySubscriptionFailure(warning).kind ==
+      SubscriptionFailureKind.wireGuardUnsupported) {
+    return l10n.wireGuardServersSkippedMessage;
   }
   return l10n.subscriptionSavedWithFetchWarningReason(
     subscriptionErrorMessage(warning, l10n),

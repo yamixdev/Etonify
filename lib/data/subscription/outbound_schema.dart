@@ -57,7 +57,6 @@ class ParsedOutboundSchema {
     'tuic',
     'anytls',
     'naive',
-    'wireguard',
   };
 
   static const Set<String> _baseOutboundKeys = {
