@@ -581,15 +581,13 @@ class _AboutOverviewRow extends StatelessWidget {
               ),
               if (value != null) ...[
                 const Gap(12),
-                Flexible(
-                  child: Text(
-                    value!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                Text(
+                  value!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],

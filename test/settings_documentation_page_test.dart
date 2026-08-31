@@ -132,6 +132,21 @@ void main() {
     expect(find.text('0.3.1-rc.1'), findsOneWidget);
     expect(find.text('@etonify'), findsOneWidget);
     expect(find.text('MeowTeam'), findsOneWidget);
+
+    final overview = find.byKey(const ValueKey('about-overview-card'));
+    final overviewRight = tester.getTopRight(overview).dx;
+    expect(
+      overviewRight - tester.getTopRight(find.text('0.3.1-rc.1')).dx,
+      lessThan(24),
+    );
+    expect(
+      overviewRight - tester.getTopRight(find.text('@etonify')).dx,
+      lessThan(52),
+    );
+    expect(
+      overviewRight - tester.getTopRight(find.text('MeowTeam')).dx,
+      lessThan(52),
+    );
   });
 
   testWidgets('about page follows the compact reference hierarchy in Russian', (
