@@ -292,12 +292,11 @@ class _ProxyPanelShellState extends State<ProxyPanelShell>
     if (viewportHeight <= proxyPanelMinHeight || widget.visibleRows <= 0) {
       return proxyPanelMinHeight;
     }
-    final viewportLimit = _viewportLimit(viewportHeight, topInset: topInset);
-    final contentHeight =
-        proxyPanelMinHeight +
-        widget.visibleRows * proxyPanelRowExtent +
-        proxyPanelListBottomPadding;
-    return contentHeight.clamp(proxyPanelMinHeight, viewportLimit).toDouble();
+    // The expanded extent must not depend on how many rows happen to be in
+    // the active profile. A short list still needs to drag to the top; if its
+    // content height is used as the limit, the list starts scrolling under the
+    // pinned header while the sheet remains stranded halfway up the screen.
+    return _viewportLimit(viewportHeight, topInset: topInset);
   }
 
   void _updateLayout(BuildContext context, BoxConstraints constraints) {

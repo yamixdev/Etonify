@@ -133,4 +133,65 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('sparse proxy panel can expand to the viewport on a tall phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2388);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProxyPanelShell(
+          ready: true,
+          onboardingCompleted: true,
+          loading: const SizedBox.shrink(),
+          welcome: const SizedBox.shrink(),
+          visibleRows: 3,
+          hasActiveProfile: true,
+          homeBuilder: (_, _) => const SizedBox.expand(),
+          sheetBuilder: (_, _, _, controller, gestures) => Material(
+            child: Column(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: gestures.onHeaderTap,
+                  child: const SizedBox(
+                    height: proxyPanelMinHeight,
+                    child: Text('Proxies'),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: controller,
+                    itemExtent: proxyPanelRowExtent,
+                    itemCount: 3,
+                    itemBuilder: (_, index) => Text('Proxy $index'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final panelSurface = find.byKey(const ValueKey('proxy-panel-drag-surface'));
+    await tester.drag(panelSurface, const Offset(0, -500));
+    await tester.pumpAndSettle();
+
+    final viewportHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final expandedHeight = tester.getSize(panelSurface).height;
+    final oldContentBound =
+        proxyPanelMinHeight +
+        3 * proxyPanelRowExtent +
+        proxyPanelListBottomPadding;
+    expect(expandedHeight, greaterThan(oldContentBound));
+    expect(expandedHeight, greaterThanOrEqualTo(viewportHeight - 9));
+    expect(tester.takeException(), isNull);
+  });
 }
