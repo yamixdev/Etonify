@@ -31,6 +31,7 @@ object MeowDefaultNetworkMonitor {
     private val heartbeatExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "MeowNetworkHeartbeat").apply { isDaemon = true }
     }
+    private val interfaceUpdateGate = InterfaceUpdateGate()
     private val notificationGeneration = AtomicLong(0L)
     private val request = NetworkRequest.Builder()
         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -42,7 +43,6 @@ object MeowDefaultNetworkMonitor {
     private var listener: InterfaceUpdateListener? = null
     private var heartbeatFuture: ScheduledFuture<*>? = null
     private var pendingNotifyRunnable: Runnable? = null
-    private var lastNotificationKey: String? = null
 
     private data class NetworkCandidate(
         val network: Network,
@@ -91,12 +91,15 @@ object MeowDefaultNetworkMonitor {
         override fun onLost(network: Network) {
             Log.w(TAG, "onLost network=$network")
             MeowDiagnostics.log(TAG, "onLost ${describeNetwork(network)}")
-            synchronized(lock) {
-                if (currentNetwork == network) {
-                    currentNetwork = resolveBestNetwork(exclude = network)
+            val replacementNetwork = resolveBestNetwork(exclude = network)
+            val decision = synchronized(lock) {
+                decideLostNetworkCallback(currentNetwork, replacementNetwork, network).also {
+                    currentNetwork = it.nextNetwork
                 }
             }
-            notifyListener()
+            if (decision.shouldCheckInterface) {
+                notifyListener()
+            }
         }
     }
 
@@ -106,7 +109,7 @@ object MeowDefaultNetworkMonitor {
                 return
             }
             started = true
-            lastNotificationKey = null
+            interfaceUpdateGate.reset()
         }
         Log.i(TAG, "start")
         MeowDiagnostics.log(TAG, "start current=${describeCurrentState()}")
@@ -121,7 +124,7 @@ object MeowDefaultNetworkMonitor {
             }
             started = false
             currentNetwork = null
-            lastNotificationKey = null
+            interfaceUpdateGate.reset()
             pendingNotifyRunnable?.let(networkHandler::removeCallbacks)
             pendingNotifyRunnable = null
         }
@@ -308,7 +311,7 @@ object MeowDefaultNetworkMonitor {
     fun setListener(newListener: InterfaceUpdateListener?) {
         synchronized(lock) {
             listener = newListener
-            lastNotificationKey = null
+            interfaceUpdateGate.reset()
         }
         notificationGeneration.incrementAndGet()
         if (newListener != null) {
@@ -336,10 +339,18 @@ object MeowDefaultNetworkMonitor {
         if (!isBaseUsableNetwork(network)) {
             Log.i(TAG, "ignore unusable network=$network")
             MeowDiagnostics.log(TAG, "ignore unusable ${describeNetwork(network)}")
-            synchronized(lock) {
-                if (currentNetwork == network) currentNetwork = resolveBestNetwork(exclude = network)
+            val replacementNetwork = resolveBestNetwork(exclude = network)
+            val decision = synchronized(lock) {
+                decideLostNetworkCallback(currentNetwork, replacementNetwork, network).also {
+                    currentNetwork = it.nextNetwork
+                }
             }
-            notifyListener(force = true)
+            if (decision.shouldCheckInterface) {
+                // Ordinary Android callbacks are never forced. The listener's
+                // interface key suppresses duplicates before setUnderlyingNetworks
+                // or libbox updateDefaultInterface is called.
+                notifyListener()
+            }
             return
         }
         // A callback for a newly available physical transport must be allowed
@@ -348,34 +359,25 @@ object MeowDefaultNetworkMonitor {
         // so keeping currentNetwork unconditionally can pin libbox to dead
         // Wi-Fi after a Wi-Fi -> cellular handover.
         val preferredNetwork = resolveBestNetwork(preferred = network)
-        var shouldNotify = false
-        var shouldForceNotify = false
         var previousNetwork: Network? = null
-        synchronized(lock) {
+        val decision = synchronized(lock) {
             previousNetwork = currentNetwork
-            if (preferredNetwork == null) {
-                if (currentNetwork == network) {
-                    currentNetwork = null
-                    shouldNotify = true
-                }
-            } else if (currentNetwork == preferredNetwork) {
-                shouldForceNotify = network == preferredNetwork
-            } else {
-                shouldNotify = true
-                currentNetwork = preferredNetwork
+            decideUsableNetworkCallback(currentNetwork, preferredNetwork, network).also {
+                currentNetwork = it.nextNetwork
             }
         }
-        Log.i(TAG, "updateNetwork network=$network preferred=$preferredNetwork notify=$shouldNotify")
+        Log.i(
+            TAG,
+            "updateNetwork network=$network preferred=$preferredNetwork " +
+                "checkInterface=${decision.shouldCheckInterface}",
+        )
         MeowDiagnostics.log(
             TAG,
             "updateNetwork event=${describeNetwork(network)} preferred=${describeNetwork(preferredNetwork)} " +
-                "previous=${describeNetwork(previousNetwork)} notify=$shouldNotify force=$shouldForceNotify",
+                "previous=${describeNetwork(previousNetwork)} " +
+                "checkInterface=${decision.shouldCheckInterface} force=false",
         )
-        if (shouldForceNotify) {
-            notifyListener(force = true)
-            return
-        }
-        if (shouldNotify) {
+        if (decision.shouldCheckInterface) {
             notifyListener()
         }
     }
@@ -403,14 +405,6 @@ object MeowDefaultNetworkMonitor {
         }
     }
 
-    private fun markInterfaceState(key: String): Boolean {
-        synchronized(lock) {
-            val duplicate = lastNotificationKey == key
-            lastNotificationKey = key
-            return duplicate
-        }
-    }
-
     private fun notifyListenerInternal(
         generation: Long,
         capturedNetwork: Network?,
@@ -422,8 +416,8 @@ object MeowDefaultNetworkMonitor {
         val effectiveNetwork = bestNetwork ?: capturedNetwork?.takeIf(::isSelectableNetwork)
         if (effectiveNetwork == null) {
             if (notificationGeneration.get() != generation) return
-            val duplicate = markInterfaceState("none")
-            if (duplicate && !force) return
+            val gateDecision = interfaceUpdateGate.evaluate("none", force)
+            if (!gateDecision.shouldDispatch) return
             Log.i(TAG, "updateDefaultInterface: none")
             MeowDiagnostics.log(TAG, "updateDefaultInterface none current=${describeCurrentState()}")
             MeowVpnService.setUnderlyingNetwork(
@@ -432,7 +426,7 @@ object MeowDefaultNetworkMonitor {
             )
             runCatching { currentListener.updateDefaultInterface("", -1, false, false) }
                 .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
-            if (!duplicate) {
+            if (!gateDecision.duplicate) {
                 SingboxController.emitNetworkChanged(
                     "default_interface_lost",
                     describeCurrentState(),
@@ -450,8 +444,8 @@ object MeowDefaultNetworkMonitor {
             MeowApplication.connectivity.getLinkProperties(effectiveNetwork)?.interfaceName
         if (interfaceName.isNullOrBlank()) {
             if (notificationGeneration.get() != generation) return
-            val duplicate = markInterfaceState("missing:$effectiveNetwork")
-            if (duplicate && !force) return
+            val gateDecision = interfaceUpdateGate.evaluate("missing:$effectiveNetwork", force)
+            if (!gateDecision.shouldDispatch) return
             Log.w(TAG, "updateDefaultInterface: missing link properties for $effectiveNetwork")
             MeowVpnService.setUnderlyingNetwork(
                 null,
@@ -459,7 +453,7 @@ object MeowDefaultNetworkMonitor {
             )
             runCatching { currentListener.updateDefaultInterface("", -1, false, false) }
                 .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
-            if (!duplicate) {
+            if (!gateDecision.duplicate) {
                 SingboxController.emitNetworkChanged(
                     "default_interface_missing",
                     describeNetwork(effectiveNetwork),
@@ -485,17 +479,18 @@ object MeowDefaultNetworkMonitor {
         }
         if (notificationGeneration.get() != generation) return
         val notifyKey = "$effectiveNetwork:$interfaceName:$index"
-        val duplicate = markInterfaceState(notifyKey)
-        if (duplicate && !force) return
+        val gateDecision = interfaceUpdateGate.evaluate(notifyKey, force)
+        if (!gateDecision.shouldDispatch) return
         Log.i(TAG, "updateDefaultInterface: $interfaceName index=$index")
         MeowDiagnostics.log(
             TAG,
-            "updateDefaultInterface interface=$interfaceName index=$index force=$force duplicate=$duplicate " +
+            "updateDefaultInterface interface=$interfaceName index=$index force=$force " +
+                "duplicate=${gateDecision.duplicate} " +
                 "current=${describeNetwork(effectiveNetwork)}",
         )
         MeowVpnService.setUnderlyingNetwork(
             effectiveNetwork,
-            if (force && duplicate) {
+            if (force && gateDecision.duplicate) {
                 "default_interface_reassert"
             } else if (force) {
                 "default_interface_forced"
@@ -505,7 +500,7 @@ object MeowDefaultNetworkMonitor {
         )
         runCatching { currentListener.updateDefaultInterface(interfaceName, index, false, false) }
             .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
-        if (!duplicate) {
+        if (!gateDecision.duplicate) {
             SingboxController.emitNetworkChanged(
                 "default_interface",
                 describeNetwork(effectiveNetwork),
