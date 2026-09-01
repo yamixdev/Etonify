@@ -224,7 +224,7 @@ internal object RuntimeMeasurement {
             appendLine(
                 "elapsed_ms,elapsed_s,cpu_percent,pss_kb,rss_kb,swap_pss_kb,private_dirty_kb," +
                     "dalvik_pss_kb,native_pss_kb,graphics_pss_kb,code_pss_kb," +
-                    "native_heap_kb,core_memory_bytes,goroutines,connections_in," +
+                    "native_heap_kb,process_rss_reported_by_core_bytes,goroutines,connections_in," +
                     "connections_out,traffic_bps",
             )
             active.samples.forEach { sample ->

@@ -1223,7 +1223,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutResourcesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On-demand Android and core snapshot. CPU appears after the second refresh.'**
+  /// **'On-demand Android and core snapshot. CPU is measured over one second.'**
   String get aboutResourcesSubtitle;
 
   /// No description provided for @aboutResourcesPssTitle.
@@ -1319,7 +1319,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutResourceCoreMemory.
   ///
   /// In en, this message translates to:
-  /// **'Core memory'**
+  /// **'Process RSS reported by core'**
   String get aboutResourceCoreMemory;
 
   /// No description provided for @aboutResourceFlutterImageCache.
@@ -1349,7 +1349,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutResourceProcessCpu.
   ///
   /// In en, this message translates to:
-  /// **'Process CPU since last refresh'**
+  /// **'Process CPU, all cores'**
   String get aboutResourceProcessCpu;
 
   /// No description provided for @aboutResourceSystemMemory.

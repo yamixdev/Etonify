@@ -635,7 +635,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutResourcesSubtitle =>
-      'On-demand Android and core snapshot. CPU appears after the second refresh.';
+      'On-demand Android and core snapshot. CPU is measured over one second.';
 
   @override
   String get aboutResourcesPssTitle => 'Process memory';
@@ -684,7 +684,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutResourceJavaHeap => 'Java heap';
 
   @override
-  String get aboutResourceCoreMemory => 'Core memory';
+  String get aboutResourceCoreMemory => 'Process RSS reported by core';
 
   @override
   String get aboutResourceFlutterImageCache => 'Flutter image cache';
@@ -699,7 +699,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutResourcesSystemTitle => 'System';
 
   @override
-  String get aboutResourceProcessCpu => 'Process CPU since last refresh';
+  String get aboutResourceProcessCpu => 'Process CPU, all cores';
 
   @override
   String get aboutResourceSystemMemory => 'Free system RAM';

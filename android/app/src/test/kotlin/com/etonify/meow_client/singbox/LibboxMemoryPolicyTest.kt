@@ -9,7 +9,7 @@ class LibboxMemoryPolicyTest {
     fun `enabled policy limits Go without enabling process OOM killer`() {
         val policy = LibboxMemoryPolicy.forAndroid(softLimitEnabled = true)
 
-        assertEquals(30L * 1024L * 1024L, policy.goMemoryLimitBytes)
+        assertEquals(64L * 1024L * 1024L, policy.goMemoryLimitBytes)
         assertFalse(policy.processOomKillerEnabled)
         assertEquals(0L, policy.processOomMemoryLimitBytes)
     }

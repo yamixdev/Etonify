@@ -636,7 +636,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aboutResourcesSubtitle =>
-      'Снимок состояния Android и ядра по запросу. Нагрузка на процессор появится после второго обновления.';
+      'Снимок состояния Android и ядра по запросу. Нагрузка на процессор измеряется в течение одной секунды.';
 
   @override
   String get aboutResourcesPssTitle => 'Память процесса';
@@ -685,7 +685,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutResourceJavaHeap => 'Куча Java';
 
   @override
-  String get aboutResourceCoreMemory => 'Память ядра';
+  String get aboutResourceCoreMemory => 'RSS процесса по данным ядра';
 
   @override
   String get aboutResourceFlutterImageCache => 'Кэш изображений Flutter';
@@ -700,7 +700,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutResourcesSystemTitle => 'Система';
 
   @override
-  String get aboutResourceProcessCpu => 'CPU процесса с прошлого обновления';
+  String get aboutResourceProcessCpu => 'CPU процесса, все ядра';
 
   @override
   String get aboutResourceSystemMemory => 'Свободная RAM системы';

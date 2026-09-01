@@ -192,9 +192,7 @@ class _SettingsDiagnosticsPageState extends State<SettingsDiagnosticsPage> {
     if (_performanceBusy) return;
     setState(() => _performanceBusy = true);
     try {
-      final snapshot = _withFlutterMemoryStats(
-        await SingboxRuntime.instance.getPerformanceSnapshot(),
-      );
+      final snapshot = await _capturePerformanceSnapshot();
       if (!mounted) return;
       setState(() => _performanceSnapshot = snapshot);
     } finally {
@@ -843,12 +841,6 @@ class _AboutResourcesCard extends StatelessWidget {
               label: l10n.aboutResourceJavaHeap,
               value: _formatKb(data?['javaHeapUsedKb']),
             ),
-            const Gap(8),
-            _AboutInfoRow(
-              label: l10n.aboutResourceCoreMemory,
-              value: _formatBytes(data?['coreMemoryBytes']),
-            ),
-            const Gap(8),
             _AboutInfoRow(
               label: l10n.aboutResourceFlutterImageCache,
               value: _formatBytes(data?['flutterImageCacheBytes']),
@@ -1393,9 +1385,7 @@ class _RuntimeFlagsTogglesState extends State<_RuntimeFlagsToggles> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final snapshot = _withFlutterMemoryStats(
-        await SingboxRuntime.instance.getPerformanceSnapshot(),
-      );
+      final snapshot = await _capturePerformanceSnapshot();
       AppLogStore.info('performance snapshot', snapshot.toString());
       if (!mounted) return;
       AppNotice.show(
@@ -1732,6 +1722,17 @@ class _MeasurementSummary extends StatelessWidget {
   }
 
   static num? _number(Object? value) => value is num ? value : null;
+}
+
+Future<Map<String, dynamic>> _capturePerformanceSnapshot() async {
+  // Establish a fresh CPU baseline, then measure a fixed window. Reusing the
+  // previous manual refresh made a short burst and an hour-long average look
+  // identical in the UI.
+  await SingboxRuntime.instance.getPerformanceSnapshot();
+  await Future<void>.delayed(const Duration(seconds: 1));
+  return _withFlutterMemoryStats(
+    await SingboxRuntime.instance.getPerformanceSnapshot(),
+  );
 }
 
 Map<String, dynamic> _withFlutterMemoryStats(Map<String, dynamic> snapshot) {
