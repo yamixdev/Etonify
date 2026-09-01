@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
+import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
@@ -61,6 +63,59 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 450));
     expect(dots, findsOneWidget);
+  });
+
+  testWidgets('proxy header collapse leaves the lazy list mounted', (
+    tester,
+  ) async {
+    final proxies = List<AppProxySummary>.generate(
+      80,
+      (index) => _performanceProxy(index),
+      growable: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SizedBox(
+            height: 720,
+            child: ProxiesPage(
+              proxies: proxies,
+              selectedTag: proxies.first.tag,
+              connected: false,
+              progressiveBlurEnabled: false,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+              embedded: true,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+              collapsedSheetExtent: 0,
+              expandedHeaderExtent: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final listFinder = find.byType(ListView);
+    final headerFinder = find.byKey(const ValueKey('proxy-sheet-header'));
+    expect(listFinder, findsOneWidget);
+    expect(headerFinder, findsOneWidget);
+
+    final listBefore = tester.widget<ListView>(listFinder);
+    final paddingBefore = listBefore.padding;
+    final headerHeightBefore = tester.getSize(headerFinder).height;
+
+    await tester.drag(listFinder, const Offset(0, -96));
+    await tester.pumpAndSettle();
+
+    final listAfter = tester.widget<ListView>(listFinder);
+    expect(identical(listAfter, listBefore), isTrue);
+    expect(listAfter.padding, paddingBefore);
+    expect(tester.getSize(headerFinder).height, lessThan(headerHeightBefore));
   });
 
   testWidgets('proxy panel keeps one sheet during repeated open-close cycles', (
@@ -194,4 +249,24 @@ void main() {
     expect(expandedHeight, greaterThanOrEqualTo(viewportHeight - 9));
     expect(tester.takeException(), isNull);
   });
+}
+
+AppProxySummary _performanceProxy(int index) {
+  return AppProxySummary(
+    tag: 'proxy-$index',
+    displayName: 'Proxy $index',
+    countryCode: index.isEven ? 'DE' : 'NL',
+    type: 'vless',
+    server: 'example.com',
+    port: 443,
+    detailText: 'VLESS · TLS',
+    ip: '',
+    latency: index + 1,
+    latencyFresh: true,
+    latencyChecking: false,
+    latencyUnavailable: false,
+    latencyError: null,
+    protocolLabel: 'VLESS · TLS',
+    endpointLabel: 'example.com:443',
+  );
 }

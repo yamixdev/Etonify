@@ -118,16 +118,19 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     if (_runtimeResortTimer?.isActive ?? false) {
       return;
     }
-    _runtimeResortTimer = Timer(const Duration(milliseconds: 80), () {
-      if (!mounted ||
-          (_sort != ProxySort.latency && _sort != ProxySort.working)) {
-        return;
-      }
-      setState(() {
-        _sortedChildrenCache = null;
-        _sortedChildrenSort = null;
-      });
-    });
+    _runtimeResortTimer = Timer(
+      _runtimeResortInterval(widget.children.length),
+      () {
+        if (!mounted ||
+            (_sort != ProxySort.latency && _sort != ProxySort.working)) {
+          return;
+        }
+        setState(() {
+          _sortedChildrenCache = null;
+          _sortedChildrenSort = null;
+        });
+      },
+    );
   }
 
   void _setSort(ProxySort value) {
@@ -275,7 +278,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               itemExtent: _kProxySheetRowExtent,
-              scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+              scrollCacheExtent: _kProxyListScrollCacheExtent,
               addAutomaticKeepAlives: false,
               addRepaintBoundaries: true,
               addSemanticIndexes: false,

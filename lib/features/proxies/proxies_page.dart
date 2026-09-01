@@ -34,8 +34,21 @@ const _kProxySheetHeaderHeight = 108.0;
 const _kProxySheetCompactHeaderHeight = 72.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
 const _kProxySheetRowExtent = proxyPanelRowExtent;
+const _kProxyListScrollCacheExtent = ScrollCacheExtent.pixels(
+  _kProxySheetRowExtent * 2,
+);
 const _kProxySheetHeaderCollapseDistance = 48.0;
 const _kProxySheetHeaderBlurStart = 0.0;
+
+Duration _runtimeResortInterval(int proxyCount) {
+  if (proxyCount >= 2000) {
+    return const Duration(milliseconds: 900);
+  }
+  if (proxyCount >= 500) {
+    return const Duration(milliseconds: 600);
+  }
+  return const Duration(milliseconds: 80);
+}
 
 enum _ProxyChainAction { edit, rename, remove }
 
@@ -244,12 +257,47 @@ class ProxyLatencyDots extends StatefulWidget {
   State<ProxyLatencyDots> createState() => _ProxyLatencyDotsState();
 }
 
-class _ProxyLatencyDotsState extends State<ProxyLatencyDots> {
+class _ProxyLatencyClock {
   static const _stepDuration = Duration(milliseconds: 300);
 
+  final Set<VoidCallback> _listeners = <VoidCallback>{};
   Timer? _timer;
-  int _visibleCount = 1;
+  int visibleCount = 1;
+
+  void addListener(VoidCallback listener) {
+    if (!_listeners.add(listener)) {
+      return;
+    }
+    _timer ??= Timer.periodic(_stepDuration, _advance);
+  }
+
+  void removeListener(VoidCallback listener) {
+    _listeners.remove(listener);
+    if (_listeners.isEmpty) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  void _advance(Timer _) {
+    visibleCount = visibleCount % 3 + 1;
+    for (final listener in List<VoidCallback>.of(_listeners)) {
+      listener();
+    }
+  }
+}
+
+final _proxyLatencyClock = _ProxyLatencyClock();
+
+class _ProxyLatencyDotsState extends State<ProxyLatencyDots> {
+  late final VoidCallback _clockListener;
   bool _active = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockListener = _onClockTick;
+  }
 
   @override
   void didChangeDependencies() {
@@ -262,20 +310,22 @@ class _ProxyLatencyDotsState extends State<ProxyLatencyDots> {
       return;
     }
     _active = active;
-    _timer?.cancel();
-    _timer = active ? Timer.periodic(_stepDuration, _advance) : null;
+    if (active) {
+      _proxyLatencyClock.addListener(_clockListener);
+    } else {
+      _proxyLatencyClock.removeListener(_clockListener);
+    }
   }
 
-  void _advance(Timer _) {
-    if (!mounted || !_active) {
-      return;
+  void _onClockTick() {
+    if (mounted && _active) {
+      setState(() {});
     }
-    setState(() => _visibleCount = _visibleCount % 3 + 1);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _proxyLatencyClock.removeListener(_clockListener);
     super.dispose();
   }
 
@@ -286,8 +336,8 @@ class _ProxyLatencyDotsState extends State<ProxyLatencyDots> {
       fontWeight: FontWeight.w700,
     );
     return Text(
-      '.' * _visibleCount,
-      key: ValueKey(_visibleCount),
+      '.' * _proxyLatencyClock.visibleCount,
+      key: ValueKey(_proxyLatencyClock.visibleCount),
       textAlign: TextAlign.center,
       style: style,
     );
@@ -382,13 +432,12 @@ class ProxiesPage extends StatefulWidget {
 }
 
 class _ProxiesPageState extends State<ProxiesPage> {
-  static const _largeProxyRuntimeResortInterval = Duration(milliseconds: 320);
-
   late ProxySort _sort;
   List<AppProxySummary> _visibleItems = const [];
   Timer? _runtimeResortTimer;
   ValueListenable<ProxyPanelMetrics>? _observedSheetMetrics;
-  double _proxySheetHeaderScrollCollapse = 0;
+  final ValueNotifier<double> _proxySheetHeaderScrollCollapse =
+      ValueNotifier<double>(0);
   bool _groupSheetOpen = false;
   List<_ProxyListEntry>? _visibleEntriesCache;
   List<AppProxySummary>? _visibleEntriesItemsCache;
@@ -436,8 +485,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _sort = widget.initialSort;
       _rebuildVisibleItems();
     }
-    if (!_effectiveSheetAtMaxExtent && _proxySheetHeaderScrollCollapse != 0) {
-      _proxySheetHeaderScrollCollapse = 0;
+    if (!_effectiveSheetAtMaxExtent &&
+        _proxySheetHeaderScrollCollapse.value != 0) {
+      _proxySheetHeaderScrollCollapse.value = 0;
     }
   }
 
@@ -446,6 +496,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _runtimeResortTimer?.cancel();
     widget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
     _observedSheetMetrics?.removeListener(_onSheetMetricsChanged);
+    _proxySheetHeaderScrollCollapse.dispose();
     super.dispose();
   }
 
@@ -469,7 +520,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
         !metrics.animating &&
         metrics.progress <= 0.001;
     final resetHeaderCollapse =
-        !atMaxExtent && _proxySheetHeaderScrollCollapse != 0;
+        !atMaxExtent && _proxySheetHeaderScrollCollapse.value != 0;
     if (!activateList && !deactivateList && !resetHeaderCollapse) {
       return;
     }
@@ -481,21 +532,23 @@ class _ProxiesPageState extends State<ProxiesPage> {
         _releaseEmbeddedListPresentation();
       }
       if (resetHeaderCollapse) {
-        _proxySheetHeaderScrollCollapse = 0;
+        _proxySheetHeaderScrollCollapse.value = 0;
       }
       return;
     }
-    setState(() {
-      if (activateList) {
-        _embeddedListActivated = true;
-        _rebuildVisibleItems();
-      } else if (deactivateList) {
-        _releaseEmbeddedListPresentation();
-      }
-      if (resetHeaderCollapse) {
-        _proxySheetHeaderScrollCollapse = 0;
-      }
-    });
+    if (resetHeaderCollapse) {
+      _proxySheetHeaderScrollCollapse.value = 0;
+    }
+    if (activateList || deactivateList) {
+      setState(() {
+        if (activateList) {
+          _embeddedListActivated = true;
+          _rebuildVisibleItems();
+        } else if (deactivateList) {
+          _releaseEmbeddedListPresentation();
+        }
+      });
+    }
   }
 
   void _activateEmbeddedListIfNeeded({bool notify = false}) {
@@ -516,6 +569,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
   void _releaseEmbeddedListPresentation() {
     _runtimeResortTimer?.cancel();
     _runtimeResortTimer = null;
+    _proxySheetHeaderScrollCollapse.value = 0;
     _embeddedListActivated = false;
     _visibleItems = const <AppProxySummary>[];
     _invalidateVisibleEntries();
@@ -530,9 +584,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (_runtimeResortTimer?.isActive ?? false) {
       return;
     }
-    final interval = widget.proxies.length >= 500
-        ? _largeProxyRuntimeResortInterval
-        : const Duration(milliseconds: 80);
+    final interval = _runtimeResortInterval(widget.proxies.length);
     _runtimeResortTimer = Timer(interval, () {
       if (!mounted ||
           (widget.embedded && !_embeddedListActivated) ||
@@ -900,40 +952,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
         : ((effectiveSheetExtent - widget.collapsedSheetExtent) / progressRange)
               .clamp(0.0, 1.0)
               .toDouble();
-    final headerScrollCollapse = effectiveSheetAtMaxExtent
-        ? _proxySheetHeaderScrollCollapse
-        : 0.0;
-    final headerHeight = _proxySheetHeaderHeightForCollapse(
-      headerScrollCollapse,
-    );
-    final header = _ProxySheetHeader(
-      height: headerHeight,
-      progress: headerProgress,
-      scrollCollapse: headerScrollCollapse,
-      canFillScreen: effectiveSheetCanFillScreen,
-      activeProxy: widget.activeProxy,
-      activeProxyHideIp: widget.activeProxyHideIp,
-      l10n: l10n,
-      sort: _sort,
-      connected: widget.connected,
-      hapticEnabled: widget.hapticEnabled,
-      speedBytesPerSecond: widget.speedBytesPerSecond,
-      trafficBytes: widget.trafficBytes,
-      trafficListenable: widget.trafficListenable,
-      onSortSelected: _setSort,
-      onUrlTest: widget.onUrlTest,
-      onRefreshIp: widget.onActiveProxyIpRefresh,
-      onTap: widget.onHeaderTap,
-    );
-    final pinnedHeader = _ProxySheetHeaderBackdrop(
-      enabled:
-          effectiveProgressiveBlurEnabled &&
-          !_groupSheetOpen &&
-          headerProgress >= _kProxySheetHeaderBlurStart,
-      cornerRadius: widget.sheetCornerRadius,
-      height: headerHeight,
-      child: header,
-    );
     final sheetBody = RepaintBoundary(
       child: Stack(
         children: [
@@ -944,7 +962,49 @@ class _ProxiesPageState extends State<ProxiesPage> {
               child: RepaintBoundary(child: list),
             ),
           ),
-          Positioned(left: 0, right: 0, top: 0, child: pinnedHeader),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _proxySheetHeaderScrollCollapse,
+              builder: (context, scrollCollapse, _) {
+                final effectiveScrollCollapse = effectiveSheetAtMaxExtent
+                    ? scrollCollapse
+                    : 0.0;
+                final headerHeight = _proxySheetHeaderHeightForCollapse(
+                  effectiveScrollCollapse,
+                );
+                return _ProxySheetHeaderBackdrop(
+                  enabled:
+                      effectiveProgressiveBlurEnabled &&
+                      !_groupSheetOpen &&
+                      headerProgress >= _kProxySheetHeaderBlurStart,
+                  cornerRadius: widget.sheetCornerRadius,
+                  height: headerHeight,
+                  child: _ProxySheetHeader(
+                    height: headerHeight,
+                    progress: headerProgress,
+                    scrollCollapse: effectiveScrollCollapse,
+                    canFillScreen: effectiveSheetCanFillScreen,
+                    activeProxy: widget.activeProxy,
+                    activeProxyHideIp: widget.activeProxyHideIp,
+                    l10n: l10n,
+                    sort: _sort,
+                    connected: widget.connected,
+                    hapticEnabled: widget.hapticEnabled,
+                    speedBytesPerSecond: widget.speedBytesPerSecond,
+                    trafficBytes: widget.trafficBytes,
+                    trafficListenable: widget.trafficListenable,
+                    onSortSelected: _setSort,
+                    onUrlTest: widget.onUrlTest,
+                    onRefreshIp: widget.onActiveProxyIpRefresh,
+                    onTap: widget.onHeaderTap,
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -962,10 +1022,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required AppLocalizations l10n,
   }) {
     final listMounted = _embeddedListActivated;
-    final headerHeight = _proxySheetHeaderHeightForCollapse(
-      _proxySheetHeaderScrollCollapse,
-    );
-    final listTopPadding = max(headerHeight + 6, 84).toDouble();
+    // Keep the sliver geometry stable while the pinned header collapses.
+    // Mutating padding during a drag forces the list to relayout and makes the
+    // first rows visibly jump under the finger.
+    const listTopPadding = _kProxySheetHeaderHeight + 6;
     final bottomInset = appSystemNavigationBarInset(context);
     final entries = listMounted ? _visibleEntries() : const <_ProxyListEntry>[];
     return Padding(
@@ -978,7 +1038,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
               )
             : const NeverScrollableScrollPhysics(),
         itemExtent: _kProxySheetRowExtent,
-        scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+        scrollCacheExtent: _kProxyListScrollCacheExtent,
         addAutomaticKeepAlives: false,
         addRepaintBoundaries: true,
         addSemanticIndexes: false,
@@ -1019,12 +1079,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
               .clamp(0.0, 1.0)
               .toDouble()
         : 0.0;
-    if ((nextCollapse - _proxySheetHeaderScrollCollapse).abs() < 0.01) {
+    if ((nextCollapse - _proxySheetHeaderScrollCollapse.value).abs() < 0.01) {
       return;
     }
-    setState(() {
-      _proxySheetHeaderScrollCollapse = nextCollapse;
-    });
+    _proxySheetHeaderScrollCollapse.value = nextCollapse;
   }
 
   double _proxySheetHeaderHeightForCollapse(double collapse) {
@@ -1049,7 +1107,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     final entries = _visibleEntries();
     return ListView.builder(
-      scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+      scrollCacheExtent: _kProxyListScrollCacheExtent,
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: true,
       addSemanticIndexes: false,

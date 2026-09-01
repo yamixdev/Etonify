@@ -151,6 +151,7 @@ class _ProxySheetHeader extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
+        key: const ValueKey('proxy-sheet-header'),
         height: height,
         child: Stack(
           clipBehavior: Clip.hardEdge,
