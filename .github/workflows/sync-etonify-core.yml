@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_core_version:
-        description: "Optional exact core version, for example v1.14.0-etonify.1"
+        description: "Optional exact core version, for example v1.14.0-etonify.2"
         required: false
         type: string
 

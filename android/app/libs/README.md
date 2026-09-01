@@ -2,7 +2,7 @@
 
 Etonify bundles
 [`yamixdev/etonify-core`](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
-`v1.14.0-etonify.1`, based on the stable sing-box `v1.14.0` release. The AAR
+`v1.14.0-etonify.2`, based on the stable sing-box `v1.14.0` release. The AAR
 exposes Etonify's versioned capability
 contract, targeted and bounded asynchronous URLTest sessions with failover,
 structured probe failures, bounded XHTTP/SplitHTTP transports, opt-in VLESS
