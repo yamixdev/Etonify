@@ -65,6 +65,8 @@ class ProxyRuntimeGroupUpdateResult {
 
 class ProxyRuntimeController {
   static const urlTestStatusUnavailable = 'unavailable';
+  static const startupUrlTestNoDataError =
+      'No URLTest result received after VPN startup';
 
   static bool effectiveLatencyUnavailable({
     required bool urlTestUnavailable,
@@ -134,6 +136,39 @@ class ProxyRuntimeController {
     runtimeLowestSelections.clear();
     lowestLatency = null;
     runtimeLowestOutboundTag = null;
+  }
+
+  /// Marks only proxies that produced no terminal URLTest telemetry during the
+  /// startup grace period. Existing latency and explicit failure results are
+  /// preserved, and a later native or manual URLTest result can replace this
+  /// synthetic failure normally.
+  Set<String> markMissingStartupMeasurementsUnavailable(
+    Iterable<String> expectedTags,
+  ) {
+    final affectedTags = <String>{};
+    for (final rawTag in expectedTags) {
+      final tag = rawTag.trim();
+      if (tag.isEmpty ||
+          affectedTags.contains(tag) ||
+          (runtimeLatencies[tag] ?? 0) > 0 ||
+          unavailableLatencyTags.contains(tag) ||
+          (latencyErrors[tag]?.trim().isNotEmpty ?? false)) {
+        continue;
+      }
+      affectedTags.add(tag);
+      invalidatedLatencyTags.remove(tag);
+      runtimeLatencies.remove(tag);
+      unavailableLatencyTags.add(tag);
+      latencyErrors[tag] = startupUrlTestNoDataError;
+      latencyFailureCounts[tag] = 1;
+    }
+    if (affectedTags.isNotEmpty) {
+      lowestLatency = _computeLowestLatency(
+        runtimeLatencies,
+        unavailableLatencyTags,
+      );
+    }
+    return Set<String>.unmodifiable(affectedTags);
   }
 
   /// Drops measurements that belong to a previous Android network while

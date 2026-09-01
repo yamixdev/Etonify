@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:meow_client/core/network/remote_download_timeout.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
+import 'package:path_provider/path_provider.dart';
 
 enum RemoteDownloadRoute { outbound, app, underlying }
 
@@ -122,6 +123,24 @@ Future<T> runRemoteDownloadRouteAttemptsForTest<T>({
     }
   }
   Error.throwWithStackTrace(lastError!, lastStackTrace!);
+}
+
+@visibleForTesting
+Future<File> createPrivateDownloadTemporaryFile({
+  required int generation,
+  Future<Directory> Function()? temporaryDirectoryProvider,
+  int? processIdentifier,
+  DateTime? timestamp,
+}) async {
+  // The Android physical-network bridge refuses shared/system temp paths.
+  // path_provider maps this directory to the app-private cache on Android.
+  final temporaryDirectory =
+      await (temporaryDirectoryProvider ?? getTemporaryDirectory)();
+  return File(
+    '${temporaryDirectory.path}${Platform.pathSeparator}'
+    'etonify-remote-${processIdentifier ?? pid}-'
+    '${(timestamp ?? DateTime.now()).microsecondsSinceEpoch}-$generation.tmp',
+  );
 }
 
 /// Downloads Etonify-owned remote data without pinning it to one Android path.
@@ -537,10 +556,8 @@ class VpnAwareRemoteDownloader {
     required int maximumBytes,
     void Function(int completed, int total)? onProgress,
   }) async {
-    final temp = File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}'
-      'etonify-remote-$pid-${DateTime.now().microsecondsSinceEpoch}-'
-      '${_temporaryFileGeneration++}.tmp',
+    final temp = await createPrivateDownloadTemporaryFile(
+      generation: _temporaryFileGeneration++,
     );
     try {
       final result = await _downloadFileViaUnderlying(

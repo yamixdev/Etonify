@@ -3,6 +3,72 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test('startup deadline marks only proxies without terminal telemetry', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.runtimeLatencies['vless-fast'] = 73;
+    controller.runtimeLatencies['vless-stale'] = 140;
+    controller.unavailableLatencyTags.add('vless-failed');
+    controller.latencyErrors['vless-failed'] = 'TLS handshake failed';
+    controller.latencyFailureCounts['vless-failed'] = 2;
+    controller.lowestLatency = 73;
+
+    final affected = controller.markMissingStartupMeasurementsUnavailable([
+      'vless-fast',
+      'vless-missing',
+      'vless-failed',
+      'vless-missing',
+      '',
+    ]);
+
+    expect(affected, {'vless-missing'});
+    expect(controller.runtimeLatencies['vless-fast'], 73);
+    expect(controller.runtimeLatencies['vless-stale'], 140);
+    expect(controller.latencyErrors['vless-failed'], 'TLS handshake failed');
+    expect(controller.latencyFailureCounts['vless-failed'], 2);
+    expect(controller.unavailableLatencyTags, {
+      'vless-failed',
+      'vless-missing',
+    });
+    expect(
+      controller.latencyErrors['vless-missing'],
+      ProxyRuntimeController.startupUrlTestNoDataError,
+    );
+    expect(controller.latencyFailureCounts['vless-missing'], 1);
+    expect(controller.lowestLatency, 73);
+  });
+
+  test('fresh URLTest recovers a proxy missing at startup', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.markMissingStartupMeasurementsUnavailable(const ['vless-1']);
+
+    final result = controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {
+                'tag': 'vless-1',
+                'status': 'available',
+                'delay': 91,
+                'time': 100,
+              },
+            ],
+          },
+        ],
+      ),
+    );
+
+    expect(result.changed, isTrue);
+    expect(controller.runtimeLatencies['vless-1'], 91);
+    expect(controller.unavailableLatencyTags, isNot(contains('vless-1')));
+    expect(controller.latencyErrors['vless-1'], isNull);
+    expect(controller.latencyFailureCounts['vless-1'], isNull);
+    expect(controller.lowestLatency, 91);
+  });
+
   test('URLTest group delay updates runtime latency', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);

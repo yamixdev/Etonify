@@ -1,9 +1,33 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 void main() {
+  test(
+    'underlying downloads stage bytes in the private temporary directory',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'etonify-private-download-test-',
+      );
+      try {
+        final file = await createPrivateDownloadTemporaryFile(
+          generation: 7,
+          temporaryDirectoryProvider: () async => root,
+          processIdentifier: 42,
+          timestamp: DateTime.fromMicrosecondsSinceEpoch(123456),
+        );
+
+        expect(file.parent.absolute.path, root.absolute.path);
+        expect(file.path, endsWith('etonify-remote-42-123456-7.tmp'));
+        expect(file.existsSync(), isFalse);
+      } finally {
+        await root.delete(recursive: true);
+      }
+    },
+  );
+
   test('capability cache retries after a failed read', () async {
     final cache = RetryableFutureCache<bool>();
     var reads = 0;

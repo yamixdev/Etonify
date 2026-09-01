@@ -36,6 +36,7 @@ import 'package:meow_client/app/runtime_recovery_controller.dart';
 import 'package:meow_client/app/runtime_recovery_policy.dart';
 import 'package:meow_client/app/runtime_session_coordinator.dart';
 import 'package:meow_client/app/singbox_config_coordinator.dart';
+import 'package:meow_client/app/startup_latency_deadline_controller.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/app/traffic_status_reducer.dart';
@@ -98,7 +99,7 @@ class MeowClient extends ConsumerStatefulWidget {
 
 class _MeowClientState extends ConsumerState<MeowClient>
     with WidgetsBindingObserver {
-  static const _fallbackClientVersionLabel = '0.3.1';
+  static const _fallbackClientVersionLabel = '0.3.3';
   static const _requiredLegalVersion = '0.2.1';
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
   static const _lowestProxyTag = lowestProxyTag;
@@ -217,6 +218,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final LatencyCoordinator _latencyCoordinator;
   CoreConfigMigrationResult? _pendingCoreConfigMigration;
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
+  final StartupLatencyDeadlineController _startupLatencyDeadline =
+      StartupLatencyDeadlineController();
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
@@ -2087,6 +2090,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _locationLookupTimer?.cancel();
     _resumeForegroundSyncTimer?.cancel();
     _groupUrlTestScheduler.dispose();
+    _startupLatencyDeadline.dispose();
     _networkRecovery.dispose();
     _configCoordinator.dispose();
     _settingsConfigApplyTimer?.cancel();
@@ -3274,7 +3278,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     if (transition.becameConnected) {
       _connectedSince = DateTime.now();
-    } else if (!_connected &&
+    }
+    if (transition.becameDisconnected) {
+      _startupLatencyDeadline.resetForNextService();
+    }
+    if (!_connected &&
         (phase == AppConnectionPhase.idle ||
             phase == AppConnectionPhase.failed)) {
       _connectedSince = null;
@@ -6718,6 +6726,46 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // Diagnostics are not a startup requirement. Let real application traffic
     // use the newly established TUN before opening probe/provider connections.
     _scheduleActiveOutboundIpRefresh(delay: const Duration(seconds: 5));
+    final configuredTimeoutSeconds =
+        _activeSubscription?.urlTestConfig.timeoutSeconds ??
+        _urlTestTimeoutSeconds;
+    final delay = startupLatencyDeadlineDelay(configuredTimeoutSeconds);
+    final armed = _startupLatencyDeadline.armOnce(
+      delay: delay,
+      onExpired: _applyStartupLatencyDeadline,
+    );
+    if (armed) {
+      AppLogStore.info(
+        'latency',
+        'startup URLTest deadline armed delayMs=${delay.inMilliseconds}',
+      );
+    }
+  }
+
+  void _applyStartupLatencyDeadline() {
+    if (!mounted ||
+        !_connected ||
+        _runtimeTransitionInProgress ||
+        !_runtimeOperations.diagnosticsReady) {
+      AppLogStore.debug(
+        'latency',
+        'startup URLTest deadline skipped because runtime is not ready',
+      );
+      return;
+    }
+    final affectedTags = _proxyRuntime
+        .markMissingStartupMeasurementsUnavailable(
+          _expectedLatencyTagsForSession(''),
+        );
+    AppLogStore.info(
+      'latency',
+      'startup URLTest deadline completed missing=${affectedTags.length}',
+    );
+    if (affectedTags.isEmpty) {
+      return;
+    }
+    _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
+    unawaited(_syncQuickSettingsTileLabel());
   }
 
   void _recordGroupsDiagnostics(int groupCount) {

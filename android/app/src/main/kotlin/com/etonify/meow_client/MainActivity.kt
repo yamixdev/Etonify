@@ -750,15 +750,10 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun requirePrivateDownloadTarget(rawPath: String): File {
-        require(rawPath.isNotBlank()) { "Download destination is empty." }
-        val destination = File(rawPath).canonicalFile
-        val allowedRoots = listOf(filesDir.canonicalFile, cacheDir.canonicalFile)
-        val allowed = allowedRoots.any { root ->
-            destination.path.startsWith(root.path + File.separator)
-        }
-        require(allowed) { "Download destination must be inside private app storage." }
-        require(!destination.isDirectory) { "Download destination is a directory." }
-        return destination
+        return PrivateDownloadPathPolicy.requireTarget(
+            rawPath = rawPath,
+            privateDataDirectory = File(applicationInfo.dataDir),
+        )
     }
 
     private fun validateSubscriptionRequest(url: URL) {
