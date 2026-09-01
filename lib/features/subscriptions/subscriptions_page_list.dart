@@ -254,11 +254,11 @@ class _SubscriptionCard extends StatelessWidget {
     final lastUpdatedText = subscription.lastUpdated > 0
         ? _subscriptionLastUpdatedText(context, subscription.lastUpdated)
         : null;
-    final metaParts = <String>[
+    final reparseRecommended = serverCount == 0 && rawLooksNonEmpty;
+    final summaryParts = <String>[
       l10n.subscriptionServersCount(serverCount),
-      ...?(lastUpdatedText == null ? null : <String>[lastUpdatedText]),
-      if (serverCount == 0 && rawLooksNonEmpty)
-        l10n.subscriptionReparseRecommended,
+      ...?(usageText == null ? null : <String>[usageText]),
+      if (reparseRecommended) l10n.subscriptionReparseRecommended,
     ];
     final highlighted = active || multiSelected;
     return Material(
@@ -291,7 +291,7 @@ class _SubscriptionCard extends StatelessWidget {
             children: [
               SizedBox(
                 width: 54,
-                height: 92,
+                height: _kSubscriptionCardHeight,
                 child: selectionMode
                     ? InkWell(
                         onTap: onSelect,
@@ -317,7 +317,7 @@ class _SubscriptionCard extends StatelessWidget {
               ),
               SizedBox(
                 width: 1,
-                height: 70,
+                height: 88,
                 child: ColoredBox(
                   color: highlighted
                       ? cs.primary.withValues(alpha: .34)
@@ -329,12 +329,12 @@ class _SubscriptionCard extends StatelessWidget {
                   onTap: onSelect,
                   onLongPress: onLongPress,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 11, 14, 11),
                     child: Row(
                       children: [
                         Container(
                           width: 3,
-                          height: 44,
+                          height: 54,
                           decoration: BoxDecoration(
                             color: highlighted
                                 ? cs.primary
@@ -348,46 +348,38 @@ class _SubscriptionCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      subscription.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.titleLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0,
-                                          ),
-                                    ),
-                                  ),
-                                  if (remainingText != null) ...[
-                                    const Gap(12),
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        maxWidth: 116,
-                                      ),
-                                      child: Text(
-                                        remainingText,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.right,
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                              color:
-                                                  remainingDays != null &&
-                                                      remainingDays <= 3
-                                                  ? cs.error
-                                                  : cs.onSurfaceVariant,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              Text(
+                                subscription.name,
+                                key: ValueKey(
+                                  'subscription_name_${subscription.id}',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0,
+                                ),
                               ),
-                              const Gap(5),
+                              if (remainingText != null) ...[
+                                const Gap(1),
+                                Text(
+                                  remainingText,
+                                  key: ValueKey(
+                                    'subscription_remaining_${subscription.id}',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color:
+                                        remainingDays != null &&
+                                            remainingDays <= 3
+                                        ? cs.error
+                                        : cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                              const Gap(6),
                               if (info != null)
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(999),
@@ -395,26 +387,36 @@ class _SubscriptionCard extends StatelessWidget {
                                     value: hasTraffic
                                         ? (info.ratio.clamp(0, 1)).toDouble()
                                         : 0,
-                                    minHeight: 5,
+                                    minHeight: 4,
                                     backgroundColor: cs.surfaceContainerHighest,
                                   ),
                                 ),
-                              const Gap(5),
+                              const Gap(6),
                               Text(
-                                metaParts.join(' · '),
+                                summaryParts.join(' · '),
+                                key: ValueKey(
+                                  'subscription_summary_${subscription.id}',
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.labelMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
+                                  color: reparseRecommended
+                                      ? cs.error
+                                      : cs.onSurfaceVariant,
                                 ),
                               ),
-                              if (usageText != null) ...[
-                                const Gap(4),
+                              if (lastUpdatedText != null) ...[
+                                const Gap(2),
                                 Text(
-                                  usageText,
+                                  lastUpdatedText,
+                                  key: ValueKey(
+                                    'subscription_updated_${subscription.id}',
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
                                 ),
                               ],
                             ],

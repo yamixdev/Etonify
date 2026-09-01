@@ -225,7 +225,13 @@ class _OutboundRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CountryFlagBadge(countryCode: outbound.info.country ?? '', size: 34),
+          CountryFlagBadge(
+            countryCode: outboundDisplayCountryCode(
+              outbound,
+              markAllServersRussia: false,
+            ),
+            size: 34,
+          ),
           const Gap(10),
           Expanded(
             child: Column(

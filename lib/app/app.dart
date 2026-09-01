@@ -42,6 +42,7 @@ import 'package:meow_client/app/traffic_status_reducer.dart';
 import 'package:meow_client/app/subscription_profile_import_controller.dart';
 import 'package:meow_client/app/subscription_profile_flow_controller.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -1093,7 +1094,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       displayName: subscriptionName.isEmpty
           ? outboundName
           : '$subscriptionName · $outboundName',
-      countryCode: _normalizeCountryCode(outbound.info.country),
+      countryCode: outboundDisplayCountryCode(
+        outbound,
+        markAllServersRussia: false,
+      ),
       type: outbound.type,
       server: outbound.server,
       port: outbound.port,
@@ -1388,6 +1392,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final latencyUnavailable =
         !latencyInvalidated && _unavailableLatencyTags.contains(tag);
     final latencyError = latencyInvalidated ? null : _latencyErrors[tag];
+    final targetCountry = outboundDisplayCountryCode(
+      target,
+      markAllServersRussia: false,
+    );
     return targetSummary.copyWith(
       tag: tag,
       displayName: chain.name.trim().isEmpty
@@ -1395,8 +1403,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
           : chain.name.trim(),
       detailText: 'Chain · $detourName -> ${targetSummary.displayName}',
       protocolLabel: 'Chain · ${targetSummary.protocolLabel}',
-      countryCode: _normalizeCountryCode(target.info.country).isNotEmpty
-          ? _normalizeCountryCode(target.info.country)
+      countryCode: targetCountry.isNotEmpty
+          ? targetCountry
           : _normalizeCountryCode(chain.targetCountry),
       latency: latencyInvalidated
           ? null
@@ -1427,7 +1435,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return AppProxySummary(
       tag: outbound.tag,
       displayName: outbound.name.trim().isEmpty ? outbound.tag : outbound.name,
-      countryCode: _effectiveOutboundCountry(outbound),
+      countryCode: _displayOutboundCountry(outbound),
       type: outbound.type,
       server: outbound.server,
       port: outbound.port,
@@ -7256,16 +7264,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   bool _hasResolvedExternalLocation(Outbound outbound) {
-    if (_markAllServersRussia) {
-      return true;
-    }
-    final externalIp = outbound.info.externalIp?.trim() ?? '';
-    if (externalIp.isEmpty) {
-      return false;
-    }
-    return _normalizeCountryCode(
-      outbound.info.exitCountry ?? outbound.info.country,
-    ).isNotEmpty;
+    return hasResolvedOutboundExitLocation(
+      outbound,
+      markAllServersRussia: _markAllServersRussia,
+    );
   }
 
   String _normalizeCountryCode(String? countryCode) {
@@ -7273,14 +7275,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return RegExp(r'^[A-Z]{2}$').hasMatch(normalized) ? normalized : '';
   }
 
-  String _effectiveOutboundCountry(Outbound outbound) {
-    if (_markAllServersRussia) {
-      return 'RU';
-    }
-    final sourceCountry = _normalizeCountryCode(outbound.info.country);
-    return sourceCountry.isNotEmpty
-        ? sourceCountry
-        : _normalizeCountryCode(outbound.info.exitCountry);
+  String _displayOutboundCountry(Outbound outbound) {
+    return outboundDisplayCountryCode(
+      outbound,
+      markAllServersRussia: _markAllServersRussia,
+    );
   }
 
   String _protocolLabel(Map<String, dynamic> config, String fallbackType) {

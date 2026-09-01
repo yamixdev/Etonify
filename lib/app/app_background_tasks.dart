@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
@@ -1120,7 +1121,7 @@ List<AppProxySummary> _lowestEligibleProxySummaries(
     }
     if (!lowestProxyAllowsCountry(
       lowestTag,
-      _effectiveOutboundCountry(input, outbound),
+      _sourceOutboundCountry(input, outbound),
     )) {
       continue;
     }
@@ -1210,7 +1211,7 @@ AppProxySummary _buildProxySummary(
   return AppProxySummary(
     tag: outbound.tag,
     displayName: outbound.name.trim().isEmpty ? outbound.tag : outbound.name,
-    countryCode: _effectiveOutboundCountry(input, outbound),
+    countryCode: _displayOutboundCountry(input, outbound),
     type: outbound.type,
     server: outbound.server,
     port: outbound.port,
@@ -1287,7 +1288,7 @@ String _proxyChainTargetCountry(
 ) {
   final target = visibleOutboundByTag[chain.targetTag.trim()];
   if (target != null) {
-    return _normalizeCountryCode(target.info.country);
+    return outboundDisplayCountryCode(target, markAllServersRussia: false);
   }
   return _normalizeCountryCode(chain.targetCountry);
 }
@@ -1502,10 +1503,14 @@ String _normalizeCountryCode(String? countryCode) {
   return RegExp(r'^[A-Z]{2}$').hasMatch(normalized) ? normalized : '';
 }
 
-String _effectiveOutboundCountry(
-  ProxyCacheBuildInput input,
-  Outbound outbound,
-) {
+String _displayOutboundCountry(ProxyCacheBuildInput input, Outbound outbound) {
+  return outboundDisplayCountryCode(
+    outbound,
+    markAllServersRussia: input.markAllServersRussia,
+  );
+}
+
+String _sourceOutboundCountry(ProxyCacheBuildInput input, Outbound outbound) {
   return input.markAllServersRussia
       ? 'RU'
       : _normalizeCountryCode(outbound.info.country);

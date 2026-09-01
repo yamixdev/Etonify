@@ -205,7 +205,7 @@ void main() {
       await _pumpUi(tester, const Duration(milliseconds: 420));
       final headerTop = tester.getTopLeft(find.text('Subscriptions')).dy;
 
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -360));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -560));
       await _pumpUi(tester, const Duration(milliseconds: 80));
       expect(tester.getTopLeft(find.text('Subscriptions')).dy, headerTop);
       expect(find.text('FurkVPN'), findsNothing);
@@ -259,6 +259,77 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Работают:'), findsNothing);
+  });
+
+  testWidgets('subscription card keeps profile details on separate lines', (
+    tester,
+  ) async {
+    const subscriptionId = 'profile-summary';
+    await tester.runAsync(
+      () => SubscriptionStore.save(
+        Subscription(
+          id: subscriptionId,
+          name: 'A very long subscription profile name for compact layout',
+          url: 'https://example.com/summary',
+          lastUpdated: DateTime(2026, 8, 30, 18, 45).millisecondsSinceEpoch,
+          info: SubscriptionInfo(
+            upload: 1024 * 1024,
+            download: 2 * 1024 * 1024,
+            total: 10 * 1024 * 1024,
+            expire:
+                DateTime.now()
+                    .add(const Duration(days: 10))
+                    .millisecondsSinceEpoch ~/
+                1000,
+          ),
+          outbounds: const [
+            Outbound(
+              tag: 'summary-proxy',
+              name: 'Summary proxy',
+              config: {'type': 'vless'},
+            ),
+          ],
+          cachedVisibleProxyCount: 1,
+        ),
+      ),
+    );
+
+    await _openSheet(tester, activeSubscriptionId: subscriptionId);
+    final name = find.byKey(
+      const ValueKey('subscription_name_profile-summary'),
+    );
+    final remaining = find.byKey(
+      const ValueKey('subscription_remaining_profile-summary'),
+    );
+    final summary = find.byKey(
+      const ValueKey('subscription_summary_profile-summary'),
+    );
+    final updated = find.byKey(
+      const ValueKey('subscription_updated_profile-summary'),
+    );
+    await _pumpUntilFound(tester, updated);
+
+    final nameText = tester.widget<Text>(name);
+    final summaryText = tester.widget<Text>(summary).data!;
+    expect(nameText.maxLines, 1);
+    expect(nameText.overflow, TextOverflow.ellipsis);
+    expect(nameText.style?.fontSize, lessThan(20));
+    expect(
+      tester.getTopLeft(name).dy,
+      lessThan(tester.getTopLeft(remaining).dy),
+    );
+    expect(
+      tester.getTopLeft(remaining).dy,
+      lessThan(tester.getTopLeft(summary).dy),
+    );
+    expect(
+      tester.getTopLeft(summary).dy,
+      lessThan(tester.getTopLeft(updated).dy),
+    );
+    expect(summaryText, contains('1'));
+    expect(summaryText, contains('MB'));
+    expect(find.textContaining('Updated August 30, 2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('share menu exposes URL actions without raw JSON export', (
