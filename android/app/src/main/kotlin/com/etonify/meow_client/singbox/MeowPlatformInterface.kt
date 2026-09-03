@@ -96,25 +96,25 @@ abstract class MeowBasePlatformInterface(
             throw UnsupportedOperationException("connection owner lookup requires Android 10+")
         }
         val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        try {
-            val uid = connectivity.getConnectionOwnerUid(
+        val uid = try {
+            connectivity.getConnectionOwnerUid(
                 ipProtocol,
                 InetSocketAddress(sourceAddress ?: "", sourcePort),
                 InetSocketAddress(destinationAddress ?: "", destinationPort),
             )
-            if (uid == Process.INVALID_UID) {
-                error("android: connection owner not found")
-            }
-            val packages = context.packageManager.getPackagesForUid(uid)
-            val owner = ConnectionOwner()
-            owner.userId = uid
-            owner.userName = packages?.firstOrNull() ?: ""
-            owner.setAndroidPackageNames(SimpleStringIterator(packages.orEmpty().asIterable()))
-            return owner
         } catch (error: Exception) {
             MeowDiagnostics.log("MeowPlatform", "getConnectionOwnerUid failed", error)
             throw error
         }
+        if (uid == Process.INVALID_UID) {
+            error("android: connection owner not found")
+        }
+        val packages = context.packageManager.getPackagesForUid(uid)
+        val owner = ConnectionOwner()
+        owner.userId = uid
+        owner.userName = packages?.firstOrNull() ?: ""
+        owner.setAndroidPackageNames(SimpleStringIterator(packages.orEmpty().asIterable()))
+        return owner
     }
 
     override fun getInterfaces(): NetworkInterfaceIterator {
