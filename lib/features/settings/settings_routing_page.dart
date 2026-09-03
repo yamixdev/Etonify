@@ -4,7 +4,11 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/app/providers/app_dependency_providers.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
@@ -42,70 +46,18 @@ String _trafficRulePresetTitle(
   };
 }
 
-class SettingsRoutingPage extends StatefulWidget {
-  const SettingsRoutingPage({
-    super.key,
-    required this.currentBlockLeaks,
-    required this.currentAdBlockEnabled,
-    required this.currentAdBlockStatus,
-    required this.currentRussiaRouteDataStatus,
-    this.currentTrafficRulePreset = TrafficRulePreset.none,
-    required this.currentRussiaDnsDirectResolver,
-    required this.currentBypassLocalNetwork,
-    required this.currentVpnInboundEnabled,
-    required this.currentSplitRoutingMode,
-    required this.currentSplitRoutingPackages,
-    required this.initialInstalledApps,
-    required this.preloadInstalledApps,
-    required this.onBlockLeaksChanged,
-    required this.onAdBlockEnabledChanged,
-    required this.onDownloadAdBlockRuleSet,
-    required this.onDeleteAdBlockRuleSet,
-    required this.onRefreshRoutingRuleData,
-    this.onTrafficRulePresetChanged,
-    this.onPrepareTrafficRuleData,
-    required this.onRussiaDnsDirectResolverChanged,
-    required this.onBypassLocalNetworkChanged,
-    required this.onSplitRoutingModeChanged,
-    required this.onSplitRoutingPackagesChanged,
-  });
-
-  final bool currentBlockLeaks;
-  final bool currentAdBlockEnabled;
-  final AdBlockRuleSetStatus currentAdBlockStatus;
-  final RussiaRouteDataStatus currentRussiaRouteDataStatus;
-  final TrafficRulePreset currentTrafficRulePreset;
-  final String currentRussiaDnsDirectResolver;
-  final bool currentBypassLocalNetwork;
-  final bool currentVpnInboundEnabled;
-  final SplitRoutingMode currentSplitRoutingMode;
-  final List<String> currentSplitRoutingPackages;
-  final List<Map<String, dynamic>> initialInstalledApps;
-  final Future<List<Map<String, dynamic>>> Function() preloadInstalledApps;
-  final ValueChanged<bool> onBlockLeaksChanged;
-  final ValueChanged<bool> onAdBlockEnabledChanged;
-  final Future<AdBlockRuleSetStatus> Function() onDownloadAdBlockRuleSet;
-  final Future<AdBlockRuleSetStatus> Function() onDeleteAdBlockRuleSet;
-  final Future<RussiaRouteDataStatus> Function() onRefreshRoutingRuleData;
-  final ValueChanged<TrafficRulePreset>? onTrafficRulePresetChanged;
-  final Future<RussiaRouteDataStatus> Function(TrafficRulePreset preset)?
-  onPrepareTrafficRuleData;
-  final ValueChanged<String> onRussiaDnsDirectResolverChanged;
-  final ValueChanged<bool> onBypassLocalNetworkChanged;
-  final ValueChanged<SplitRoutingMode> onSplitRoutingModeChanged;
-  final ValueChanged<List<String>> onSplitRoutingPackagesChanged;
+class SettingsRoutingPage extends ConsumerStatefulWidget {
+  const SettingsRoutingPage({super.key});
 
   @override
-  State<SettingsRoutingPage> createState() => _SettingsRoutingPageState();
+  ConsumerState<SettingsRoutingPage> createState() =>
+      _SettingsRoutingPageState();
 }
 
-class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
-  late bool _blockLeaks;
-  late bool _adBlockEnabled;
-  late AdBlockRuleSetStatus _adBlockStatus;
-  late bool _bypassLocalNetwork;
-  late SplitRoutingMode _splitRoutingMode;
+class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
   late final TextEditingController _packagesController;
+  late final AppSettingsCommands _commands;
+  late final AdBlockRuleSetService _adBlockService;
   bool _adBlockBusy = false;
   AdBlockUpdateProgress? _adBlockProgress;
   bool _loadingInstalledApps = false;
@@ -116,19 +68,19 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   @override
   void initState() {
     super.initState();
-    _blockLeaks = widget.currentBlockLeaks;
-    _adBlockEnabled = widget.currentAdBlockEnabled;
-    _adBlockStatus = widget.currentAdBlockStatus;
-    _bypassLocalNetwork = widget.currentBypassLocalNetwork;
-    _splitRoutingMode = widget.currentSplitRoutingMode;
-    _packagesController = TextEditingController(
-      text: widget.currentSplitRoutingPackages.join('\n'),
+    _commands = ref.read(appSettingsCommandsProvider);
+    _adBlockService = ref.read(adBlockRuleSetServiceProvider);
+    final initialPackages = ref.read(
+      appSettingsProvider.select((s) => s.controller.splitRoutingPackages),
     );
-    final adBlockService = AdBlockRuleSetService.instance;
-    _adBlockBusy = adBlockService.isUpdating;
-    _adBlockProgress = adBlockService.progress.value;
-    adBlockService.progress.addListener(_handleAdBlockProgress);
-    _installedApps = widget.initialInstalledApps
+    _packagesController = TextEditingController(
+      text: initialPackages.join('\n'),
+    );
+    _adBlockBusy = _adBlockService.isUpdating;
+    _adBlockProgress = _adBlockService.progress.value;
+    _adBlockService.progress.addListener(_handleAdBlockProgress);
+    final initialApps = ref.read(installedAppsCacheProvider);
+    _installedApps = initialApps
         .map((item) => _InstalledApp.fromMap(item))
         .where((item) => item.packageName.isNotEmpty)
         .toList(growable: false);
@@ -144,22 +96,8 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   }
 
   @override
-  void didUpdateWidget(covariant SettingsRoutingPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_adBlockBusy &&
-        !identical(
-          oldWidget.currentAdBlockStatus,
-          widget.currentAdBlockStatus,
-        )) {
-      _adBlockStatus = widget.currentAdBlockStatus;
-    }
-  }
-
-  @override
   void dispose() {
-    AdBlockRuleSetService.instance.progress.removeListener(
-      _handleAdBlockProgress,
-    );
+    _adBlockService.progress.removeListener(_handleAdBlockProgress);
     _commitPackages();
     _packagesController.dispose();
     super.dispose();
@@ -167,11 +105,10 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
 
   void _handleAdBlockProgress() {
     if (!mounted) return;
-    final service = AdBlockRuleSetService.instance;
-    final busy = service.isUpdating;
+    final busy = _adBlockService.isUpdating;
     setState(() {
       _adBlockBusy = busy;
-      _adBlockProgress = service.progress.value;
+      _adBlockProgress = _adBlockService.progress.value;
     });
     if (!busy) {
       unawaited(_reloadAdBlockStatus());
@@ -179,9 +116,9 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   }
 
   Future<void> _reloadAdBlockStatus() async {
-    final status = await AdBlockRuleSetService.instance.loadStatus();
-    if (!mounted || AdBlockRuleSetService.instance.isUpdating) return;
-    setState(() => _adBlockStatus = status);
+    final status = await _adBlockService.loadStatus();
+    if (!mounted || _adBlockService.isUpdating) return;
+    ref.read(adBlockStatusProvider.notifier).update(status);
   }
 
   Future<bool> _loadInstalledApps() async {
@@ -196,7 +133,9 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
       _installedAppsError = null;
     });
     try {
-      final items = await widget.preloadInstalledApps();
+      final items = await ref
+          .read(appSettingsCommandsProvider)
+          .preloadInstalledApps();
       if (!mounted) {
         return false;
       }
@@ -229,7 +168,7 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
 
   void _commitPackages() {
     final packages = _selectedPackages();
-    widget.onSplitRoutingPackagesChanged(packages);
+    _commands.setSplitRoutingPackages(packages);
     final normalizedText = packages.join('\n');
     if (_packagesController.text.trim() != normalizedText) {
       _packagesController.text = normalizedText;
@@ -254,51 +193,55 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
   }
 
   Future<void> _openTrafficRules() async {
-    final onPresetChanged = widget.onTrafficRulePresetChanged;
-    if (onPresetChanged == null) {
-      return;
-    }
+    final commands = ref.read(appSettingsCommandsProvider);
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => TrafficRulesPage(
-          currentPreset: widget.currentTrafficRulePreset,
-          currentStatus: widget.currentRussiaRouteDataStatus,
-          currentRussiaDnsDirectResolver: widget.currentRussiaDnsDirectResolver,
-          onPrepareRuleData:
-              widget.onPrepareTrafficRuleData ??
-              (_) => widget.onRefreshRoutingRuleData(),
-          onPresetChanged: onPresetChanged,
-          onRussiaDnsDirectResolverChanged:
-              widget.onRussiaDnsDirectResolverChanged,
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final liveSettings = ref.watch(appSettingsProvider).controller;
+            final liveStatus = ref.watch(russiaRouteDataStatusProvider);
+            return TrafficRulesPage(
+              currentPreset: liveSettings.trafficRulePreset,
+              currentStatus: liveStatus,
+              currentRussiaDnsDirectResolver:
+                  liveSettings.russiaDnsDirectResolver,
+              onPrepareRuleData: commands.prepareTrafficRuleData,
+              onPresetChanged: commands.setTrafficRulePreset,
+              onRussiaDnsDirectResolverChanged:
+                  commands.setRussiaDnsDirectResolver,
+            );
+          },
         ),
       ),
     );
   }
 
   Future<void> _openRoutingRuleFiles() async {
+    final commands = ref.read(appSettingsCommandsProvider);
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => RoutingRuleFilesPage(
-          currentStatus: widget.currentRussiaRouteDataStatus,
-          onRefresh: widget.onRefreshRoutingRuleData,
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final liveStatus = ref.watch(russiaRouteDataStatusProvider);
+            return RoutingRuleFilesPage(
+              currentStatus: liveStatus,
+              onRefresh: commands.refreshRoutingRuleData,
+            );
+          },
         ),
       ),
     );
   }
 
   Future<void> _setAdBlock(bool value) async {
+    final commands = ref.read(appSettingsCommandsProvider);
+    final adBlockStatus = ref.read(adBlockStatusProvider);
     if (!value) {
-      setState(() {
-        _adBlockEnabled = false;
-      });
-      widget.onAdBlockEnabledChanged(false);
+      commands.setAdBlockEnabled(false);
       return;
     }
-    if (_adBlockStatus.available) {
-      setState(() {
-        _adBlockEnabled = true;
-      });
-      widget.onAdBlockEnabledChanged(true);
+    if (adBlockStatus.available) {
+      commands.setAdBlockEnabled(true);
       return;
     }
     await _downloadAdBlock(enableAfterDownload: true);
@@ -312,18 +255,14 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
       _adBlockBusy = true;
     });
     try {
-      final status = await widget.onDownloadAdBlockRuleSet();
+      final commands = ref.read(appSettingsCommandsProvider);
+      final status = await commands.downloadAdBlockRuleSet();
       if (!mounted) {
         return;
       }
-      setState(() {
-        _adBlockStatus = status;
-        if (enableAfterDownload && status.available) {
-          _adBlockEnabled = true;
-        }
-      });
+      ref.read(adBlockStatusProvider.notifier).update(status);
       if (enableAfterDownload && status.available) {
-        widget.onAdBlockEnabledChanged(true);
+        commands.setAdBlockEnabled(true);
       }
     } catch (error) {
       if (mounted) {
@@ -346,14 +285,13 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
       _adBlockBusy = true;
     });
     try {
-      final status = await widget.onDeleteAdBlockRuleSet();
+      final commands = ref.read(appSettingsCommandsProvider);
+      final status = await commands.deleteAdBlockRuleSet();
       if (!mounted) {
         return;
       }
-      setState(() {
-        _adBlockStatus = status;
-        _adBlockEnabled = false;
-      });
+      ref.read(adBlockStatusProvider.notifier).update(status);
+      commands.setAdBlockEnabled(false);
     } catch (error) {
       if (mounted) {
         _showOperationError(error);
@@ -404,10 +342,24 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
     final cs = theme.colorScheme;
     final isAndroid =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+    final settingsSnapshot = ref.watch(appSettingsProvider);
+    final settings = settingsSnapshot.controller;
+    final blockLeaks = settings.blockLeaks;
+    final bypassLocalNetwork = settings.bypassLocalNetwork;
+    final trafficRulePreset = settings.trafficRulePreset;
+    final vpnInboundEnabled = settings.vpnInboundEnabled;
+    final splitRoutingMode = settings.splitRoutingMode;
+    final adBlockEnabled = settings.adBlockEnabled;
+
+    final adBlockStatus = ref.watch(adBlockStatusProvider);
+    final russiaRouteDataStatus = ref.watch(russiaRouteDataStatusProvider);
+    final commands = ref.read(appSettingsCommandsProvider);
+
     final splitAvailable =
         !_splitRoutingTemporarilyDisabled &&
         isAndroid &&
-        widget.currentVpnInboundEnabled;
+        vpnInboundEnabled;
     final selectedPackages = _selectedPackages();
     final installedAppByPackage = <String, _InstalledApp>{
       for (final app in _installedApps) app.packageName: app,
@@ -452,13 +404,8 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                     ),
                     title: Text(l10n.blockLeaksTitle),
                     subtitle: Text(l10n.blockLeaksSubtitle),
-                    value: _blockLeaks,
-                    onChanged: (value) {
-                      setState(() {
-                        _blockLeaks = value;
-                      });
-                      widget.onBlockLeaksChanged(value);
-                    },
+                    value: blockLeaks,
+                    onChanged: commands.setBlockLeaks,
                   ),
                   SwitchListTile(
                     contentPadding: const EdgeInsets.symmetric(
@@ -471,13 +418,8 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                     ),
                     title: Text(l10n.bypassLocalNetworkTitle),
                     subtitle: Text(l10n.bypassLocalNetworkSubtitle),
-                    value: _bypassLocalNetwork,
-                    onChanged: (value) {
-                      setState(() {
-                        _bypassLocalNetwork = value;
-                      });
-                      widget.onBypassLocalNetworkChanged(value);
-                    },
+                    value: bypassLocalNetwork,
+                    onChanged: commands.setBypassLocalNetwork,
                   ),
                 ],
               ),
@@ -497,17 +439,12 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                 ),
                 title: Text(l10n.trafficRulesSettingsTitle),
                 subtitle: Text(
-                  widget.currentTrafficRulePreset == TrafficRulePreset.none
+                  trafficRulePreset == TrafficRulePreset.none
                       ? l10n.trafficRulesNone
-                      : _trafficRulePresetTitle(
-                          l10n,
-                          widget.currentTrafficRulePreset,
-                        ),
+                      : _trafficRulePresetTitle(l10n, trafficRulePreset),
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: widget.onTrafficRulePresetChanged == null
-                    ? null
-                    : _openTrafficRules,
+                onTap: _openTrafficRules,
               ),
             ),
             const Gap(settingsIslandGap),
@@ -525,10 +462,9 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                 ),
                 title: Text(l10n.routingRuleFilesSettingsTitle),
                 subtitle: Text(
-                  widget.currentRussiaRouteDataStatus.available
+                  russiaRouteDataStatus.available
                       ? l10n.routingRuleFilesSettingsReady(
-                          widget
-                              .currentRussiaRouteDataStatus
+                          russiaRouteDataStatus
                               .verifiedFiles
                               .length,
                         )
@@ -578,7 +514,7 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                     ),
                     const Gap(16),
                     _AdBlockStatusPanel(
-                      status: _adBlockStatus,
+                      status: adBlockStatus,
                       busy: _adBlockBusy,
                       progress: _adBlockProgress,
                       l10n: l10n,
@@ -600,18 +536,18 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                                     ),
                                   )
                                 : Icon(
-                                    _adBlockStatus.available
+                                    adBlockStatus.available
                                         ? Icons.refresh_rounded
                                         : Icons.download_rounded,
                                   ),
                             label: Text(
-                              _adBlockStatus.available
+                              adBlockStatus.available
                                   ? l10n.adBlockUpdateAction
                                   : l10n.adBlockDownloadAction,
                             ),
                           ),
                         ),
-                        if (_adBlockStatus.available) ...[
+                        if (adBlockStatus.available) ...[
                           const Gap(10),
                           OutlinedButton(
                             onPressed: _adBlockBusy ? null : _deleteAdBlock,
@@ -624,10 +560,10 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                     _CompactSwitchRow(
                       icon: Icons.shield_moon_rounded,
                       title: l10n.adBlockEnableTitle,
-                      subtitle: _adBlockStatus.available
+                      subtitle: adBlockStatus.available
                           ? l10n.adBlockEnabledSubtitle
                           : l10n.adBlockMissingSubtitle,
-                      value: _adBlockEnabled,
+                      value: adBlockEnabled,
                       onChanged: _adBlockBusy ? null : _setAdBlock,
                     ),
                   ],
@@ -668,7 +604,7 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                                 ),
                               ),
                               if (!_splitRoutingTemporarilyDisabled &&
-                                  !widget.currentVpnInboundEnabled) ...[
+                                  !vpnInboundEnabled) ...[
                                 const Gap(8),
                                 _InlineWarning(text: l10n.splitRoutingTunOnly),
                               ],
@@ -704,19 +640,13 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                               title: l10n.splitRoutingModeDisabled,
                               subtitle: l10n.splitRoutingModeDisabledSubtitle,
                               selected:
-                                  _splitRoutingMode ==
+                                  splitRoutingMode ==
                                   SplitRoutingMode.disabled,
                               onTap: _splitRoutingTemporarilyDisabled
                                   ? null
-                                  : () {
-                                      setState(() {
-                                        _splitRoutingMode =
-                                            SplitRoutingMode.disabled;
-                                      });
-                                      widget.onSplitRoutingModeChanged(
+                                  : () => commands.setSplitRoutingMode(
                                         SplitRoutingMode.disabled,
-                                      );
-                                    },
+                                      ),
                             ),
                             const Gap(10),
                             _RoutingModeCard(
@@ -725,18 +655,12 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                               subtitle:
                                   l10n.splitRoutingModeProxySelectedSubtitle,
                               selected:
-                                  _splitRoutingMode ==
+                                  splitRoutingMode ==
                                   SplitRoutingMode.proxySelected,
                               onTap: splitAvailable
-                                  ? () {
-                                      setState(() {
-                                        _splitRoutingMode =
-                                            SplitRoutingMode.proxySelected;
-                                      });
-                                      widget.onSplitRoutingModeChanged(
+                                  ? () => commands.setSplitRoutingMode(
                                         SplitRoutingMode.proxySelected,
-                                      );
-                                    }
+                                      )
                                   : null,
                             ),
                             const Gap(10),
@@ -746,28 +670,22 @@ class _SettingsRoutingPageState extends State<SettingsRoutingPage> {
                               subtitle:
                                   l10n.splitRoutingModeBypassSelectedSubtitle,
                               selected:
-                                  _splitRoutingMode ==
+                                  splitRoutingMode ==
                                   SplitRoutingMode.bypassSelected,
                               onTap: splitAvailable
-                                  ? () {
-                                      setState(() {
-                                        _splitRoutingMode =
-                                            SplitRoutingMode.bypassSelected;
-                                      });
-                                      widget.onSplitRoutingModeChanged(
+                                  ? () => commands.setSplitRoutingMode(
                                         SplitRoutingMode.bypassSelected,
-                                      );
-                                    }
+                                      )
                                   : null,
                             ),
-                            if (_splitRoutingMode ==
+                            if (splitRoutingMode ==
                                 SplitRoutingMode.bypassSelected) ...[
                               const Gap(10),
                               _InlineWarning(
                                 text: l10n.splitRoutingLockdownWarning,
                               ),
                             ],
-                            if (_splitRoutingMode !=
+                            if (splitRoutingMode !=
                                 SplitRoutingMode.disabled) ...[
                               const Gap(18),
                               Row(

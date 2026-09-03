@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/app/app_settings_controller.dart';
+import 'package:meow_client/app/providers/app_dependency_providers.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
@@ -153,41 +158,55 @@ Future<void> _pumpPage(
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
   addTearDown(() => tester.binding.setSurfaceSize(null));
+
+  final controller = AppSettingsController()
+    ..blockLeaks = true
+    ..adBlockEnabled = false
+    ..trafficRulePreset = TrafficRulePreset.none
+    ..russiaDnsDirectResolver = 'udp://77.88.8.8'
+    ..bypassLocalNetwork = true
+    ..vpnInboundEnabled = true
+    ..splitRoutingMode = splitRoutingMode
+    ..splitRoutingPackages = splitRoutingPackages;
+
+  final commands = AppSettingsCommands();
+  commands.bindRoutingHandlers(
+    setBlockLeaks: (_) {},
+    setAdBlockEnabled: (_) {},
+    downloadAdBlockRuleSet: () async => const AdBlockRuleSetStatus.unavailable(),
+    deleteAdBlockRuleSet: () async => const AdBlockRuleSetStatus.unavailable(),
+    refreshRoutingRuleData: () async => routeStatus,
+    setTrafficRulePreset: (_) {},
+    prepareTrafficRuleData: (_) async => routeStatus,
+    setRussiaDnsDirectResolver: (_) {},
+    setBypassLocalNetwork: (_) {},
+    setSplitRoutingMode: (_) {},
+    setSplitRoutingPackages: onSplitRoutingPackagesChanged ?? (_) {},
+    preloadInstalledApps: () async => installedApps,
+  );
+
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('ru'),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+    ProviderScope(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(controller),
+        appSettingsCommandsProvider.overrideWithValue(commands),
+        russiaRouteDataStatusProvider.overrideWith(
+          () => RussiaRouteDataStatusNotifier(routeStatus),
+        ),
+        installedAppsCacheProvider.overrideWith(
+          () => InstalledAppsCacheNotifier(installedApps),
+        ),
       ],
-      home: SettingsRoutingPage(
-        currentBlockLeaks: true,
-        currentAdBlockEnabled: false,
-        currentAdBlockStatus: const AdBlockRuleSetStatus.unavailable(),
-        currentRussiaRouteDataStatus: routeStatus,
-        currentTrafficRulePreset: TrafficRulePreset.none,
-        currentRussiaDnsDirectResolver: 'udp://77.88.8.8',
-        currentBypassLocalNetwork: true,
-        currentVpnInboundEnabled: true,
-        currentSplitRoutingMode: splitRoutingMode,
-        currentSplitRoutingPackages: splitRoutingPackages,
-        initialInstalledApps: installedApps,
-        preloadInstalledApps: () async => installedApps,
-        onBlockLeaksChanged: (_) {},
-        onAdBlockEnabledChanged: (_) {},
-        onDownloadAdBlockRuleSet: () async =>
-            const AdBlockRuleSetStatus.unavailable(),
-        onDeleteAdBlockRuleSet: () async =>
-            const AdBlockRuleSetStatus.unavailable(),
-        onRefreshRoutingRuleData: () async => routeStatus,
-        onTrafficRulePresetChanged: (_) {},
-        onRussiaDnsDirectResolverChanged: (_) {},
-        onBypassLocalNetworkChanged: (_) {},
-        onSplitRoutingModeChanged: (_) {},
-        onSplitRoutingPackagesChanged: onSplitRoutingPackagesChanged ?? (_) {},
+      child: const MaterialApp(
+        locale: Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SettingsRoutingPage(),
       ),
     ),
   );

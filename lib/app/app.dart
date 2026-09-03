@@ -21,6 +21,7 @@ import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/app/providers/proxy_runtime_providers.dart';
 import 'package:meow_client/app/providers/subscription_catalog_provider.dart';
@@ -157,6 +158,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final AppUpdateService _appUpdateService;
   late final RussiaRouteDataService _russiaRouteDataService;
   late final VpnLifecycleCommands _vpnLifecycleCommands;
+  late final AppSettingsCommands _appSettingsCommands;
   int _locationLookupActiveRequests = 0;
   int _locationLookupGeneration = 0;
   bool _locationLookupRefreshRequested = false;
@@ -1971,6 +1973,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _appUpdateService = ref.read(appUpdateServiceProvider);
     _russiaRouteDataService = ref.read(russiaRouteDataServiceProvider);
     _vpnLifecycleCommands = ref.read(vpnLifecycleCommandsProvider);
+    _appSettingsCommands = ref.read(appSettingsCommandsProvider);
+    _appSettingsCommands.bindRoutingHandlers(
+      setBlockLeaks: _setBlockLeaks,
+      setAdBlockEnabled: _setAdBlockEnabled,
+      downloadAdBlockRuleSet: _downloadAdBlockRuleSet,
+      deleteAdBlockRuleSet: _deleteAdBlockRuleSet,
+      refreshRoutingRuleData: _installRussiaRouteData,
+      setTrafficRulePreset: _setTrafficRulePreset,
+      prepareTrafficRuleData: _prepareTrafficRuleData,
+      setRussiaDnsDirectResolver: _setRussiaDnsDirectResolver,
+      setBypassLocalNetwork: _setBypassLocalNetwork,
+      setSplitRoutingMode: _setSplitRoutingMode,
+      setSplitRoutingPackages: _setSplitRoutingPackages,
+      preloadInstalledApps: _warmInstalledApps,
+    );
     _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
       runtime: ref.read(subscriptionRuntimeControllerProvider),
@@ -2010,8 +2027,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       },
       timeoutSeconds: () => _urlTestTimeoutSeconds,
       concurrency: () => _urlTestConcurrency,
-      canRunDiagnostics: () => _runtimeOperations.diagnosticsReady,
-      operationGeneration: () => _runtimeOperations.diagnosticGeneration,
+      canRunDiagnostics: () => _runtimeOperations.urlTestReady,
+      operationGeneration: () => _runtimeOperations.urlTestGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
       onSessionChanged: (running, kind, targetTag) {
@@ -2083,6 +2100,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   void dispose() {
     _vpnLifecycleCommands.unbind();
+    _appSettingsCommands.unbindRoutingHandlers();
     WidgetsBinding.instance.removeObserver(this);
     _subscriptionAutoRefreshTimer?.cancel();
     _latencyCoordinator.dispose();
@@ -2761,7 +2779,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _showAppSnackBar(l10n.subscriptionHwidEnabledAndUpdated);
     if (SubscriptionStore.likelyRequiresHwidEnable(updated)) {
-      _offerLikelyHwidFix(updated);
+      unawaited(_offerLikelyHwidFix(updated));
     }
   }
 
@@ -2853,6 +2871,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
           );
       _adBlockStatus = adBlockStatus;
       _russiaRouteDataStatus = russiaRouteDataStatus;
+      ref.read(adBlockStatusProvider.notifier).update(adBlockStatus);
+      ref.read(russiaRouteDataStatusProvider.notifier).update(russiaRouteDataStatus);
       _setConnectionPhase(AppConnectionPhase.idle);
       _refreshThemeCache();
       _applyMetadataActiveProfile(
@@ -2946,6 +2966,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     setState(() {
       _adBlockStatus = statuses.adBlockStatus;
       _russiaRouteDataStatus = statuses.russiaRouteDataStatus;
+      ref.read(adBlockStatusProvider.notifier).update(statuses.adBlockStatus);
+      ref.read(russiaRouteDataStatusProvider.notifier).update(statuses.russiaRouteDataStatus);
     });
   }
 
@@ -3637,6 +3659,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _cancelAutomaticRuntimeRecovery('stop:$reason');
     _cancelManualRuntimeStart('stop:$reason');
     _runtimeIntent.beginExplicitStop();
+    _groupUrlTestScheduler.cancel();
+    _activeProxyIpController.cancelPending();
+    _networkRecovery.cancelDecision();
+    await _latencyCoordinator.cancelAndWait(
+      maxWait: const Duration(seconds: 2),
+    );
     if (mounted) {
       setState(() {
         _setConnectionPhase(AppConnectionPhase.stopping);
@@ -3659,8 +3687,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
 
     final startAfterStop = _runtimeIntent.completeSuccessfulStop();
-    _latencyCoordinator.cancel();
-    _groupUrlTestScheduler.cancel();
     setState(() {
       _setConnectionPhase(AppConnectionPhase.idle);
       _resetActiveProxyIpState();
@@ -3680,7 +3706,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _invalidatedLatencyTags.clear();
       _latencyErrors.clear();
       _latencyFailureCounts.clear();
-      _networkRecovery.cancelDecision();
       _applyRuntimeStateToDerivedCaches();
     });
     unawaited(_syncQuickSettingsTileLabel());
@@ -4930,11 +4955,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
         .then((items) {
           if (generation == _installedAppsCacheGeneration) {
             _installedAppsCache = items;
+            ref.read(installedAppsCacheProvider.notifier).update(items);
           }
           _installedAppsWarmupFuture = null;
           return items;
         })
-        .catchError((error) {
+        .catchError((Object error) {
           _installedAppsWarmupFuture = null;
           throw error;
         });
@@ -4946,6 +4972,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _installedAppsCacheGeneration++;
     _installedAppsWarmupFuture = null;
     _installedAppsCache = const <Map<String, dynamic>>[];
+    ref
+        .read(installedAppsCacheProvider.notifier)
+        .update(const <Map<String, dynamic>>[]);
     clearInstalledAppIconCache();
   }
 
@@ -5224,6 +5253,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     setState(() {
       _adBlockStatus = status;
+      ref.read(adBlockStatusProvider.notifier).update(status);
     });
     if (affectsActiveRuntime) {
       await _configCoordinator.emitCurrentConfigLogAsync(
@@ -5244,6 +5274,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     setState(() {
       _adBlockStatus = status;
+      ref.read(adBlockStatusProvider.notifier).update(status);
       if (!status.available) {
         _adBlockEnabled = false;
       }
@@ -5275,6 +5306,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     setState(() {
       _russiaRouteDataStatus = status;
+      ref.read(russiaRouteDataStatusProvider.notifier).update(status);
     });
     if (affectsActiveRuntime) {
       await _configCoordinator.emitCurrentConfigLogAsync(
@@ -5306,7 +5338,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!mounted) {
       return status;
     }
-    setState(() => _russiaRouteDataStatus = status);
+    setState(() {
+      _russiaRouteDataStatus = status;
+      ref.read(russiaRouteDataStatusProvider.notifier).update(status);
+    });
     if (affectsActiveRuntime) {
       await _configCoordinator.emitCurrentConfigLogAsync(
         'traffic rule data prepared',
@@ -5419,31 +5454,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     try {
       await navigator.push(
         MaterialPageRoute<void>(
-          builder: (context) => SettingsRoutingPage(
-            currentBlockLeaks: _blockLeaks,
-            currentAdBlockEnabled: _adBlockEnabled,
-            currentAdBlockStatus: _adBlockStatus,
-            currentRussiaRouteDataStatus: _russiaRouteDataStatus,
-            currentTrafficRulePreset: _trafficRulePreset,
-            currentRussiaDnsDirectResolver: _russiaDnsDirectResolver,
-            currentBypassLocalNetwork: _bypassLocalNetwork,
-            currentVpnInboundEnabled: _vpnInboundEnabled,
-            currentSplitRoutingMode: _splitRoutingMode,
-            currentSplitRoutingPackages: _splitRoutingPackages,
-            initialInstalledApps: _installedAppsCache,
-            preloadInstalledApps: _warmInstalledApps,
-            onBlockLeaksChanged: _setBlockLeaks,
-            onAdBlockEnabledChanged: _setAdBlockEnabled,
-            onDownloadAdBlockRuleSet: _downloadAdBlockRuleSet,
-            onDeleteAdBlockRuleSet: _deleteAdBlockRuleSet,
-            onRefreshRoutingRuleData: _installRussiaRouteData,
-            onTrafficRulePresetChanged: _setTrafficRulePreset,
-            onRussiaDnsDirectResolverChanged: _setRussiaDnsDirectResolver,
-            onPrepareTrafficRuleData: _prepareTrafficRuleData,
-            onBypassLocalNetworkChanged: _setBypassLocalNetwork,
-            onSplitRoutingModeChanged: _setSplitRoutingMode,
-            onSplitRoutingPackagesChanged: _setSplitRoutingPackages,
-          ),
+          builder: (context) => const SettingsRoutingPage(),
         ),
       );
     } finally {
@@ -6709,7 +6720,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
             status == ProxyRuntimeController.urlTestStatusUnavailable ||
             error.isNotEmpty;
         if (terminalResult) {
-          _latencyCoordinator.handleGroupEvent(tag: tag, timeSeconds: time);
+          _latencyCoordinator.handleGroupEvent(
+            tag: tag,
+            timeSeconds: time,
+            available:
+                delay > 0 &&
+                status != ProxyRuntimeController.urlTestStatusUnavailable &&
+                error.isEmpty,
+          );
         }
       }
     }

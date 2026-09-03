@@ -6,7 +6,7 @@ import 'package:meow_client/data/update/app_update_channel.dart';
 const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
 const int appSettingsStandardUrlTestIntervalSeconds = 1800;
-const int appSettingsStandardUrlTestConcurrency = 8;
+const int appSettingsStandardUrlTestConcurrency = 4;
 const int appSettingsStandardUrlTestUnavailableCheckIntervalSeconds = 120;
 const int appSettingsStandardLocationLookupLimit = 1;
 const int appSettingsStandardLocationLookupConcurrency = 1;
@@ -88,7 +88,7 @@ class AppSettingsController {
   String localeCode = 'system';
   AppThemePreference themePreference = AppThemePreference.system;
   String accentColorHex = 'default';
-  bool memoryLimitEnabled = true;
+  bool memoryLimitEnabled = false;
   bool memoryLimitWarningDismissed = false;
   AppUpdateInstallMode updateInstallMode = AppUpdateInstallMode.ask;
   AppUpdateChannel updateChannel = AppUpdateChannel.stable;
