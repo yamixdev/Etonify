@@ -4,9 +4,8 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:jni/jni.dart';
-import 'package:jni_flutter/jni_flutter.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
+import 'package:meow_client/core/platform/android_files_dir.dart';
 
 enum AdBlockUpdateStage {
   connecting,
@@ -319,7 +318,7 @@ class AdBlockRuleSetService {
 
   Future<_AdBlockStoragePaths> _storagePaths() async {
     final baseDirPath = Platform.isAndroid
-        ? _androidFilesDirPath()
+        ? AndroidFilesDir.path
         : Directory.systemTemp.path;
     final base = Directory('$baseDirPath/adblock');
     return _AdBlockStoragePaths(
@@ -328,31 +327,6 @@ class AdBlockRuleSetService {
       allowRuleSetPath: '${base.path}/adguard_dns_allow.srs',
       metadataPath: '${base.path}/adguard_dns_meta.json',
     );
-  }
-
-  String _androidFilesDirPath() {
-    final context = androidApplicationContext;
-    final contextClass = context.jClass;
-    final getFilesDir = contextClass.instanceMethodId(
-      'getFilesDir',
-      '()Ljava/io/File;',
-    );
-    final filesDir = getFilesDir.call(context, JObject.type, []);
-    final fileClass = filesDir.jClass;
-    final getAbsolutePath = fileClass.instanceMethodId(
-      'getAbsolutePath',
-      '()Ljava/lang/String;',
-    );
-    final path = getAbsolutePath
-        .call(filesDir, JString.type, [])
-        .toDartString(releaseOriginal: true);
-
-    fileClass.release();
-    filesDir.release();
-    contextClass.release();
-    context.release();
-
-    return path;
   }
 }
 

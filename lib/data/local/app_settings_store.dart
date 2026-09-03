@@ -1,8 +1,7 @@
 import 'dart:io' show InternetAddress, InternetAddressType, Platform;
 import 'dart:math';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-import 'package:jni/jni.dart';
-import 'package:jni_flutter/jni_flutter.dart';
+import 'package:meow_client/core/platform/android_files_dir.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
@@ -159,7 +158,7 @@ class AppSettingsState {
     required this.hideServerIp,
     required this.progressiveBlurEnabled,
     this.progressiveBlurConfigured = false,
-    this.memoryLimitEnabled = true,
+    this.memoryLimitEnabled = false,
     this.memoryLimitWarningDismissed = false,
     this.updateInstallMode = AppUpdateInstallMode.ask,
     this.updateChannel = AppUpdateChannel.stable,
@@ -632,12 +631,13 @@ abstract class AppSettingsStore {
                 2)
             .clamp(1, 10)
             .toInt();
-    const defaultUrlTestConcurrency = 8;
+    const defaultUrlTestConcurrency = 4;
+    const maximumUrlTestConcurrency = 8;
     final normalizedUrlTestConcurrency =
         ((legacyEconomy && urlTestConcurrency == 4)
                 ? defaultUrlTestConcurrency
                 : urlTestConcurrency ?? defaultUrlTestConcurrency)
-            .clamp(1, defaultUrlTestConcurrency);
+            .clamp(1, maximumUrlTestConcurrency);
     const defaultUnavailableCheckInterval = 120;
     final locationLookupConcurrency = int.tryParse(
       map[_locationLookupConcurrencyKey]?.toString() ?? '',
@@ -658,8 +658,8 @@ abstract class AppSettingsStore {
       acceptedLegalAtMillis: int.tryParse(
         map[_acceptedLegalAtMillisKey]?.toString() ?? '',
       ),
-      activeProfileId: map[_activeProfileIdKey] ?? '',
-      selectedProxyTag: map[_selectedProxyTagKey] ?? '',
+      activeProfileId: map[_activeProfileIdKey]?.toString() ?? '',
+      selectedProxyTag: map[_selectedProxyTagKey]?.toString() ?? '',
       proxySort: switch (map[_proxySortKey]?.toString()) {
         'latency' => 'latency',
         'working' => 'working',
@@ -667,7 +667,7 @@ abstract class AppSettingsStore {
         'country' => 'country',
         _ => 'source',
       },
-      localeCode: map[_localeCodeKey] ?? 'system',
+      localeCode: map[_localeCodeKey]?.toString() ?? 'system',
       themePreference: switch (map[_themePreferenceKey]) {
         'system' => AppThemePreference.system,
         'dark' => AppThemePreference.dark,
@@ -675,7 +675,7 @@ abstract class AppSettingsStore {
         'amoled' => AppThemePreference.amoled,
         _ => AppThemePreference.system,
       },
-      accentColorHex: map[_accentColorHexKey] ?? 'default',
+      accentColorHex: map[_accentColorHexKey]?.toString() ?? 'default',
       hapticEnabled: boolValue(_hapticEnabledKey, defaultValue: true),
       statusNotificationEnabled: boolValue(
         _statusNotificationEnabledKey,
@@ -694,7 +694,7 @@ abstract class AppSettingsStore {
         defaultValue: false,
       ),
       progressiveBlurConfigured: map.containsKey(_progressiveBlurEnabledKey),
-      memoryLimitEnabled: boolValue(_memoryLimitEnabledKey, defaultValue: true),
+      memoryLimitEnabled: boolValue(_memoryLimitEnabledKey, defaultValue: false),
       memoryLimitWarningDismissed: boolValue(
         _memoryLimitWarningDismissedKey,
         defaultValue: false,
@@ -966,36 +966,11 @@ class HiveAppSettingsStore extends AppSettingsStore {
   final Box<dynamic> _box;
   static bool _hiveInitialized = false;
 
-  static String _androidFilesDirPath() {
-    final context = androidApplicationContext;
-    final contextClass = context.jClass;
-    final getFilesDir = contextClass.instanceMethodId(
-      'getFilesDir',
-      '()Ljava/io/File;',
-    );
-    final filesDir = getFilesDir.call(context, JObject.type, []);
-    final fileClass = filesDir.jClass;
-    final getAbsolutePath = fileClass.instanceMethodId(
-      'getAbsolutePath',
-      '()Ljava/lang/String;',
-    );
-    final path = getAbsolutePath
-        .call(filesDir, JString.type, [])
-        .toDartString(releaseOriginal: true);
-
-    fileClass.release();
-    filesDir.release();
-    contextClass.release();
-    context.release();
-
-    return path;
-  }
-
   /// Call once before [open], ideally in main() before runApp.
   static Future<void> initHive() async {
     if (_hiveInitialized) return;
     if (Platform.isAndroid) {
-      final filesDir = _androidFilesDirPath();
+      final filesDir = AndroidFilesDir.path;
       Hive.init('$filesDir/meow_hive');
     } else {
       await Hive.initFlutter('meow_hive');
@@ -1126,7 +1101,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             hideServerIp: false,
             progressiveBlurEnabled: false,
             progressiveBlurConfigured: false,
-            memoryLimitEnabled: true,
+            memoryLimitEnabled: false,
             memoryLimitWarningDismissed: false,
             updateInstallMode: AppUpdateInstallMode.ask,
             vpnInboundEnabled: true,
@@ -1146,7 +1121,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             urlTestUrl: defaultUrlTestUrl,
             urlTestIntervalSeconds: 1800,
             urlTestTimeoutSeconds: 15,
-            urlTestConcurrency: 8,
+            urlTestConcurrency: 4,
             urlTestUnavailableCheckIntervalSeconds: 120,
             locationLookupLimit: 2,
             locationLookupTimeoutSeconds: 3,

@@ -9,14 +9,14 @@ void main() {
 
     expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
-    expect(state.urlTestConcurrency, 8);
+    expect(state.urlTestConcurrency, 4);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(state.urlTestUrl, defaultUrlTestUrl);
     expect(state.locationLookupLimit, 1);
     expect(state.locationLookupTimeoutSeconds, 3);
     expect(state.locationLookupConcurrency, 1);
     expect(state.russiaDnsDirectResolver, defaultRussiaDnsDirectResolver);
-    expect(state.memoryLimitEnabled, isTrue);
+    expect(state.memoryLimitEnabled, isFalse);
     expect(state.memoryLimitWarningDismissed, isFalse);
     expect(state.statusNotificationEnabled, isTrue);
     expect(
@@ -145,7 +145,7 @@ void main() {
 
     expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
-    expect(state.urlTestConcurrency, 8);
+    expect(state.urlTestConcurrency, 4);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(state.locationLookupLimit, 1);
     expect(state.locationLookupTimeoutSeconds, 3);
@@ -165,7 +165,7 @@ void main() {
     });
     expect(standard.urlTestIntervalSeconds, 1800);
     expect(standard.urlTestTimeoutSeconds, 15);
-    expect(standard.urlTestConcurrency, 8);
+    expect(standard.urlTestConcurrency, 4);
     expect(standard.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(standard.locationLookupConcurrency, 1);
 
@@ -188,7 +188,7 @@ void main() {
     });
     expect(economy.urlTestIntervalSeconds, 1800);
     expect(economy.urlTestTimeoutSeconds, 15);
-    expect(economy.urlTestConcurrency, 8);
+    expect(economy.urlTestConcurrency, 4);
     expect(economy.urlTestUnavailableCheckIntervalSeconds, 120);
   });
 
