@@ -42,7 +42,7 @@ class MeowBoxService(
         const val EXTRA_STOP_REASON = "stop_reason"
         private const val NOTIFICATION_ID = 42
         private const val COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS = 1_000L
-        private const val NATIVE_SERVICE_CLOSE_TIMEOUT_MS = 4_000L
+        private const val NATIVE_SERVICE_CLOSE_TIMEOUT_MS = 6_000L
         private const val COMMAND_SERVER_CLOSE_TIMEOUT_MS = 1_000L
         private const val TERMINAL_FORCE_STOP_DELAY_MS = 500L
         private const val NETWORK_WAIT_TIMEOUT_MS = 2_500L

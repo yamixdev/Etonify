@@ -46,7 +46,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
                 MeowApplication.clearRuntimeIntent()
                 MeowVpnService.cancelScheduledRestart(applicationContext, "notification_stop")
                 MeowBoxService.requestStopAll("notification_stop")
-                SingboxController.awaitStopped(4_000L) { stopped ->
+                SingboxController.awaitStopped(8_000L) { stopped ->
                     if (stopped) {
                         clearStaleNotification(applicationContext, "notification_stop_confirmed")
                     } else {
