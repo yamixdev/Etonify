@@ -746,7 +746,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       return;
     }
     if (widget.hapticEnabled) {
-      HapticFeedback.selectionClick();
+      unawaited(HapticFeedback.selectionClick());
     }
     setState(() {
       _groupSheetOpen = true;
@@ -806,7 +806,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       return;
     }
     if (widget.hapticEnabled) {
-      HapticFeedback.selectionClick();
+      unawaited(HapticFeedback.selectionClick());
     }
     await showModalBottomSheet<void>(
       context: context,

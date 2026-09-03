@@ -189,7 +189,7 @@ Endpoint = wg.example.com:51820
 
       await SubscriptionStore.save(subscription);
 
-      final stored = Hive.box(
+      final stored = Hive.box<dynamic>(
         'subscription_payloads_secure_v1',
       ).get(subscription.id);
       expect(stored, isA<String>());

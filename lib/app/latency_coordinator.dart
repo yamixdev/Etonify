@@ -91,7 +91,7 @@ class LatencyCoordinator {
   static const _defaultTimeoutMillis = 15000;
   static const _minimumTimeoutMillis = 500;
   static const _maximumTimeoutMillis = 30000;
-  static const _defaultConcurrency = 8;
+  static const _defaultConcurrency = 4;
   static const _maximumConcurrency = 16;
   static const _maximumDeadlineMillis = 120000;
 
@@ -129,9 +129,9 @@ class LatencyCoordinator {
   Map<String, int> _baselineEventTimes = const <String, int>{};
   Set<String> _sessionExpectedTags = const <String>{};
   final Map<String, int> _acceptedEventTimes = <String, int>{};
+  final Set<String> _successfulTags = <String>{};
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
-  bool _rpcAccepted = false;
 
   bool get isRunning =>
       _phase == LatencySessionPhase.startingRpc ||
@@ -211,7 +211,11 @@ class LatencyCoordinator {
   /// Records one timestamped result from the command client's group stream.
   /// Cached snapshots from before this session and duplicate events are
   /// ignored, so they cannot keep the progress UI alive indefinitely.
-  bool handleGroupEvent({required String tag, required int timeSeconds}) {
+  bool handleGroupEvent({
+    required String tag,
+    required int timeSeconds,
+    required bool available,
+  }) {
     final normalizedTag = tag.trim();
     if (!isRunning || normalizedTag.isEmpty || timeSeconds <= 0) {
       return false;
@@ -229,19 +233,30 @@ class LatencyCoordinator {
       return false;
     }
     _acceptedEventTimes[normalizedTag] = timeSeconds;
+    if (available) {
+      _successfulTags.add(normalizedTag);
+    } else {
+      _successfulTags.remove(normalizedTag);
+    }
     _phase = LatencySessionPhase.collectingEvents;
     _firstEventTimer?.cancel();
     _firstEventTimer = null;
     if (_sessionExpectedTags.isNotEmpty &&
         _sessionExpectedTags.every(_acceptedEventTimes.containsKey)) {
-      _settleCurrent(success: true, reason: 'all_expected_results');
+      _settleCurrent(
+        success: _successfulTags.isNotEmpty,
+        reason: 'all_expected_results',
+      );
       return true;
     }
     _settleTimer?.cancel();
     final generation = _generation;
     _settleTimer = Timer(uiPolicy.eventInactivityTimeout, () {
       if (generation != _generation) return;
-      _settleCurrent(success: true, reason: 'event_stream_settled');
+      _settleCurrent(
+        success: _successfulTags.isNotEmpty,
+        reason: 'event_stream_settled',
+      );
     });
     return true;
   }
@@ -258,6 +273,7 @@ class LatencyCoordinator {
     _baselineEventTimes = const <String, int>{};
     _sessionExpectedTags = const <String>{};
     _acceptedEventTimes.clear();
+    _successfulTags.clear();
     final result = _sessionResult;
     _sessionResult = null;
     if (result != null && !result.isCompleted) {
@@ -369,7 +385,7 @@ class LatencyCoordinator {
               .where((tag) => tag.isNotEmpty)
               .toSet();
     _acceptedEventTimes.clear();
-    _rpcAccepted = false;
+    _successfulTags.clear();
     _phase = LatencySessionPhase.startingRpc;
     _kind = kind;
     _targetTag = targetTag;
@@ -388,7 +404,7 @@ class LatencyCoordinator {
     _watchdogTimer = Timer(uiPolicy.hardWatchdog, () {
       if (generation != _generation) return;
       _settleCurrent(
-        success: _rpcAccepted || _acceptedEventTimes.isNotEmpty,
+        success: _successfulTags.isNotEmpty,
         reason: 'hard_watchdog',
       );
     });
@@ -434,7 +450,6 @@ class LatencyCoordinator {
         _settleCurrent(success: false, reason: 'stale_runtime');
         return;
       }
-      _rpcAccepted = true;
       _phase = LatencySessionPhase.collectingEvents;
       if (_acceptedEventTimes.isNotEmpty) {
         return;
@@ -485,6 +500,7 @@ class LatencyCoordinator {
     final receivedCount = _acceptedEventTimes.keys
         .where(_sessionExpectedTags.contains)
         .length;
+    final successfulCount = _successfulTags.length;
     _cancelSessionTimers();
     _phase = LatencySessionPhase.settled;
     _kind = null;
@@ -492,6 +508,7 @@ class LatencyCoordinator {
     _baselineEventTimes = const <String, int>{};
     _sessionExpectedTags = const <String>{};
     _acceptedEventTimes.clear();
+    _successfulTags.clear();
     _sessionResult = null;
     _onSessionChanged(false, previousKind, previousTarget);
     if (result != null && !result.isCompleted) {
@@ -501,7 +518,8 @@ class LatencyCoordinator {
       'latency',
       'latency session settled kind=${previousKind?.name ?? 'unknown'} '
           'reason=$reason success=$success '
-          'received=$receivedCount expected=$expectedCount',
+          'received=$receivedCount successful=$successfulCount '
+          'expected=$expectedCount',
     );
   }
 

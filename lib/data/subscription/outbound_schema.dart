@@ -6,6 +6,7 @@ class ParsedOutboundSchema {
   ParsedOutboundSchema._();
 
   static const Set<String> _validXhttpModes = {
+    'auto',
     'packet-up',
     'stream-up',
     'stream-one',
@@ -241,12 +242,15 @@ class ParsedOutboundSchema {
     'uplink_chunk_size',
     'session_placement',
     'session_key',
+    'session_table',
+    'session_length',
     'seq_placement',
     'seq_key',
     'sc_max_each_post_bytes',
     'sc_min_posts_interval_ms',
     'sc_max_buffered_posts',
     'sc_stream_up_server_secs',
+    'server_max_header_bytes',
     'xmux',
   };
 
@@ -631,7 +635,10 @@ class ParsedOutboundSchema {
     return null;
   }
 
-  static String? _validateTransport(String type, Map transport) {
+  static String? _validateTransport(
+    String type,
+    Map<dynamic, dynamic> transport,
+  ) {
     if (const {
       'http',
       'ws',
@@ -1014,7 +1021,7 @@ class ParsedOutboundSchema {
     }
   }
 
-  static void _normalizeUtlsFingerprint(Map utls) {
+  static void _normalizeUtlsFingerprint(Map<dynamic, dynamic> utls) {
     final fingerprint = (utls['fingerprint'] as String?)?.trim();
     if (fingerprint == null || fingerprint.isEmpty) {
       return;
@@ -1022,7 +1029,7 @@ class ParsedOutboundSchema {
     utls['fingerprint'] = fingerprint.toLowerCase();
   }
 
-  static void _normalizeRealityShortId(Map reality) {
+  static void _normalizeRealityShortId(Map<dynamic, dynamic> reality) {
     final normalized = _normalizeRealityShortIdValue(reality['short_id']);
     if (normalized == null) {
       return;
@@ -1073,7 +1080,7 @@ class ParsedOutboundSchema {
   static List<String>? _sanitizeAlpn(dynamic value) {
     final values = switch (value) {
       String text => text.split(','),
-      List items => items.map((item) => item.toString()),
+      List<dynamic> items => items.map((item) => item.toString()),
       _ => const <String>[],
     };
     final result = <String>[];
@@ -1149,6 +1156,8 @@ class ParsedOutboundSchema {
 
       for (final key in const [
         'x_padding_bytes',
+        'uplink_chunk_size',
+        'session_length',
         'sc_max_each_post_bytes',
         'sc_min_posts_interval_ms',
         'sc_stream_up_server_secs',
@@ -1327,7 +1336,9 @@ class ParsedOutboundSchema {
     return sanitized;
   }
 
-  static Map<String, dynamic> _sanitizeHeaders(Map headers) {
+  static Map<String, dynamic> _sanitizeHeaders(
+    Map<dynamic, dynamic> headers,
+  ) {
     final sanitized = <String, dynamic>{};
     for (final entry in headers.entries) {
       final key = entry.key.toString();

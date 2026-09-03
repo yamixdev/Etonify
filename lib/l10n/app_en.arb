@@ -507,7 +507,7 @@
   "hideServerIpTitle": "Hide server IP",
   "hideServerIpSubtitle": "Masks last two octets of the IP address",
   "memoryLimitTitle": "Soft core memory limit",
-  "memoryLimitEnabledSubtitle": "Recommended. Limits only memory managed by the Go part of sing-box and encourages earlier cleanup of unused data. Reaching this limit does not stop the VPN. Changes take effect after app restart.",
+  "memoryLimitEnabledSubtitle": "Optional adaptive limit for memory managed by the Go part of sing-box. The value is applied immediately and does not limit the whole app.",
   "memoryLimitDisabledSubtitle": "Disabled. The Go part of sing-box manages memory without an Etonify budget and may retain more RAM. Takes effect after app restart.",
   "memoryLimitDisableWarningTitle": "Disable the soft core limit?",
   "memoryLimitDisableWarningMessage": "Without the soft limit, the Go part of sing-box may retain unused memory for longer. This does not change Flutter or Android memory limits and does not affect system process termination. The change takes effect after restarting Etonify.",

@@ -67,13 +67,13 @@ class ParseResult {
         (value) => value.name == formatName,
         orElse: () => SubscriptionFormat.unknown,
       ),
-      outbounds: (map['outbounds'] as List? ?? const [])
-          .map((entry) => Map<String, dynamic>.from(entry as Map))
+      outbounds: (map['outbounds'] as List<dynamic>? ?? const [])
+          .map((entry) => Map<String, dynamic>.from(entry as Map<dynamic, dynamic>))
           .toList(growable: false),
-      groups: (map['groups'] as List? ?? const [])
+      groups: (map['groups'] as List<dynamic>? ?? const [])
           .map(
             (entry) =>
-                ParsedOutboundGroup.fromMap(Map<String, dynamic>.from(entry)),
+                ParsedOutboundGroup.fromMap(Map<String, dynamic>.from(entry as Map<dynamic, dynamic>)),
           )
           .where((group) => group.sourceOutboundTags.isNotEmpty)
           .toList(growable: false),
@@ -500,7 +500,7 @@ class SubscriptionParser {
     return normalized;
   }
 
-  static Map<String, dynamic> _sanitizeHeaders(Map headers) {
+  static Map<String, dynamic> _sanitizeHeaders(Map<dynamic, dynamic> headers) {
     final sanitized = <String, dynamic>{};
 
     for (final entry in headers.entries) {

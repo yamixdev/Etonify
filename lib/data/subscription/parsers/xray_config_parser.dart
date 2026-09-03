@@ -632,7 +632,10 @@ class XrayConfigParser {
       case 'splithttp':
       case 'xhttp':
         final sh = _map(stream['splithttpSettings'] ?? stream['xhttpSettings']);
-        final t = <String, dynamic>{'type': 'xhttp'};
+        final t = <String, dynamic>{
+          'type': 'xhttp',
+          ..._xhttpExtra(sh['extra']),
+        };
         final host = _s(sh['host']);
         if (host.isNotEmpty) t['host'] = host;
         final path = _s(sh['path']);
@@ -699,13 +702,47 @@ class XrayConfigParser {
     return fallback;
   }
 
+  static Map<String, dynamic> _xhttpExtra(dynamic rawValue) {
+    dynamic value = rawValue;
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        value = jsonDecode(value);
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
+    if (value is! Map) {
+      return const <String, dynamic>{};
+    }
+
+    final extra = <String, dynamic>{};
+    for (final entry in value.entries) {
+      final key = _camelToSnake(entry.key.toString());
+      final item = entry.value;
+      extra[key] = key == 'xmux' && item is Map
+          ? {
+              for (final xmuxEntry in item.entries)
+                _camelToSnake(xmuxEntry.key.toString()): xmuxEntry.value,
+            }
+          : item;
+    }
+    return extra;
+  }
+
+  static String _camelToSnake(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'[A-Z]'),
+      (match) => '_${match.group(0)!.toLowerCase()}',
+    );
+  }
+
   static Map<String, dynamic> _map(dynamic v) {
-    if (v is Map) return Map<String, dynamic>.from(v);
+    if (v is Map<dynamic, dynamic>) return Map<String, dynamic>.from(v);
     return {};
   }
 
-  static List _list(dynamic v) {
-    if (v is List) return v;
+  static List<dynamic> _list(dynamic v) {
+    if (v is List<dynamic>) return v;
     return [];
   }
 }

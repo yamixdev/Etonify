@@ -38,6 +38,7 @@ class RuntimeOperationCoordinator {
   int _networkGeneration = 0;
   int _selectionGeneration = 0;
   int _diagnosticGeneration = 0;
+  int _urlTestGeneration = 0;
   int _nativeRuntimeGeneration = 0;
   bool _transitioning = false;
   bool _running = false;
@@ -47,6 +48,7 @@ class RuntimeOperationCoordinator {
   String _selectedTag = '';
 
   int get diagnosticGeneration => _diagnosticGeneration;
+  int get urlTestGeneration => _urlTestGeneration;
   int get nativeRuntimeGeneration => _nativeRuntimeGeneration;
   String get selectedTag => _selectedTag;
   bool get transitioning => _transitioning;
@@ -58,6 +60,7 @@ class RuntimeOperationCoordinator {
       _networkUsable &&
       _groupsReady &&
       _selectedTag.isNotEmpty;
+  bool get urlTestReady => _running && !_transitioning && _networkUsable;
 
   RuntimeOperationKey get currentKey => RuntimeOperationKey(
     runtimeGeneration: _runtimeGeneration,
@@ -73,6 +76,7 @@ class RuntimeOperationCoordinator {
     _transitioning = true;
     _groupsReady = false;
     invalidateDiagnostics();
+    invalidateUrlTests();
   }
 
   void updateRuntimeState({
@@ -86,10 +90,12 @@ class RuntimeOperationCoordinator {
       _runtimeGeneration++;
       _groupsReady = false;
       invalidateDiagnostics();
+      invalidateUrlTests();
     }
     if (!running) {
       _groupsReady = false;
       invalidateDiagnostics();
+      invalidateUrlTests();
     }
   }
 
@@ -108,6 +114,7 @@ class RuntimeOperationCoordinator {
     _networkUsable = usable;
     if (changed || !usable) {
       invalidateDiagnostics();
+      invalidateUrlTests();
     }
   }
 
@@ -146,6 +153,10 @@ class RuntimeOperationCoordinator {
 
   void invalidateDiagnostics() {
     _diagnosticGeneration++;
+  }
+
+  void invalidateUrlTests() {
+    _urlTestGeneration++;
   }
 
   bool isCurrent(RuntimeOperationKey key) => key == currentKey;

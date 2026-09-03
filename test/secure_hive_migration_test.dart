@@ -36,9 +36,9 @@ void main() {
         ),
       ],
     );
-    final metadata = await Hive.openBox('subscriptions');
-    final payloads = await Hive.openBox('subscription_payloads');
-    final summaries = await Hive.openBox('subscription_summaries');
+    final metadata = await Hive.openBox<dynamic>('subscriptions');
+    final payloads = await Hive.openBox<dynamic>('subscription_payloads');
+    final summaries = await Hive.openBox<dynamic>('subscription_summaries');
     await metadata.put(
       subscription.id,
       jsonEncode(subscription.toMetadataMap()),
@@ -58,7 +58,7 @@ void main() {
     expect(migrated?.url, subscription.url);
     expect(migrated?.rawContent, subscription.rawContent);
     expect(migrated?.outbounds.single.config['uuid'], isNotEmpty);
-    final storedPayload = Hive.box(
+    final storedPayload = Hive.box<dynamic>(
       'subscription_payloads_secure_v1',
     ).get(subscription.id);
     expect(storedPayload, isA<String>());

@@ -45,8 +45,8 @@ class SubscriptionStore {
   static const _storageSchemaVersionKey = '__etonify_storage_schema_version__';
   static const _storageSchemaVersion = 2;
   static const _localFileImportScheme = 'meow-file';
-  static Box? _metaBox;
-  static Box? _payloadBox;
+  static Box<dynamic>? _metaBox;
+  static Box<dynamic>? _payloadBox;
   static Future<void>? _payloadInitialization;
   static bool _payloadMigrationRequired = false;
   static final Map<String, Future<void>> _subscriptionWriteLocks =
@@ -195,13 +195,13 @@ class SubscriptionStore {
 
   static Future<void> _migratePlaintextBox(
     String legacyName,
-    Box secureBox,
+    Box<dynamic> secureBox,
   ) async {
     if (!await Hive.boxExists(legacyName)) return;
 
     final legacyBox = Hive.isBoxOpen(legacyName)
-        ? Hive.box(legacyName)
-        : await Hive.openBox(legacyName);
+        ? Hive.box<dynamic>(legacyName)
+        : await Hive.openBox<dynamic>(legacyName);
     try {
       if (legacyBox.isNotEmpty) {
         final legacyValues = Map<dynamic, dynamic>.from(legacyBox.toMap());
@@ -225,12 +225,12 @@ class SubscriptionStore {
     await Hive.deleteBoxFromDisk(legacyName);
   }
 
-  static Box get _metaStore {
+  static Box<dynamic> get _metaStore {
     assert(_metaBox != null, 'SubscriptionStore.init() must be called first');
     return _metaBox!;
   }
 
-  static Box get _payloadStore {
+  static Box<dynamic> get _payloadStore {
     if (_payloadBox == null) {
       throw StateError(
         'SubscriptionStore.ensurePayloadReady() must be awaited first',
@@ -258,7 +258,7 @@ class SubscriptionStore {
       return await next;
     } finally {
       if (identical(_subscriptionWriteLocks[id], queued)) {
-        _subscriptionWriteLocks.remove(id);
+        unawaited(_subscriptionWriteLocks.remove(id));
       }
     }
   }
@@ -1662,7 +1662,7 @@ class SubscriptionStore {
 
   static Future<void> _cleanupLegacySummaryBox() async {
     if (Hive.isBoxOpen(_legacySummaryBoxName)) {
-      await Hive.box(_legacySummaryBoxName).close();
+      await Hive.box<dynamic>(_legacySummaryBoxName).close();
     }
     if (!await Hive.boxExists(_legacySummaryBoxName)) {
       return;

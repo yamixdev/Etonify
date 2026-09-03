@@ -2252,7 +2252,7 @@ abstract class AppLocalizations {
   /// No description provided for @memoryLimitEnabledSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Recommended. Limits only memory managed by the Go part of sing-box and encourages earlier cleanup of unused data. Reaching this limit does not stop the VPN. Changes take effect after app restart.'**
+  /// **'Optional adaptive limit for memory managed by the Go part of sing-box. The value is applied immediately and does not limit the whole app.'**
   String get memoryLimitEnabledSubtitle;
 
   /// No description provided for @memoryLimitDisabledSubtitle.

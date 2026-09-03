@@ -147,12 +147,12 @@ class AppLogStore {
   }
 
   static void config(String reason, Map<String, dynamic> config) {
-    final outbounds = (config['outbounds'] as List?) ?? const [];
-    final inbounds = (config['inbounds'] as List?) ?? const [];
-    final route = config['route'] as Map?;
-    final rules = (route?['rules'] as List?) ?? const [];
+    final outbounds = (config['outbounds'] as List<dynamic>?) ?? const [];
+    final inbounds = (config['inbounds'] as List<dynamic>?) ?? const [];
+    final route = config['route'] as Map<dynamic, dynamic>?;
+    final rules = (route?['rules'] as List<dynamic>?) ?? const [];
     final outboundTypes = <String, int>{};
-    for (final outbound in outbounds.whereType<Map>()) {
+    for (final outbound in outbounds.whereType<Map<dynamic, dynamic>>()) {
       final type = outbound['type']?.toString().trim();
       if (type == null || type.isEmpty) {
         continue;

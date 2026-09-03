@@ -769,9 +769,10 @@ class AppUpdateService {
 
   Future<AppUpdateManifest?> _fetchReleaseManifest(Object? rawAssets) async {
     if (rawAssets is! Iterable) return null;
-    Map? manifestAsset;
+    Map<dynamic, dynamic>? manifestAsset;
     for (final raw in rawAssets) {
-      if (raw is Map && raw['name']?.toString() == _manifestAssetName) {
+      if (raw is Map<dynamic, dynamic> &&
+          raw['name']?.toString() == _manifestAssetName) {
         manifestAsset = raw;
         break;
       }

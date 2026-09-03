@@ -230,7 +230,7 @@ void main() {
         AppUpdateManifest.fromJson({
           'version': '0.2.1',
           'packageName': '',
-          'assets': const [],
+          'assets': const <dynamic>[],
         }),
         isNull,
       );
@@ -238,7 +238,7 @@ void main() {
         AppUpdateManifest.fromJson({
           'version': '',
           'packageName': 'com.etonify.meow_client',
-          'assets': const [],
+          'assets': const <dynamic>[],
         }),
         isNull,
       );

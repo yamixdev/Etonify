@@ -185,7 +185,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     if (outbound == null) {
       return;
     }
-    HapticFeedback.selectionClick();
+    unawaited(HapticFeedback.selectionClick());
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

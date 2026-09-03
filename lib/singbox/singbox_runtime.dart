@@ -16,13 +16,15 @@ class RuntimeFlags {
     this.wakeLockEnabled = false,
     this.networkHeartbeatEnabled = true,
     this.networkHeartbeatIntervalSeconds = 180,
-    this.memoryLimitEnabled = true,
+    this.memoryLimitEnabled = false,
+    this.goMemoryLimitBytes = 0,
   });
 
   final bool wakeLockEnabled;
   final bool networkHeartbeatEnabled;
   final int networkHeartbeatIntervalSeconds;
   final bool memoryLimitEnabled;
+  final int goMemoryLimitBytes;
 }
 
 class AppVersionInfo {
@@ -112,7 +114,10 @@ class SingboxRuntime {
     if (value is! Iterable) {
       return const <Map<String, dynamic>>[];
     }
-    return value.whereType<Map>().map(_normalizeMap).toList(growable: false);
+    return value
+        .whereType<Map<dynamic, dynamic>>()
+        .map(_normalizeMap)
+        .toList(growable: false);
   }
 
   Future<T> _withMethodChannelFallback<T>(
@@ -240,7 +245,9 @@ class SingboxRuntime {
         networkHeartbeatEnabled: value['networkHeartbeatEnabled'] != false,
         networkHeartbeatIntervalSeconds:
             (value['networkHeartbeatIntervalSeconds'] as num?)?.toInt() ?? 180,
-        memoryLimitEnabled: value['memoryLimitEnabled'] != false,
+        memoryLimitEnabled: value['memoryLimitEnabled'] == true,
+        goMemoryLimitBytes:
+            (value['goMemoryLimitBytes'] as num?)?.toInt() ?? 0,
       );
     } on MissingPluginException {
       return const RuntimeFlags();

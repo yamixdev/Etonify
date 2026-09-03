@@ -52,7 +52,11 @@ void main() {
     expect(coordinator.isChecking('proxy-2'), isTrue);
     expect(coordinator.isChecking('proxy-1'), isFalse);
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-2', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: now,
+        available: true,
+      ),
       isTrue,
     );
     expect(await result, isTrue);
@@ -139,15 +143,27 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-1', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-1',
+        timeSeconds: now,
+        available: true,
+      ),
       isFalse,
     );
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-2', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: now,
+        available: true,
+      ),
       isTrue,
     );
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-2', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: now,
+        available: true,
+      ),
       isFalse,
     );
     expect(await result, isTrue);
@@ -178,7 +194,11 @@ void main() {
     );
 
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-1', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-1',
+        timeSeconds: now,
+        available: true,
+      ),
       isTrue,
     );
     expect(coordinator.isChecking('proxy-1'), isFalse);
@@ -187,7 +207,11 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(completed, isFalse);
     expect(
-      coordinator.handleGroupEvent(tag: 'proxy-2', timeSeconds: now),
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: now,
+        available: true,
+      ),
       isTrue,
     );
     expect(await result, isTrue);
@@ -207,7 +231,11 @@ void main() {
 
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       expect(
-        coordinator.handleGroupEvent(tag: 'proxy-1', timeSeconds: now),
+        coordinator.handleGroupEvent(
+          tag: 'proxy-1',
+          timeSeconds: now,
+          available: true,
+        ),
         isTrue,
       );
       expect(await first, isTrue);
@@ -239,6 +267,56 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     },
   );
+
+  test('unavailable terminal results never fabricate success', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const <String>{'proxy-1', 'proxy-2'},
+    );
+    addTearDown(coordinator.dispose);
+
+    final result = coordinator.runFull(reason: 'manual');
+    await Future<void>.delayed(Duration.zero);
+
+    coordinator.handleGroupEvent(
+      tag: 'proxy-1',
+      timeSeconds: now,
+      available: false,
+    );
+    coordinator.handleGroupEvent(
+      tag: 'proxy-2',
+      timeSeconds: now,
+      available: false,
+    );
+
+    expect(await result, isFalse);
+  });
+
+  test('a mixed terminal batch succeeds when one proxy has a delay', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const <String>{'proxy-1', 'proxy-2'},
+    );
+    addTearDown(coordinator.dispose);
+
+    final result = coordinator.runFull(reason: 'manual');
+    await Future<void>.delayed(Duration.zero);
+
+    coordinator.handleGroupEvent(
+      tag: 'proxy-1',
+      timeSeconds: now,
+      available: false,
+    );
+    coordinator.handleGroupEvent(
+      tag: 'proxy-2',
+      timeSeconds: now,
+      available: true,
+    );
+
+    expect(await result, isTrue);
+  });
 
   test('does not start tests in background or while disconnected', () async {
     var connected = false;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -12,11 +14,13 @@ void main() {
       ),
     );
 
-    showModalBottomSheet<void>(
-      context: navigatorKey.currentContext!,
-      builder: (_) => const SizedBox(
-        height: 300,
-        child: Center(child: Text('Profiles sheet')),
+    unawaited(
+      showModalBottomSheet<void>(
+        context: navigatorKey.currentContext!,
+        builder: (_) => const SizedBox(
+          height: 300,
+          child: Center(child: Text('Profiles sheet')),
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -872,8 +872,8 @@ void main() {
       experimentalFakeIpEnabled: true,
     ).build();
     final fullTunDns = (fullTunConfig['dns'] as Map).cast<String, dynamic>();
-    final fullTunServers = (fullTunDns['servers'] as List).cast<Map>();
-    final fullTunRules = (fullTunDns['rules'] as List).cast<Map>();
+    final fullTunServers = (fullTunDns['servers'] as List).cast<Map<dynamic, dynamic>>();
+    final fullTunRules = (fullTunDns['rules'] as List).cast<Map<dynamic, dynamic>>();
 
     expect(
       fullTunServers.any(
@@ -898,7 +898,7 @@ void main() {
       splitRoutingPackages: const ['com.example.app'],
     ).build();
     final splitTunDns = (splitTunConfig['dns'] as Map).cast<String, dynamic>();
-    final splitTunServers = (splitTunDns['servers'] as List).cast<Map>();
+    final splitTunServers = (splitTunDns['servers'] as List).cast<Map<dynamic, dynamic>>();
 
     expect(
       splitTunServers.any((server) => server['tag'] == 'dns-fakeip'),
@@ -2167,7 +2167,7 @@ void main() {
       ],
     ).build();
 
-    final tunInbound = (config['inbounds'] as List).cast<Map>().firstWhere(
+    final tunInbound = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
       (inbound) => inbound['type'] == 'tun',
     );
     expect(tunInbound['include_package'], [
@@ -2178,7 +2178,7 @@ void main() {
     expect(tunInbound['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
 
     final route = (config['route'] as Map).cast<String, dynamic>();
-    final routeRules = (route['rules'] as List).cast<Map>();
+    final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(route['final'], 'select');
     expect(routeRules.any((rule) => rule.containsKey('package_name')), isFalse);
     final dnsHijackRule = routeRules.firstWhere(
@@ -2187,7 +2187,7 @@ void main() {
           rule['type'] == 'logical' &&
           rule['mode'] == 'or',
     );
-    final dnsHijackChildren = (dnsHijackRule['rules'] as List).cast<Map>();
+    final dnsHijackChildren = (dnsHijackRule['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(dnsHijackChildren, contains(containsPair('protocol', 'dns')));
     expect(dnsHijackChildren, contains(containsPair('port', 53)));
     expect(route['default_domain_resolver'], 'dns-local');
@@ -2236,7 +2236,7 @@ void main() {
       ),
     ).build();
 
-    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map>();
+    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map<dynamic, dynamic>>();
     final privateIndex = routeRules.indexWhere(
       (rule) => rule.containsKey('ip_is_private'),
     );
@@ -2270,12 +2270,12 @@ void main() {
     expect(russiaGeoipDirectIndex, greaterThan(russiaBlockedIndex));
 
     final dns = (config['dns'] as Map).cast<String, dynamic>();
-    final dnsServers = (dns['servers'] as List).cast<Map>();
+    final dnsServers = (dns['servers'] as List).cast<Map<dynamic, dynamic>>();
     expect(
       dnsServers.any((server) => server['tag'] == 'dns-ru-direct'),
       isTrue,
     );
-    final dnsRules = (dns['rules'] as List).cast<Map>();
+    final dnsRules = (dns['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(
       dnsRules.first,
       allOf([
@@ -2334,14 +2334,14 @@ void main() {
       ).build();
 
       final route = (config['route'] as Map).cast<String, dynamic>();
-      final routeRules = (route['rules'] as List).cast<Map>();
+      final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
       expect(route['final'], 'select');
       expect(
         routeRules.any((rule) => rule.containsKey('package_name')),
         isFalse,
       );
       expect(
-        (config['inbounds'] as List).cast<Map>().any(
+        (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().any(
           (inbound) => inbound['tag'] == 'mixed-in',
         ),
         isTrue,
@@ -2375,13 +2375,13 @@ void main() {
       splitRoutingPackages: const ['com.example.bypass'],
     ).build();
 
-    final tunInbound = (config['inbounds'] as List).cast<Map>().firstWhere(
+    final tunInbound = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
       (inbound) => inbound['type'] == 'tun',
     );
     expect(tunInbound['exclude_package'], ['com.example.bypass']);
     expect(tunInbound.containsKey('include_package'), isFalse);
 
-    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map>();
+    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(routeRules.any((rule) => rule.containsKey('package_name')), isFalse);
   });
 
@@ -2409,7 +2409,7 @@ void main() {
       vpnInboundEnabled: true,
     ).build();
 
-    final inbounds = (config['inbounds'] as List).cast<Map>();
+    final inbounds = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>();
     expect(
       inbounds.any((inbound) => inbound['tag'] == 'speedtest-in'),
       isFalse,
@@ -2427,7 +2427,7 @@ void main() {
       subscription,
       vpnInboundEnabled: true,
     ).build();
-    final tun = (config['inbounds'] as List).cast<Map>().firstWhere(
+    final tun = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
       (inbound) => inbound['type'] == 'tun',
     );
 
@@ -2507,7 +2507,7 @@ void main() {
       proxyInboundEnabled: true,
       proxyPassword: 'LocalOnlyPassword123456',
     ).build();
-    final inbounds = (config['inbounds'] as List).cast<Map>();
+    final inbounds = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>();
 
     expect(inbounds.where((inbound) => inbound['type'] == 'tun'), hasLength(1));
     expect(
@@ -2534,7 +2534,7 @@ void main() {
       proxyUsername: 'sergey',
       proxyPassword: 'LocalOnlyPassword123456',
     ).build();
-    final mixed = (config['inbounds'] as List).cast<Map>().firstWhere(
+    final mixed = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
       (inbound) => inbound['type'] == 'mixed',
     );
 
@@ -2557,7 +2557,7 @@ void main() {
       proxyPassword: 'LocalOnlyPassword123456',
     ).build();
     final loopbackMixed = (loopbackConfig['inbounds'] as List)
-        .cast<Map>()
+        .cast<Map<dynamic, dynamic>>()
         .firstWhere((inbound) => inbound['type'] == 'mixed');
     expect(loopbackMixed['users'], [
       {'username': defaultProxyUsername, 'password': 'LocalOnlyPassword123456'},
@@ -2624,7 +2624,7 @@ void main() {
     ).build();
 
     final route = (config['route'] as Map).cast<String, dynamic>();
-    final routeRules = (route['rules'] as List).cast<Map>();
+    final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(route.containsKey('rule_set'), isFalse);
     expect(
       routeRules.any((rule) => rule['rule_set'] == 'ru-direct-services'),

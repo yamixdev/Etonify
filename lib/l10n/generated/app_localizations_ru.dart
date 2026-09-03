@@ -1217,7 +1217,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get memoryLimitEnabledSubtitle =>
-      'Рекомендуется. Ограничивает только память Go-части sing-box и помогает ядру раньше освобождать неиспользуемые данные. VPN не отключается при достижении этого лимита. Изменение вступит в силу после перезапуска приложения.';
+      'Необязательный адаптивный лимит памяти Go-части sing-box. Значение применяется сразу и не ограничивает память всего приложения.';
 
   @override
   String get memoryLimitDisabledSubtitle =>

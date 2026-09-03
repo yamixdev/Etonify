@@ -1213,7 +1213,7 @@ void main() {
       });
     });
 
-    test('drops invalid xhttp mode from share links', () {
+    test('preserves Xray auto xhttp mode from share links', () {
       const content =
           'vless://8b53c90b-7523-422f-963b-2be108685376@2.27.13.230:8443?encryption=mlkem768x25519plus.native.0rtt.MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs&fp=chrome&host=fonts.gstatic.com&mode=auto&path=%2Fcss2&pbk=z0S7qx_G_rb8nATkZmCJpPC-hiQPNmqkXGkSmKM5fXY&security=reality&sid=e63ca6d5&sni=aws.amazon.com&spx=%2Fewh6P1O3aLaR0D3&type=xhttp#Xhttp';
 
@@ -1228,9 +1228,75 @@ void main() {
       );
       expect(outbound['tls']['reality']['spider_x'], '/ewh6P1O3aLaR0D3');
       expect(transport['type'], 'xhttp');
-      expect(transport.containsKey('mode'), isFalse);
+      expect(transport['mode'], 'auto');
       expect(transport['host'], 'fonts.gstatic.com');
       expect(transport['path'], '/css2');
+    });
+
+    test('preserves XHTTP extra settings from Xray JSON configs', () {
+      final content = jsonEncode({
+        'outbounds': [
+          {
+            'protocol': 'vless',
+            'tag': 'xhttp-extra',
+            'settings': {
+              'vnext': [
+                {
+                  'address': 'cdn.example.com',
+                  'port': 8443,
+                  'users': [
+                    {'id': 'test-uuid', 'encryption': 'none'},
+                  ],
+                },
+              ],
+            },
+            'streamSettings': {
+              'network': 'xhttp',
+              'security': 'tls',
+              'tlsSettings': {'serverName': 'origin.example.com'},
+              'xhttpSettings': {
+                'host': 'cdn.example.com',
+                'path': '/api',
+                'mode': 'auto',
+                'extra': {
+                  'uplinkDataPlacement': 'body',
+                  'uplinkChunkSize': {'from': 4096, 'to': 8192},
+                  'sessionTable': 'header',
+                  'sessionLength': {'from': 8, 'to': 16},
+                  'scMaxEachPostBytes': {'from': 100000, 'to': 200000},
+                  'scMinPostsIntervalMs': {'from': 20, 'to': 40},
+                  'serverMaxHeaderBytes': 8192,
+                  'xmux': {
+                    'maxConcurrency': {'from': 1, 'to': 4},
+                    'hKeepAlivePeriod': 30,
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      final result = SubscriptionParser.parse(content);
+      expect(result.outbounds, hasLength(1));
+      final transport = result.outbounds.single['transport'] as Map;
+      expect(transport, {
+        'type': 'xhttp',
+        'host': 'cdn.example.com',
+        'path': '/api',
+        'mode': 'auto',
+        'uplink_data_placement': 'body',
+        'uplink_chunk_size': {'from': 4096, 'to': 8192},
+        'session_table': 'header',
+        'session_length': {'from': 8, 'to': 16},
+        'sc_max_each_post_bytes': {'from': 100000, 'to': 200000},
+        'sc_min_posts_interval_ms': {'from': 20, 'to': 40},
+        'server_max_header_bytes': 8192,
+        'xmux': {
+          'max_concurrency': {'from': 1, 'to': 4},
+          'h_keep_alive_period': 30,
+        },
+      });
     });
 
     test('drops invalid outbounds during parsing', () {

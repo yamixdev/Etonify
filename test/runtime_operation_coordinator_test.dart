@@ -70,4 +70,33 @@ void main() {
     expect(coordinator.diagnosticsReady, isFalse);
     expect(coordinator.isCurrent(key), isFalse);
   });
+
+  test('proxy selection does not invalidate an active URLTest', () {
+    final coordinator = RuntimeOperationCoordinator();
+    coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 1);
+    coordinator.finishRuntimeTransition(running: true);
+    coordinator.updateNetwork(generation: 10, usable: true);
+    final urlTestGeneration = coordinator.urlTestGeneration;
+
+    coordinator.beginSelection('vless-2');
+
+    expect(coordinator.urlTestReady, isTrue);
+    expect(coordinator.urlTestGeneration, urlTestGeneration);
+  });
+
+  test('runtime and network changes invalidate an active URLTest', () {
+    final coordinator = RuntimeOperationCoordinator();
+    coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 1);
+    coordinator.finishRuntimeTransition(running: true);
+    coordinator.updateNetwork(generation: 10, usable: true);
+    final initialGeneration = coordinator.urlTestGeneration;
+
+    coordinator.updateNetwork(generation: 11, usable: true);
+    expect(coordinator.urlTestGeneration, greaterThan(initialGeneration));
+    final networkGeneration = coordinator.urlTestGeneration;
+
+    coordinator.beginRuntimeTransition();
+    expect(coordinator.urlTestReady, isFalse);
+    expect(coordinator.urlTestGeneration, greaterThan(networkGeneration));
+  });
 }

@@ -241,16 +241,16 @@ class Outbound {
     return _endpointPort(_wireGuardEndpointPeer?['port']);
   }
 
-  Map? get _wireGuardEndpointPeer {
+  Map<dynamic, dynamic>? get _wireGuardEndpointPeer {
     if (type.trim().toLowerCase() != 'wireguard') {
       return null;
     }
     final peers = config['peers'];
-    if (peers is! List) {
+    if (peers is! List<dynamic>) {
       return null;
     }
     for (final peer in peers) {
-      if (peer is! Map) {
+      if (peer is! Map<dynamic, dynamic>) {
         continue;
       }
       final address = peer['address']?.toString().trim() ?? '';
