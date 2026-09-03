@@ -394,7 +394,8 @@ class LibboxCapabilities {
 
   bool supportsXHttpMode(String value) {
     final normalized = value.trim().toLowerCase();
-    return normalized.isEmpty || xHttpModes.contains(normalized);
+    if (normalized.isEmpty || normalized == 'auto') return true;
+    return xHttpModes.contains(normalized);
   }
 
   bool supportsVlessEncryptionValue(String value) {

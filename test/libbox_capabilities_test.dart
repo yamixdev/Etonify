@@ -112,6 +112,7 @@ void main() {
       expect(capabilities.supportsUrlTestFailover, isTrue);
       expect(capabilities.xHttpProfile, 'etonify_client_v1');
       expect(capabilities.supportsXHttpMode('packet-up'), isTrue);
+      expect(capabilities.supportsXHttpMode('auto'), isTrue);
       expect(capabilities.supportsXHttpMode('unsupported'), isFalse);
       expect(capabilities.xHttpMaxPoolConnections, 16);
       expect(capabilities.xHttpMaxPacketUploadBytes, 262144);

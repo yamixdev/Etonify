@@ -1632,6 +1632,19 @@ void main() {
             'transport': {'type': 'splithttp', 'path': '/api'},
           },
         ),
+        Outbound(
+          tag: 'xhttp-auto-leaf',
+          name: 'XHTTP Auto',
+          config: {
+            'type': 'vless',
+            'tag': 'xhttp-auto-leaf',
+            'server': 'xhttp-auto.example.com',
+            'server_port': 443,
+            'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+            'encryption': 'none',
+            'transport': {'type': 'xhttp', 'mode': 'auto', 'path': '/api'},
+          },
+        ),
       ],
     );
 
@@ -1658,12 +1671,14 @@ void main() {
     );
 
     expect(emittedTags(unsupported), isNot(contains('xhttp-leaf')));
+    expect(emittedTags(unsupported), isNot(contains('xhttp-auto-leaf')));
     expect(emittedTags(unsupported), isNot(contains('splithttp-leaf')));
     expect(emittedTags(xhttpOnly), contains('xhttp-leaf'));
+    expect(emittedTags(xhttpOnly), contains('xhttp-auto-leaf'));
     expect(emittedTags(xhttpOnly), isNot(contains('splithttp-leaf')));
     expect(
       emittedTags(supported),
-      containsAll(<String>{'xhttp-leaf', 'splithttp-leaf'}),
+      containsAll(<String>{'xhttp-leaf', 'xhttp-auto-leaf', 'splithttp-leaf'}),
     );
   });
 
