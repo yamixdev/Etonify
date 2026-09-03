@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/etonify_logo_badge.dart';
 
@@ -80,7 +79,8 @@ class _WelcomePageState extends State<WelcomePage>
                         Text(
                           widget.brandName,
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
                             fontSize: 44,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0,

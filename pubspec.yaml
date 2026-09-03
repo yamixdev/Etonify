@@ -45,7 +45,6 @@ dependencies:
   flutter_svg: ^2.3.0
   dynamic_color: ^1.9.0
   gap: ^3.0.1
-  google_fonts: ^8.2.1
   intl: ^0.20.3
   hive_ce: ^2.19.3
   hive_ce_flutter: ^2.3.4
@@ -104,6 +103,12 @@ flutter:
 
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
+
+  fonts:
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit-ExtraBold.ttf
+          weight: 800
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
