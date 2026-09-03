@@ -1331,6 +1331,7 @@ class MainActivity : FlutterFragmentActivity() {
             "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
             "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
             "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
+            "goMemoryLimitBytes" to MeowApplication.appliedGoMemoryLimitBytes,
             "serviceState" to MeowApplication.describeRecordedServiceState(),
             "runtimeIntent" to MeowApplication.describeRuntimeIntent(),
             "totalPssKb" to processMemory.totalPssKb,
@@ -1671,6 +1672,7 @@ class MainActivity : FlutterFragmentActivity() {
                                 "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
                                 "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
                                 "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
+                                "goMemoryLimitBytes" to MeowApplication.appliedGoMemoryLimitBytes,
                             ),
                         ),
                     )
@@ -1690,7 +1692,13 @@ class MainActivity : FlutterFragmentActivity() {
                         MeowApplication.networkHeartbeatIntervalSeconds = it
                         heartbeatChanged = true
                     }
-                    flags.memoryLimitEnabled?.let { MeowApplication.memoryLimitEnabled = it }
+                    val memoryPolicyApplied = flags.memoryLimitEnabled?.let {
+                        MeowApplication.updateMemoryLimitEnabled(it)
+                    } ?: true
+                    if (!memoryPolicyApplied) {
+                        callback(Result.failure(IllegalStateException("Unable to apply Go memory limit")))
+                        return
+                    }
                     if (heartbeatChanged) {
                         MeowDefaultNetworkMonitor.refreshHeartbeat()
                     }
@@ -2272,6 +2280,7 @@ class MainActivity : FlutterFragmentActivity() {
                             "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
                             "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
                             "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
+                            "goMemoryLimitBytes" to MeowApplication.appliedGoMemoryLimitBytes,
                         ),
                     )
                 }
@@ -2294,7 +2303,14 @@ class MainActivity : FlutterFragmentActivity() {
                         heartbeatChanged = true
                     }
                     if (memoryLimitEnabled != null) {
-                        MeowApplication.memoryLimitEnabled = memoryLimitEnabled
+                        if (!MeowApplication.updateMemoryLimitEnabled(memoryLimitEnabled)) {
+                            result.error(
+                                "memory_limit_apply_failed",
+                                "Unable to apply Go memory limit",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
                     }
                     if (heartbeatChanged) {
                         MeowDefaultNetworkMonitor.refreshHeartbeat()

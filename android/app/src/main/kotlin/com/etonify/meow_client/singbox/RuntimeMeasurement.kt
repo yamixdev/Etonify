@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import com.etonify.meow_client.MeowApplication
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -155,6 +156,7 @@ internal object RuntimeMeasurement {
             "startedAtMillis" to active.startedAtEpochMs,
             "finishedAtMillis" to active.finishedAtEpochMs,
             "sampleCount" to samples.size,
+            "goMemoryLimitBytes" to MeowApplication.appliedGoMemoryLimitBytes,
             "cpuAveragePercent" to cpuValues.averageOrNull(),
             "cpuPeakPercent" to cpuValues.maxOrNull(),
             "trafficAverageBytesPerSecond" to trafficValues.averageOrNull(),
@@ -203,6 +205,7 @@ internal object RuntimeMeasurement {
             appendLine("elapsed_seconds: ${snapshot["elapsedSeconds"]}")
             appendLine("sample_interval_ms: $SAMPLE_INTERVAL_MS")
             appendLine("samples: ${snapshot["sampleCount"]}")
+            appendLine("go_memory_limit_bytes: ${snapshot["goMemoryLimitBytes"]}")
             appendLine("cpu_average_percent: ${formatNumber(snapshot["cpuAveragePercent"])}")
             appendLine("cpu_peak_percent: ${formatNumber(snapshot["cpuPeakPercent"])}")
             appendLine("traffic_average_bytes_per_second: ${formatNumber(snapshot["trafficAverageBytesPerSecond"])}")

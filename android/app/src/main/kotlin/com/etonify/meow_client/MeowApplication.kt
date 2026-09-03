@@ -1,6 +1,7 @@
 package com.etonify.meow_client
 
 import android.app.Application
+import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
@@ -61,6 +62,9 @@ class MeowApplication : Application() {
         lateinit var application: MeowApplication
         @Volatile
         private var libboxReady: Boolean = false
+        @Volatile
+        var appliedGoMemoryLimitBytes: Long = 0L
+            private set
         val connectivity: ConnectivityManager
             get() = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val configFile: File
@@ -103,13 +107,34 @@ class MeowApplication : Application() {
                     .apply()
             }
 
-        var memoryLimitEnabled: Boolean
-            get() = runtimeFlagsPrefs.getBoolean(FLAG_MEMORY_LIMIT_ENABLED, true)
-            set(value) {
-                runtimeFlagsPrefs.edit()
-                    .putBoolean(FLAG_MEMORY_LIMIT_ENABLED, value)
-                    .apply()
+        val memoryLimitEnabled: Boolean
+            get() = runtimeFlagsPrefs.getBoolean(FLAG_MEMORY_LIMIT_ENABLED, false)
+
+        fun updateMemoryLimitEnabled(value: Boolean): Boolean = synchronized(this) {
+            val previous = memoryLimitEnabled
+            if (previous == value && (!libboxReady || appliedGoMemoryLimitBytes == currentMemoryPolicy().goMemoryLimitBytes)) {
+                return true
             }
+            runtimeFlagsPrefs.edit()
+                .putBoolean(FLAG_MEMORY_LIMIT_ENABLED, value)
+                .commit()
+            if (!libboxReady) {
+                return true
+            }
+            val applied = runCatching {
+                applyRuntimeMemoryPolicyLocked(currentMemoryPolicy())
+            }.onFailure { error ->
+                runtimeFlagsPrefs.edit()
+                    .putBoolean(FLAG_MEMORY_LIMIT_ENABLED, previous)
+                    .commit()
+                MeowDiagnostics.log(
+                    "Application",
+                    "failed to apply Go memory limit enabled=$value; preference restored",
+                    error,
+                )
+            }.isSuccess
+            applied
+        }
 
         private fun installUncaughtExceptionLogger() {
             if (uncaughtExceptionLoggerInstalled) return
@@ -149,8 +174,7 @@ class MeowApplication : Application() {
                 val baseDir = File(app.filesDir, "singbox-base").apply { mkdirs() }
                 val workingDir = singboxWorkingDirectory
                 val tempDir = File(app.cacheDir, "singbox-tmp").apply { mkdirs() }
-                val memoryLimitFlag = memoryLimitEnabled
-                val memoryPolicy = LibboxMemoryPolicy.forAndroid(memoryLimitFlag)
+                val memoryPolicy = currentMemoryPolicy()
                 val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     app.packageManager.getPackageInfo(
                         app.packageName,
@@ -185,6 +209,7 @@ class MeowApplication : Application() {
                     goMemoryLimit = memoryPolicy.goMemoryLimitBytes
                 }
                 Libbox.setup(setupOptions)
+                appliedGoMemoryLimitBytes = memoryPolicy.goMemoryLimitBytes
                 libboxReady = true
                 MeowDiagnostics.log(
                     "Application",
@@ -193,6 +218,31 @@ class MeowApplication : Application() {
                         "processOomKiller=${if (memoryPolicy.processOomKillerEnabled) "enabled" else "disabled"}",
                 )
             }
+        }
+
+        private fun currentMemoryPolicy(): LibboxMemoryPolicy {
+            val activityManager = application.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            return LibboxMemoryPolicy.forAndroid(
+                softLimitEnabled = memoryLimitEnabled,
+                memoryClassMegabytes = activityManager.memoryClass,
+            )
+        }
+
+        private fun applyRuntimeMemoryPolicyLocked(memoryPolicy: LibboxMemoryPolicy) {
+            Libbox.reloadSetupOptions(
+                SetupOptions().apply {
+                    oomKillerEnabled = memoryPolicy.processOomKillerEnabled
+                    oomKillerDisabled = false
+                    oomMemoryLimit = memoryPolicy.processOomMemoryLimitBytes
+                    goMemoryLimit = memoryPolicy.goMemoryLimitBytes
+                },
+            )
+            appliedGoMemoryLimitBytes = memoryPolicy.goMemoryLimitBytes
+            MeowDiagnostics.log(
+                "Application",
+                "Go memory policy applied enabled=$memoryLimitEnabled " +
+                    "goMemoryLimit=${memoryPolicy.goMemoryLimitBytes}",
+            )
         }
 
         fun writeServiceState(mode: String) {
