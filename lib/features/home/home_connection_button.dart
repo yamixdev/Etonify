@@ -88,18 +88,20 @@ class _ConnectionButtonState extends State<ConnectionButton> {
                 const Size.square(_kConnectionButtonSize),
                 shape,
               );
-              return Transform.scale(
-                scale: scale,
-                child: CustomPaint(
-                  painter: _ConnectionButtonShadowPainter(
-                    path: path,
-                    color: buttonColor.withValues(alpha: .45),
-                    blur: glow,
-                    spread: shape.emphasis * 2,
-                  ),
-                  child: ClipPath(
-                    clipper: _ConnectionButtonShapeClipper(path),
-                    child: child,
+              return RepaintBoundary(
+                child: Transform.scale(
+                  scale: scale,
+                  child: CustomPaint(
+                    painter: _ConnectionButtonShadowPainter(
+                      path: path,
+                      color: buttonColor.withValues(alpha: .45),
+                      blur: glow,
+                      spread: shape.emphasis * 2,
+                    ),
+                    child: ClipPath(
+                      clipper: _ConnectionButtonShapeClipper(path),
+                      child: child,
+                    ),
                   ),
                 ),
               );
