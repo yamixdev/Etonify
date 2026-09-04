@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:gap/gap.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
@@ -16,7 +15,7 @@ import 'package:meow_client/app/app_root_shell.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/coordinators/proxy_location_coordinator.dart';
 import 'package:meow_client/app/coordinators/app_traffic_monitor.dart';
-import 'package:meow_client/app/deep_link_import.dart';
+import 'package:meow_client/app/coordinators/deep_link_import_coordinator.dart';
 import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
@@ -51,7 +50,6 @@ import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
-import 'package:meow_client/data/subscription/happ_crypto_link.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
@@ -122,7 +120,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late ThemeData _lightTheme;
   late ThemeData _darkTheme;
   late ThemeData _amoledTheme;
-  StreamSubscription<DeepLinkImportRequest>? _deepLinkImportSubscription;
   AppSettingsStore? _store;
   Timer? _subscriptionAutoRefreshTimer;
   Timer? _derivedCacheBuildTimer;
@@ -137,7 +134,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int? _acceptedLegalAtMillis;
   bool _runtimeErrorDialogVisible = false;
   bool _noValidOutboundsDialogVisible = false;
-  bool _deepLinkImportInFlight = false;
   bool _settingsBackupOperationInFlight = false;
   bool _proxyPanelInteractionActive = false;
   bool _proxyPanelOpen = false;
@@ -157,6 +153,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final AppSettingsCommands _appSettingsCommands;
   late final ProxyLocationCoordinator _proxyLocationCoordinator;
   late final AppTrafficMonitor _appTrafficMonitor;
+  late final DeepLinkImportCoordinator _deepLinkImportCoordinator;
   AdBlockRuleSetStatus _adBlockStatus =
       const AdBlockRuleSetStatus.unavailable();
   RussiaRouteDataStatus _russiaRouteDataStatus =
@@ -217,7 +214,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Map<String, Outbound> _activeOutboundByTagLookup = const {};
   Map<String, SubscriptionGroup> _activeGroupByTagLookup = const {};
   final Map<String, List<AppProxySummary>> _proxyChainTargetSourceCache = {};
-  DeepLinkImportRequest? _pendingDeepLinkImport;
   String? _lastQuickSettingsTileLabel;
   ColorScheme? _dynamicLightScheme;
   ColorScheme? _dynamicDarkScheme;
@@ -2095,6 +2091,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
       getEffectiveOutboundLatency: _effectiveOutboundLatency,
       onApplyResolvedInfos: _applyResolvedExternalIpInfos,
     );
+    _deepLinkImportCoordinator = DeepLinkImportCoordinator(
+      host: DeepLinkImportHost(
+        isMounted: () => mounted,
+        isReady: () => _ready,
+        isOnboardingCompleted: () => _onboardingCompleted,
+        isLegalAccepted: () => _legalAccepted,
+        getNavigatorContext: () => _navigatorKey.currentContext,
+        showSnackBar: _showAppSnackBar,
+        runSubscriptionOperationWithWarning:
+            _runSubscriptionOperationWithWarning,
+        getSubscriptionOperationTimeout: () => _subscriptionOperationTimeout,
+        getAllowUntrustedSubscriptionCertificates: () =>
+            _allowUntrustedSubscriptionCertificates,
+        onSubscriptionRouteAttempt: _handleSubscriptionRouteAttempt,
+        reloadSubscriptions: _reloadSubscriptions,
+        offerLikelyHwidFix: _offerLikelyHwidFix,
+        userFacingSubscriptionError: _userFacingSubscriptionError,
+      ),
+    );
     _vpnLifecycleCommands.bind(
       toggle: (source) => _toggleConnection(source: source),
       stop: (reason, allowQueuedRestart) =>
@@ -2103,7 +2118,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     WidgetsBinding.instance.addObserver(this);
     _configureImageCacheForAndroid();
     _refreshThemeCache();
-    _startDeepLinkHandling();
+    unawaited(_deepLinkImportCoordinator.start());
     unawaited(_bootstrap());
   }
 
@@ -2154,7 +2169,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxyListCacheReleaseTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
     unawaited(_runtimeEvents.dispose());
-    _deepLinkImportSubscription?.cancel();
+    _deepLinkImportCoordinator.dispose();
     final store = _store;
     if (_ownsStore && store != null) {
       unawaited(store.close());
@@ -2241,201 +2256,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return total;
   }
 
-  Future<void> _startDeepLinkHandling() async {
-    _deepLinkImportSubscription = DeepLinkImportBridge.stream.listen(
-      _enqueueDeepLinkImport,
-    );
-
-    final initialRequest = await DeepLinkImportBridge.getInitialRequest();
-    if (!mounted || initialRequest == null) {
-      return;
-    }
-    _enqueueDeepLinkImport(initialRequest);
-  }
-
-  void _enqueueDeepLinkImport(DeepLinkImportRequest request) {
-    if (_ready && _onboardingCompleted && !_legalAccepted) {
-      _showAppSnackBar(_legalImportBlockedMessage());
-      return;
-    }
-    _pendingDeepLinkImport = request;
-    if (!_ready ||
-        !_onboardingCompleted ||
-        !_legalAccepted ||
-        _deepLinkImportInFlight) {
-      return;
-    }
-    unawaited(_drainPendingDeepLinkImports());
-  }
-
-  Future<void> _drainPendingDeepLinkImports() async {
-    if (_deepLinkImportInFlight) {
-      return;
-    }
-
-    if (_pendingDeepLinkImport != null && !_legalAccepted) {
-      _pendingDeepLinkImport = null;
-      _showAppSnackBar(_legalImportBlockedMessage());
-      return;
-    }
-
-    while (mounted && _ready && _onboardingCompleted && _legalAccepted) {
-      final request = _pendingDeepLinkImport;
-      if (request == null) {
-        return;
-      }
-
-      final context = _navigatorKey.currentContext;
-      if (context == null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _ready && _onboardingCompleted && _legalAccepted) {
-            unawaited(_drainPendingDeepLinkImports());
-          }
-        });
-        return;
-      }
-
-      _pendingDeepLinkImport = null;
-      _deepLinkImportInFlight = true;
-      try {
-        await _handleDeepLinkImport(request);
-      } finally {
-        _deepLinkImportInFlight = false;
-      }
-    }
-  }
-
-  Future<void> _handleDeepLinkImport(DeepLinkImportRequest request) async {
-    final context = _navigatorKey.currentContext;
-    if (context == null) {
-      _pendingDeepLinkImport = request;
-      return;
-    }
-    final l10n = AppLocalizations.of(context);
-    final copy = _deepLinkImportCopy(context);
-
-    if (!HappCryptoLinkDecoder.isSupportedSubscriptionUrl(request.url)) {
-      _showAppSnackBar(l10n.invalidUrl);
-      return;
-    }
-
-    try {
-      final preview = await _buildDeepLinkImportPreview(request);
-      if (!context.mounted) {
-        return;
-      }
-      final decision = await _showDeepLinkImportSheet(
-        context,
-        request,
-        preview,
-      );
-      if (decision == null) {
-        return;
-      }
-      if (!context.mounted) {
-        return;
-      }
-      final requestInfo = switch (decision) {
-        _DeepLinkImportDecision.sendHwid => preview.requestInfo,
-        _DeepLinkImportDecision.importWithoutHwid =>
-          preview.requestInfo?.copyWith(requireHwid: false),
-        _DeepLinkImportDecision.import => preview.requestInfo,
-      };
-
-      final createdResult = await _runSubscriptionOperationWithWarning(
-        SubscriptionStore.addFromUrl(
-          preview.resolvedUrl,
-          customName: request.name,
-          requestInfo: requestInfo,
-          operationTimeout: _subscriptionOperationTimeout,
-          allowInsecureTls: _allowUntrustedSubscriptionCertificates,
-          onRouteAttempt: _handleSubscriptionRouteAttempt,
-        ),
-        slowMessage: l10n.subscriptionOperationSlowWarning,
-        timeoutMessage: l10n.subscriptionOperationTimeout,
-      );
-      final created = createdResult.subscription;
-      await _reloadSubscriptions();
-      if (!mounted) {
-        return;
-      }
-      _showAppSnackBar(
-        createdResult.hasWarning
-            ? subscriptionSavedWarningMessage(createdResult.warning, l10n)
-            : copy.imported(created.name),
-      );
-      await _offerLikelyHwidFix(created);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      AppLogStore.warning(
-        'subscription',
-        'Deep-link subscription import failed: ${error.runtimeType}: $error',
-      );
-      _showAppSnackBar(_userFacingSubscriptionError(error, l10n));
-    }
-  }
-
-  String _legalImportBlockedMessage() {
-    final context = _navigatorKey.currentContext;
-    if (context == null) {
-      return 'Accept Terms and Privacy Policy before importing subscriptions.';
-    }
-    return AppLocalizations.of(context).legalImportBlockedMessage;
-  }
-
-  Future<_DeepLinkImportPreview> _buildDeepLinkImportPreview(
-    DeepLinkImportRequest request,
-  ) async {
-    if (HappCryptoLinkDecoder.isSupportedLink(request.url)) {
-      final prepared = await HappCryptoLinkDecoder.prepare(request.url);
-      return _DeepLinkImportPreview(
-        sourceUrl: request.url,
-        resolvedUrl: prepared.resolvedUrl,
-        requestInfo: prepared.requestInfo,
-      );
-    }
-
-    final isHappDeepLink = request.isHapp;
-
-    return _DeepLinkImportPreview(
-      sourceUrl: request.url,
-      resolvedUrl: request.url,
-      requestInfo: isHappDeepLink
-          ? HappCryptoLinkDecoder.happRequestInfo()
-          : null,
-    );
-  }
-
-  Future<_DeepLinkImportDecision?> _showDeepLinkImportSheet(
-    BuildContext context,
-    DeepLinkImportRequest request,
-    _DeepLinkImportPreview preview,
-  ) {
-    final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<_DeepLinkImportDecision>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => _DeepLinkImportSheet(
-        request: request,
-        preview: preview,
-        copy: _deepLinkImportCopy(context),
-        l10n: l10n,
-      ),
-    );
-  }
-
-  _DeepLinkImportCopy _deepLinkImportCopy(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return _DeepLinkImportCopy(
-      title: l10n.deepLinkImportTitle,
-      message: l10n.deepLinkImportMessage,
-      nameLabel: l10n.deepLinkImportNameLabel,
-      importAction: l10n.deepLinkImportAction,
-      importedTextBuilder: l10n.deepLinkImportSuccess,
-    );
-  }
 
   void _showAppSnackBar(
     String message, {
@@ -2928,8 +2748,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'metadataSubscriptions=${subscriptions.length} '
           'activePayloadDeferred=${!useInMemoryBootstrap && subscriptions.isNotEmpty}',
     );
-    if (_pendingDeepLinkImport != null && _onboardingCompleted) {
-      unawaited(_drainPendingDeepLinkImports());
+    if (_deepLinkImportCoordinator.hasPendingImport && _onboardingCompleted) {
+      unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
 
     final inboundSettingsMigrated =
@@ -3506,8 +3326,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _onboardingCompleted = true;
     });
     _saveStateSoon();
-    if (_pendingDeepLinkImport != null && _legalAccepted) {
-      unawaited(_drainPendingDeepLinkImports());
+    if (_deepLinkImportCoordinator.hasPendingImport && _legalAccepted) {
+      unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
   }
 
@@ -3517,8 +3337,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _acceptedLegalAtMillis = DateTime.now().millisecondsSinceEpoch;
     });
     _saveStateSoon();
-    if (_pendingDeepLinkImport != null) {
-      unawaited(_drainPendingDeepLinkImports());
+    if (_deepLinkImportCoordinator.hasPendingImport) {
+      unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
   }
 
@@ -7211,25 +7031,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 }
 
-class _DeepLinkImportCopy {
-  const _DeepLinkImportCopy({
-    required this.title,
-    required this.message,
-    required this.nameLabel,
-    required this.importAction,
-    required this.importedTextBuilder,
-  });
-
-  final String title;
-  final String message;
-  final String nameLabel;
-  final String importAction;
-  final String Function(String name) importedTextBuilder;
-
-  String imported(String name) {
-    return importedTextBuilder(name);
-  }
-}
 
 class _LocalizedSubscriptionError implements Exception {
   const _LocalizedSubscriptionError(this.message);
@@ -7239,285 +7040,3 @@ class _LocalizedSubscriptionError implements Exception {
   @override
   String toString() => message;
 }
-
-class _DeepLinkImportPreview {
-  const _DeepLinkImportPreview({
-    required this.sourceUrl,
-    required this.resolvedUrl,
-    required this.requestInfo,
-  });
-
-  final String sourceUrl;
-  final String resolvedUrl;
-  final SubscriptionInfo? requestInfo;
-
-  bool get isHapp =>
-      requestInfo?.happCryptoLink != null ||
-      requestInfo?.requireHwid == true ||
-      requestInfo?.customUserAgent?.trim().isNotEmpty == true;
-}
-
-class _DeepLinkImportSheet extends StatelessWidget {
-  const _DeepLinkImportSheet({
-    required this.request,
-    required this.preview,
-    required this.copy,
-    required this.l10n,
-  });
-
-  final DeepLinkImportRequest request;
-  final _DeepLinkImportPreview preview;
-  final _DeepLinkImportCopy copy;
-  final AppLocalizations l10n;
-
-  String _summarizeSourceUrl(String value) {
-    if (value.length <= 72) {
-      return value;
-    }
-    return '${value.substring(0, 72)}...';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final name = request.name;
-    final isHapp = preview.isHapp;
-    final happInfo = preview.requestInfo;
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.8;
-
-    return SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(copy.title, style: theme.textTheme.titleLarge),
-                      const Gap(12),
-                      Text(copy.message, style: theme.textTheme.bodyLarge),
-                      if (isHapp) ...[
-                        const Gap(12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: .10,
-                            ),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            l10n.deepLinkImportHappBadge,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                      const Gap(16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (name != null && name.isNotEmpty) ...[
-                                  Text(
-                                    copy.nameLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  Text(name, style: theme.textTheme.titleSmall),
-                                  const Gap(12),
-                                ],
-                                if (isHapp) ...[
-                                  Text(
-                                    l10n.deepLinkImportResolvedUrlLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  SelectableText(
-                                    preview.resolvedUrl,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                  const Gap(16),
-                                  Text(
-                                    l10n.deepLinkImportSourceLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  Text(
-                                    _summarizeSourceUrl(preview.sourceUrl),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ] else ...[
-                                  Text(
-                                    l10n.subscriptionUrl,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  SelectableText(
-                                    preview.sourceUrl,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (isHapp) ...[
-                        const Gap(12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                l10n.deepLinkImportHappNotice,
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const Gap(12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: Card(
-                            margin: EdgeInsets.zero,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    l10n.deepLinkImportHwidLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  Text(
-                                    l10n.deepLinkImportHwidValue,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                  const Gap(12),
-                                  Text(
-                                    l10n.deepLinkImportUserAgentLabel,
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
-                                  const Gap(4),
-                                  SelectableText(
-                                    happInfo?.customUserAgent ??
-                                        happLatestUserAgent,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const Gap(16),
-              if (isHapp)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    FilledButton(
-                      onPressed: () => Navigator.of(
-                        context,
-                      ).pop(_DeepLinkImportDecision.sendHwid),
-                      child: Text(l10n.deepLinkImportHappSendHwidAction),
-                    ),
-                    const Gap(8),
-                    FilledButton.tonal(
-                      onPressed: () => Navigator.of(
-                        context,
-                      ).pop(_DeepLinkImportDecision.importWithoutHwid),
-                      child: Text(l10n.deepLinkImportHappWithoutHwidAction),
-                    ),
-                    const Gap(8),
-                    OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(l10n.cancel),
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: Text(l10n.cancel),
-                      ),
-                    ),
-                    const Gap(12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.of(
-                          context,
-                        ).pop(_DeepLinkImportDecision.import),
-                        child: Text(copy.importAction),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-enum _DeepLinkImportDecision { import, sendHwid, importWithoutHwid }
