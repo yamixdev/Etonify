@@ -14,6 +14,7 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_root_shell.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
+import 'package:meow_client/app/coordinators/proxy_location_coordinator.dart';
 import 'package:meow_client/app/deep_link_import.dart';
 import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
@@ -125,7 +126,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   StreamSubscription<DeepLinkImportRequest>? _deepLinkImportSubscription;
   AppSettingsStore? _store;
   Timer? _subscriptionAutoRefreshTimer;
-  Timer? _locationLookupTimer;
   Timer? _derivedCacheBuildTimer;
   Timer? _proxyListCacheReleaseTimer;
   Timer? _trafficUiUpdateTimer;
@@ -142,7 +142,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _trafficAvailable = false;
   bool _deepLinkImportInFlight = false;
   bool _settingsBackupOperationInFlight = false;
-  bool _locationLookupInFlight = false;
   bool _proxyPanelInteractionActive = false;
   bool _proxyPanelOpen = false;
   int _proxyPanelResetGeneration = 0;
@@ -159,14 +158,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final RussiaRouteDataService _russiaRouteDataService;
   late final VpnLifecycleCommands _vpnLifecycleCommands;
   late final AppSettingsCommands _appSettingsCommands;
-  int _locationLookupActiveRequests = 0;
-  int _locationLookupGeneration = 0;
-  bool _locationLookupRefreshRequested = false;
-  String _lastLocationLookupSignature = '';
-  final Map<String, Future<Map<String, dynamic>>> _externalInfoLookups =
-      <String, Future<Map<String, dynamic>>>{};
-  final Queue<Completer<bool>> _locationLookupWaiters =
-      Queue<Completer<bool>>();
+  late final ProxyLocationCoordinator _proxyLocationCoordinator;
   AdBlockRuleSetStatus _adBlockStatus =
       const AdBlockRuleSetStatus.unavailable();
   RussiaRouteDataStatus _russiaRouteDataStatus =
@@ -2091,6 +2083,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
       shouldRecordLog: _shouldRecordSingBoxLog,
       onRuntimeLogIssue: _handleRuntimeLogIssue,
     );
+    _proxyLocationCoordinator = ProxyLocationCoordinator(
+      runtime: _singboxRuntime,
+      getLocationLookupLimit: () => _locationLookupLimit,
+      getLocationLookupTimeoutSeconds: () => _locationLookupTimeoutSeconds,
+      getLocationLookupConcurrency: () => _locationLookupConcurrency,
+      isConnected: () => _connected,
+      isForegroundLifecycleActive: () => _foregroundLifecycleActive,
+      isMarkAllServersRussia: () => _markAllServersRussia,
+      isProxyPanelInteractionActive: () => _proxyPanelInteractionActive,
+      getDiagnosticGeneration: () => _runtimeOperations.diagnosticGeneration,
+      getActiveSubscription: () => _activeSubscription,
+      getBestOutbounds: _bestOutboundsForLocationLookup,
+      hasResolvedExternalLocation: _hasResolvedExternalLocation,
+      getEffectiveOutboundLatency: _effectiveOutboundLatency,
+      onApplyResolvedInfos: _applyResolvedExternalIpInfos,
+    );
     _vpnLifecycleCommands.bind(
       toggle: (source) => _toggleConnection(source: source),
       stop: (reason, allowQueuedRestart) =>
@@ -2135,7 +2143,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _subscriptionAutoRefreshTimer?.cancel();
     _latencyCoordinator.dispose();
     _runtimeRecovery.dispose();
-    _locationLookupTimer?.cancel();
+    _proxyLocationCoordinator.dispose();
     _resumeForegroundSyncTimer?.cancel();
     _groupUrlTestScheduler.dispose();
     _startupLatencyDeadline.dispose();
@@ -2146,14 +2154,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _runtimeCommands.dispose();
     _activeProxyIpController.dispose();
     _proxySelection.dispose();
-    _locationLookupRefreshRequested = false;
-    for (final waiter in _locationLookupWaiters) {
-      if (!waiter.isCompleted) {
-        waiter.complete(false);
-      }
-    }
-    _locationLookupWaiters.clear();
-    _externalInfoLookups.clear();
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
     _trafficUiUpdateTimer?.cancel();
@@ -3082,7 +3082,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _refreshThemeCache();
       }
       if (change.scheduleLocationRefresh) {
-        _lastLocationLookupSignature = '';
+        _proxyLocationCoordinator.invalidateSignature();
       }
     });
     if (!change.changed) {
@@ -3102,10 +3102,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _saveStateSoon();
     }
     if (change.pumpLocationLookupWaiters) {
-      _pumpLocationLookupWaiters();
+      _proxyLocationCoordinator.pumpLocationLookupWaiters();
     }
     if (change.scheduleLocationRefresh) {
-      _scheduleBestOutboundLocationRefresh();
+      _proxyLocationCoordinator.scheduleBestOutboundLocationRefresh();
     }
     if (change.syncRuntimeFlags) {
       unawaited(_syncRuntimeFlags());
@@ -3180,7 +3180,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           .read(appSettingsProvider.notifier)
           .hydrate(state, progressiveBlurEnabledOverride: false);
       _refreshThemeCache();
-      _lastLocationLookupSignature = '';
+      _proxyLocationCoordinator.invalidateSignature();
     });
     _lastAppliedSettingsState = state;
     _publishTrafficDashboardSnapshot(force: true);
@@ -3395,11 +3395,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _resumeForegroundSyncTimer?.cancel();
     _subscriptionAutoRefreshTimer?.cancel();
     _activeProxyIpController.cancelPending();
-    _locationLookupTimer?.cancel();
-    _locationLookupGeneration++;
-    _locationLookupInFlight = false;
-    _locationLookupRefreshRequested = false;
-    _cancelQueuedLocationLookups();
+    _proxyLocationCoordinator.reset();
     _trafficUiUpdateTimer?.cancel();
     _trafficUiUpdateTimer = null;
     _pendingTrafficStatusEvent = null;
@@ -3435,7 +3431,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           delay: const Duration(milliseconds: 700),
         );
         if (_locationLookupLimit > 0) {
-          _scheduleBestOutboundLocationRefresh(
+          _proxyLocationCoordinator.scheduleBestOutboundLocationRefresh(
             delay: const Duration(seconds: 1),
           );
         }
@@ -3720,11 +3716,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     setState(() {
       _setConnectionPhase(AppConnectionPhase.idle);
       _resetActiveProxyIpState();
-      _locationLookupGeneration++;
-      _locationLookupTimer?.cancel();
-      _locationLookupInFlight = false;
-      _locationLookupRefreshRequested = false;
-      _cancelQueuedLocationLookups();
+      _proxyLocationCoordinator.reset();
       _runtimeRecovery.clearExcludedOutbounds();
       _clearLastStartedBuildCache();
       _runtimeRecovery.cancelRetry();
@@ -5883,7 +5875,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     setState(() {
       if (running) {
         _runtimeIntent.restoreDesiredFromObservedRuntime();
-        _lastLocationLookupSignature = '';
+        _proxyLocationCoordinator.invalidateSignature();
       }
       _setConnectionPhase(
         decision.phase,
@@ -5893,11 +5885,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         shouldCancelLatency = true;
         shouldSyncQuickSettingsTile = true;
         _resetActiveProxyIpState();
-        _locationLookupGeneration++;
-        _locationLookupTimer?.cancel();
-        _locationLookupInFlight = false;
-        _locationLookupRefreshRequested = false;
-        _cancelQueuedLocationLookups();
+        _proxyLocationCoordinator.reset();
         _resetTrafficDashboardData();
         _lowestLatency = null;
         _runtimeLowestOutboundTag = null;
@@ -6038,12 +6026,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       preserveUnrelatedMeasurements: true,
     );
     _resetActiveProxyIpState(rebuild: false);
-    _locationLookupGeneration++;
-    _locationLookupTimer?.cancel();
-    _locationLookupInFlight = false;
-    _locationLookupRefreshRequested = false;
-    _lastLocationLookupSignature = '';
-    _cancelQueuedLocationLookups();
+    _proxyLocationCoordinator.reset();
+    _proxyLocationCoordinator.invalidateSignature();
     if (measurementsChanged) {
       _publishProxyRuntimeVisualStatesForTags(invalidatedTags);
     }
@@ -6674,7 +6658,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _scheduleActiveOutboundIpRefresh();
       }
       if (result.realOutboundRuntimeStateChanged) {
-        _scheduleBestOutboundLocationRefresh();
+        _proxyLocationCoordinator.scheduleBestOutboundLocationRefresh();
       }
     }
     if (diagnosticsBecameReady) {
@@ -6949,7 +6933,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<ActiveProxyIpResolveResult?> _resolveActiveProxyIp(
     String outboundTag,
   ) async {
-    final resolved = await _fetchExternalIpInfo(
+    final resolved = await _proxyLocationCoordinator.fetchExternalIpInfo(
       outboundTag: outboundTag,
       highPriority: true,
     );
@@ -6977,7 +6961,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await _applyResolvedExternalIpInfos(
       subscriptionId: target.subscriptionId,
       resolvedByTag: {
-        target.outboundTag: _ResolvedExternalIpInfo(
+        target.outboundTag: ResolvedExternalIpInfo(
           ip: result.ip,
           countryCode: result.countryCode,
         ),
@@ -6985,113 +6969,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  Future<_ResolvedExternalIpInfo?> _fetchExternalIpInfo({
-    required String outboundTag,
-    bool highPriority = false,
-  }) async {
-    _LocationLookupSlot? slot;
-    if (!highPriority) {
-      slot = await _acquireLocationLookupSlot();
-      if (slot == null) {
-        return null;
-      }
-    }
-    final lookup = _sharedExternalInfoLookup(outboundTag);
-    if (slot != null) {
-      unawaited(
-        lookup.whenComplete(slot.release).then<void>((_) {}, onError: (_) {}),
-      );
-    }
-    try {
-      final response = await lookup.timeout(
-        Duration(seconds: _locationLookupTimeoutSeconds),
-      );
-      return _ResolvedExternalIpInfo.fromResponse(
-        response,
-        normalizeCountryCode: _normalizeCountryCode,
-      );
-    } on TimeoutException {
-      AppLogStore.debug(
-        'proxy',
-        'outbound_ip_rpc tag=$outboundTag error=timeout',
-      );
-      return null;
-    } catch (error) {
-      AppLogStore.debug(
-        'proxy',
-        'outbound_ip_rpc tag=$outboundTag error=core_error '
-            'detail=$error',
-      );
-      return null;
-    }
-  }
-
-  Future<Map<String, dynamic>> _sharedExternalInfoLookup(String outboundTag) {
-    final normalizedTag = outboundTag.trim();
-    final key = '${_runtimeOperations.diagnosticGeneration}\n$normalizedTag';
-    final existing = _externalInfoLookups[key];
-    if (existing != null) {
-      return existing;
-    }
-    final lookup = _singboxRuntime.lookupOutboundExternalInfo(
-      outboundTag: normalizedTag,
-    );
-    _externalInfoLookups[key] = lookup;
-    unawaited(
-      lookup
-          .whenComplete(() {
-            if (identical(_externalInfoLookups[key], lookup)) {
-              _externalInfoLookups.remove(key);
-            }
-          })
-          .then<void>((_) {}, onError: (_) {}),
-    );
-    return lookup;
-  }
-
-  Future<_LocationLookupSlot?> _acquireLocationLookupSlot() async {
-    if (_locationLookupActiveRequests >= _locationLookupConcurrency) {
-      final waiter = Completer<bool>();
-      _locationLookupWaiters.add(waiter);
-      final acquired = await waiter.future;
-      if (!acquired || !mounted) {
-        return null;
-      }
-    } else {
-      _locationLookupActiveRequests++;
-    }
-    return _LocationLookupSlot(_releaseLocationLookupSlot);
-  }
-
-  void _releaseLocationLookupSlot() {
-    _locationLookupActiveRequests = max(0, _locationLookupActiveRequests - 1);
-    _pumpLocationLookupWaiters();
-  }
-
-  void _pumpLocationLookupWaiters() {
-    while (_locationLookupWaiters.isNotEmpty &&
-        _locationLookupActiveRequests < _locationLookupConcurrency) {
-      final waiter = _locationLookupWaiters.removeFirst();
-      if (waiter.isCompleted) {
-        continue;
-      }
-      _locationLookupActiveRequests++;
-      waiter.complete(true);
-    }
-  }
-
-  void _cancelQueuedLocationLookups() {
-    while (_locationLookupWaiters.isNotEmpty) {
-      final waiter = _locationLookupWaiters.removeFirst();
-      if (!waiter.isCompleted) {
-        waiter.complete(false);
-      }
-    }
-  }
-
   Future<void> _applyResolvedExternalIpInfos({
     required String subscriptionId,
-    required Map<String, _ResolvedExternalIpInfo> resolvedByTag,
+    required Map<String, ResolvedExternalIpInfo> resolvedByTag,
   }) async {
     if (resolvedByTag.isEmpty ||
         !_connected ||
@@ -7160,136 +7040,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  void _scheduleBestOutboundLocationRefresh({
-    Duration delay = const Duration(seconds: 1),
-  }) {
-    if (!mounted || !_foregroundLifecycleActive) {
-      _locationLookupTimer?.cancel();
-      _locationLookupRefreshRequested = false;
-      return;
-    }
-    if (_locationLookupInFlight) {
-      _locationLookupRefreshRequested = true;
-      return;
-    }
-    _locationLookupTimer?.cancel();
-    final generation = ++_locationLookupGeneration;
-    if (!_connected || _locationLookupLimit <= 0 || _markAllServersRussia) {
-      _locationLookupRefreshRequested = false;
-      return;
-    }
-    final effectiveDelay = _proxyPanelInteractionActive
-        ? delay + const Duration(seconds: 3)
-        : delay;
-    _locationLookupTimer = Timer(effectiveDelay, () {
-      unawaited(_refreshBestOutboundLocations(generation: generation));
-    });
-  }
-
-  Future<void> _refreshBestOutboundLocations({required int generation}) async {
-    if (_locationLookupInFlight ||
-        !_connected ||
-        !_foregroundLifecycleActive ||
-        !mounted ||
-        generation != _locationLookupGeneration ||
-        _locationLookupLimit <= 0 ||
-        _markAllServersRussia) {
-      return;
-    }
-    if (_proxyPanelInteractionActive) {
-      _scheduleBestOutboundLocationRefresh(delay: const Duration(seconds: 3));
-      return;
-    }
-    final activeSubscription = _activeSubscription;
-    if (activeSubscription == null) {
-      return;
-    }
-    final targets = _bestOutboundsForLocationLookup();
-    if (targets.isEmpty) {
-      return;
-    }
-    final targetTags = targets
-        .take(_locationLookupLimit)
-        .where((outbound) => !_hasResolvedExternalLocation(outbound))
-        .map((outbound) => outbound.tag)
-        .toList(growable: false);
-    if (targetTags.isEmpty) {
-      return;
-    }
-    final signature =
-        '${activeSubscription.id}|$_locationLookupLimit|'
-        '${targetTags.map((tag) {
-          final outbound = _activeOutboundByTagLookup[tag];
-          return '$tag:${outbound == null ? '' : _effectiveOutboundLatency(outbound) ?? ''}';
-        }).join('|')}';
-    if (signature == _lastLocationLookupSignature) {
-      return;
-    }
-    _lastLocationLookupSignature = signature;
-    _locationLookupInFlight = true;
-    try {
-      final resolvedByTag = await _fetchExternalIpInfoBatch(
-        targetTags,
-        subscriptionId: activeSubscription.id,
-        generation: generation,
-      );
-      if (resolvedByTag.isEmpty ||
-          !_connected ||
-          !mounted ||
-          generation != _locationLookupGeneration) {
-        return;
-      }
-      await _applyResolvedExternalIpInfos(
-        subscriptionId: activeSubscription.id,
-        resolvedByTag: resolvedByTag,
-      );
-    } finally {
-      final refreshRequested = _locationLookupRefreshRequested;
-      _locationLookupRefreshRequested = false;
-      _locationLookupInFlight = false;
-      if (mounted &&
-          _connected &&
-          (refreshRequested || generation != _locationLookupGeneration) &&
-          _locationLookupLimit > 0) {
-        _scheduleBestOutboundLocationRefresh(
-          delay: _proxyPanelInteractionActive
-              ? const Duration(seconds: 3)
-              : Duration.zero,
-        );
-      }
-    }
-  }
-
-  Future<Map<String, _ResolvedExternalIpInfo>> _fetchExternalIpInfoBatch(
-    List<String> outboundTags, {
-    required String subscriptionId,
-    required int generation,
-  }) async {
-    final resolvedByTag = <String, _ResolvedExternalIpInfo>{};
-    var nextIndex = 0;
-    final workerCount = min(outboundTags.length, _locationLookupConcurrency);
-    Future<void> worker() async {
-      while (mounted &&
-          _connected &&
-          generation == _locationLookupGeneration &&
-          _activeSubscription?.id == subscriptionId) {
-        final index = nextIndex;
-        nextIndex++;
-        if (index >= outboundTags.length) {
-          return;
-        }
-        final tag = outboundTags[index];
-        final resolved = await _fetchExternalIpInfo(outboundTag: tag);
-        if (resolved != null) {
-          resolvedByTag[tag] = resolved;
-        }
-      }
-    }
-
-    await Future.wait(List.generate(workerCount, (_) => worker()));
-    return resolvedByTag;
-  }
-
   List<Outbound> _bestOutboundsForLocationLookup() {
     _ensureActiveLookupCaches();
     final outbounds = _activeVisibleOutboundsLookup
@@ -7318,10 +7068,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  String _normalizeCountryCode(String? countryCode) {
-    final normalized = countryCode?.trim().toUpperCase() ?? '';
-    return RegExp(r'^[A-Z]{2}$').hasMatch(normalized) ? normalized : '';
-  }
+  String _normalizeCountryCode(String? countryCode) =>
+      ResolvedExternalIpInfo.normalizeCountryCode(countryCode);
 
   String _displayOutboundCountry(Outbound outbound) {
     return outboundDisplayCountryCode(
@@ -7643,49 +7391,6 @@ class _DeepLinkImportCopy {
 
   String imported(String name) {
     return importedTextBuilder(name);
-  }
-}
-
-class _ResolvedExternalIpInfo {
-  const _ResolvedExternalIpInfo({required this.ip, this.countryCode});
-
-  final String ip;
-  final String? countryCode;
-
-  static _ResolvedExternalIpInfo? fromResponse(
-    Map<String, dynamic> response, {
-    required String Function(String? value) normalizeCountryCode,
-  }) {
-    final ip =
-        (response['ip']?.toString() ?? response['query']?.toString() ?? '')
-            .trim();
-    if (ip.isEmpty) {
-      return null;
-    }
-    final normalizedCountry = normalizeCountryCode(
-      response['countryCode']?.toString() ??
-          response['country_code']?.toString() ??
-          response['cc']?.toString(),
-    );
-    return _ResolvedExternalIpInfo(
-      ip: ip,
-      countryCode: normalizedCountry.isEmpty ? null : normalizedCountry,
-    );
-  }
-}
-
-class _LocationLookupSlot {
-  _LocationLookupSlot(this._onRelease);
-
-  final VoidCallback _onRelease;
-  bool _released = false;
-
-  void release() {
-    if (_released) {
-      return;
-    }
-    _released = true;
-    _onRelease();
   }
 }
 
