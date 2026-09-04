@@ -36,6 +36,10 @@ typedef SetTlsFragmentationModeCommand =
     void Function(TlsFragmentationMode value);
 typedef SetMemoryLimitEnabledCommand =
     void Function(bool value, {bool warningDismissed});
+typedef SetAllowUntrustedProxyCertificatesCommand = void Function(bool value);
+typedef SetAllowUntrustedSubscriptionCertificatesCommand =
+    void Function(bool value);
+typedef SetSingBoxLogLevelCommand = void Function(String value);
 
 /// UI-facing command port for mutating application settings and triggering
 /// dependent runtime reconfiguration operations.
@@ -68,6 +72,11 @@ class AppSettingsCommands {
   SetExperimentalFakeIpEnabledCommand? _setExperimentalFakeIpEnabled;
   SetTlsFragmentationModeCommand? _setTlsFragmentationMode;
   SetMemoryLimitEnabledCommand? _setMemoryLimitEnabled;
+  SetAllowUntrustedProxyCertificatesCommand?
+      _setAllowUntrustedProxyCertificates;
+  SetAllowUntrustedSubscriptionCertificatesCommand?
+      _setAllowUntrustedSubscriptionCertificates;
+  SetSingBoxLogLevelCommand? _setSingBoxLogLevel;
 
   bool get isDnsBound =>
       _setDnsDirectPreset != null &&
@@ -145,6 +154,38 @@ class AppSettingsCommands {
     _setExperimentalFakeIpEnabled = null;
     _setTlsFragmentationMode = null;
     _setMemoryLimitEnabled = null;
+  }
+
+  bool get isSecurityBound =>
+      _setAllowUntrustedProxyCertificates != null &&
+      _setAllowUntrustedSubscriptionCertificates != null;
+
+  void bindSecurityHandlers({
+    required SetAllowUntrustedProxyCertificatesCommand
+        setAllowUntrustedProxyCertificates,
+    required SetAllowUntrustedSubscriptionCertificatesCommand
+        setAllowUntrustedSubscriptionCertificates,
+  }) {
+    _setAllowUntrustedProxyCertificates = setAllowUntrustedProxyCertificates;
+    _setAllowUntrustedSubscriptionCertificates =
+        setAllowUntrustedSubscriptionCertificates;
+  }
+
+  void unbindSecurityHandlers() {
+    _setAllowUntrustedProxyCertificates = null;
+    _setAllowUntrustedSubscriptionCertificates = null;
+  }
+
+  bool get isLogsBound => _setSingBoxLogLevel != null;
+
+  void bindLogsHandlers({
+    required SetSingBoxLogLevelCommand setSingBoxLogLevel,
+  }) {
+    _setSingBoxLogLevel = setSingBoxLogLevel;
+  }
+
+  void unbindLogsHandlers() {
+    _setSingBoxLogLevel = null;
   }
 
   bool get isRoutingBound =>
@@ -299,6 +340,14 @@ class AppSettingsCommands {
 
   void setMemoryLimitEnabled(bool value, {bool warningDismissed = false}) =>
       _setMemoryLimitEnabled?.call(value, warningDismissed: warningDismissed);
+
+  void setAllowUntrustedProxyCertificates(bool value) =>
+      _setAllowUntrustedProxyCertificates?.call(value);
+
+  void setAllowUntrustedSubscriptionCertificates(bool value) =>
+      _setAllowUntrustedSubscriptionCertificates?.call(value);
+
+  void setSingBoxLogLevel(String value) => _setSingBoxLogLevel?.call(value);
 }
 
 final appSettingsCommandsProvider = Provider<AppSettingsCommands>((ref) {
@@ -307,6 +356,8 @@ final appSettingsCommandsProvider = Provider<AppSettingsCommands>((ref) {
     commands.unbindRoutingHandlers();
     commands.unbindDnsHandlers();
     commands.unbindExperimentalHandlers();
+    commands.unbindSecurityHandlers();
+    commands.unbindLogsHandlers();
   });
   return commands;
 }, name: 'appSettingsCommandsProvider');

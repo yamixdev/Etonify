@@ -2006,6 +2006,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setTlsFragmentationMode: _setTlsFragmentationMode,
       setMemoryLimitEnabled: _setMemoryLimitEnabled,
     );
+    _appSettingsCommands.bindSecurityHandlers(
+      setAllowUntrustedProxyCertificates: _setAllowUntrustedProxyCertificates,
+      setAllowUntrustedSubscriptionCertificates:
+          _setAllowUntrustedSubscriptionCertificates,
+    );
+    _appSettingsCommands.bindLogsHandlers(
+      setSingBoxLogLevel: _setSingBoxLogLevel,
+    );
     _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
       runtime: ref.read(subscriptionRuntimeControllerProvider),
@@ -2119,6 +2127,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void dispose() {
     _vpnLifecycleCommands.unbind();
     _appSettingsCommands.unbindRoutingHandlers();
+    _appSettingsCommands.unbindDnsHandlers();
+    _appSettingsCommands.unbindExperimentalHandlers();
+    _appSettingsCommands.unbindSecurityHandlers();
+    _appSettingsCommands.unbindLogsHandlers();
     WidgetsBinding.instance.removeObserver(this);
     _subscriptionAutoRefreshTimer?.cancel();
     _latencyCoordinator.dispose();
@@ -5482,15 +5494,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (navigator == null) return;
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (context) => SettingsSecurityPage(
-          allowUntrustedProxyCertificates: _allowUntrustedProxyCertificates,
-          allowUntrustedSubscriptionCertificates:
-              _allowUntrustedSubscriptionCertificates,
-          onAllowUntrustedProxyCertificatesChanged:
-              _setAllowUntrustedProxyCertificates,
-          onAllowUntrustedSubscriptionCertificatesChanged:
-              _setAllowUntrustedSubscriptionCertificates,
-        ),
+        builder: (context) => const SettingsSecurityPage(),
       ),
     );
   }
@@ -5500,10 +5504,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (navigator == null) return;
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsLogsPage(
-          currentSingBoxLogLevel: _singBoxLogLevel,
-          onSingBoxLogLevelChanged: _setSingBoxLogLevel,
-        ),
+        builder: (_) => const SettingsLogsPage(),
       ),
     );
   }

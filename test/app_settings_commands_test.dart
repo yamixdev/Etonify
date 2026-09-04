@@ -202,5 +202,50 @@ void main() {
       commands.setExperimentalTcpFastOpen(false);
       expect(tcpFastOpen, isTrue);
     });
+
+    test('forwards calls to bound security handlers and unbinds cleanly', () {
+      final commands = AppSettingsCommands();
+      var allowProxy = false;
+      var allowSub = false;
+
+      commands.bindSecurityHandlers(
+        setAllowUntrustedProxyCertificates: (v) => allowProxy = v,
+        setAllowUntrustedSubscriptionCertificates: (v) => allowSub = v,
+      );
+
+      expect(commands.isSecurityBound, isTrue);
+
+      commands.setAllowUntrustedProxyCertificates(true);
+      expect(allowProxy, isTrue);
+
+      commands.setAllowUntrustedSubscriptionCertificates(true);
+      expect(allowSub, isTrue);
+
+      commands.unbindSecurityHandlers();
+      expect(commands.isSecurityBound, isFalse);
+
+      commands.setAllowUntrustedProxyCertificates(false);
+      expect(allowProxy, isTrue);
+    });
+
+    test('forwards calls to bound logs handlers and unbinds cleanly', () {
+      final commands = AppSettingsCommands();
+      var logLevel = '';
+
+      commands.bindLogsHandlers(
+        setSingBoxLogLevel: (v) => logLevel = v,
+      );
+
+      expect(commands.isLogsBound, isTrue);
+
+      commands.setSingBoxLogLevel('debug');
+      expect(logLevel, 'debug');
+
+      commands.unbindLogsHandlers();
+      expect(commands.isLogsBound, isFalse);
+
+      commands.setSingBoxLogLevel('error');
+      expect(logLevel, 'debug');
+    });
   });
 }

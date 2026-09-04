@@ -1,39 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
-class SettingsSecurityPage extends StatefulWidget {
-  const SettingsSecurityPage({
-    super.key,
-    required this.allowUntrustedProxyCertificates,
-    required this.allowUntrustedSubscriptionCertificates,
-    required this.onAllowUntrustedProxyCertificatesChanged,
-    required this.onAllowUntrustedSubscriptionCertificatesChanged,
-  });
-
-  final bool allowUntrustedProxyCertificates;
-  final bool allowUntrustedSubscriptionCertificates;
-  final ValueChanged<bool> onAllowUntrustedProxyCertificatesChanged;
-  final ValueChanged<bool> onAllowUntrustedSubscriptionCertificatesChanged;
-
-  @override
-  State<SettingsSecurityPage> createState() => _SettingsSecurityPageState();
-}
-
-class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
-  late bool _allowUntrustedProxyCertificates;
-  late bool _allowUntrustedSubscriptionCertificates;
-
-  @override
-  void initState() {
-    super.initState();
-    _allowUntrustedProxyCertificates = widget.allowUntrustedProxyCertificates;
-    _allowUntrustedSubscriptionCertificates =
-        widget.allowUntrustedSubscriptionCertificates;
-  }
+class SettingsSecurityPage extends ConsumerWidget {
+  const SettingsSecurityPage({super.key});
 
   Future<bool> _confirmRisk({
+    required BuildContext context,
     required String title,
     required String message,
     required Key confirmKey,
@@ -63,38 +40,51 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
         false;
   }
 
-  Future<void> _setProxyCertificates(bool value) async {
+  Future<void> _setProxyCertificates(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
     if (value) {
       final l10n = AppLocalizations.of(context);
       final confirmed = await _confirmRisk(
+        context: context,
         title: l10n.securityConfirmProxyTitle,
         message: l10n.securityConfirmProxyMessage,
         confirmKey: const ValueKey('security-confirm-proxy'),
       );
-      if (!confirmed || !mounted) return;
+      if (!confirmed || !context.mounted) return;
     }
-    setState(() => _allowUntrustedProxyCertificates = value);
-    widget.onAllowUntrustedProxyCertificatesChanged(value);
+    ref
+        .read(appSettingsCommandsProvider)
+        .setAllowUntrustedProxyCertificates(value);
   }
 
-  Future<void> _setSubscriptionCertificates(bool value) async {
+  Future<void> _setSubscriptionCertificates(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
     if (value) {
       final l10n = AppLocalizations.of(context);
       final confirmed = await _confirmRisk(
+        context: context,
         title: l10n.securityConfirmSubscriptionTitle,
         message: l10n.securityConfirmSubscriptionMessage,
         confirmKey: const ValueKey('security-confirm-subscription'),
       );
-      if (!confirmed || !mounted) return;
+      if (!confirmed || !context.mounted) return;
     }
-    setState(() => _allowUntrustedSubscriptionCertificates = value);
-    widget.onAllowUntrustedSubscriptionCertificatesChanged(value);
+    ref
+        .read(appSettingsCommandsProvider)
+        .setAllowUntrustedSubscriptionCertificates(value);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final settings = ref.watch(appSettingsProvider).controller;
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.securityTitle)),
@@ -131,8 +121,9 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                       color: colorScheme.error,
                     ),
                     title: Text(l10n.securityUntrustedProxyCertificatesTitle),
-                    value: _allowUntrustedProxyCertificates,
-                    onChanged: _setProxyCertificates,
+                    value: settings.allowUntrustedProxyCertificates,
+                    onChanged:
+                        (value) => _setProxyCertificates(context, ref, value),
                   ),
                   SwitchListTile(
                     key: const ValueKey(
@@ -145,8 +136,10 @@ class _SettingsSecurityPageState extends State<SettingsSecurityPage> {
                     title: Text(
                       l10n.securityUntrustedSubscriptionCertificatesTitle,
                     ),
-                    value: _allowUntrustedSubscriptionCertificates,
-                    onChanged: _setSubscriptionCertificates,
+                    value: settings.allowUntrustedSubscriptionCertificates,
+                    onChanged:
+                        (value) =>
+                            _setSubscriptionCertificates(context, ref, value),
                   ),
                 ],
               ),

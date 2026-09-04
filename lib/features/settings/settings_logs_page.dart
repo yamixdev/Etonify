@@ -1,27 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
-import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
-class SettingsLogsPage extends StatefulWidget {
-  const SettingsLogsPage({
-    super.key,
-    required this.currentSingBoxLogLevel,
-    required this.onSingBoxLogLevelChanged,
-  });
-
-  final String currentSingBoxLogLevel;
-  final ValueChanged<String> onSingBoxLogLevelChanged;
+class SettingsLogsPage extends ConsumerStatefulWidget {
+  const SettingsLogsPage({super.key});
 
   @override
-  State<SettingsLogsPage> createState() => _SettingsLogsPageState();
+  ConsumerState<SettingsLogsPage> createState() => _SettingsLogsPageState();
 }
 
-class _SettingsLogsPageState extends State<SettingsLogsPage> {
+class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
   static const _menuDisplayLevel = 'display-level';
   static const _menuSingBoxLevel = 'sing-box-level';
   static const _menuClear = 'clear';
@@ -34,7 +30,6 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
     'error',
   ];
   String _levelFilter = 'all';
-  late String _currentSingBoxLogLevel;
 
   static const _visibleLevelOrder = <String>[
     'all',
@@ -43,12 +38,6 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
     'info',
     'debug',
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _currentSingBoxLogLevel = widget.currentSingBoxLogLevel;
-  }
 
   Future<void> _exportVisibleLogs(BuildContext context) async {
     final output = _buildVisibleLogsText();
@@ -179,6 +168,8 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
 
   Future<void> _showSingBoxLogLevelPicker(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
+    final currentSingBoxLogLevel =
+        ref.read(appSettingsProvider).controller.singBoxLogLevel;
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -193,7 +184,7 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
                 Divider(height: 1, color: theme.colorScheme.outlineVariant),
             itemBuilder: (context, index) {
               final level = _logLevelOrder[index];
-              final selected = level == _currentSingBoxLogLevel;
+              final selected = level == currentSingBoxLogLevel;
               return ListTile(
                 dense: true,
                 shape: RoundedRectangleBorder(
@@ -223,13 +214,10 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
       },
     );
 
-    if (selected == null || selected == _currentSingBoxLogLevel) {
+    if (selected == null || selected == currentSingBoxLogLevel) {
       return;
     }
-    setState(() {
-      _currentSingBoxLogLevel = selected;
-    });
-    widget.onSingBoxLogLevelChanged(selected);
+    ref.read(appSettingsCommandsProvider).setSingBoxLogLevel(selected);
   }
 
   Future<void> _handleMenuSelection(String value) async {
@@ -249,6 +237,8 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final currentSingBoxLogLevel =
+        ref.watch(appSettingsProvider).controller.singBoxLogLevel;
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(
@@ -277,7 +267,7 @@ class _SettingsLogsPageState extends State<SettingsLogsPage> {
                 child: _LogMenuItem(
                   icon: Icons.terminal_rounded,
                   title: l10n.singBoxLogLevelTitle,
-                  value: _logLevelLabel(l10n, _currentSingBoxLogLevel),
+                  value: _logLevelLabel(l10n, currentSingBoxLogLevel),
                 ),
               ),
               const PopupMenuDivider(),
