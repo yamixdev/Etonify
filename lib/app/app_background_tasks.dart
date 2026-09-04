@@ -1165,19 +1165,44 @@ AppProxySummary? _lowestSelectedSummary(
         final selectedLeafTag = candidate.isGroup
             ? input.runtimeGroupSelections[candidate.tag]?.trim()
             : candidate.tag;
-        if (selectedLeafTag == null ||
+        final isUnavailable = selectedLeafTag == null ||
             selectedLeafTag.isEmpty ||
             input.unavailableLatencyTags.contains(selectedLeafTag) ||
             input.latencyErrors.containsKey(selectedLeafTag) ||
             candidate.latencyUnavailable ||
-            candidate.latencyError != null) {
-          return null;
+            candidate.latencyError != null;
+        if (!isUnavailable) {
+          return candidate;
         }
-        return candidate;
+        break;
       }
     }
   }
-  return null;
+  AppProxySummary? bestCandidate;
+  int? bestLatency;
+  for (final candidate in candidates) {
+    final selectedLeafTag = candidate.isGroup
+        ? input.runtimeGroupSelections[candidate.tag]?.trim()
+        : candidate.tag;
+    if (selectedLeafTag == null ||
+        selectedLeafTag.isEmpty ||
+        input.unavailableLatencyTags.contains(selectedLeafTag) ||
+        input.latencyErrors.containsKey(selectedLeafTag) ||
+        candidate.latencyUnavailable ||
+        candidate.latencyError != null) {
+      continue;
+    }
+    final latency = candidate.latency;
+    if (latency != null && latency > 0) {
+      if (bestLatency == null || latency < bestLatency) {
+        bestLatency = latency;
+        bestCandidate = candidate;
+      }
+    } else {
+      bestCandidate ??= candidate;
+    }
+  }
+  return bestCandidate;
 }
 
 bool _isSetbackUrlTestGroup(SubscriptionGroup group) {

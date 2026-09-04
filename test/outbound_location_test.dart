@@ -10,10 +10,26 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 void main() {
   group('outbound location', () {
     test(
-      'shows the observed exit country instead of the subscription name',
+      'prioritizes the declared source country over the observed exit country',
       () {
         final outbound = _outbound(
-          sourceCountry: 'CZ',
+          sourceCountry: 'RU',
+          exitCountry: 'FR',
+          externalIp: '203.0.113.7',
+        );
+
+        expect(
+          outboundDisplayCountryCode(outbound, markAllServersRussia: false),
+          'RU',
+        );
+      },
+    );
+
+    test(
+      'falls back to the observed exit country when source country is not declared',
+      () {
+        final outbound = _outbound(
+          sourceCountry: null,
           exitCountry: 'US',
           externalIp: '203.0.113.7',
         );
@@ -59,9 +75,9 @@ void main() {
       );
     });
 
-    testWidgets('proxy tile renders the observed exit flag', (tester) async {
+    testWidgets('proxy tile renders the observed exit flag when no source country', (tester) async {
       final outbound = _outbound(
-        sourceCountry: 'CZ',
+        sourceCountry: null,
         exitCountry: 'US',
         externalIp: '203.0.113.7',
       );

@@ -83,6 +83,7 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/core_config_migration.dart';
+import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/theme/demo_app_theme.dart';
@@ -393,7 +394,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!isLowestProxyTag(_selectedProxyTag)) {
       return null;
     }
-    return _runtimeLowestOutboundTagFor(_selectedProxyTag);
+    final tag = _runtimeLowestOutboundTagFor(_selectedProxyTag);
+    if (tag != null && tag.isNotEmpty) {
+      return tag;
+    }
+    return _currentResolvedActiveOutbound()?.tag;
   }
 
   Outbound? _lowestSelectedOutbound(
@@ -401,29 +406,44 @@ class _MeowClientState extends ConsumerState<MeowClient>
     List<Outbound> visibleOutbounds,
   ) {
     final runtimeSelectedTag = _runtimeLowestOutboundTagFor(lowestTag);
-    if (runtimeSelectedTag == null || runtimeSelectedTag.isEmpty) {
-      return null;
-    }
-    final selectedGroup = _activeGroupByTagLookup[runtimeSelectedTag];
-    final effectiveTag = selectedGroup == null
-        ? runtimeSelectedTag
-        : _runtimeGroupSelections[selectedGroup.tag]?.trim();
-    if (effectiveTag == null ||
-        effectiveTag.isEmpty ||
-        _unavailableLatencyTags.contains(effectiveTag) ||
-        _latencyErrors.containsKey(effectiveTag)) {
-      return null;
-    }
-    final cached = _activeOutboundByTagLookup[effectiveTag];
-    if (cached != null) {
-      return cached;
-    }
-    for (final outbound in visibleOutbounds) {
-      if (outbound.tag == effectiveTag) {
-        return outbound;
+    if (runtimeSelectedTag != null && runtimeSelectedTag.isNotEmpty) {
+      final selectedGroup = _activeGroupByTagLookup[runtimeSelectedTag];
+      final effectiveTag = selectedGroup == null
+          ? runtimeSelectedTag
+          : _runtimeGroupSelections[selectedGroup.tag]?.trim();
+      if (effectiveTag != null &&
+          effectiveTag.isNotEmpty &&
+          !_unavailableLatencyTags.contains(effectiveTag) &&
+          !_latencyErrors.containsKey(effectiveTag)) {
+        final cached = _activeOutboundByTagLookup[effectiveTag];
+        if (cached != null) {
+          return cached;
+        }
+        for (final outbound in visibleOutbounds) {
+          if (outbound.tag == effectiveTag) {
+            return outbound;
+          }
+        }
       }
     }
-    return null;
+    Outbound? bestOutbound;
+    int? bestLatency;
+    for (final outbound in visibleOutbounds) {
+      if (_unavailableLatencyTags.contains(outbound.tag) ||
+          _latencyErrors.containsKey(outbound.tag)) {
+        continue;
+      }
+      final latency = _effectiveOutboundLatency(outbound);
+      if (latency != null && latency > 0) {
+        if (bestLatency == null || latency < bestLatency) {
+          bestLatency = latency;
+          bestOutbound = outbound;
+        }
+      } else {
+        bestOutbound ??= outbound;
+      }
+    }
+    return bestOutbound;
   }
 
   void _rebuildDerivedCaches() {
@@ -2018,6 +2038,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       isConnected: () => _connected,
       isForeground: () => _foregroundLifecycleActive,
       activeOutboundTag: () => _currentResolvedActiveOutboundTag() ?? '',
+      activeGroupTag: _activeUrlTestGroupTag,
       testUrl: () => _urlTestUrl,
       outboundCount: () {
         _ensureActiveLookupCaches();
@@ -2053,6 +2074,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       onRuntimeLifecycleTimeout: _handleRuntimeLifecycleTimeout,
       cacheStartedBuild: _cacheLastStartedBuild,
       syncRuntimeState: _syncRuntimeState,
+      refreshCapabilities: _refreshCoreCapabilities,
     );
     _appTrafficMonitor = AppTrafficMonitor(
       host: AppTrafficMonitorHost(
@@ -5543,6 +5565,28 @@ class _MeowClientState extends ConsumerState<MeowClient>
       markAllServersRussia: _activeSubscription?.markAllServersRussia ?? false,
       capabilities: _latencyCoordinator.capabilities,
     );
+  }
+
+  Future<LibboxCapabilities> _refreshCoreCapabilities() async {
+    final capabilities = await _singboxRuntime.getCoreCapabilities();
+    _latencyCoordinator.updateCapabilities(capabilities);
+    return capabilities;
+  }
+
+  bool get _hasAvailableLowestGroup {
+    _ensureActiveLookupCaches();
+    return _activeVisibleOutboundsLookup.length > 1;
+  }
+
+  String _activeUrlTestGroupTag() {
+    final activeGroup = _subscriptionGroupForTag(_selectedProxyTag);
+    if (activeGroup != null) {
+      return activeGroup.tag;
+    }
+    if (isLowestProxyTag(_selectedProxyTag) || _hasAvailableLowestGroup) {
+      return lowestProxyTag;
+    }
+    return 'select';
   }
 
   void _startSingboxEvents() {

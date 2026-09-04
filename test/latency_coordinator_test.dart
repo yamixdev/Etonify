@@ -371,12 +371,27 @@ void main() {
     expect(await active, isFalse);
     expect(waitFinished, isTrue);
   });
+
+  test('uses active group tag when provided', () async {
+    final requests = <LatencyTestRequest>[];
+    final coordinator = _coordinator(
+      runTest: (request) async => requests.add(request),
+      activeGroupTag: () => 'lowest',
+    );
+    addTearDown(coordinator.dispose);
+
+    unawaited(coordinator.runFull(reason: 'test'));
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, hasLength(1));
+    expect(requests.single.groupTag, 'lowest');
+  });
 }
 
 LatencyCoordinator _coordinator({
   required LatencyTestRunner runTest,
   LatencyBoolReader? isConnected,
   LatencyBoolReader? isForeground,
+  LatencyStringReader? activeGroupTag,
   LatencyIntReader? outboundCount,
   LatencyIntReader? timeoutSeconds,
   LatencyIntReader? concurrency,
@@ -390,6 +405,7 @@ LatencyCoordinator _coordinator({
     isConnected: isConnected ?? () => true,
     isForeground: isForeground ?? () => true,
     activeOutboundTag: () => 'proxy-1',
+    activeGroupTag: activeGroupTag,
     testUrl: () => 'https://example.com/generate_204',
     outboundCount: outboundCount ?? () => 12,
     timeoutSeconds: timeoutSeconds ?? () => 15,

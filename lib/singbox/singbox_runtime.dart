@@ -817,7 +817,7 @@ class SingboxRuntime {
       final value = await _withMethodChannelFallback<String?>(
         () => _hostApi.getCoreCapabilities(),
         () => _methods.invokeMethod<String>('getCoreCapabilities'),
-      ).timeout(const Duration(seconds: 2));
+      ).timeout(const Duration(seconds: 5));
       return LibboxCapabilities.parseStrict(value);
     } on TimeoutException {
       return LibboxCapabilities.incompatible;

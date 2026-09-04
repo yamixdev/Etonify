@@ -6,6 +6,7 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/singbox_config_coordinator.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
@@ -214,6 +215,50 @@ void main() {
       everyElement(isNot(contains('.rollback.'))),
     );
   });
+
+  test(
+    'buildCurrentSingboxConfigInBackground retries capabilities if incompatible',
+    () async {
+      final runtime = _BlockingRuntime();
+      final lifecycle = RuntimeLifecycleController(
+        runtime: runtime,
+        healthCheckTimeout: const Duration(milliseconds: 20),
+      );
+      addTearDown(lifecycle.dispose);
+
+      var refreshCalled = false;
+      final coordinator = SingboxConfigCoordinator(
+        readSnapshot: () => _snapshot(
+          capabilities: LibboxCapabilities.incompatible,
+        ),
+        isMounted: () => true,
+        ensureActiveSubscriptionHydrated: () async => true,
+        runtimeLifecycle: lifecycle,
+        applyStartupValidationResult: (_, _) => true,
+        showNoValidOutboundsWarning: () {},
+        setPhase: (_) {},
+        showRuntimeFailure: ({required bool timedOut}) {},
+        logCall: (_, _) {},
+        trimRuntimeStartMemory: (_) {},
+        onRuntimeLifecycleTimeout: (_) {},
+        cacheStartedBuild: (_) {},
+        syncRuntimeState: () async {},
+        refreshCapabilities: () async {
+          refreshCalled = true;
+          return LibboxCapabilities.bundledLegacy;
+        },
+        readConfigPath: () async => null,
+      );
+
+      final build = await coordinator.buildCurrentSingboxConfigInBackground(
+        prepareConfig: false,
+        validateConfig: false,
+      );
+
+      expect(refreshCalled, isTrue);
+      expect(build, isNotNull);
+    },
+  );
 }
 
 SingboxConfigCoordinator _coordinator({
@@ -247,9 +292,13 @@ SingboxConfigCoordinator _coordinator({
   );
 }
 
-SingboxConfigCoordinatorSnapshot _snapshot({bool connected = true}) {
+SingboxConfigCoordinatorSnapshot _snapshot({
+  bool connected = true,
+  LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
+}) {
   return SingboxConfigCoordinatorSnapshot(
     connected: connected,
+    capabilities: capabilities,
     runtimeTransitionInProgress: false,
     activeSubscription: null,
     selectedProxyTag: '',

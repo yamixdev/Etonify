@@ -186,6 +186,8 @@ typedef SingboxConfigRuntimeFailureNotifier =
     void Function({required bool timedOut});
 typedef SingboxRuntimeStatusReader = Future<Map<String, dynamic>> Function();
 typedef SingboxConfigPathReader = Future<String?> Function();
+typedef SingboxConfigCapabilitiesRefresher =
+    Future<LibboxCapabilities> Function();
 
 class SingboxConfigCoordinator {
   SingboxConfigCoordinator({
@@ -204,6 +206,7 @@ class SingboxConfigCoordinator {
     required Future<void> Function() syncRuntimeState,
     SingboxRuntimeStatusReader? readRuntimeStatus,
     SingboxConfigPathReader? readConfigPath,
+    SingboxConfigCapabilitiesRefresher? refreshCapabilities,
     this.fullServiceRestartDebounce = const Duration(milliseconds: 450),
   }) : _readSnapshot = readSnapshot,
        _isMounted = isMounted,
@@ -220,7 +223,8 @@ class SingboxConfigCoordinator {
        _syncRuntimeState = syncRuntimeState,
        _readRuntimeStatus = readRuntimeStatus ?? SingboxRuntime.instance.status,
        _readConfigPath =
-           readConfigPath ?? SingboxRuntime.instance.getConfigPath;
+           readConfigPath ?? SingboxRuntime.instance.getConfigPath,
+       _refreshCapabilities = refreshCapabilities;
 
   final Duration fullServiceRestartDebounce;
 
@@ -239,6 +243,7 @@ class SingboxConfigCoordinator {
   final Future<void> Function() _syncRuntimeState;
   final SingboxRuntimeStatusReader _readRuntimeStatus;
   final SingboxConfigPathReader _readConfigPath;
+  final SingboxConfigCapabilitiesRefresher? _refreshCapabilities;
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
@@ -605,7 +610,10 @@ class SingboxConfigCoordinator {
     bool returnConfig = false,
     bool validateConfig = true,
   }) async {
-    final capabilities = _readSnapshot().capabilities;
+    var capabilities = _readSnapshot().capabilities;
+    if (!capabilities.isCompatible && _refreshCapabilities != null) {
+      capabilities = await _refreshCapabilities();
+    }
     if (!capabilities.isCompatible) {
       throw StateError(
         'Incompatible libbox contract: ${capabilities.contractError}',
@@ -631,6 +639,7 @@ class SingboxConfigCoordinator {
       // in that mode so checkConfig/logging cannot fail with an artificial
       // "Generated config is unavailable" error.
       returnConfig: returnConfig || stagedConfigPath == null,
+      capabilitiesOverride: capabilities,
     );
     late final SingboxConfigBuildResult result;
     try {
@@ -834,6 +843,7 @@ class SingboxConfigCoordinator {
   SingboxConfigBuildInput _currentSingboxConfigBuildInput({
     String? outputConfigPath,
     required bool returnConfig,
+    LibboxCapabilities? capabilitiesOverride,
   }) {
     final snapshot = _readSnapshot();
     return SingboxConfigBuildInput(
@@ -889,7 +899,7 @@ class SingboxConfigCoordinator {
       urlTestStrictTolerance: snapshot.urlTestStrictTolerance,
       experimentalFakeIpEnabled: snapshot.experimentalFakeIpEnabled,
       markAllServersRussia: snapshot.markAllServersRussia,
-      capabilities: snapshot.capabilities,
+      capabilities: capabilitiesOverride ?? snapshot.capabilities,
       outputConfigPath: outputConfigPath,
       returnConfig: returnConfig,
     );

@@ -8,9 +8,11 @@ String normalizeOutboundCountryCode(String? countryCode) {
 /// Returns the country that should be shown beside an outbound.
 ///
 /// [OutboundInfo.country] comes from the subscription or proxy name, while
-/// [OutboundInfo.exitCountry] is observed through the proxy itself. Once an
-/// exit location is known it must take precedence, otherwise a node named for
-/// one country can keep showing that flag even when its public IP is elsewhere.
+/// [OutboundInfo.exitCountry] is observed through the proxy itself. The declared
+/// country from the node's configuration or name takes precedence so that dedicated
+/// or relay servers (such as Russian nodes hosted in European datacenters)
+/// display their declared location flag. If no declared country is available,
+/// the observed exit country is used as a fallback.
 String outboundDisplayCountryCode(
   Outbound outbound, {
   required bool markAllServersRussia,
@@ -18,10 +20,11 @@ String outboundDisplayCountryCode(
   if (markAllServersRussia) {
     return 'RU';
   }
-  final exitCountry = normalizeOutboundCountryCode(outbound.info.exitCountry);
-  return exitCountry.isNotEmpty
-      ? exitCountry
-      : normalizeOutboundCountryCode(outbound.info.country);
+  final declaredCountry = normalizeOutboundCountryCode(outbound.info.country);
+  if (declaredCountry.isNotEmpty) {
+    return declaredCountry;
+  }
+  return normalizeOutboundCountryCode(outbound.info.exitCountry);
 }
 
 /// Whether the cached location is a complete observation of the proxy exit.
