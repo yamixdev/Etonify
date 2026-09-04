@@ -15,6 +15,7 @@ import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_root_shell.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/coordinators/proxy_location_coordinator.dart';
+import 'package:meow_client/app/coordinators/app_traffic_monitor.dart';
 import 'package:meow_client/app/deep_link_import.dart';
 import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
@@ -41,7 +42,6 @@ import 'package:meow_client/app/singbox_config_coordinator.dart';
 import 'package:meow_client/app/startup_latency_deadline_controller.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
-import 'package:meow_client/app/traffic_status_reducer.dart';
 import 'package:meow_client/app/subscription_profile_import_controller.dart';
 import 'package:meow_client/app/subscription_profile_flow_controller.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
@@ -107,7 +107,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   static const _lowestProxyTag = lowestProxyTag;
   static const _derivedCacheBuildDebounce = Duration(milliseconds: 160);
   static const _networkHeartbeatIntervalSeconds = 240;
-  static const _trafficUiUpdateInterval = Duration(seconds: 1);
   static const _runtimeRecoveryStatusLogInterval = Duration(seconds: 5);
   static const _subscriptionOperationSoftWarningDelay = Duration(seconds: 15);
   static const _subscriptionOperationTimeout = Duration(seconds: 30);
@@ -128,7 +127,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Timer? _subscriptionAutoRefreshTimer;
   Timer? _derivedCacheBuildTimer;
   Timer? _proxyListCacheReleaseTimer;
-  Timer? _trafficUiUpdateTimer;
   Timer? _vpnNotificationSyncTimer;
   Timer? _resumeForegroundSyncTimer;
   bool _autoRefreshInFlight = false;
@@ -139,7 +137,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int? _acceptedLegalAtMillis;
   bool _runtimeErrorDialogVisible = false;
   bool _noValidOutboundsDialogVisible = false;
-  bool _trafficAvailable = false;
   bool _deepLinkImportInFlight = false;
   bool _settingsBackupOperationInFlight = false;
   bool _proxyPanelInteractionActive = false;
@@ -159,6 +156,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final VpnLifecycleCommands _vpnLifecycleCommands;
   late final AppSettingsCommands _appSettingsCommands;
   late final ProxyLocationCoordinator _proxyLocationCoordinator;
+  late final AppTrafficMonitor _appTrafficMonitor;
   AdBlockRuleSetStatus _adBlockStatus =
       const AdBlockRuleSetStatus.unavailable();
   RussiaRouteDataStatus _russiaRouteDataStatus =
@@ -167,19 +165,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       const <Map<String, dynamic>>[];
   Future<List<Map<String, dynamic>>>? _installedAppsWarmupFuture;
   int _installedAppsCacheGeneration = 0;
-  int _downlinkBytesPerSecond = 0;
-  int _uplinkBytesPerSecond = 0;
-  int _uplinkTotalBytes = 0;
-  int _downlinkTotalBytes = 0;
   DateTime? _connectedSince;
-  List<TrafficSample> _trafficSamples = const <TrafficSample>[];
-  bool _trafficDashboardOpen = false;
-  final ValueNotifier<TrafficDashboardSnapshot> _trafficDashboardSnapshot =
-      ValueNotifier<TrafficDashboardSnapshot>(TrafficDashboardSnapshot.empty);
-  final ValueNotifier<TrafficUiSnapshot> _trafficUiSnapshot =
-      ValueNotifier<TrafficUiSnapshot>(TrafficUiSnapshot.zero);
-  Map<String, dynamic>? _pendingTrafficStatusEvent;
-  DateTime _lastTrafficUiUpdateAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _networkInterfaceGeneration = 0;
   int _derivedCacheBuildGeneration = 0;
   final ProxyCacheBuildCoordinator _proxyCacheBuildCoordinator =
@@ -190,8 +176,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final ProxySelectionController _proxySelection = ProxySelectionController();
   final ActiveProxyIpController _activeProxyIpController =
       ActiveProxyIpController();
-  static const TrafficStatusReducer _trafficStatusReducer =
-      TrafficStatusReducer();
   late final AppBootstrapController _bootstrapController;
   final RuntimeLifecycleController _runtimeLifecycle =
       RuntimeLifecycleController();
@@ -2074,10 +2058,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
       cacheStartedBuild: _cacheLastStartedBuild,
       syncRuntimeState: _syncRuntimeState,
     );
+    _appTrafficMonitor = AppTrafficMonitor(
+      host: AppTrafficMonitorHost(
+        isMounted: () => mounted,
+        isForegroundLifecycleActive: () => _foregroundLifecycleActive,
+        isConnected: () => _connected,
+        isConnecting: () => _connectionBusy,
+        isHideServerIp: () => _hideServerIp,
+        getConnectedSince: () => _connectedSince,
+        getActiveProfile: () => _activeProfile,
+        getActiveProxy: () => _displayProxy,
+      ),
+    );
     _runtimeEvents = RuntimeEventController(
       events: _singboxRuntime.events,
       onState: _handleRuntimeStateEvent,
-      onStatus: _handleTrafficStatusEvent,
+      onStatus: _appTrafficMonitor.handleTrafficStatusEvent,
       onNetwork: _handleRuntimeNetworkEvent,
       onGroups: _applyGroupUpdates,
       shouldRecordLog: _shouldRecordSingBoxLog,
@@ -2156,7 +2152,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxySelection.dispose();
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
-    _trafficUiUpdateTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
     unawaited(_runtimeEvents.dispose());
     _deepLinkImportSubscription?.cancel();
@@ -2165,8 +2160,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       unawaited(store.close());
     }
     _proxyRuntime.dispose();
-    _trafficDashboardSnapshot.dispose();
-    _trafficUiSnapshot.dispose();
+    _appTrafficMonitor.dispose();
     super.dispose();
   }
 
@@ -2208,7 +2202,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final imageEntriesBefore = cache.currentSize;
     final proxyCacheBefore = _activeProxiesCache.length;
     final groupCacheBefore = _activeGroupChildrenByTagCache.length;
-    final samplesBefore = _trafficSamples.length;
+    final samplesBefore = _appTrafficMonitor.samplesCount;
     final installedAppsBefore = _installedAppsCache.length;
     final proxyChainSourcesBefore = _proxyChainTargetSourceCache.length;
 
@@ -2225,19 +2219,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       additionalPinnedTags: [?_displayProxyCache?.tag],
     );
     _preloadedProxyFlagCodes = const <String>{};
-    var trafficDashboardChanged = false;
-    if (!_connected) {
-      _resetTrafficDashboardData();
-      trafficDashboardChanged = true;
-    } else if (_trafficSamples.length > 60) {
-      _trafficSamples = List<TrafficSample>.unmodifiable(
-        _trafficSamples.skip(_trafficSamples.length - 60),
-      );
-      trafficDashboardChanged = true;
-    }
-    if (trafficDashboardChanged) {
-      _publishTrafficDashboardSnapshot(force: true);
-    }
+    _appTrafficMonitor.handleMemoryPressure(connected: _connected);
 
     AppLogStore.info(
       'memory cleanup',
@@ -2701,8 +2683,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (context == null) {
       return;
     }
-    _trafficDashboardOpen = true;
-    _publishTrafficDashboardSnapshot(force: true);
+    _appTrafficMonitor.openDashboard();
     try {
       await showModalBottomSheet<void>(
         context: context,
@@ -2716,15 +2697,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
           minChildSize: 0.32,
           maxChildSize: 0.94,
           builder: (context, scrollController) => TrafficDashboardPage(
-            snapshotListenable: _trafficDashboardSnapshot,
+            snapshotListenable:
+                _appTrafficMonitor.trafficDashboardSnapshotNotifier,
             scrollController: scrollController,
           ),
         ),
       );
     } finally {
-      _trafficDashboardOpen = false;
-      _trafficSamples = const <TrafficSample>[];
-      _trafficDashboardSnapshot.value = TrafficDashboardSnapshot.empty;
+      _appTrafficMonitor.closeDashboard();
     }
   }
 
@@ -3224,98 +3204,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   bool get _effectiveProgressiveBlurEnabled => false;
 
-  RuntimeTrafficStatus _currentTrafficStatus() {
-    return RuntimeTrafficStatus(
-      uplinkBytesPerSecond: _uplinkBytesPerSecond,
-      downlinkBytesPerSecond: _downlinkBytesPerSecond,
-      uplinkTotalBytes: _uplinkTotalBytes,
-      downlinkTotalBytes: _downlinkTotalBytes,
-      available: _trafficAvailable,
-    );
-  }
+  void _publishTrafficDashboardSnapshot({bool force = false}) =>
+      _appTrafficMonitor.publish(force: force);
 
-  void _applyTrafficStatus(RuntimeTrafficStatus status) {
-    _uplinkBytesPerSecond = status.uplinkBytesPerSecond;
-    _downlinkBytesPerSecond = status.downlinkBytesPerSecond;
-    _uplinkTotalBytes = status.uplinkTotalBytes;
-    _downlinkTotalBytes = status.downlinkTotalBytes;
-    _trafficAvailable = status.available;
-  }
-
-  void _recordTrafficSample(DateTime now) {
-    if (!_trafficDashboardOpen || !_connected || !_trafficAvailable) {
-      return;
-    }
-    final cutoff = now.subtract(const Duration(minutes: 5));
-    final next = <TrafficSample>[
-      for (final sample in _trafficSamples)
-        if (!sample.timestamp.isBefore(cutoff)) sample,
-      TrafficSample(
-        timestamp: now,
-        downlinkBps: _downlinkBytesPerSecond,
-        uplinkBps: _uplinkBytesPerSecond,
-        totalBytes: _uplinkTotalBytes + _downlinkTotalBytes,
-      ),
-    ];
-    if (next.length > 180) {
-      _trafficSamples = List<TrafficSample>.unmodifiable(
-        next.skip(next.length - 180),
-      );
-    } else {
-      _trafficSamples = List<TrafficSample>.unmodifiable(next);
-    }
-  }
-
-  void _resetTrafficDashboardData() {
-    _uplinkBytesPerSecond = 0;
-    _downlinkBytesPerSecond = 0;
-    _uplinkTotalBytes = 0;
-    _downlinkTotalBytes = 0;
-    _trafficAvailable = false;
-    _trafficSamples = const <TrafficSample>[];
-  }
-
-  TrafficDashboardSnapshot _currentTrafficDashboardSnapshot() {
-    return TrafficDashboardSnapshot(
-      connected: _connected,
-      connecting: _connectionBusy,
-      trafficAvailable: _trafficAvailable,
-      hideServerIp: _hideServerIp,
-      downlinkBps: _connected && _trafficAvailable
-          ? _downlinkBytesPerSecond
-          : 0,
-      uplinkBps: _connected && _trafficAvailable ? _uplinkBytesPerSecond : 0,
-      uplinkTotalBytes: _connected && _trafficAvailable ? _uplinkTotalBytes : 0,
-      downlinkTotalBytes: _connected && _trafficAvailable
-          ? _downlinkTotalBytes
-          : 0,
-      connectedSince: _connected ? _connectedSince : null,
-      activeProfile: _activeProfile,
-      activeProxy: _displayProxy,
-      samples: _trafficSamples,
-    );
-  }
-
-  void _publishTrafficDashboardSnapshot({bool force = false}) {
-    final trafficUiSnapshot = TrafficUiSnapshot(
-      speedBytesPerSecond: _connected && _trafficAvailable
-          ? _downlinkBytesPerSecond.toDouble()
-          : 0,
-      trafficBytes: _connected && _trafficAvailable
-          ? (_uplinkTotalBytes + _downlinkTotalBytes).toDouble()
-          : 0,
-    );
-    if (_trafficUiSnapshot.value != trafficUiSnapshot) {
-      _trafficUiSnapshot.value = trafficUiSnapshot;
-    }
-    if (!_trafficDashboardOpen && !force) {
-      return;
-    }
-    final snapshot = _currentTrafficDashboardSnapshot();
-    if (_trafficDashboardSnapshot.value != snapshot) {
-      _trafficDashboardSnapshot.value = snapshot;
-    }
-  }
+  void _resetTrafficDashboardData() => _appTrafficMonitor.reset();
 
   void _setConnectionPhase(
     AppConnectionPhase phase, {
@@ -3396,9 +3288,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _subscriptionAutoRefreshTimer?.cancel();
     _activeProxyIpController.cancelPending();
     _proxyLocationCoordinator.reset();
-    _trafficUiUpdateTimer?.cancel();
-    _trafficUiUpdateTimer = null;
-    _pendingTrafficStatusEvent = null;
+    _appTrafficMonitor.suspendForegroundWork();
     _groupUrlTestScheduler.cancel();
     _latencyCoordinator.cancel();
     _networkRecovery.cancelDecision();
@@ -5917,54 +5807,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  void _handleTrafficStatusEvent(Map<String, dynamic> event) {
-    if (!mounted || !_foregroundLifecycleActive) {
-      return;
-    }
-    _pendingTrafficStatusEvent = event;
-    final now = DateTime.now();
-    final interval = _trafficUiUpdateInterval;
-    final elapsed = now.difference(_lastTrafficUiUpdateAt);
-    if (elapsed >= interval) {
-      _flushPendingTrafficStatusEvent();
-      return;
-    }
-    _trafficUiUpdateTimer ??= Timer(interval - elapsed, () {
-      _trafficUiUpdateTimer = null;
-      _flushPendingTrafficStatusEvent();
-    });
-  }
-
-  void _flushPendingTrafficStatusEvent() {
-    final event = _pendingTrafficStatusEvent;
-    if (event == null) {
-      return;
-    }
-    _pendingTrafficStatusEvent = null;
-    _applyTrafficStatusEvent(event);
-  }
-
-  void _applyTrafficStatusEvent(Map<String, dynamic> event) {
-    if (!mounted) return;
-    final now = DateTime.now();
-    final current = _currentTrafficStatus();
-    final next = _trafficStatusReducer
-        .reduce(current: current, event: RuntimeTrafficEvent.fromMap(event))
-        .status;
-    if (current == next) {
-      // The graph needs a time sample even while traffic is idle; otherwise a
-      // flat connection leaves its last point frozen until another packet is
-      // transferred. The dashboard is the only consumer, so this stays idle
-      // when it is closed.
-      _recordTrafficSample(now);
-      _publishTrafficDashboardSnapshot();
-      return;
-    }
-    _lastTrafficUiUpdateAt = now;
-    _applyTrafficStatus(next);
-    _recordTrafficSample(now);
-    _publishTrafficDashboardSnapshot();
-  }
 
   void _handleRuntimeNetworkEvent(Map<String, dynamic> event) {
     final reason = event['reason']?.toString() ?? 'network';
@@ -6092,12 +5934,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _logRuntimeRecoveryStatus(status);
       }
       final now = DateTime.now();
-      final syncedTraffic = _trafficStatusReducer
-          .reduce(
-            current: _currentTrafficStatus(),
-            event: RuntimeTrafficEvent.fromMap(status),
-          )
-          .status;
+      final syncedTraffic = _appTrafficMonitor.reduceRuntimeStatus(status);
       setState(() {
         if (running) {
           _runtimeIntent.restoreDesiredFromObservedRuntime();
@@ -6106,9 +5943,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           decision.phase,
           retryScheduled: decision.retryScheduled,
         );
-        _applyTrafficStatus(syncedTraffic);
+        _appTrafficMonitor.applyStatus(syncedTraffic);
         if (running) {
-          _recordTrafficSample(now);
+          _appTrafficMonitor.recordTrafficSample(now);
         } else if (!nativeRecoveryPending) {
           _resetTrafficDashboardData();
           _groupUrlTestScheduler.cancel();
@@ -7155,11 +6992,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         runtimeStates: _proxyRuntimeVisualStates,
         hideServerIp: _hideServerIp,
         hapticEnabled: _hapticEnabled,
-        trafficAvailable: _trafficAvailable,
-        downlinkBytesPerSecond: _downlinkBytesPerSecond,
-        uplinkTotalBytes: _uplinkTotalBytes,
-        downlinkTotalBytes: _downlinkTotalBytes,
-        trafficListenable: _trafficUiSnapshot,
+        trafficAvailable: _appTrafficMonitor.trafficAvailable,
+        downlinkBytesPerSecond: _appTrafficMonitor.downlinkBytesPerSecond,
+        uplinkTotalBytes: _appTrafficMonitor.uplinkTotalBytes,
+        downlinkTotalBytes: _appTrafficMonitor.downlinkTotalBytes,
+        trafficListenable: _appTrafficMonitor.trafficUiSnapshotNotifier,
         activeProfileRefreshing: _activeProfileRefreshInFlight,
         showActiveProfileRefreshAction: activeSubscription != null,
         brandName: 'Etonify',
@@ -7202,11 +7039,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         hideActiveProxyIp: _hideServerIp,
         connected: _connected,
         hapticEnabled: _hapticEnabled,
-        trafficAvailable: _trafficAvailable,
-        downlinkBytesPerSecond: _downlinkBytesPerSecond,
-        uplinkTotalBytes: _uplinkTotalBytes,
-        downlinkTotalBytes: _downlinkTotalBytes,
-        trafficListenable: _trafficUiSnapshot,
+        trafficAvailable: _appTrafficMonitor.trafficAvailable,
+        downlinkBytesPerSecond: _appTrafficMonitor.downlinkBytesPerSecond,
+        uplinkTotalBytes: _appTrafficMonitor.uplinkTotalBytes,
+        downlinkTotalBytes: _appTrafficMonitor.downlinkTotalBytes,
+        trafficListenable: _appTrafficMonitor.trafficUiSnapshotNotifier,
         initialSort: _proxySort,
         progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
         runtimeStates: _proxyRuntimeVisualStates,
