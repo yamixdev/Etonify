@@ -1,33 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/app/app_settings_controller.dart';
+import 'package:meow_client/app/providers/app_dependency_providers.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 Widget _experimentalSettingsApp({
-  required void Function(bool value, {bool warningDismissed})
-  onMemoryLimitChanged,
+  required ProviderContainer container,
 }) {
-  return MaterialApp(
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    home: SettingsExperimentalPage(
-      currentTcpFastOpen: false,
-      currentTcpMultiPath: false,
-      currentInterruptExistingConnections: true,
-      currentUrlTestStrictTolerance: false,
-      currentFakeIpEnabled: false,
-      fakeIpAvailable: true,
-      currentTlsFragmentationMode: TlsFragmentationMode.disabled,
-      currentMemoryLimitEnabled: true,
-      currentMemoryLimitWarningDismissed: false,
-      onTcpFastOpenChanged: (_) {},
-      onTcpMultiPathChanged: (_) {},
-      onInterruptExistingConnectionsChanged: (_) {},
-      onUrlTestStrictToleranceChanged: (_) {},
-      onFakeIpEnabledChanged: (_) {},
-      onTlsFragmentationModeChanged: (_) {},
-      onMemoryLimitChanged: onMemoryLimitChanged,
+  return UncontrolledProviderScope(
+    container: container,
+    child: const MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: SettingsExperimentalPage(),
     ),
   );
 }
@@ -41,15 +30,43 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
+      final controller = AppSettingsController()
+        ..memoryLimitEnabled = true
+        ..memoryLimitWarningDismissed = false;
+      final commands = AppSettingsCommands();
+      final container = ProviderContainer(
+        overrides: [
+          appSettingsControllerProvider.overrideWithValue(controller),
+          appSettingsCommandsProvider.overrideWithValue(commands),
+        ],
+      );
+      addTearDown(container.dispose);
+
       bool? selected;
       bool? observedWarningDismissed;
+      commands.bindExperimentalHandlers(
+        setExperimentalTcpFastOpen: (_) {},
+        setExperimentalTcpMultiPath: (_) {},
+        setExperimentalInterruptExistingConnections: (_) {},
+        setExperimentalUrlTestStrictTolerance: (_) {},
+        setExperimentalFakeIpEnabled: (_) {},
+        setTlsFragmentationMode: (_) {},
+        setMemoryLimitEnabled: (value, {warningDismissed = false}) {
+          selected = value;
+          observedWarningDismissed = warningDismissed;
+          container
+              .read(appSettingsProvider.notifier)
+              .mutate(
+                (c) => c.setMemoryLimitEnabled(
+                  value,
+                  warningDismissed: warningDismissed,
+                ),
+              );
+        },
+      );
+
       await tester.pumpWidget(
-        _experimentalSettingsApp(
-          onMemoryLimitChanged: (value, {warningDismissed = false}) {
-            selected = value;
-            observedWarningDismissed = warningDismissed;
-          },
-        ),
+        _experimentalSettingsApp(container: container),
       );
 
       await tester.ensureVisible(find.text('Soft core memory limit'));
@@ -63,6 +80,17 @@ void main() {
 
       expect(selected, isFalse);
       expect(observedWarningDismissed, isTrue);
+      expect(
+        container.read(appSettingsProvider).controller.memoryLimitEnabled,
+        isFalse,
+      );
+      expect(
+        container
+            .read(appSettingsProvider)
+            .controller
+            .memoryLimitWarningDismissed,
+        isTrue,
+      );
     },
   );
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
+import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -31,42 +34,11 @@ String dnsResolverProtocolLabel(String value) {
   return 'UDP';
 }
 
-class SettingsDnsPage extends StatefulWidget {
-  const SettingsDnsPage({
-    super.key,
-    required this.currentDirectPreset,
-    required this.currentDirectResolver,
-    required this.currentProxyPreset,
-    required this.currentProxyResolver,
-    required this.currentPreferIpv6,
-    this.currentSecureOnly = false,
-    this.currentDirectThroughProxy = false,
-    required this.onDirectPresetChanged,
-    required this.onDirectResolverChanged,
-    required this.onProxyPresetChanged,
-    required this.onProxyResolverChanged,
-    required this.onPreferIpv6Changed,
-    this.onSecureOnlyChanged,
-    this.onDirectThroughProxyChanged,
-  });
-
-  final String currentDirectPreset;
-  final String currentDirectResolver;
-  final String currentProxyPreset;
-  final String currentProxyResolver;
-  final bool currentPreferIpv6;
-  final bool currentSecureOnly;
-  final bool currentDirectThroughProxy;
-  final ValueChanged<String> onDirectPresetChanged;
-  final ValueChanged<String> onDirectResolverChanged;
-  final ValueChanged<String> onProxyPresetChanged;
-  final ValueChanged<String> onProxyResolverChanged;
-  final ValueChanged<bool> onPreferIpv6Changed;
-  final ValueChanged<bool>? onSecureOnlyChanged;
-  final ValueChanged<bool>? onDirectThroughProxyChanged;
+class SettingsDnsPage extends ConsumerStatefulWidget {
+  const SettingsDnsPage({super.key});
 
   @override
-  State<SettingsDnsPage> createState() => _SettingsDnsPageState();
+  ConsumerState<SettingsDnsPage> createState() => _SettingsDnsPageState();
 }
 
 class _DnsPreset {
@@ -112,11 +84,12 @@ String _dnsPresetSubtitle(AppLocalizations l10n, _DnsPreset preset) {
   return value;
 }
 
-class _SettingsDnsPageState extends State<SettingsDnsPage> {
+class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
   late final TextEditingController _directController;
   late final TextEditingController _proxyController;
   late final FocusNode _directFocusNode;
   late final FocusNode _proxyFocusNode;
+  late final AppSettingsCommands _commands;
 
   static const _directPresets = <_DnsPreset>[
     _DnsPreset(
@@ -169,31 +142,18 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
   @override
   void initState() {
     super.initState();
+    _commands = ref.read(appSettingsCommandsProvider);
+    final settings = ref.read(appSettingsProvider).controller;
     _directController = TextEditingController(
-      text: dnsResolverFieldText(widget.currentDirectResolver),
+      text: dnsResolverFieldText(settings.dnsDirectResolver),
     );
     _proxyController = TextEditingController(
-      text: dnsResolverFieldText(widget.currentProxyResolver),
+      text: dnsResolverFieldText(settings.dnsProxyResolver),
     );
     _directFocusNode = FocusNode(debugLabel: 'dnsDirectResolver')
       ..addListener(_handleDirectFocusChanged);
     _proxyFocusNode = FocusNode(debugLabel: 'dnsProxyResolver')
       ..addListener(_handleProxyFocusChanged);
-  }
-
-  @override
-  void didUpdateWidget(covariant SettingsDnsPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncResolverController(
-      _directController,
-      _directFocusNode,
-      widget.currentDirectResolver,
-    );
-    _syncResolverController(
-      _proxyController,
-      _proxyFocusNode,
-      widget.currentProxyResolver,
-    );
   }
 
   void _syncResolverController(
@@ -268,25 +228,25 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
 
   void _commitDirectResolver() {
     final value = _directController.text.trim();
+    final current = ref.read(appSettingsProvider).controller.dnsDirectResolver;
     if (value.isEmpty) {
-      _directController.text = dnsResolverFieldText(
-        widget.currentDirectResolver,
-      );
+      _directController.text = dnsResolverFieldText(current);
       return;
     }
-    if (value != widget.currentDirectResolver) {
-      widget.onDirectResolverChanged(value);
+    if (value != current) {
+      _commands.setDnsDirectResolver(value);
     }
   }
 
   void _commitProxyResolver() {
     final value = _proxyController.text.trim();
+    final current = ref.read(appSettingsProvider).controller.dnsProxyResolver;
     if (value.isEmpty) {
-      _proxyController.text = dnsResolverFieldText(widget.currentProxyResolver);
+      _proxyController.text = dnsResolverFieldText(current);
       return;
     }
-    if (value != widget.currentProxyResolver) {
-      widget.onProxyResolverChanged(value);
+    if (value != current) {
+      _commands.setDnsProxyResolver(value);
     }
   }
 
@@ -295,15 +255,40 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final directPreset = _presetById(
-      _directPresets,
-      widget.currentDirectPreset,
+    final settings = ref.watch(appSettingsProvider).controller;
+    final currentDirectPreset = settings.dnsDirectPreset;
+    final currentDirectResolver = settings.dnsDirectResolver;
+    final currentProxyPreset = settings.dnsProxyPreset;
+    final currentProxyResolver = settings.dnsProxyResolver;
+    final currentPreferIpv6 = settings.dnsPreferIpv6;
+    final currentSecureOnly = settings.dnsSecureOnly;
+    final currentDirectThroughProxy = settings.dnsDirectThroughProxy;
+
+    ref.listen(
+      appSettingsProvider.select((s) => s.controller.dnsDirectResolver),
+      (_, next) {
+        _syncResolverController(_directController, _directFocusNode, next);
+      },
     );
-    final proxyPreset = _presetById(_proxyPresets, widget.currentProxyPreset);
+    ref.listen(
+      appSettingsProvider.select((s) => s.controller.dnsProxyResolver),
+      (_, next) {
+        _syncResolverController(_proxyController, _proxyFocusNode, next);
+      },
+    );
+
+    final directPreset = _presetById(_directPresets, currentDirectPreset);
+    final proxyPreset = _presetById(_proxyPresets, currentProxyPreset);
     final directIsCustom = directPreset.id == 'custom';
     final proxyIsCustom = proxyPreset.id == 'custom';
-    final directPresets = _availablePresets(_directPresets);
-    final proxyPresets = _availablePresets(_proxyPresets);
+    final directPresets = _availablePresets(
+      _directPresets,
+      secureOnly: currentSecureOnly,
+    );
+    final proxyPresets = _availablePresets(
+      _proxyPresets,
+      secureOnly: currentSecureOnly,
+    );
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.dnsTitle)),
@@ -330,21 +315,20 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                     title: l10n.dnsResolverTitle,
                     subtitle:
                         '${_dnsPresetLabel(l10n, directPreset)} • '
-                        '${dnsResolverProtocolLabel(widget.currentDirectResolver)}',
+                        '${dnsResolverProtocolLabel(currentDirectResolver)}',
                     onTap: () => _showPresetPicker(
                       context: context,
                       title: l10n.dnsDirectTitle,
                       presets: directPresets,
-                      current: widget.currentDirectPreset,
+                      current: currentDirectPreset,
                       onSelected: (preset) {
-                        widget.onDirectPresetChanged(preset.id);
+                        _commands.setDnsDirectPreset(preset.id);
                         if (preset.id != 'custom') {
-                          widget.onDirectResolverChanged(preset.value);
+                          _commands.setDnsDirectResolver(preset.value);
                           _directController.text = dnsResolverFieldText(
                             preset.value,
                           );
                         }
-                        setState(() {});
                       },
                     ),
                   ),
@@ -383,21 +367,20 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                     title: l10n.dnsResolverTitle,
                     subtitle:
                         '${_dnsPresetLabel(l10n, proxyPreset)} • '
-                        '${dnsResolverProtocolLabel(widget.currentProxyResolver)}',
+                        '${dnsResolverProtocolLabel(currentProxyResolver)}',
                     onTap: () => _showPresetPicker(
                       context: context,
                       title: l10n.dnsProxyTitle,
                       presets: proxyPresets,
-                      current: widget.currentProxyPreset,
+                      current: currentProxyPreset,
                       onSelected: (preset) {
-                        widget.onProxyPresetChanged(preset.id);
+                        _commands.setDnsProxyPreset(preset.id);
                         if (preset.id != 'custom') {
-                          widget.onProxyResolverChanged(preset.value);
+                          _commands.setDnsProxyResolver(preset.value);
                           _proxyController.text = dnsResolverFieldText(
                             preset.value,
                           );
                         }
-                        setState(() {});
                       },
                     ),
                   ),
@@ -438,8 +421,8 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                   ),
                   title: Text(l10n.dnsSecureOnlyTitle),
                   subtitle: Text(l10n.dnsSecureOnlySubtitle),
-                  value: widget.currentSecureOnly,
-                  onChanged: widget.onSecureOnlyChanged,
+                  value: currentSecureOnly,
+                  onChanged: _commands.setDnsSecureOnly,
                 ),
                 const Divider(height: 1, indent: 72),
                 SwitchListTile(
@@ -453,8 +436,8 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
                   ),
                   title: Text(l10n.dnsDirectThroughProxyTitle),
                   subtitle: Text(l10n.dnsDirectThroughProxySubtitle),
-                  value: widget.currentDirectThroughProxy,
-                  onChanged: widget.onDirectThroughProxyChanged,
+                  value: currentDirectThroughProxy,
+                  onChanged: _commands.setDnsDirectThroughProxy,
                 ),
               ],
             ),
@@ -475,8 +458,8 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
               ),
               title: Text(l10n.dnsPreferIpv6Title),
               subtitle: Text(l10n.dnsPreferIpv6Subtitle),
-              value: widget.currentPreferIpv6,
-              onChanged: widget.onPreferIpv6Changed,
+              value: currentPreferIpv6,
+              onChanged: _commands.setDnsPreferIpv6,
             ),
           ),
         ],
@@ -484,8 +467,11 @@ class _SettingsDnsPageState extends State<SettingsDnsPage> {
     );
   }
 
-  List<_DnsPreset> _availablePresets(List<_DnsPreset> presets) {
-    if (!widget.currentSecureOnly) {
+  List<_DnsPreset> _availablePresets(
+    List<_DnsPreset> presets, {
+    required bool secureOnly,
+  }) {
+    if (!secureOnly) {
       return presets;
     }
     return presets

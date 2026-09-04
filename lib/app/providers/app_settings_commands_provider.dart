@@ -18,6 +18,24 @@ typedef SetSplitRoutingModeCommand = void Function(SplitRoutingMode value);
 typedef SetSplitRoutingPackagesCommand = void Function(List<String> value);
 typedef PreloadInstalledAppsCommand =
     Future<List<Map<String, dynamic>>> Function();
+typedef SetDnsDirectPresetCommand = void Function(String value);
+typedef SetDnsDirectResolverCommand = void Function(String value);
+typedef SetDnsProxyPresetCommand = void Function(String value);
+typedef SetDnsProxyResolverCommand = void Function(String value);
+typedef SetDnsPreferIpv6Command = void Function(bool value);
+typedef SetDnsSecureOnlyCommand = void Function(bool value);
+typedef SetDnsDirectThroughProxyCommand = void Function(bool value);
+typedef SetExperimentalTcpFastOpenCommand = void Function(bool value);
+typedef SetExperimentalTcpMultiPathCommand = void Function(bool value);
+typedef SetExperimentalInterruptExistingConnectionsCommand =
+    void Function(bool value);
+typedef SetExperimentalUrlTestStrictToleranceCommand =
+    void Function(bool value);
+typedef SetExperimentalFakeIpEnabledCommand = void Function(bool value);
+typedef SetTlsFragmentationModeCommand =
+    void Function(TlsFragmentationMode value);
+typedef SetMemoryLimitEnabledCommand =
+    void Function(bool value, {bool warningDismissed});
 
 /// UI-facing command port for mutating application settings and triggering
 /// dependent runtime reconfiguration operations.
@@ -34,6 +52,100 @@ class AppSettingsCommands {
   SetSplitRoutingModeCommand? _setSplitRoutingMode;
   SetSplitRoutingPackagesCommand? _setSplitRoutingPackages;
   PreloadInstalledAppsCommand? _preloadInstalledApps;
+  SetDnsDirectPresetCommand? _setDnsDirectPreset;
+  SetDnsDirectResolverCommand? _setDnsDirectResolver;
+  SetDnsProxyPresetCommand? _setDnsProxyPreset;
+  SetDnsProxyResolverCommand? _setDnsProxyResolver;
+  SetDnsPreferIpv6Command? _setDnsPreferIpv6;
+  SetDnsSecureOnlyCommand? _setDnsSecureOnly;
+  SetDnsDirectThroughProxyCommand? _setDnsDirectThroughProxy;
+  SetExperimentalTcpFastOpenCommand? _setExperimentalTcpFastOpen;
+  SetExperimentalTcpMultiPathCommand? _setExperimentalTcpMultiPath;
+  SetExperimentalInterruptExistingConnectionsCommand?
+      _setExperimentalInterruptExistingConnections;
+  SetExperimentalUrlTestStrictToleranceCommand?
+      _setExperimentalUrlTestStrictTolerance;
+  SetExperimentalFakeIpEnabledCommand? _setExperimentalFakeIpEnabled;
+  SetTlsFragmentationModeCommand? _setTlsFragmentationMode;
+  SetMemoryLimitEnabledCommand? _setMemoryLimitEnabled;
+
+  bool get isDnsBound =>
+      _setDnsDirectPreset != null &&
+      _setDnsDirectResolver != null &&
+      _setDnsProxyPreset != null &&
+      _setDnsProxyResolver != null &&
+      _setDnsPreferIpv6 != null &&
+      _setDnsSecureOnly != null &&
+      _setDnsDirectThroughProxy != null;
+
+  void bindDnsHandlers({
+    required SetDnsDirectPresetCommand setDnsDirectPreset,
+    required SetDnsDirectResolverCommand setDnsDirectResolver,
+    required SetDnsProxyPresetCommand setDnsProxyPreset,
+    required SetDnsProxyResolverCommand setDnsProxyResolver,
+    required SetDnsPreferIpv6Command setDnsPreferIpv6,
+    required SetDnsSecureOnlyCommand setDnsSecureOnly,
+    required SetDnsDirectThroughProxyCommand setDnsDirectThroughProxy,
+  }) {
+    _setDnsDirectPreset = setDnsDirectPreset;
+    _setDnsDirectResolver = setDnsDirectResolver;
+    _setDnsProxyPreset = setDnsProxyPreset;
+    _setDnsProxyResolver = setDnsProxyResolver;
+    _setDnsPreferIpv6 = setDnsPreferIpv6;
+    _setDnsSecureOnly = setDnsSecureOnly;
+    _setDnsDirectThroughProxy = setDnsDirectThroughProxy;
+  }
+
+  void unbindDnsHandlers() {
+    _setDnsDirectPreset = null;
+    _setDnsDirectResolver = null;
+    _setDnsProxyPreset = null;
+    _setDnsProxyResolver = null;
+    _setDnsPreferIpv6 = null;
+    _setDnsSecureOnly = null;
+    _setDnsDirectThroughProxy = null;
+  }
+
+  bool get isExperimentalBound =>
+      _setExperimentalTcpFastOpen != null &&
+      _setExperimentalTcpMultiPath != null &&
+      _setExperimentalInterruptExistingConnections != null &&
+      _setExperimentalUrlTestStrictTolerance != null &&
+      _setExperimentalFakeIpEnabled != null &&
+      _setTlsFragmentationMode != null &&
+      _setMemoryLimitEnabled != null;
+
+  void bindExperimentalHandlers({
+    required SetExperimentalTcpFastOpenCommand setExperimentalTcpFastOpen,
+    required SetExperimentalTcpMultiPathCommand setExperimentalTcpMultiPath,
+    required SetExperimentalInterruptExistingConnectionsCommand
+        setExperimentalInterruptExistingConnections,
+    required SetExperimentalUrlTestStrictToleranceCommand
+        setExperimentalUrlTestStrictTolerance,
+    required SetExperimentalFakeIpEnabledCommand setExperimentalFakeIpEnabled,
+    required SetTlsFragmentationModeCommand setTlsFragmentationMode,
+    required SetMemoryLimitEnabledCommand setMemoryLimitEnabled,
+  }) {
+    _setExperimentalTcpFastOpen = setExperimentalTcpFastOpen;
+    _setExperimentalTcpMultiPath = setExperimentalTcpMultiPath;
+    _setExperimentalInterruptExistingConnections =
+        setExperimentalInterruptExistingConnections;
+    _setExperimentalUrlTestStrictTolerance =
+        setExperimentalUrlTestStrictTolerance;
+    _setExperimentalFakeIpEnabled = setExperimentalFakeIpEnabled;
+    _setTlsFragmentationMode = setTlsFragmentationMode;
+    _setMemoryLimitEnabled = setMemoryLimitEnabled;
+  }
+
+  void unbindExperimentalHandlers() {
+    _setExperimentalTcpFastOpen = null;
+    _setExperimentalTcpMultiPath = null;
+    _setExperimentalInterruptExistingConnections = null;
+    _setExperimentalUrlTestStrictTolerance = null;
+    _setExperimentalFakeIpEnabled = null;
+    _setTlsFragmentationMode = null;
+    _setMemoryLimitEnabled = null;
+  }
 
   bool get isRoutingBound =>
       _setBlockLeaks != null &&
@@ -151,10 +263,50 @@ class AppSettingsCommands {
     }
     return await command();
   }
+
+  void setDnsDirectPreset(String value) => _setDnsDirectPreset?.call(value);
+
+  void setDnsDirectResolver(String value) => _setDnsDirectResolver?.call(value);
+
+  void setDnsProxyPreset(String value) => _setDnsProxyPreset?.call(value);
+
+  void setDnsProxyResolver(String value) => _setDnsProxyResolver?.call(value);
+
+  void setDnsPreferIpv6(bool value) => _setDnsPreferIpv6?.call(value);
+
+  void setDnsSecureOnly(bool value) => _setDnsSecureOnly?.call(value);
+
+  void setDnsDirectThroughProxy(bool value) =>
+      _setDnsDirectThroughProxy?.call(value);
+
+  void setExperimentalTcpFastOpen(bool value) =>
+      _setExperimentalTcpFastOpen?.call(value);
+
+  void setExperimentalTcpMultiPath(bool value) =>
+      _setExperimentalTcpMultiPath?.call(value);
+
+  void setExperimentalInterruptExistingConnections(bool value) =>
+      _setExperimentalInterruptExistingConnections?.call(value);
+
+  void setExperimentalUrlTestStrictTolerance(bool value) =>
+      _setExperimentalUrlTestStrictTolerance?.call(value);
+
+  void setExperimentalFakeIpEnabled(bool value) =>
+      _setExperimentalFakeIpEnabled?.call(value);
+
+  void setTlsFragmentationMode(TlsFragmentationMode value) =>
+      _setTlsFragmentationMode?.call(value);
+
+  void setMemoryLimitEnabled(bool value, {bool warningDismissed = false}) =>
+      _setMemoryLimitEnabled?.call(value, warningDismissed: warningDismissed);
 }
 
 final appSettingsCommandsProvider = Provider<AppSettingsCommands>((ref) {
   final commands = AppSettingsCommands();
-  ref.onDispose(commands.unbindRoutingHandlers);
+  ref.onDispose(() {
+    commands.unbindRoutingHandlers();
+    commands.unbindDnsHandlers();
+    commands.unbindExperimentalHandlers();
+  });
   return commands;
 }, name: 'appSettingsCommandsProvider');

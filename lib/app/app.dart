@@ -337,9 +337,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int get _proxyMixedPort => _settings.proxyMixedPort;
   String get _proxyUsername => _settings.proxyUsername;
   String get _proxyPassword => _settings.proxyPassword;
-  String get _dnsDirectPreset => _settings.dnsDirectPreset;
   String get _dnsDirectResolver => _settings.dnsDirectResolver;
-  String get _dnsProxyPreset => _settings.dnsProxyPreset;
   String get _dnsProxyResolver => _settings.dnsProxyResolver;
   bool get _dnsPreferIpv6 => _settings.dnsPreferIpv6;
   bool get _dnsSecureOnly => _settings.dnsSecureOnly;
@@ -1987,6 +1985,26 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setSplitRoutingMode: _setSplitRoutingMode,
       setSplitRoutingPackages: _setSplitRoutingPackages,
       preloadInstalledApps: _warmInstalledApps,
+    );
+    _appSettingsCommands.bindDnsHandlers(
+      setDnsDirectPreset: _setDnsDirectPreset,
+      setDnsDirectResolver: _setDnsDirectResolver,
+      setDnsProxyPreset: _setDnsProxyPreset,
+      setDnsProxyResolver: _setDnsProxyResolver,
+      setDnsPreferIpv6: _setDnsPreferIpv6,
+      setDnsSecureOnly: _setDnsSecureOnly,
+      setDnsDirectThroughProxy: _setDnsDirectThroughProxy,
+    );
+    _appSettingsCommands.bindExperimentalHandlers(
+      setExperimentalTcpFastOpen: _setExperimentalTcpFastOpen,
+      setExperimentalTcpMultiPath: _setExperimentalTcpMultiPath,
+      setExperimentalInterruptExistingConnections:
+          _setExperimentalInterruptExistingConnections,
+      setExperimentalUrlTestStrictTolerance:
+          _setExperimentalUrlTestStrictTolerance,
+      setExperimentalFakeIpEnabled: _setExperimentalFakeIpEnabled,
+      setTlsFragmentationMode: _setTlsFragmentationMode,
+      setMemoryLimitEnabled: _setMemoryLimitEnabled,
     );
     _proxyRuntimeVisualStates = ref.read(proxyRuntimeVisualStoreProvider);
     _subscriptionCoordinator = SubscriptionCoordinator(
@@ -5069,22 +5087,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (navigator == null) return;
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (context) => SettingsDnsPage(
-          currentDirectPreset: _dnsDirectPreset,
-          currentDirectResolver: _dnsDirectResolver,
-          currentProxyPreset: _dnsProxyPreset,
-          currentProxyResolver: _dnsProxyResolver,
-          currentPreferIpv6: _dnsPreferIpv6,
-          currentSecureOnly: _dnsSecureOnly,
-          currentDirectThroughProxy: _dnsDirectThroughProxy,
-          onDirectPresetChanged: _setDnsDirectPreset,
-          onDirectResolverChanged: _setDnsDirectResolver,
-          onProxyPresetChanged: _setDnsProxyPreset,
-          onProxyResolverChanged: _setDnsProxyResolver,
-          onPreferIpv6Changed: _setDnsPreferIpv6,
-          onSecureOnlyChanged: _setDnsSecureOnly,
-          onDirectThroughProxyChanged: _setDnsDirectThroughProxy,
-        ),
+        builder: (context) => const SettingsDnsPage(),
       ),
     );
   }
@@ -5469,29 +5472,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (navigator == null) return;
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (context) => SettingsExperimentalPage(
-          currentTcpFastOpen: _experimentalTcpFastOpen,
-          currentTcpMultiPath: _experimentalTcpMultiPath,
-          currentInterruptExistingConnections:
-              _experimentalInterruptExistingConnections,
-          currentUrlTestStrictTolerance: _experimentalUrlTestStrictTolerance,
-          currentFakeIpEnabled: _experimentalFakeIpEnabled,
-          fakeIpAvailable:
-              _vpnInboundEnabled &&
-              _splitRoutingMode == SplitRoutingMode.disabled,
-          currentTlsFragmentationMode: _tlsFragmentationMode,
-          currentMemoryLimitEnabled: _memoryLimitEnabled,
-          currentMemoryLimitWarningDismissed: _memoryLimitWarningDismissed,
-          onTcpFastOpenChanged: _setExperimentalTcpFastOpen,
-          onTcpMultiPathChanged: _setExperimentalTcpMultiPath,
-          onInterruptExistingConnectionsChanged:
-              _setExperimentalInterruptExistingConnections,
-          onUrlTestStrictToleranceChanged:
-              _setExperimentalUrlTestStrictTolerance,
-          onFakeIpEnabledChanged: _setExperimentalFakeIpEnabled,
-          onTlsFragmentationModeChanged: _setTlsFragmentationMode,
-          onMemoryLimitChanged: _setMemoryLimitEnabled,
-        ),
+        builder: (context) => const SettingsExperimentalPage(),
       ),
     );
   }

@@ -97,5 +97,110 @@ void main() {
       // blockLeaks should still be true since handler is unbound (noop)
       expect(blockLeaks, isTrue);
     });
+
+    test('forwards calls to bound dns handlers and unbinds cleanly', () {
+      final commands = AppSettingsCommands();
+      var directPreset = '';
+      var directResolver = '';
+      var proxyPreset = '';
+      var proxyResolver = '';
+      var preferIpv6 = false;
+      var secureOnly = false;
+      var directThroughProxy = false;
+
+      commands.bindDnsHandlers(
+        setDnsDirectPreset: (v) => directPreset = v,
+        setDnsDirectResolver: (v) => directResolver = v,
+        setDnsProxyPreset: (v) => proxyPreset = v,
+        setDnsProxyResolver: (v) => proxyResolver = v,
+        setDnsPreferIpv6: (v) => preferIpv6 = v,
+        setDnsSecureOnly: (v) => secureOnly = v,
+        setDnsDirectThroughProxy: (v) => directThroughProxy = v,
+      );
+
+      expect(commands.isDnsBound, isTrue);
+
+      commands.setDnsDirectPreset('cloudflare');
+      expect(directPreset, 'cloudflare');
+
+      commands.setDnsDirectResolver('udp://1.1.1.1');
+      expect(directResolver, 'udp://1.1.1.1');
+
+      commands.setDnsProxyPreset('device');
+      expect(proxyPreset, 'device');
+
+      commands.setDnsProxyResolver('device://network');
+      expect(proxyResolver, 'device://network');
+
+      commands.setDnsPreferIpv6(true);
+      expect(preferIpv6, isTrue);
+
+      commands.setDnsSecureOnly(true);
+      expect(secureOnly, isTrue);
+
+      commands.setDnsDirectThroughProxy(true);
+      expect(directThroughProxy, isTrue);
+
+      commands.unbindDnsHandlers();
+      expect(commands.isDnsBound, isFalse);
+
+      commands.setDnsDirectPreset('custom');
+      expect(directPreset, 'cloudflare');
+    });
+
+    test('forwards calls to bound experimental handlers and unbinds cleanly', () {
+      final commands = AppSettingsCommands();
+      var tcpFastOpen = false;
+      var tcpMultiPath = false;
+      var interruptConns = false;
+      var urlTolerance = false;
+      var fakeIp = false;
+      var tlsMode = TlsFragmentationMode.disabled;
+      var memoryLimit = false;
+      var observedWarningDismissed = false;
+
+      commands.bindExperimentalHandlers(
+        setExperimentalTcpFastOpen: (v) => tcpFastOpen = v,
+        setExperimentalTcpMultiPath: (v) => tcpMultiPath = v,
+        setExperimentalInterruptExistingConnections: (v) => interruptConns = v,
+        setExperimentalUrlTestStrictTolerance: (v) => urlTolerance = v,
+        setExperimentalFakeIpEnabled: (v) => fakeIp = v,
+        setTlsFragmentationMode: (v) => tlsMode = v,
+        setMemoryLimitEnabled: (v, {bool warningDismissed = false}) {
+          memoryLimit = v;
+          observedWarningDismissed = warningDismissed;
+        },
+      );
+
+      expect(commands.isExperimentalBound, isTrue);
+
+      commands.setExperimentalTcpFastOpen(true);
+      expect(tcpFastOpen, isTrue);
+
+      commands.setExperimentalTcpMultiPath(true);
+      expect(tcpMultiPath, isTrue);
+
+      commands.setExperimentalInterruptExistingConnections(true);
+      expect(interruptConns, isTrue);
+
+      commands.setExperimentalUrlTestStrictTolerance(true);
+      expect(urlTolerance, isTrue);
+
+      commands.setExperimentalFakeIpEnabled(true);
+      expect(fakeIp, isTrue);
+
+      commands.setTlsFragmentationMode(TlsFragmentationMode.fragment);
+      expect(tlsMode, TlsFragmentationMode.fragment);
+
+      commands.setMemoryLimitEnabled(true, warningDismissed: true);
+      expect(memoryLimit, isTrue);
+      expect(observedWarningDismissed, isTrue);
+
+      commands.unbindExperimentalHandlers();
+      expect(commands.isExperimentalBound, isFalse);
+
+      commands.setExperimentalTcpFastOpen(false);
+      expect(tcpFastOpen, isTrue);
+    });
   });
 }
