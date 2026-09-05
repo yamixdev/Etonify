@@ -351,6 +351,7 @@ class SubscriptionGroup {
     required this.tag,
     required this.name,
     required this.outboundTags,
+    this.fallbackOutboundTags = const [],
     this.type = 'urltest',
     this.country,
     this.urlTestConfig = const UrlTestConfig(),
@@ -361,6 +362,9 @@ class SubscriptionGroup {
   final String type;
   final String? country;
   final List<String> outboundTags;
+  /// Resolved provider fallback references, not ordinary URLTest candidates.
+  /// Preserved for ownership/visibility; sing-box URLTest has no fallback field.
+  final List<String> fallbackOutboundTags;
   final UrlTestConfig urlTestConfig;
 
   Map<String, dynamic> toMap() => {
@@ -369,6 +373,8 @@ class SubscriptionGroup {
     'type': type,
     if (country != null) 'country': country,
     'outbounds': outboundTags,
+    if (fallbackOutboundTags.isNotEmpty)
+      'fallback_outbounds': fallbackOutboundTags,
     'urltest_config': urlTestConfig.toMap(),
   };
 
@@ -381,6 +387,10 @@ class SubscriptionGroup {
       outboundTags: (map['outbounds'] as List? ?? const [])
           .map((entry) => entry.toString())
           .where((entry) => entry.trim().isNotEmpty)
+          .toList(growable: false),
+      fallbackOutboundTags: (map['fallback_outbounds'] as List? ?? const [])
+          .map((entry) => entry.toString().trim())
+          .where((entry) => entry.isNotEmpty)
           .toList(growable: false),
       urlTestConfig: map['urltest_config'] is Map
           ? UrlTestConfig.fromMap(
@@ -396,6 +406,7 @@ class SubscriptionGroup {
     String? type,
     String? country,
     List<String>? outboundTags,
+    List<String>? fallbackOutboundTags,
     UrlTestConfig? urlTestConfig,
   }) {
     return SubscriptionGroup(
@@ -404,6 +415,7 @@ class SubscriptionGroup {
       type: type ?? this.type,
       country: country ?? this.country,
       outboundTags: outboundTags ?? this.outboundTags,
+      fallbackOutboundTags: fallbackOutboundTags ?? this.fallbackOutboundTags,
       urlTestConfig: urlTestConfig ?? this.urlTestConfig,
     );
   }

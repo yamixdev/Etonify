@@ -633,6 +633,59 @@ data class UnderlyingNetworkFetchResponseMessage (
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
+data class OutboundFetchRequestMessage (
+  val outboundTag: String,
+  val url: String,
+  val headers: List<HttpHeaderMessage?>,
+  val maxBytes: Long,
+  val timeoutMillis: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): OutboundFetchRequestMessage {
+      val outboundTag = pigeonVar_list[0] as String
+      val url = pigeonVar_list[1] as String
+      val headers = pigeonVar_list[2] as List<HttpHeaderMessage?>
+      val maxBytes = pigeonVar_list[3] as Long
+      val timeoutMillis = pigeonVar_list[4] as Long
+      return OutboundFetchRequestMessage(outboundTag, url, headers, maxBytes, timeoutMillis)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      outboundTag,
+      url,
+      headers,
+      maxBytes,
+      timeoutMillis,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as OutboundFetchRequestMessage
+    return SingboxApiPigeonUtils.deepEquals(this.outboundTag, other.outboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.headers, other.headers) && SingboxApiPigeonUtils.deepEquals(this.maxBytes, other.maxBytes) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.outboundTag)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.url)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.headers)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.maxBytes)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.timeoutMillis)
+    return result
+  }
+  override fun toString(): String {
+    return "OutboundFetchRequestMessage(outboundTag=$outboundTag, url=$url, headers=$headers, maxBytes=$maxBytes, timeoutMillis=$timeoutMillis)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
 data class UnderlyingNetworkDownloadRequestMessage (
   val url: String,
   val headers: List<HttpHeaderMessage?>,
@@ -903,20 +956,25 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkDownloadRequestMessage.fromList(it)
+          OutboundFetchRequestMessage.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkDownloadResponseMessage.fromList(it)
+          UnderlyingNetworkDownloadRequestMessage.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ApkInspectionMessage.fromList(it)
+          UnderlyingNetworkDownloadResponseMessage.fromList(it)
         }
       }
       139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ApkInspectionMessage.fromList(it)
+        }
+      }
+      140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           InstalledAppMessage.fromList(it)
         }
@@ -954,20 +1012,24 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkDownloadRequestMessage -> {
+      is OutboundFetchRequestMessage -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkDownloadResponseMessage -> {
+      is UnderlyingNetworkDownloadRequestMessage -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is ApkInspectionMessage -> {
+      is UnderlyingNetworkDownloadResponseMessage -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is InstalledAppMessage -> {
+      is ApkInspectionMessage -> {
         stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is InstalledAppMessage -> {
+        stream.write(140)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1002,6 +1064,7 @@ interface SingboxHostApi {
   fun openApkInstallSettings(callback: (Result<Boolean>) -> Unit)
   fun installDownloadedApk(callback: (Result<Unit>) -> Unit)
   fun inspectDownloadedApk(path: String, callback: (Result<ApkInspectionMessage>) -> Unit)
+  fun fetchUrlViaOutbound(request: OutboundFetchRequestMessage, callback: (Result<Map<String?, Any?>>) -> Unit)
   fun fetchUrlOnUnderlyingNetwork(request: UnderlyingNetworkFetchRequestMessage, callback: (Result<UnderlyingNetworkFetchResponseMessage>) -> Unit)
   fun downloadUrlOnUnderlyingNetwork(request: UnderlyingNetworkDownloadRequestMessage, callback: (Result<UnderlyingNetworkDownloadResponseMessage>) -> Unit)
   fun resolveHostOnUnderlyingNetwork(host: String, callback: (Result<List<String?>>) -> Unit)
@@ -1472,6 +1535,26 @@ interface SingboxHostApi {
             val args = message as List<Any?>
             val pathArg = args[0] as String
             api.inspectDownloadedApk(pathArg) { result: Result<ApkInspectionMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlViaOutbound$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val requestArg = args[0] as OutboundFetchRequestMessage
+            api.fetchUrlViaOutbound(requestArg) { result: Result<Map<String?, Any?>> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))

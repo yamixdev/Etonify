@@ -200,6 +200,10 @@ class XrayConfigParser {
         'source_scope': sourceScope,
         if (parsedName.countryCode != null) 'country': parsedName.countryCode,
         'outbounds': memberTags,
+        // Keep the exact fallback reference separate: it is not a selector
+        // prefix and must not compete with ordinary URLTest members.
+        if (_s(balancer['fallbackTag']).isNotEmpty)
+          'fallback_tag': _s(balancer['fallbackTag']),
         if (destination.isNotEmpty) 'url': destination,
         ...intervalSeconds == null
             ? const <String, dynamic>{}

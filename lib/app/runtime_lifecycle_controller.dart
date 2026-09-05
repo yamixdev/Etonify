@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/singbox/singbox_api.g.dart' as pigeon;
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 enum RuntimeApplyPolicy { logOnly, safeCoreRestart, fullServiceRestart }
@@ -56,6 +57,8 @@ abstract interface class RuntimeLifecycleRuntime {
   Future<Map<String, dynamic>> status();
 
   Future<NetworkInterfaceSnapshot> getNetworkInterfaceState();
+
+  Stream<Map<String, dynamic>> get events;
 }
 
 class SingboxRuntimeLifecycleRuntime implements RuntimeLifecycleRuntime {
@@ -63,6 +66,9 @@ class SingboxRuntimeLifecycleRuntime implements RuntimeLifecycleRuntime {
     : _runtime = runtime ?? SingboxRuntime.instance;
 
   final SingboxRuntime _runtime;
+
+  @override
+  Stream<Map<String, dynamic>> get events => _runtime.events;
 
   @override
   Future<void> applyConfig({
@@ -249,49 +255,120 @@ class RuntimeLifecycleController {
     required bool useVpn,
     required DateTime deadline,
   }) async {
+    final initialRemaining = deadline.difference(DateTime.now());
+    if (initialRemaining <= Duration.zero) {
+      return false;
+    }
+
+    // 1. Probe immediate status first: if already confirmed running, return immediately.
     var lastStatus = const <String, dynamic>{};
-    do {
-      final remaining = deadline.difference(DateTime.now());
-      if (remaining <= Duration.zero) {
-        break;
+    try {
+      final probeTimeout = initialRemaining < const Duration(seconds: 1)
+          ? initialRemaining
+          : const Duration(seconds: 1);
+      lastStatus = await _runtime.status().timeout(probeTimeout);
+      if (_isStartedRuntimeStatus(lastStatus, useVpn: useVpn)) {
+        AppLogStore.info(
+          'runtime',
+          'runtime start confirmed immediately mode=${lastStatus['mode']} '
+          'generation=${lastStatus['runtimeGeneration']}',
+        );
+        return true;
       }
-      final statusTimeout = remaining < const Duration(seconds: 2)
-          ? remaining
-          : const Duration(seconds: 2);
-      try {
-        lastStatus = await _runtime.status().timeout(statusTimeout);
-        if (_isStartedRuntimeStatus(lastStatus, useVpn: useVpn)) {
-          AppLogStore.info(
-            'runtime',
-            'runtime start confirmed mode=${lastStatus['mode']} '
-                'generation=${lastStatus['runtimeGeneration']}',
-          );
-          return true;
+    } catch (error) {
+      AppLogStore.warning(
+        'runtime',
+        'initial status probe during start check was non-fatal: $error',
+      );
+    }
+
+    // 2. Reactively await start event from the runtime event stream.
+    final completer = Completer<bool>();
+    StreamSubscription<Map<String, dynamic>>? subscription;
+    Timer? fallbackTimer;
+
+    void completeOnce(bool result) {
+      if (!completer.isCompleted) {
+        completer.complete(result);
+      }
+    }
+
+    try {
+      subscription = _runtime.events.listen((event) {
+        final type = event['type']?.toString() ?? '';
+        if (type == pigeon.runtimeEventState) {
+          final expectedMode = useVpn ? 'vpn' : 'proxy';
+          final running = event['running'] == true;
+          final mode = event['mode']?.toString() ?? '';
+          final runtimeGeneration =
+              (event['runtimeGeneration'] as num?)?.toInt() ?? 0;
+          if (running && mode == expectedMode && runtimeGeneration > 0) {
+            AppLogStore.info(
+              'runtime',
+              'runtime start confirmed via event mode=$mode '
+              'generation=$runtimeGeneration',
+            );
+            completeOnce(true);
+          }
         }
-      } catch (error) {
+      }, onError: (Object error) {
+        AppLogStore.warning('runtime', 'runtime event error during start: $error');
+      });
+
+      // Low-frequency heartbeat (1.5s) to guard against dropped stream frames
+      fallbackTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+        if (completer.isCompleted) return;
+        final currentRemaining = deadline.difference(DateTime.now());
+        if (currentRemaining <= Duration.zero) {
+          completeOnce(false);
+          return;
+        }
+        try {
+          final status = await _runtime.status().timeout(
+            const Duration(milliseconds: 800),
+          );
+          lastStatus = status;
+          if (_isStartedRuntimeStatus(status, useVpn: useVpn)) {
+            AppLogStore.info(
+              'runtime',
+              'runtime start confirmed via heartbeat poll mode=${status['mode']} '
+              'generation=${status['runtimeGeneration']}',
+            );
+            completeOnce(true);
+          }
+        } catch (error) {
+          AppLogStore.warning(
+            'runtime',
+            'fallback heartbeat poll failed: $error',
+          );
+        }
+      });
+
+      final remainingWait = deadline.difference(DateTime.now());
+      if (remainingWait <= Duration.zero) {
+        return false;
+      }
+
+      final confirmed = await completer.future.timeout(
+        remainingWait,
+        onTimeout: () => false,
+      );
+
+      if (!confirmed) {
         AppLogStore.warning(
           'runtime',
-          'failed to verify native start useVpn=$useVpn: $error',
-        );
-      }
-      final delayRemaining = deadline.difference(DateTime.now());
-      if (delayRemaining > Duration.zero) {
-        await Future<void>.delayed(
-          delayRemaining < const Duration(milliseconds: 100)
-              ? delayRemaining
-              : const Duration(milliseconds: 100),
-        );
-      }
-    } while (DateTime.now().isBefore(deadline));
-    AppLogStore.warning(
-      'runtime',
-      'runtime start was not confirmed useVpn=$useVpn '
+          'runtime start was not confirmed useVpn=$useVpn '
           'running=${lastStatus['running']} mode=${lastStatus['mode']} '
           'generation=${lastStatus['runtimeGeneration']} '
           'recordedServiceAlive=${lastStatus['recordedServiceAlive']} '
           'activeRuntimeOwner=${lastStatus['activeRuntimeOwner']}',
-    );
-    return false;
+        );
+      }
+      return confirmed;
+    } finally {
+      fallbackTimer?.cancel();
+      await subscription?.cancel();
+    }
   }
 
   bool _isStartedRuntimeStatus(

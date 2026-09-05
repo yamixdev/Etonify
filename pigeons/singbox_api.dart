@@ -164,6 +164,22 @@ class UnderlyingNetworkFetchResponseMessage {
   String network;
 }
 
+class OutboundFetchRequestMessage {
+  OutboundFetchRequestMessage({
+    required this.outboundTag,
+    required this.url,
+    required this.headers,
+    required this.maxBytes,
+    required this.timeoutMillis,
+  });
+
+  String outboundTag;
+  String url;
+  List<HttpHeaderMessage?> headers;
+  int maxBytes;
+  int timeoutMillis;
+}
+
 class UnderlyingNetworkDownloadRequestMessage {
   UnderlyingNetworkDownloadRequestMessage({
     required this.url,
@@ -313,6 +329,11 @@ abstract class SingboxHostApi {
 
   @async
   ApkInspectionMessage inspectDownloadedApk(String path);
+
+  @async
+  Map<String?, Object?> fetchUrlViaOutbound(
+    OutboundFetchRequestMessage request,
+  );
 
   @async
   UnderlyingNetworkFetchResponseMessage fetchUrlOnUnderlyingNetwork(

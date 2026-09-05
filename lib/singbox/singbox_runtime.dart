@@ -90,7 +90,6 @@ class SingboxRuntime {
 
   static final SingboxRuntime instance = SingboxRuntime._();
 
-  static const MethodChannel _methods = MethodChannel('meow_client/singbox');
   static final pigeon.SingboxHostApi _hostApi = pigeon.SingboxHostApi();
   static const EventChannel _events = EventChannel(
     'meow_client/singbox_events',
@@ -120,67 +119,33 @@ class SingboxRuntime {
         .toList(growable: false);
   }
 
-  Future<T> _withMethodChannelFallback<T>(
-    Future<T> Function() hostCall,
-    Future<T> Function() fallback,
-  ) async {
-    if (!Platform.isAndroid) {
-      return fallback();
-    }
-    try {
-      return await hostCall();
-    } on MissingPluginException {
-      return fallback();
-    } on PlatformException catch (error) {
-      if (error.code == 'channel-error') {
-        return fallback();
-      }
-      rethrow;
-    }
-  }
-
   Future<bool> prepareVpn({required bool requiresVpn}) async {
-    return _withMethodChannelFallback(
-      () => _hostApi.prepareVpn(requiresVpn),
-      () async {
-        if (!Platform.isAndroid) {
-          return !requiresVpn;
-        }
-        final granted = await _methods.invokeMethod<bool>('prepareVpn', {
-          'requiresVpn': requiresVpn,
-        });
-        return granted ?? false;
-      },
-    );
+    if (!Platform.isAndroid) {
+      return !requiresVpn;
+    }
+    return _hostApi.prepareVpn(requiresVpn);
   }
 
   Future<bool> vpnPermissionGranted() async {
-    final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-      () async => _normalizeMap(await _hostApi.vpnPermissionStatus()),
-      () async =>
-          await _methods.invokeMapMethod<String, dynamic>(
-            'vpnPermissionStatus',
-          ) ??
-          const {},
-    );
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    final value = _normalizeMap(await _hostApi.vpnPermissionStatus());
     return value['granted'] == true;
   }
 
   Future<void> start({required String config, required bool useVpn}) {
-    return _withMethodChannelFallback(
-      () => _hostApi.start(config, useVpn),
-      () => _methods.invokeMethod<void>('start', {
-        'config': config,
-        'useVpn': useVpn,
-      }),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.start(config, useVpn);
   }
 
   Future<void> startPrepared({required bool useVpn}) {
-    return _withMethodChannelFallback(
-      () => _hostApi.startPrepared(useVpn),
-      () => _methods.invokeMethod<void>('startPrepared', {'useVpn': useVpn}),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.startPrepared(useVpn);
   }
 
   Future<void> applyConfig({
@@ -188,27 +153,20 @@ class SingboxRuntime {
     required bool useVpn,
     bool restartCore = false,
   }) {
-    return _withMethodChannelFallback(
-      () => _hostApi.applyConfig(config, useVpn, restartCore),
-      () => _methods.invokeMethod<void>('applyConfig', {
-        'config': config,
-        'useVpn': useVpn,
-        'restartCore': restartCore,
-      }),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.applyConfig(config, useVpn, restartCore);
   }
 
   Future<void> applyPreparedConfig({
     required bool useVpn,
     bool restartCore = false,
   }) {
-    return _withMethodChannelFallback(
-      () => _hostApi.applyPreparedConfig(useVpn, restartCore),
-      () => _methods.invokeMethod<void>('applyPreparedConfig', {
-        'useVpn': useVpn,
-        'restartCore': restartCore,
-      }),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.applyPreparedConfig(useVpn, restartCore);
   }
 
   Future<String?> getConfigPath() async {
@@ -216,11 +174,8 @@ class SingboxRuntime {
       return null;
     }
     try {
-      final value = await _withMethodChannelFallback<String?>(
-        () => _hostApi.getConfigPath(),
-        () => _methods.invokeMethod<String>('getConfigPath'),
-      );
-      final normalized = value?.trim() ?? '';
+      final value = await _hostApi.getConfigPath();
+      final normalized = value.trim();
       return normalized.isEmpty ? null : normalized;
     } on MissingPluginException {
       return null;
@@ -232,14 +187,7 @@ class SingboxRuntime {
       return const RuntimeFlags();
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getRuntimeFlags()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getRuntimeFlags',
-            ) ??
-            const {},
-      );
+      final value = _normalizeMap(await _hostApi.getRuntimeFlags());
       return RuntimeFlags(
         wakeLockEnabled: value['wakeLockEnabled'] == true,
         networkHeartbeatEnabled: value['networkHeartbeatEnabled'] != false,
@@ -264,42 +212,25 @@ class SingboxRuntime {
       return;
     }
     try {
-      await _withMethodChannelFallback(
-        () => _hostApi.setRuntimeFlags(
-          pigeon.RuntimeFlagsMessage(
-            wakeLockEnabled: wakeLockEnabled,
-            networkHeartbeatEnabled: networkHeartbeatEnabled,
-            networkHeartbeatIntervalSeconds: networkHeartbeatIntervalSeconds,
-            memoryLimitEnabled: memoryLimitEnabled,
-          ),
+      await _hostApi.setRuntimeFlags(
+        pigeon.RuntimeFlagsMessage(
+          wakeLockEnabled: wakeLockEnabled,
+          networkHeartbeatEnabled: networkHeartbeatEnabled,
+          networkHeartbeatIntervalSeconds: networkHeartbeatIntervalSeconds,
+          memoryLimitEnabled: memoryLimitEnabled,
         ),
-        () {
-          final args = <String, dynamic>{};
-          if (wakeLockEnabled != null) {
-            args['wakeLockEnabled'] = wakeLockEnabled;
-          }
-          if (networkHeartbeatEnabled != null) {
-            args['networkHeartbeatEnabled'] = networkHeartbeatEnabled;
-          }
-          if (networkHeartbeatIntervalSeconds != null) {
-            args['networkHeartbeatIntervalSeconds'] =
-                networkHeartbeatIntervalSeconds;
-          }
-          if (memoryLimitEnabled != null) {
-            args['memoryLimitEnabled'] = memoryLimitEnabled;
-          }
-          return _methods.invokeMethod<void>('setRuntimeFlags', args);
-        },
       );
     } on MissingPluginException {
       // Ignore on builds without the Android platform bridge.
     }
   }
 
-  Future<void> reload() => _withMethodChannelFallback(
-    () => _hostApi.reload(),
-    () => _methods.invokeMethod<void>('reload'),
-  );
+  Future<void> reload() {
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.reload();
+  }
 
   Future<void> setRuntimeUiForeground(bool foreground) async {
     if (!Platform.isAndroid) {
@@ -383,23 +314,20 @@ class SingboxRuntime {
   }
 
   Future<void> stop({String reason = 'unspecified'}) {
-    return _withMethodChannelFallback(
-      () => _hostApi.stop(reason),
-      () => _methods.invokeMethod<void>('stop', {'reason': reason}),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.stop(reason);
   }
 
   Future<void> selectOutbound({
     required String groupTag,
     required String outboundTag,
   }) {
-    return _withMethodChannelFallback(
-      () => _hostApi.selectOutbound(groupTag, outboundTag),
-      () => _methods.invokeMethod<void>('selectOutbound', {
-        'groupTag': groupTag,
-        'outboundTag': outboundTag,
-      }),
-    );
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.selectOutbound(groupTag, outboundTag);
   }
 
   Future<void> urlTest({
@@ -413,44 +341,33 @@ class SingboxRuntime {
     int deadlineMillis = 10000,
     bool force = true,
   }) {
-    return _withMethodChannelFallback(
-      () async {
-        await _hostApi.urlTest(
-          pigeon.UrlTestRequestMessage(
-            groupTag: groupTag,
-            targetOutboundTag: targetOutboundTag,
-            priorityOutboundTag: priorityOutboundTag,
-            excludeOutboundTag: excludeOutboundTag,
-            url: url,
-            timeoutMillis: timeoutMillis,
-            concurrency: concurrency,
-            deadlineMillis: deadlineMillis,
-            force: force,
-          ),
-        );
-      },
-      () async {
-        await _methods.invokeMethod<void>('urlTest', {
-          'groupTag': groupTag,
-          'targetOutboundTag': targetOutboundTag,
-          'priorityOutboundTag': priorityOutboundTag,
-          'excludeOutboundTag': excludeOutboundTag,
-          'url': url,
-          'timeoutMillis': timeoutMillis,
-          'concurrency': concurrency,
-          'deadlineMillis': deadlineMillis,
-          'force': force,
-        });
-      },
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.urlTest(
+      pigeon.UrlTestRequestMessage(
+        groupTag: groupTag,
+        targetOutboundTag: targetOutboundTag,
+        priorityOutboundTag: priorityOutboundTag,
+        excludeOutboundTag: excludeOutboundTag,
+        url: url,
+        timeoutMillis: timeoutMillis,
+        concurrency: concurrency,
+        deadlineMillis: deadlineMillis,
+        force: force,
+      ),
     );
   }
 
   Future<Map<String, dynamic>> status() async {
-    return _withMethodChannelFallback(
-      () async => _normalizeMap(await _hostApi.status()),
-      () async =>
-          await _methods.invokeMapMethod<String, dynamic>('status') ?? const {},
-    );
+    if (!Platform.isAndroid) {
+      return const {};
+    }
+    try {
+      return _normalizeMap(await _hostApi.status());
+    } on MissingPluginException {
+      return const {};
+    }
   }
 
   Future<Map<String, dynamic>> lookupOutboundExternalInfo({
@@ -464,18 +381,9 @@ class SingboxRuntime {
       return const {};
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(
-          await _hostApi.lookupOutboundExternalInfo(normalizedTag),
-        ),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'lookupOutboundExternalInfo',
-              {'outboundTag': normalizedTag},
-            ) ??
-            const {},
+      return _normalizeMap(
+        await _hostApi.lookupOutboundExternalInfo(normalizedTag),
       );
-      return value;
     } on MissingPluginException {
       return const {};
     }
@@ -493,17 +401,26 @@ class SingboxRuntime {
         'Outbound HTTP fetch is only available on Android.',
       );
     }
-    return await _methods.invokeMapMethod<String, dynamic>(
-          'fetchUrlViaOutbound',
-          <String, Object?>{
-            'outboundTag': outboundTag,
-            'url': uri.toString(),
-            'headers': headers,
-            'maxBytes': maxBytes,
-            'timeoutMillis': timeout.inMilliseconds,
-          },
-        ) ??
-        const <String, dynamic>{};
+    final normalizedTag = outboundTag.trim();
+    final url = uri.toString().trim();
+    if (normalizedTag.isEmpty || url.isEmpty) {
+      return const <String, dynamic>{};
+    }
+    final raw = await _hostApi.fetchUrlViaOutbound(
+      pigeon.OutboundFetchRequestMessage(
+        outboundTag: normalizedTag,
+        url: url,
+        headers: headers.entries
+            .map(
+              (entry) =>
+                  pigeon.HttpHeaderMessage(name: entry.key, value: entry.value),
+            )
+            .toList(growable: false),
+        maxBytes: maxBytes,
+        timeoutMillis: timeout.inMilliseconds,
+      ),
+    );
+    return _normalizeMap(raw);
   }
 
   Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async {
@@ -511,35 +428,15 @@ class SingboxRuntime {
       return NetworkInterfaceSnapshot.unavailable;
     }
     try {
-      final value = await _withMethodChannelFallback<NetworkInterfaceSnapshot>(
-        () async {
-          final state = await _hostApi.getNetworkInterfaceState();
-          return NetworkInterfaceSnapshot(
-            available: state.available,
-            interfaceName: state.interfaceName?.trim() ?? '',
-            interfaceIndex: state.interfaceIndex,
-            generation: state.generation,
-            reason: state.reason?.trim() ?? 'host_api',
-            updatedAtMillis: state.updatedAtMillis,
-          );
-        },
-        () async {
-          final raw =
-              await _methods.invokeMapMethod<String, dynamic>(
-                'getNetworkInterfaceState',
-              ) ??
-              const {};
-          return NetworkInterfaceSnapshot(
-            available: raw['available'] == true,
-            interfaceName: raw['interfaceName']?.toString().trim() ?? '',
-            interfaceIndex: (raw['interfaceIndex'] as num?)?.toInt() ?? -1,
-            generation: (raw['generation'] as num?)?.toInt() ?? 0,
-            reason: raw['reason']?.toString().trim() ?? 'method_channel',
-            updatedAtMillis: (raw['updatedAtMillis'] as num?)?.toInt() ?? 0,
-          );
-        },
+      final state = await _hostApi.getNetworkInterfaceState();
+      return NetworkInterfaceSnapshot(
+        available: state.available,
+        interfaceName: state.interfaceName?.trim() ?? '',
+        interfaceIndex: state.interfaceIndex,
+        generation: state.generation,
+        reason: state.reason?.trim() ?? 'host_api',
+        updatedAtMillis: state.updatedAtMillis,
       );
-      return value;
     } on MissingPluginException {
       return NetworkInterfaceSnapshot.unavailable;
     }
@@ -549,13 +446,10 @@ class SingboxRuntime {
     required String content,
     required String suggestedName,
   }) {
-    return _withMethodChannelFallback(
-      () => _hostApi.exportLogs(content, suggestedName),
-      () => _methods.invokeMethod<String>('exportLogs', {
-        'content': content,
-        'suggestedName': suggestedName,
-      }),
-    );
+    if (!Platform.isAndroid) {
+      return Future<String?>.value(null);
+    }
+    return _hostApi.exportLogs(content, suggestedName);
   }
 
   Future<bool> canInstallApks() async {
@@ -723,24 +617,25 @@ class SingboxRuntime {
   }
 
   Future<String> getAndroidId() async {
-    final value = await _withMethodChannelFallback<String?>(
-      () => _hostApi.getAndroidId(),
-      () => _methods.invokeMethod<String>('getAndroidId'),
-    );
-    return value ?? '';
+    if (!Platform.isAndroid) {
+      return '';
+    }
+    try {
+      return await _hostApi.getAndroidId();
+    } on MissingPluginException {
+      return '';
+    }
   }
 
   Future<Map<String, dynamic>> getSubscriptionRequestDeviceInfo() async {
-    final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-      () async =>
-          _normalizeMap(await _hostApi.getSubscriptionRequestDeviceInfo()),
-      () async =>
-          await _methods.invokeMapMethod<String, dynamic>(
-            'getSubscriptionRequestDeviceInfo',
-          ) ??
-          const {},
-    );
-    return value;
+    if (!Platform.isAndroid) {
+      return const {};
+    }
+    try {
+      return _normalizeMap(await _hostApi.getSubscriptionRequestDeviceInfo());
+    } on MissingPluginException {
+      return const {};
+    }
   }
 
   Future<Map<String, dynamic>> getPlatformDeviceInfo() async {
@@ -748,15 +643,7 @@ class SingboxRuntime {
       return const {};
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getPlatformDeviceInfo()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getPlatformDeviceInfo',
-            ) ??
-            const {},
-      );
-      return value;
+      return _normalizeMap(await _hostApi.getPlatformDeviceInfo());
     } on MissingPluginException {
       return const {};
     }
@@ -771,14 +658,7 @@ class SingboxRuntime {
       );
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getAppVersionInfo()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getAppVersionInfo',
-            ) ??
-            const {},
-      );
+      final value = _normalizeMap(await _hostApi.getAppVersionInfo());
       return AppVersionInfo(
         packageName: value['packageName']?.toString().trim() ?? '',
         versionName: value['versionName']?.toString().trim() ?? '',
@@ -798,11 +678,8 @@ class SingboxRuntime {
       return null;
     }
     try {
-      final value = await _withMethodChannelFallback<String?>(
-        () => _hostApi.getCoreVersion(),
-        () => _methods.invokeMethod<String>('getCoreVersion'),
-      );
-      final normalized = value?.trim() ?? '';
+      final value = await _hostApi.getCoreVersion();
+      final normalized = value.trim();
       return normalized.isEmpty ? null : normalized;
     } on MissingPluginException {
       return null;
@@ -814,10 +691,9 @@ class SingboxRuntime {
       return LibboxCapabilities.bundledLegacy;
     }
     try {
-      final value = await _withMethodChannelFallback<String?>(
-        () => _hostApi.getCoreCapabilities(),
-        () => _methods.invokeMethod<String>('getCoreCapabilities'),
-      ).timeout(const Duration(seconds: 5));
+      final value = await _hostApi
+          .getCoreCapabilities()
+          .timeout(const Duration(seconds: 5));
       return LibboxCapabilities.parseStrict(value);
     } on TimeoutException {
       return LibboxCapabilities.incompatible;
@@ -832,10 +708,7 @@ class SingboxRuntime {
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
-    return _withMethodChannelFallback(
-      () => _hostApi.checkConfig(config),
-      () => _methods.invokeMethod<void>('checkConfig', {'config': config}),
-    );
+    return _hostApi.checkConfig(config);
   }
 
   Future<Map<String, dynamic>> getPerformanceSnapshot() async {
@@ -843,15 +716,7 @@ class SingboxRuntime {
       return const {};
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getPerformanceSnapshot()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getPerformanceSnapshot',
-            ) ??
-            const {},
-      );
-      return value;
+      return _normalizeMap(await _hostApi.getPerformanceSnapshot());
     } on MissingPluginException {
       return const {};
     }
@@ -861,12 +726,7 @@ class SingboxRuntime {
     if (!Platform.isAndroid) return;
     final normalizedDuration = durationSeconds.clamp(15, 3600).toInt();
     try {
-      await _withMethodChannelFallback(
-        () => _hostApi.startRuntimeMeasurement(normalizedDuration),
-        () => _methods.invokeMethod<void>('startRuntimeMeasurement', {
-          'durationSeconds': normalizedDuration,
-        }),
-      );
+      await _hostApi.startRuntimeMeasurement(normalizedDuration);
     } on MissingPluginException {
       // The diagnostics panel is unavailable on older Android bridges.
     }
@@ -875,10 +735,7 @@ class SingboxRuntime {
   Future<void> stopRuntimeMeasurement() async {
     if (!Platform.isAndroid) return;
     try {
-      await _withMethodChannelFallback(
-        _hostApi.stopRuntimeMeasurement,
-        () => _methods.invokeMethod<void>('stopRuntimeMeasurement'),
-      );
+      await _hostApi.stopRuntimeMeasurement();
     } on MissingPluginException {
       // The diagnostics panel is unavailable on older Android bridges.
     }
@@ -887,14 +744,7 @@ class SingboxRuntime {
   Future<Map<String, dynamic>> getRuntimeMeasurement() async {
     if (!Platform.isAndroid) return const {};
     try {
-      return await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getRuntimeMeasurement()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getRuntimeMeasurement',
-            ) ??
-            const {},
-      );
+      return _normalizeMap(await _hostApi.getRuntimeMeasurement());
     } on MissingPluginException {
       return const {};
     }
@@ -903,12 +753,8 @@ class SingboxRuntime {
   Future<String> getRuntimeMeasurementReport() async {
     if (!Platform.isAndroid) return '';
     try {
-      return await _withMethodChannelFallback<String>(
-        _hostApi.getRuntimeMeasurementReport,
-        () => _methods
-            .invokeMethod<String>('getRuntimeMeasurementReport')
-            .then((value) => value ?? ''),
-      );
+      final value = await _hostApi.getRuntimeMeasurementReport();
+      return value.trim();
     } on MissingPluginException {
       return '';
     }
@@ -922,15 +768,7 @@ class SingboxRuntime {
       };
     }
     try {
-      final value = await _withMethodChannelFallback<Map<String, dynamic>>(
-        () async => _normalizeMap(await _hostApi.getHappCrypt5Support()),
-        () async =>
-            await _methods.invokeMapMethod<String, dynamic>(
-              'getHappCrypt5Support',
-            ) ??
-            const {},
-      );
-      return value;
+      return _normalizeMap(await _hostApi.getHappCrypt5Support());
     } on MissingPluginException {
       return const {
         'supported': false,
@@ -986,12 +824,7 @@ class SingboxRuntime {
     }
     try {
       final normalizedLabel = label?.trim() ?? '';
-      await _withMethodChannelFallback(
-        () => _hostApi.setQuickSettingsTileLabel(normalizedLabel),
-        () => _methods.invokeMethod<void>('setQuickSettingsTileLabel', {
-          'label': normalizedLabel,
-        }),
-      );
+      await _hostApi.setQuickSettingsTileLabel(normalizedLabel);
     } on MissingPluginException {
       // Ignore on builds without the Android platform bridge.
     }

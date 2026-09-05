@@ -635,6 +635,71 @@ class UnderlyingNetworkFetchResponseMessage {
   }
 }
 
+class OutboundFetchRequestMessage {
+  OutboundFetchRequestMessage({
+    required this.outboundTag,
+    required this.url,
+    required this.headers,
+    required this.maxBytes,
+    required this.timeoutMillis,
+  });
+
+  String outboundTag;
+
+  String url;
+
+  List<HttpHeaderMessage?> headers;
+
+  int maxBytes;
+
+  int timeoutMillis;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      outboundTag,
+      url,
+      headers,
+      maxBytes,
+      timeoutMillis,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static OutboundFetchRequestMessage decode(Object result) {
+    result as List<Object?>;
+    return OutboundFetchRequestMessage(
+      outboundTag: result[0]! as String,
+      url: result[1]! as String,
+      headers: (result[2]! as List<Object?>).cast<HttpHeaderMessage?>(),
+      maxBytes: result[3]! as int,
+      timeoutMillis: result[4]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! OutboundFetchRequestMessage || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(outboundTag, other.outboundTag) && _deepEquals(url, other.url) && _deepEquals(headers, other.headers) && _deepEquals(maxBytes, other.maxBytes) && _deepEquals(timeoutMillis, other.timeoutMillis);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'OutboundFetchRequestMessage(outboundTag: $outboundTag, url: $url, headers: $headers, maxBytes: $maxBytes, timeoutMillis: $timeoutMillis)';
+  }
+}
+
 class UnderlyingNetworkDownloadRequestMessage {
   UnderlyingNetworkDownloadRequestMessage({
     required this.url,
@@ -949,17 +1014,20 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is UnderlyingNetworkFetchResponseMessage) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkDownloadRequestMessage) {
+    }    else if (value is OutboundFetchRequestMessage) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkDownloadResponseMessage) {
+    }    else if (value is UnderlyingNetworkDownloadRequestMessage) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is ApkInspectionMessage) {
+    }    else if (value is UnderlyingNetworkDownloadResponseMessage) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is InstalledAppMessage) {
+    }    else if (value is ApkInspectionMessage) {
       buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is InstalledAppMessage) {
+      buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -984,12 +1052,14 @@ class _PigeonCodec extends StandardMessageCodec {
       case 135:
         return UnderlyingNetworkFetchResponseMessage.decode(readValue(buffer)!);
       case 136:
-        return UnderlyingNetworkDownloadRequestMessage.decode(readValue(buffer)!);
+        return OutboundFetchRequestMessage.decode(readValue(buffer)!);
       case 137:
-        return UnderlyingNetworkDownloadResponseMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkDownloadRequestMessage.decode(readValue(buffer)!);
       case 138:
-        return ApkInspectionMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkDownloadResponseMessage.decode(readValue(buffer)!);
       case 139:
+        return ApkInspectionMessage.decode(readValue(buffer)!);
+      case 140:
         return InstalledAppMessage.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1452,6 +1522,25 @@ class SingboxHostApi {
     )
     ;
     return pigeonVar_replyValue! as ApkInspectionMessage;
+  }
+
+  Future<Map<String?, Object?>> fetchUrlViaOutbound(OutboundFetchRequestMessage request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlViaOutbound$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
   }
 
   Future<UnderlyingNetworkFetchResponseMessage> fetchUrlOnUnderlyingNetwork(UnderlyingNetworkFetchRequestMessage request) async {

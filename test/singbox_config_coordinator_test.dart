@@ -399,6 +399,9 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
   int runtimeGeneration = 1;
 
   @override
+  Stream<Map<String, dynamic>> get events => const Stream.empty();
+
+  @override
   Future<void> applyConfig({
     required String config,
     required bool useVpn,

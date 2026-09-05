@@ -44,4 +44,42 @@ void main() {
       expect(normalized.single['system'], false);
     });
   });
+
+  group('SingboxRuntime non-Android guards', () {
+    test('prepareVpn returns !requiresVpn on non-Android', () async {
+      expect(
+        await SingboxRuntime.instance.prepareVpn(requiresVpn: true),
+        isFalse,
+      );
+      expect(
+        await SingboxRuntime.instance.prepareVpn(requiresVpn: false),
+        isTrue,
+      );
+    });
+
+    test('vpnPermissionGranted returns true on non-Android', () async {
+      expect(await SingboxRuntime.instance.vpnPermissionGranted(), isTrue);
+    });
+
+    test('getConfigPath returns null on non-Android', () async {
+      expect(await SingboxRuntime.instance.getConfigPath(), isNull);
+    });
+
+    test('status returns empty map on non-Android', () async {
+      expect(await SingboxRuntime.instance.status(), isEmpty);
+    });
+
+    test('fetchUrlViaOutbound throws UnsupportedError on non-Android', () async {
+      expect(
+        () => SingboxRuntime.instance.fetchUrlViaOutbound(
+          outboundTag: 'proxy',
+          uri: Uri.parse('https://example.com'),
+          headers: const {},
+          maxBytes: 1024,
+          timeout: const Duration(seconds: 5),
+        ),
+        throwsUnsupportedError,
+      );
+    });
+  });
 }

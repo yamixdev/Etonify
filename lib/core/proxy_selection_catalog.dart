@@ -21,7 +21,11 @@ class ProxySelectionCatalog {
         )
         .where((group) => group.outboundTags.isNotEmpty)
         .toList(growable: false);
-    memberTags = this.groups.expand((group) => group.outboundTags).toSet();
+    // Even if a group loses its last usable primary, its fallback must not
+    // silently become a standalone/root URLTest candidate.
+    memberTags = groups
+        .expand((group) => [...group.outboundTags, ...group.fallbackOutboundTags])
+        .toSet();
     standaloneOutbounds = outbounds
         .where(
           (outbound) =>
@@ -51,7 +55,10 @@ class ProxySelectionCatalog {
     if (isLowestProxyTag(normalized)) return defaultTag;
     // Migrate an old saved selection of an internal member to its group.
     for (final group in groups) {
-      if (group.outboundTags.contains(normalized)) return group.tag;
+      if (group.outboundTags.contains(normalized) ||
+          group.fallbackOutboundTags.contains(normalized)) {
+        return group.tag;
+      }
     }
     return defaultTag;
   }

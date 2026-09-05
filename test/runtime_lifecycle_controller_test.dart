@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
@@ -235,6 +237,71 @@ void main() {
       expect(runtime.activeRuntimeOwner, isFalse);
     },
   );
+
+  test('start service confirms reactively via events stream', () async {
+    final runtime = _FakeRuntime(running: false, confirmStartImmediately: false);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      startTimeout: const Duration(seconds: 2),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final startFuture = controller.startRuntimeWithBuild(
+      build: _build(),
+      useVpn: true,
+      promotePreparedConfig: (_) {},
+      cacheStartedBuild: (_) {},
+      logCall: (_, _) {},
+      trimMemory: (_) {},
+      onWatchdogTimeout: (_) {},
+    );
+
+    // Emit started event from stream
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    runtime.confirmStarted(useVpn: true);
+
+    final result = await startFuture;
+    expect(result.success, isTrue);
+    expect(result.policy, RuntimeApplyPolicy.fullServiceRestart);
+    expect(runtime.running, isTrue);
+  });
+
+  test('start service falls back to heartbeat status poll if event dropped', () async {
+    final runtime = _FakeRuntime(running: false, confirmStartImmediately: false);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      startTimeout: const Duration(seconds: 3),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final startFuture = controller.startRuntimeWithBuild(
+      build: _build(),
+      useVpn: true,
+      promotePreparedConfig: (_) {},
+      cacheStartedBuild: (_) {},
+      logCall: (_, _) {},
+      trimMemory: (_) {},
+      onWatchdogTimeout: (_) {},
+    );
+
+    // Update status WITHOUT emitting on events stream
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    runtime.running = true;
+    runtime.mode = 'vpn';
+    runtime.recordedServiceAlive = true;
+    runtime.activeRuntimeOwner = true;
+    runtime.runtimeGeneration = 1;
+
+    final result = await startFuture;
+    expect(result.success, isTrue);
+    expect(result.policy, RuntimeApplyPolicy.fullServiceRestart);
+  });
 }
 
 SingboxConfigBuildResult _build() {
@@ -286,6 +353,16 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   int startPreparedCalls = 0;
   int statusCalls = 0;
   bool? lastRestartCore;
+
+  final StreamController<Map<String, dynamic>> _eventsController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  @override
+  Stream<Map<String, dynamic>> get events => _eventsController.stream;
+
+  void dispose() {
+    _eventsController.close();
+  }
 
   @override
   Future<void> applyConfig({
@@ -388,5 +465,12 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     recordedServiceAlive = true;
     activeRuntimeOwner = true;
     runtimeGeneration++;
+    _eventsController.add(<String, dynamic>{
+      'type': 'state',
+      'running': true,
+      'mode': mode,
+      'runtimeGeneration': runtimeGeneration,
+      'error': null,
+    });
   }
 }

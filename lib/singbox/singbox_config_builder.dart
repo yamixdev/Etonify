@@ -144,7 +144,10 @@ class SingboxConfigBuilder {
         .map((outbound) => outbound.tag)
         .toList(growable: false);
     final visibleGroups = _visibleGroups(outboundTags.toSet());
-    final selectionCatalog = ProxySelectionCatalog(outbounds, visibleGroups);
+    final selectionCatalog = ProxySelectionCatalog(
+      outbounds,
+      activeSubscription?.groups ?? const [],
+    );
     final selectableOutboundTags = selectionCatalog.standaloneOutbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);

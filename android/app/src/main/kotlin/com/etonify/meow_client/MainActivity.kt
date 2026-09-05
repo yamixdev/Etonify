@@ -41,6 +41,7 @@ import com.etonify.meow_client.generated.FlutterError as PigeonFlutterError
 import com.etonify.meow_client.generated.HttpHeaderMessage
 import com.etonify.meow_client.generated.InstalledAppMessage
 import com.etonify.meow_client.generated.NetworkInterfaceStateMessage
+import com.etonify.meow_client.generated.OutboundFetchRequestMessage
 import com.etonify.meow_client.generated.RuntimeFlagsMessage
 import com.etonify.meow_client.generated.SingboxHostApi
 import com.etonify.meow_client.generated.UnderlyingNetworkDownloadRequestMessage
@@ -74,12 +75,10 @@ class MainActivity : FlutterFragmentActivity() {
         private const val MAX_SUBSCRIPTION_REDIRECTS = 5
         private val SUBSCRIPTION_REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
     }
-    private val methodChannelName = "meow_client/singbox"
     private val eventChannelName = "meow_client/singbox_events"
     private val deepLinkMethodChannelName = "meow_client/deep_links"
     private val deepLinkEventChannelName = "meow_client/deep_link_events"
     private val secureStorageMethodChannelName = "meow_client/secure_storage"
-    // private val happCryptoMethodChannelName = "meow_client/happ_crypto"
     private var pendingPrepareResult: MethodChannel.Result? = null
     private var pendingExportResult: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
@@ -1540,56 +1539,6 @@ class MainActivity : FlutterFragmentActivity() {
         value.length <= 255 &&
             Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$").matches(value)
 
-    /*
-    private fun decodeHappCrypt5(link: String?, result: MethodChannel.Result) {
-        val input = link?.trim().orEmpty()
-        if (input.isBlank()) {
-            result.error("empty_input", "Happ crypt5 link is empty", null)
-            return
-        }
-
-        val serviceIntent = Intent(this, Crypto5IsolatedService::class.java).apply {
-            putExtra(Crypto5IsolatedService.EXTRA_INPUT, input)
-            putExtra(
-                Crypto5IsolatedService.EXTRA_RECEIVER,
-                object : ResultReceiver(mainHandler) {
-                    override fun onReceiveResult(resultCode: Int, resultData: Bundle) {
-                        if (resultCode == Crypto5IsolatedService.RESULT_SUCCESS) {
-                            result.success(
-                                resultData.getString(Crypto5IsolatedService.EXTRA_DECODED).orEmpty(),
-                            )
-                            return
-                        }
-                        result.error(
-                            "decode_failed",
-                            resultData.getString(Crypto5IsolatedService.EXTRA_ERROR)
-                                ?: "Failed to decode Happ crypt5 link",
-                            null,
-                        )
-                    }
-                },
-            )
-        }
-
-        try {
-            val started = startService(serviceIntent)
-            if (started == null) {
-                result.error(
-                    "service_unavailable",
-                    "Happ crypt5 isolated service is unavailable",
-                    null,
-                )
-            }
-        } catch (error: Throwable) {
-            result.error(
-                "service_start_failed",
-                error.message ?: error.toString(),
-                null,
-            )
-        }
-    }
-    */
-
     private fun setupSingboxHostApi(binaryMessenger: BinaryMessenger) {
         SingboxHostApi.setUp(
             binaryMessenger,
@@ -1869,6 +1818,39 @@ class MainActivity : FlutterFragmentActivity() {
                                 mainHandler.post {
                                     callback(errorResult("inspect_apk_failed", error.message ?: error.toString()))
                                 }
+                            }
+                    }
+                }
+
+                override fun fetchUrlViaOutbound(
+                    request: OutboundFetchRequestMessage,
+                    callback: (Result<Map<String?, Any?>>) -> Unit,
+                ) {
+                    val outboundTag = request.outboundTag.trim()
+                    val url = request.url.trim()
+                    if (outboundTag.isEmpty() || url.isEmpty()) {
+                        callback(errorResult("outbound_http_invalid", "Outbound tag or URL is empty"))
+                        return
+                    }
+                    val headers = request.headers
+                        .mapNotNull { header ->
+                            val name = header?.name?.trim().orEmpty()
+                            if (name.isEmpty()) null else name to header?.value.orEmpty()
+                        }
+                        .toMap()
+                    val maxBytes = request.maxBytes.coerceIn(1L, 3L * 1024L * 1024L).toInt()
+                    val timeoutMillis = request.timeoutMillis.coerceIn(1_000L, 60_000L).toInt()
+                    SingboxController.fetchUrlViaOutbound(
+                        outboundTag = outboundTag,
+                        url = url,
+                        headers = headers,
+                        maxBytes = maxBytes,
+                        timeoutMillis = timeoutMillis,
+                    ) { fetchResult ->
+                        fetchResult
+                            .onSuccess { callback(Result.success(pigeonMap(it))) }
+                            .onFailure { error ->
+                                callback(errorResult("outbound_http_failed", error.message ?: error.toString()))
                             }
                     }
                 }
@@ -2190,360 +2172,11 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
-        /*
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            happCryptoMethodChannelName,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "decodeCrypt5" -> decodeHappCrypt5(call.argument("link"), result)
-                else -> result.notImplemented()
-            }
-        }
-        */
+    }
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            methodChannelName,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "prepareVpn" -> {
-                    val requiresVpn = call.argument<Boolean>("requiresVpn") ?: true
-                    if (!requiresVpn) {
-                        result.success(true)
-                        return@setMethodCallHandler
-                    }
-                    val intent = VpnService.prepare(this)
-                    Log.i(TAG, "prepareVpn requiresVpn=$requiresVpn granted=${intent == null}")
-                    if (intent == null) {
-                        result.success(true)
-                    } else {
-                        launchVpnPermission(intent, result)
-                    }
-                }
-
-                "vpnPermissionStatus" -> {
-                    result.success(
-                        mapOf(
-                            "granted" to (VpnService.prepare(this) == null),
-                        ),
-                    )
-                }
-
-                "getPlatformDeviceInfo" -> {
-                    result.success(
-                        mapOf(
-                            "manufacturer" to Build.MANUFACTURER,
-                            "brand" to Build.BRAND,
-                            "model" to Build.MODEL,
-                            "sdkInt" to Build.VERSION.SDK_INT,
-                            "release" to Build.VERSION.RELEASE,
-                            "abi" to Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
-                            "supportedAbis" to Build.SUPPORTED_ABIS.toList(),
-                        ),
-                    )
-                }
-
-                "getAppVersionInfo" -> {
-                    result.success(getAppVersionInfo())
-                }
-
-                "getCoreVersion" -> {
-                    result.success(Libbox.version())
-                }
-
-                "getCoreCapabilities" -> {
-                    result.success(getEtonifyCoreCapabilities())
-                }
-
-                "checkConfig" -> {
-                    val config = call.argument<String>("config").orEmpty()
-                    ioExecutor.execute {
-                        runCatching { Libbox.checkConfig(config) }
-                            .onSuccess { mainHandler.post { result.success(null) } }
-                            .onFailure { error ->
-                                mainHandler.post {
-                                    result.error("config_check_failed", error.message, null)
-                                }
-                            }
-                    }
-                }
-
-                "getConfigPath" -> {
-                    result.success(MeowApplication.configFile.absolutePath)
-                }
-
-                "getRuntimeFlags" -> {
-                    result.success(
-                        mapOf(
-                            "wakeLockEnabled" to MeowApplication.wakeLockEnabled,
-                            "networkHeartbeatEnabled" to MeowApplication.networkHeartbeatEnabled,
-                            "networkHeartbeatIntervalSeconds" to MeowApplication.networkHeartbeatIntervalSeconds,
-                            "memoryLimitEnabled" to MeowApplication.memoryLimitEnabled,
-                            "goMemoryLimitBytes" to MeowApplication.appliedGoMemoryLimitBytes,
-                        ),
-                    )
-                }
-
-                "setRuntimeFlags" -> {
-                    val wakeLock = call.argument<Boolean>("wakeLockEnabled")
-                    val heartbeat = call.argument<Boolean>("networkHeartbeatEnabled")
-                    val heartbeatInterval = call.argument<Int>("networkHeartbeatIntervalSeconds")
-                    val memoryLimitEnabled = call.argument<Boolean>("memoryLimitEnabled")
-                    var heartbeatChanged = false
-                    if (wakeLock != null) {
-                        MeowApplication.wakeLockEnabled = wakeLock
-                    }
-                    if (heartbeat != null) {
-                        MeowApplication.networkHeartbeatEnabled = heartbeat
-                        heartbeatChanged = true
-                    }
-                    if (heartbeatInterval != null) {
-                        MeowApplication.networkHeartbeatIntervalSeconds = heartbeatInterval.toLong()
-                        heartbeatChanged = true
-                    }
-                    if (memoryLimitEnabled != null) {
-                        if (!MeowApplication.updateMemoryLimitEnabled(memoryLimitEnabled)) {
-                            result.error(
-                                "memory_limit_apply_failed",
-                                "Unable to apply Go memory limit",
-                                null,
-                            )
-                            return@setMethodCallHandler
-                        }
-                    }
-                    if (heartbeatChanged) {
-                        MeowDefaultNetworkMonitor.refreshHeartbeat()
-                    }
-                    result.success(true)
-                }
-
-                "getPerformanceSnapshot" -> {
-                    result.success(buildPerformanceSnapshot())
-                }
-
-                "startRuntimeMeasurement" -> {
-                    val durationSeconds = call.argument<Number>("durationSeconds")?.toLong() ?: 60L
-                    RuntimeMeasurement.start(applicationContext, durationSeconds)
-                    result.success(null)
-                }
-
-                "stopRuntimeMeasurement" -> {
-                    RuntimeMeasurement.stop()
-                    result.success(null)
-                }
-
-                "getRuntimeMeasurement" -> {
-                    result.success(RuntimeMeasurement.snapshot())
-                }
-
-                "getRuntimeMeasurementReport" -> {
-                    result.success(RuntimeMeasurement.report())
-                }
-
-                "start" -> {
-                    val config = call.argument<String>("config")
-                    val useVpn = call.argument<Boolean>("useVpn") ?: true
-                    if (config.isNullOrBlank()) {
-                        result.error("empty_config", "Config is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    writeConfigAndDispatch(config, result) {
-                        dispatchStartAfterConfigWrite(useVpn, result)
-                    }
-                }
-
-                "startPrepared" -> {
-                    val useVpn = call.argument<Boolean>("useVpn") ?: true
-                    withPreparedConfig(result) {
-                        dispatchStartAfterConfigWrite(useVpn, result)
-                    }
-                }
-
-                "applyConfig" -> {
-                    val config = call.argument<String>("config")
-                    val useVpn = call.argument<Boolean>("useVpn") ?: true
-                    val restartCore = call.argument<Boolean>("restartCore") ?: false
-                    if (config.isNullOrBlank()) {
-                        result.error("empty_config", "Config is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    writeConfigAndDispatch(config, result) {
-                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result)
-                    }
-                }
-
-                "applyPreparedConfig" -> {
-                    val useVpn = call.argument<Boolean>("useVpn") ?: true
-                    val restartCore = call.argument<Boolean>("restartCore") ?: false
-                    withPreparedConfig(result) {
-                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result)
-                    }
-                }
-
-                "setQuickSettingsTileLabel" -> {
-                    writeQuickSettingsTileLabel(call.argument("label"))
-                    result.success(true)
-                }
-
-                "stop" -> {
-                    val reason = call.argument<String>("reason") ?: "unspecified"
-                    dispatchStopRuntime(reason) { stopped ->
-                        if (stopped) {
-                            result.success(true)
-                        } else {
-                            result.error("stop_timeout", "Native service stop timed out", null)
-                        }
-                    }
-                }
-
-                "reload" -> {
-                    val serviceClass = when (SingboxController.serviceMode) {
-                        "proxy" -> MeowProxyService::class.java
-                        else -> MeowVpnService::class.java
-                    }
-                    startService(Intent(this, serviceClass).setAction(MeowBoxService.ACTION_RELOAD))
-                    result.success(true)
-                }
-
-                "selectOutbound" -> {
-                    val groupTag = call.argument<String>("groupTag") ?: "select"
-                    val outboundTag = call.argument<String>("outboundTag")
-                    if (outboundTag.isNullOrBlank()) {
-                        result.error("missing_outbound", "Outbound tag is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.selectOutbound(groupTag, outboundTag) { selectionResult ->
-                        selectionResult.onSuccess {
-                            result.success(true)
-                        }.onFailure {
-                            result.error("select_failed", it.message, null)
-                        }
-                    }
-                }
-
-                "urlTest" -> {
-                    val groupTag = call.argument<String>("groupTag") ?: "select"
-                    SingboxController.urlTest(
-                        groupTag = groupTag,
-                        targetOutboundTag = call.argument<String>("targetOutboundTag").orEmpty(),
-                        priorityOutboundTag = call.argument<String>("priorityOutboundTag").orEmpty(),
-                        excludeOutboundTag = call.argument<String>("excludeOutboundTag").orEmpty(),
-                        url = call.argument<String>("url").orEmpty(),
-                        timeoutMillis = call.argument<Number>("timeoutMillis")?.toInt() ?: 3_000,
-                        concurrency = call.argument<Number>("concurrency")?.toInt() ?: 0,
-                        deadlineMillis = call.argument<Number>("deadlineMillis")?.toInt() ?: 10_000,
-                        force = call.argument<Boolean>("force") ?: true,
-                    ) { urlTestResult ->
-                        urlTestResult.onSuccess {
-                            result.success(true)
-                        }.onFailure {
-                            result.error("urltest_failed", it.message, null)
-                        }
-                    }
-                }
-
-                "status" -> {
-                    result.success(runtimeStatusMap())
-                }
-
-                "lookupOutboundExternalInfo" -> {
-                    val outboundTag = call.argument<String>("outboundTag")?.trim().orEmpty()
-                    if (outboundTag.isEmpty()) {
-                        result.error("lookup_outbound_external_info_failed", "Outbound tag is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.lookupOutboundExternalInfo(outboundTag) { lookupResult ->
-                        lookupResult.onSuccess {
-                            result.success(it)
-                        }.onFailure {
-                            result.error("lookup_outbound_external_info_failed", it.message, null)
-                        }
-                    }
-                }
-
-                "fetchUrlViaOutbound" -> {
-                    val outboundTag = call.argument<String>("outboundTag")?.trim().orEmpty()
-                    val url = call.argument<String>("url")?.trim().orEmpty()
-                    val headers = (call.argument<Map<*, *>>("headers") ?: emptyMap<Any?, Any?>())
-                        .entries
-                        .mapNotNull { entry ->
-                            val name = entry.key?.toString()?.trim().orEmpty()
-                            if (name.isEmpty()) null else name to entry.value?.toString().orEmpty()
-                        }
-                        .toMap()
-                    val maxBytes = (call.argument<Number>("maxBytes")?.toInt() ?: 0)
-                        .coerceIn(1, 3 * 1024 * 1024)
-                    val timeoutMillis = (call.argument<Number>("timeoutMillis")?.toInt() ?: 10_000)
-                        .coerceIn(1_000, 60_000)
-                    if (outboundTag.isEmpty() || url.isEmpty()) {
-                        result.error("outbound_http_invalid", "Outbound tag or URL is empty", null)
-                        return@setMethodCallHandler
-                    }
-                    SingboxController.fetchUrlViaOutbound(
-                        outboundTag = outboundTag,
-                        url = url,
-                        headers = headers,
-                        maxBytes = maxBytes,
-                        timeoutMillis = timeoutMillis,
-                    ) { fetchResult ->
-                        fetchResult.onSuccess(result::success).onFailure { error ->
-                            result.error("outbound_http_failed", error.message ?: error.toString(), null)
-                        }
-                    }
-                }
-
-                "getNetworkInterfaceState" -> {
-                    val state = MeowDefaultNetworkMonitor.currentInterfaceState("method_channel")
-                    result.success(
-                        mapOf(
-                            "available" to state.available,
-                            "interfaceName" to state.interfaceName,
-                            "interfaceIndex" to state.interfaceIndex,
-                            "generation" to state.generation,
-                            "reason" to state.reason,
-                            "updatedAtMillis" to state.updatedAtMillis,
-                        ),
-                    )
-                }
-
-                "exportLogs" -> {
-                    val content = call.argument<String>("content") ?: ""
-                    val suggestedName = call.argument<String>("suggestedName")
-                        ?: "meow-logs-${System.currentTimeMillis()}.txt"
-                    launchLogExport(content, suggestedName, result)
-                }
-
-                "getAndroidId" -> {
-                    result.success(
-                        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "",
-                    )
-                }
-
-                "getSubscriptionRequestDeviceInfo" -> {
-                    val locale = resources.configuration.locales?.get(0)?.language
-                        ?: java.util.Locale.getDefault().language
-                    result.success(
-                        mapOf(
-                            "locale" to locale,
-                            "os" to "Android",
-                            "osVersion" to Build.VERSION.RELEASE,
-                            "model" to Build.MODEL,
-                            "androidId" to (Settings.Secure.getString(
-                                contentResolver,
-                                Settings.Secure.ANDROID_ID,
-                            ) ?: ""),
-                        ),
-                    )
-                }
-
-                "getHappCrypt5Support" -> {
-                    result.success(getHappCrypt5Support())
-                }
-
-                else -> result.notImplemented()
-            }
-        }
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        SingboxHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, null)
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     override fun onNewIntent(intent: Intent) {

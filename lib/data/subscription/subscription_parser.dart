@@ -91,6 +91,7 @@ class ParsedOutboundGroup {
     required this.sourceTag,
     required this.name,
     required this.sourceOutboundTags,
+    this.sourceFallbackTag,
     this.type = 'urltest',
     this.sourceScope = '',
     this.countryCode,
@@ -108,6 +109,7 @@ class ParsedOutboundGroup {
   final String sourceScope;
   final String? countryCode;
   final List<String> sourceOutboundTags;
+  final String? sourceFallbackTag;
   final String? url;
   final String? method;
   final int? intervalSeconds;
@@ -122,6 +124,7 @@ class ParsedOutboundGroup {
     if (sourceScope.isNotEmpty) 'source_scope': sourceScope,
     if (countryCode != null) 'country': countryCode,
     'outbounds': sourceOutboundTags,
+    if (sourceFallbackTag != null) 'fallback_tag': sourceFallbackTag,
     if (url != null) 'url': url,
     if (method != null) 'method': method,
     if (intervalSeconds != null) 'interval': intervalSeconds,
@@ -146,6 +149,7 @@ class ParsedOutboundGroup {
           .map((entry) => entry.toString().trim())
           .where((entry) => entry.isNotEmpty)
           .toList(growable: false),
+      sourceFallbackTag: map['fallback_tag']?.toString().trim(),
       url: map['url']?.toString(),
       method: map['method']?.toString(),
       intervalSeconds: (map['interval'] as num?)?.toInt(),

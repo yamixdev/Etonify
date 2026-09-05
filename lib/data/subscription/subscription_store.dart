@@ -1302,6 +1302,8 @@ class SubscriptionStore {
           type: group.type.trim().isEmpty ? 'urltest' : group.type.trim(),
           country: groupCountry,
           outboundTags: memberTags,
+          fallbackOutboundTags:
+              sourceTagToTags[group.sourceFallbackTag] ?? const <String>[],
           urlTestConfig: UrlTestConfig(
             url: group.url,
             method: group.method,
