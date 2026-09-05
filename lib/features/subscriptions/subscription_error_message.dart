@@ -4,6 +4,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
   final failure = classifySubscriptionFailure(error);
   return switch (failure.kind) {
+    SubscriptionFailureKind.invalidHwid => l10n.subscriptionErrorHwid,
     SubscriptionFailureKind.invalidUrl => l10n.subscriptionErrorInvalidUrl,
     SubscriptionFailureKind.credentialsRequireHttps =>
       l10n.subscriptionErrorHttpsRequired,

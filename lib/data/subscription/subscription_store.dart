@@ -1389,7 +1389,7 @@ class SubscriptionStore {
 
   static bool likelyRequiresHwidEnable(Subscription subscription) {
     final info = subscription.info;
-    if (info?.requireHwid == true) {
+    if (SubscriptionFetcher.shouldSendHwid(info)) {
       return false;
     }
     final visibleOutbounds = subscription.outbounds

@@ -38,14 +38,15 @@ class DeepLinkImportHost {
     Future<SubscriptionImportResult> future, {
     required String slowMessage,
     required String timeoutMessage,
-  }) runSubscriptionOperationWithWarning;
+  })
+  runSubscriptionOperationWithWarning;
   final Duration Function() getSubscriptionOperationTimeout;
   final bool Function() getAllowUntrustedSubscriptionCertificates;
   final SubscriptionFetchRouteAttemptCallback onSubscriptionRouteAttempt;
   final Future<void> Function() reloadSubscriptions;
   final Future<void> Function(Subscription subscription) offerLikelyHwidFix;
   final String Function(Object error, AppLocalizations l10n)
-      userFacingSubscriptionError;
+  userFacingSubscriptionError;
 }
 
 class DeepLinkImportCoordinator {
@@ -53,9 +54,9 @@ class DeepLinkImportCoordinator {
     required this.host,
     Stream<DeepLinkImportRequest>? importStream,
     Future<DeepLinkImportRequest?> Function()? initialRequestProvider,
-  })  : _importStream = importStream ?? DeepLinkImportBridge.stream,
-        _initialRequestProvider =
-            initialRequestProvider ?? DeepLinkImportBridge.getInitialRequest;
+  }) : _importStream = importStream ?? DeepLinkImportBridge.stream,
+       _initialRequestProvider =
+           initialRequestProvider ?? DeepLinkImportBridge.getInitialRequest;
 
   final DeepLinkImportHost host;
   final Stream<DeepLinkImportRequest> _importStream;
@@ -164,6 +165,7 @@ class DeepLinkImportCoordinator {
           preview: preview,
           copy: copy,
           l10n: l10n,
+          hwidSharingEnabled: SubscriptionFetcher.sendHwidToProviders,
         ),
       );
       if (decision == null) {
@@ -176,18 +178,20 @@ class DeepLinkImportCoordinator {
         DeepLinkImportDecision.sendHwid => preview.requestInfo,
         DeepLinkImportDecision.importWithoutHwid =>
           preview.requestInfo?.copyWith(requireHwid: false),
-        DeepLinkImportDecision.import => preview.requestInfo,
+        // Global consent is evaluated by the fetcher, not saved as a permanent
+        // per-subscription exception when the global switch is later disabled.
+        DeepLinkImportDecision.import => preview.requestInfo?.copyWith(
+          requireHwid: false,
+        ),
       };
 
-      final createdResult =
-          await host.runSubscriptionOperationWithWarning(
+      final createdResult = await host.runSubscriptionOperationWithWarning(
         SubscriptionStore.addFromUrl(
           preview.resolvedUrl,
           customName: request.name,
           requestInfo: requestInfo,
           operationTimeout: host.getSubscriptionOperationTimeout(),
-          allowInsecureTls:
-              host.getAllowUntrustedSubscriptionCertificates(),
+          allowInsecureTls: host.getAllowUntrustedSubscriptionCertificates(),
           onRouteAttempt: host.onSubscriptionRouteAttempt,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,

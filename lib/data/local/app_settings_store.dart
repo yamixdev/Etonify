@@ -156,6 +156,7 @@ class AppSettingsState {
     this.notificationTrafficDisplayMode = NotificationTrafficDisplayMode.speed,
     this.notificationTrafficRefreshSeconds = 2,
     required this.hideServerIp,
+    this.sendHwidToProviders = false,
     required this.progressiveBlurEnabled,
     this.progressiveBlurConfigured = false,
     this.memoryLimitEnabled = false,
@@ -221,6 +222,7 @@ class AppSettingsState {
   final NotificationTrafficDisplayMode notificationTrafficDisplayMode;
   final int notificationTrafficRefreshSeconds;
   final bool hideServerIp;
+  final bool sendHwidToProviders;
   final bool progressiveBlurEnabled;
   final bool progressiveBlurConfigured;
   final bool memoryLimitEnabled;
@@ -286,6 +288,7 @@ class AppSettingsState {
     NotificationTrafficDisplayMode? notificationTrafficDisplayMode,
     int? notificationTrafficRefreshSeconds,
     bool? hideServerIp,
+    bool? sendHwidToProviders,
     bool? progressiveBlurEnabled,
     bool? progressiveBlurConfigured,
     bool? memoryLimitEnabled,
@@ -357,6 +360,7 @@ class AppSettingsState {
           notificationTrafficRefreshSeconds ??
           this.notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp ?? this.hideServerIp,
+      sendHwidToProviders: sendHwidToProviders ?? this.sendHwidToProviders,
       progressiveBlurEnabled:
           progressiveBlurEnabled ?? this.progressiveBlurEnabled,
       progressiveBlurConfigured:
@@ -456,6 +460,8 @@ abstract class AppSettingsStore {
   static const _notificationTrafficRefreshSecondsKey =
       'notification_traffic_refresh_seconds';
   static const _hideServerIpKey = 'hide_server_ip';
+  // Local consent: intentionally excluded from safeExportKeys.
+  static const _sendHwidToProvidersKey = 'send_hwid_to_providers';
   static const _progressiveBlurEnabledKey = 'progressive_blur_enabled';
   static const _performanceModeKey = 'performance_mode';
   static const _memoryLimitEnabledKey = 'memory_limit_enabled';
@@ -689,12 +695,19 @@ abstract class AppSettingsStore {
           },
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: boolValue(_hideServerIpKey, defaultValue: false),
+      sendHwidToProviders: boolValue(
+        _sendHwidToProvidersKey,
+        defaultValue: false,
+      ),
       progressiveBlurEnabled: boolValue(
         _progressiveBlurEnabledKey,
         defaultValue: false,
       ),
       progressiveBlurConfigured: map.containsKey(_progressiveBlurEnabledKey),
-      memoryLimitEnabled: boolValue(_memoryLimitEnabledKey, defaultValue: false),
+      memoryLimitEnabled: boolValue(
+        _memoryLimitEnabledKey,
+        defaultValue: false,
+      ),
       memoryLimitWarningDismissed: boolValue(
         _memoryLimitWarningDismissedKey,
         defaultValue: false,
@@ -891,6 +904,7 @@ abstract class AppSettingsStore {
           .notificationTrafficRefreshSeconds
           .toString(),
       _hideServerIpKey: state.hideServerIp ? '1' : '0',
+      _sendHwidToProvidersKey: state.sendHwidToProviders ? '1' : '0',
       _progressiveBlurEnabledKey: state.progressiveBlurEnabled ? '1' : '0',
       _memoryLimitEnabledKey: state.memoryLimitEnabled ? '1' : '0',
       _memoryLimitWarningDismissedKey: state.memoryLimitWarningDismissed

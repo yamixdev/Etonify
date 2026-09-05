@@ -3,6 +3,35 @@ import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test(
+    'fallback ownership survives serialization without becoming a member',
+    () {
+      final saved = SubscriptionGroup.fromMap(
+        const SubscriptionGroup(
+          tag: 'auto',
+          name: 'Auto',
+          outboundTags: ['primary'],
+          fallbackOutboundTags: ['backup'],
+        ).toMap(),
+      );
+      final catalog = ProxySelectionCatalog(
+        const [
+          Outbound(tag: 'primary', name: 'Primary', config: {}),
+          Outbound(tag: 'backup', name: 'Any name', config: {}),
+          Outbound(tag: 'cand-own', name: 'Own', config: {}),
+        ],
+        [saved.copyWith(name: 'Renamed')],
+      );
+      expect(catalog.candidateTags, ['auto', 'cand-own']);
+      expect(catalog.resolveSelection('backup'), 'auto');
+      expect(catalog.groups.single.outboundTags, ['primary']);
+      final missingPrimary = ProxySelectionCatalog(
+        const [Outbound(tag: 'backup', name: 'Any name', config: {})],
+        [saved],
+      );
+      expect(missingPrimary.candidateTags, isEmpty);
+    },
+  );
   const members = [
     Outbound(tag: 'cand-1', name: 'Internal', config: {}),
     Outbound(tag: 'real-name', name: 'Internal too', config: {}),

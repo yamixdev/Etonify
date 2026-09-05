@@ -59,6 +59,15 @@ class SubscriptionFetcher {
 
   static const fallbackAppVersion = '0.2.3';
   static String _appVersion = fallbackAppVersion;
+  static bool _sendHwidToProviders = false;
+  static bool get sendHwidToProviders => _sendHwidToProviders;
+
+  static void configureHwidSharing(bool enabled) {
+    _sendHwidToProviders = enabled;
+  }
+
+  static bool shouldSendHwid(SubscriptionInfo? requestInfo) =>
+      _sendHwidToProviders || requestInfo?.requireHwid == true;
   static String get defaultUserAgent => 'Etonify/$_appVersion';
   static const _maxSubscriptionResponseBytes = 16 * 1024 * 1024;
   static const _maxRedirects = 5;
@@ -222,8 +231,18 @@ class SubscriptionFetcher {
       'Accept': '*/*',
       ...customHeaders,
     };
-    if (requestInfo?.requireHwid == true) {
-      final hwidHeaders = await _resolveHwidHeaders(requestInfo);
+    if (shouldSendHwid(requestInfo)) {
+      final explicitHwid = customHeaders.entries
+          .where((entry) => entry.key.toLowerCase() == 'x-hwid')
+          .firstOrNull
+          ?.value;
+      final hwidHeaders = await _resolveHwidHeaders(
+        explicitHwid == null
+            ? requestInfo
+            : (requestInfo ?? const SubscriptionInfo()).copyWith(
+                customHwid: explicitHwid,
+              ),
+      );
       for (final entry in hwidHeaders.entries) {
         if (!_hasHeader(customHeaders, entry.key)) {
           headers[entry.key] = entry.value;
@@ -397,7 +416,7 @@ class SubscriptionFetcher {
       'subscription',
       'fetch start host=${uri.host} port=$port scheme=${uri.scheme} '
           'path=${uri.path.isEmpty ? "/" : uri.path} '
-          'requireHwid=${requestInfo?.requireHwid == true} '
+          'requireHwid=${shouldSendHwid(requestInfo)} '
           'customHeaders=${_parseCustomHeaders(requestInfo?.customRequestHeader).length}',
     );
   }
@@ -685,32 +704,42 @@ class SubscriptionFetcher {
   static Future<Map<String, String>> _resolveHwidHeaders(
     SubscriptionInfo? requestInfo,
   ) async {
+    Map<String, dynamic> deviceInfo = const {};
     try {
-      final deviceInfo = await SingboxRuntime.instance
+      deviceInfo = await SingboxRuntime.instance
           .getSubscriptionRequestDeviceInfo();
-      final locale = (deviceInfo['locale'] as String?)?.trim() ?? '';
-      final os = (deviceInfo['os'] as String?)?.trim() ?? 'Android';
-      final osVersion = (deviceInfo['osVersion'] as String?)?.trim() ?? '';
-      final model = (deviceInfo['model'] as String?)?.trim() ?? '';
-      final resolvedHwid =
-          (requestInfo?.customHwid?.trim().isNotEmpty == true
-              ? requestInfo!.customHwid!.trim()
-              : (deviceInfo['androidId'] as String?)?.trim()) ??
-          '';
-      return {
-        if (locale.isNotEmpty) 'X-Device-Locale': locale,
-        if (resolvedHwid.isNotEmpty) 'X-HWID': resolvedHwid,
-        'X-Device-Os': os,
-        if (osVersion.isNotEmpty) 'X-Ver-Os': osVersion,
-        if (model.isNotEmpty) 'X-Device-Model': model,
-      };
     } catch (_) {
-      return {
-        if (requestInfo?.customHwid?.trim().isNotEmpty == true)
-          'X-HWID': requestInfo!.customHwid!.trim(),
-        'X-Device-Os': 'Android',
-      };
+      // A user-supplied ID can still be used if the platform API is unavailable.
     }
+    return deviceHeaders(deviceInfo, customHwid: requestInfo?.customHwid);
+  }
+
+  /// Provider-compatible identity headers. Do not generate a new ID per fetch
+  /// or send locale/other device details that device binding does not require.
+  static Map<String, String> deviceHeaders(
+    Map<String, dynamic> deviceInfo, {
+    String? customHwid,
+  }) {
+    final suppliedId = customHwid?.trim() ?? '';
+    final hwid = suppliedId.isNotEmpty
+        ? suppliedId
+        : deviceInfo['androidId']?.toString().trim() ?? '';
+    if (!RegExp(r'^[a-zA-Z0-9=-]{10,64}$').hasMatch(hwid)) {
+      // Never include an identifier in an exception that may reach logs.
+      throw const SubscriptionHwidException();
+    }
+    String safeValue(String key) => (deviceInfo[key]?.toString() ?? '')
+        .replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '')
+        .trim();
+    final os = safeValue('os');
+    final version = safeValue('osVersion');
+    final model = safeValue('model');
+    return {
+      'X-HWID': hwid,
+      if (os.isNotEmpty) 'X-Device-Os': os,
+      if (version.isNotEmpty) 'X-Ver-Os': version,
+      if (model.isNotEmpty) 'X-Device-Model': model,
+    };
   }
 
   /// Extracts subscription metadata from HTTP response headers.

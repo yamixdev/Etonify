@@ -4,6 +4,29 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 
 void main() {
+  test('HWID sharing consent persists locally but cannot be imported', () {
+    final store = _TestSettingsStore();
+    final off = store.mapState(const {});
+    expect(off.sendHwidToProviders, isFalse);
+    final on = off.copyWith(sendHwidToProviders: true);
+    expect(store.mapState(store.stateToMap(on)).sendHwidToProviders, isTrue);
+    expect(
+      store.stateToSafeExportMap(on).containsKey('send_hwid_to_providers'),
+      isFalse,
+    );
+    expect(
+      store.mergeSafeImportMap(off, {
+        'send_hwid_to_providers': '1',
+      }).sendHwidToProviders,
+      isFalse,
+    );
+    expect(
+      store.mergeSafeImportMap(on, {
+        'send_hwid_to_providers': '0',
+      }).sendHwidToProviders,
+      isTrue,
+    );
+  });
   test('defaults to stable runtime values', () {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{});
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'happ_crypto_link.dart';
 
 enum SubscriptionFailureKind {
+  invalidHwid,
   invalidUrl,
   credentialsRequireHttps,
   unsafeRedirect,
@@ -82,7 +83,17 @@ class SubscriptionImportCancelledException implements Exception {
   String toString() => 'Subscription import was cancelled';
 }
 
+class SubscriptionHwidException implements Exception {
+  const SubscriptionHwidException();
+
+  @override
+  String toString() => 'A valid device ID is required to send HWID.';
+}
+
 SubscriptionFailure classifySubscriptionFailure(Object error) {
+  if (error is SubscriptionHwidException) {
+    return const SubscriptionFailure(SubscriptionFailureKind.invalidHwid);
+  }
   if (error is SubscriptionHttpStatusException) {
     return SubscriptionFailure(
       SubscriptionFailureKind.httpStatus,

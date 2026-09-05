@@ -9,6 +9,17 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get subscriptionErrorHwid =>
+      'Не удалось получить корректный HWID. Если задан свой ID, используйте от 10 до 64 латинских букв, цифр, знаков = или -.';
+
+  @override
+  String get sendHwidToProvidersTitle => 'Отправлять HWID провайдерам';
+
+  @override
+  String get sendHwidToProvidersDescription =>
+      'Передавать ID устройства, модель и версию ОС при загрузке всех подписок. Отдельные разрешения в подписках сохраняются.';
+
+  @override
   String get profiles => 'Профили';
 
   @override

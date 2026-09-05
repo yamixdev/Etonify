@@ -948,8 +948,12 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                               contentPadding: EdgeInsets.zero,
                               title: Text(l10n.sendHwidTitle),
                               subtitle: Text(l10n.sendHwidSubtitle),
-                              value: _sendHwid,
-                              onChanged: _busy
+                              value:
+                                  _sendHwid ||
+                                  SubscriptionFetcher.sendHwidToProviders,
+                              onChanged:
+                                  _busy ||
+                                      SubscriptionFetcher.sendHwidToProviders
                                   ? null
                                   : (value) async {
                                       _haptic();
@@ -966,8 +970,16 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                               contentPadding: EdgeInsets.zero,
                               title: Text(l10n.useCustomHwidTitle),
                               subtitle: Text(l10n.useCustomHwidSubtitle),
-                              value: _sendHwid && _useCustomHwid,
-                              onChanged: !_sendHwid || _busy
+                              value:
+                                  (_sendHwid ||
+                                      SubscriptionFetcher
+                                          .sendHwidToProviders) &&
+                                  _useCustomHwid,
+                              onChanged:
+                                  (!_sendHwid &&
+                                          !SubscriptionFetcher
+                                              .sendHwidToProviders) ||
+                                      _busy
                                   ? null
                                   : (value) async {
                                       _haptic();
@@ -976,7 +988,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                                     },
                             ),
                             const Gap(6),
-                            if (_sendHwid && _useCustomHwid) ...[
+                            if ((_sendHwid ||
+                                    SubscriptionFetcher.sendHwidToProviders) &&
+                                _useCustomHwid) ...[
                               TextField(
                                 controller: _customHwidController,
                                 onTapOutside: (_) async {

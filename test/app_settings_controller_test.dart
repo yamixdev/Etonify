@@ -4,8 +4,20 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 
 void main() {
+  test('HWID switch updates request policy without restarting the core', () {
+    addTearDown(() => SubscriptionFetcher.configureHwidSharing(false));
+    final controller = AppSettingsController();
+    final change = controller.setSendHwidToProviders(true);
+    expect(change.changed, isTrue);
+    expect(change.configReason, isNull);
+    expect(SubscriptionFetcher.shouldSendHwid(null), isTrue);
+    expect(controller.setSendHwidToProviders(true).changed, isFalse);
+    controller.setSendHwidToProviders(false);
+    expect(SubscriptionFetcher.shouldSendHwid(null), isFalse);
+  });
   test('URLTest fallbacks use the stable runtime defaults', () {
     final controller = AppSettingsController();
 

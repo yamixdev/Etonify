@@ -71,8 +71,9 @@ class DeepLinkImportPreview {
     return DeepLinkImportPreview(
       sourceUrl: request.url,
       resolvedUrl: request.url,
-      requestInfo:
-          isHappDeepLink ? HappCryptoLinkDecoder.happRequestInfo() : null,
+      requestInfo: isHappDeepLink
+          ? HappCryptoLinkDecoder.happRequestInfo()
+          : null,
     );
   }
 }
@@ -84,12 +85,14 @@ class DeepLinkImportSheet extends StatelessWidget {
     required this.preview,
     required this.copy,
     required this.l10n,
+    this.hwidSharingEnabled = false,
   });
 
   final DeepLinkImportRequest request;
   final DeepLinkImportPreview preview;
   final DeepLinkImportCopy copy;
   final AppLocalizations l10n;
+  final bool hwidSharingEnabled;
 
   String _summarizeSourceUrl(String value) {
     if (value.length <= 72) {
@@ -223,7 +226,7 @@ class DeepLinkImportSheet extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (isHapp) ...[
+                      if (isHapp && !hwidSharingEnabled) ...[
                         const Gap(12),
                         SizedBox(
                           width: double.infinity,
@@ -289,7 +292,7 @@ class DeepLinkImportSheet extends StatelessWidget {
                 ),
               ),
               const Gap(16),
-              if (isHapp)
+              if (isHapp && !hwidSharingEnabled)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

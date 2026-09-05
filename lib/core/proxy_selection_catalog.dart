@@ -24,7 +24,9 @@ class ProxySelectionCatalog {
     // Even if a group loses its last usable primary, its fallback must not
     // silently become a standalone/root URLTest candidate.
     memberTags = groups
-        .expand((group) => [...group.outboundTags, ...group.fallbackOutboundTags])
+        .expand(
+          (group) => [...group.outboundTags, ...group.fallbackOutboundTags],
+        )
         .toSet();
     standaloneOutbounds = outbounds
         .where(

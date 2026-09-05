@@ -514,7 +514,10 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
     }
 
-    final decision = await _showHappImportDialog();
+    final globalHwid = SubscriptionFetcher.sendHwidToProviders;
+    final decision = globalHwid
+        ? _HappImportDecision.withoutHwid
+        : await _showHappImportDialog();
     if (decision == null) {
       return null;
     }

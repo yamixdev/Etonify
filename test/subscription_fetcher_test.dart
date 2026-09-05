@@ -5,8 +5,78 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
+import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  tearDown(() => SubscriptionFetcher.configureHwidSharing(false));
+
+  test(
+    'global consent applies to ordinary subscriptions and remains reversible',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      final ids = <String?>[];
+      server.listen((request) async {
+        ids.add(request.headers.value('x-hwid'));
+        request.response.write('vless://uuid@example.com:443#Node');
+        await request.response.close();
+      });
+      const info = SubscriptionInfo(customHwid: '0123456789abcdef');
+      final url = 'http://${server.address.host}:${server.port}/sub';
+      await SubscriptionFetcher.fetch(url, requestInfo: info);
+      SubscriptionFetcher.configureHwidSharing(true);
+      await SubscriptionFetcher.fetch(url, requestInfo: info);
+      await SubscriptionFetcher.fetch(url, requestInfo: info);
+      SubscriptionFetcher.configureHwidSharing(false);
+      await SubscriptionFetcher.fetch(url, requestInfo: info);
+      await SubscriptionFetcher.fetch(
+        url,
+        requestInfo: info.copyWith(requireHwid: true),
+      );
+      expect(ids, [
+        null,
+        '0123456789abcdef',
+        '0123456789abcdef',
+        null,
+        '0123456789abcdef',
+      ]);
+    },
+  );
+
+  test(
+    'device headers use stable identity and only the documented device fields',
+    () {
+      const device = {
+        'androidId': '0123456789abcdef',
+        'os': 'Android',
+        'osVersion': '15',
+        'model': 'Pixel 9',
+        'locale': 'ru-RU',
+      };
+      expect(SubscriptionFetcher.deviceHeaders(device), {
+        'X-HWID': '0123456789abcdef',
+        'X-Device-Os': 'Android',
+        'X-Ver-Os': '15',
+        'X-Device-Model': 'Pixel 9',
+      });
+      expect(
+        SubscriptionFetcher.deviceHeaders(
+          device,
+          customHwid: 'custom-id-123',
+        )['X-HWID'],
+        'custom-id-123',
+      );
+      expect(
+        () =>
+            SubscriptionFetcher.deviceHeaders(device, customHwid: 'bad\r\nid'),
+        throwsA(isA<SubscriptionHwidException>()),
+      );
+      expect(
+        () => SubscriptionFetcher.deviceHeaders(const {}),
+        throwsA(isA<SubscriptionHwidException>()),
+      );
+    },
+  );
   group('SubscriptionFetcher', () {
     tearDown(
       () => SubscriptionFetcher.configureAppVersion(

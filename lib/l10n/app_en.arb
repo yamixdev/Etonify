@@ -1,5 +1,8 @@
 {
   "@@locale": "en",
+  "subscriptionErrorHwid": "Could not obtain a valid HWID. A custom ID must contain 10 to 64 Latin letters, digits, = or - characters.",
+  "sendHwidToProvidersTitle": "Send HWID to providers",
+  "sendHwidToProvidersDescription": "Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.",
   "profiles": "Profiles",
   "close": "Close",
   "homeTab": "Home",

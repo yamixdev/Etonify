@@ -68,12 +68,16 @@ class ParseResult {
         orElse: () => SubscriptionFormat.unknown,
       ),
       outbounds: (map['outbounds'] as List<dynamic>? ?? const [])
-          .map((entry) => Map<String, dynamic>.from(entry as Map<dynamic, dynamic>))
+          .map(
+            (entry) =>
+                Map<String, dynamic>.from(entry as Map<dynamic, dynamic>),
+          )
           .toList(growable: false),
       groups: (map['groups'] as List<dynamic>? ?? const [])
           .map(
-            (entry) =>
-                ParsedOutboundGroup.fromMap(Map<String, dynamic>.from(entry as Map<dynamic, dynamic>)),
+            (entry) => ParsedOutboundGroup.fromMap(
+              Map<String, dynamic>.from(entry as Map<dynamic, dynamic>),
+            ),
           )
           .where((group) => group.sourceOutboundTags.isNotEmpty)
           .toList(growable: false),

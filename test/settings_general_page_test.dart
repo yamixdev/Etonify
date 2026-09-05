@@ -12,6 +12,7 @@ Widget _generalSettingsApp({
       NotificationTrafficDisplayMode.speed,
   ValueChanged<NotificationTrafficDisplayMode>? onTrafficDisplayChanged,
   ValueChanged<int>? onTrafficRefreshChanged,
+  ValueChanged<bool>? onHwidChanged,
 }) {
   return MaterialApp(
     locale: locale,
@@ -26,6 +27,7 @@ Widget _generalSettingsApp({
       currentNotificationTrafficDisplayMode: trafficDisplayMode,
       currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
+      onSendHwidToProvidersChanged: onHwidChanged,
       onLocaleChanged: (_) {},
       onThemePreferenceChanged: (_) {},
       onAccentColorChanged: (_) {},
@@ -49,6 +51,35 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'HWID switch updates immediately and remains readable in Russian',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final values = <bool>[];
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          locale: const Locale('ru'),
+          onHwidChanged: values.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final tile = find.byKey(const ValueKey('send-hwid-to-providers'));
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(tile).value, isFalse);
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      expect(values, [true, false]);
+      expect(tester.takeException(), isNull);
+    },
+  );
   const trafficDisplaySetting = ValueKey(
     'notification-traffic-display-setting',
   );

@@ -52,7 +52,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     final customUserAgent = _useCustomUserAgent
         ? _customUserAgentController.text.trim()
         : '';
-    final customHwid = _sendHwid && _useCustomHwid
+    final customHwid =
+        (_sendHwid || SubscriptionFetcher.sendHwidToProviders) && _useCustomHwid
         ? _customHwidController.text.trim()
         : '';
     if (customUserAgent.isEmpty && !_sendHwid && customHwid.isEmpty) {
@@ -429,7 +430,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                               formatAutoRefreshOption: (minutes) =>
                                   _formatRefreshInterval(l10n, minutes),
                               useCustomUserAgent: _useCustomUserAgent,
-                              sendHwid: _sendHwid,
+                              sendHwid:
+                                  _sendHwid ||
+                                  SubscriptionFetcher.sendHwidToProviders,
                               useCustomHwid: _useCustomHwid,
                               onPasteUrl: _pasteUrl,
                               onSubmit: _submit,
@@ -973,7 +976,9 @@ class _AddSubscriptionManualCard extends StatelessWidget {
                   title: Text(sendHwidLabel),
                   subtitle: Text(sendHwidSubtitle),
                   value: sendHwid,
-                  onChanged: onSendHwidChanged,
+                  onChanged: SubscriptionFetcher.sendHwidToProviders
+                      ? null
+                      : onSendHwidChanged,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,

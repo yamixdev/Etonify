@@ -4779,6 +4779,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentNotificationTrafficRefreshSeconds:
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
+          currentSendHwidToProviders: _settings.sendHwidToProviders,
+          onSendHwidToProvidersChanged: (value) => _applySettingsChange(
+            () => _settings.setSendHwidToProviders(value),
+          ),
           onAccentColorChanged: _setAccentColor,
           onHapticChanged: _setHapticEnabled,
           onStatusNotificationChanged: _setStatusNotificationEnabled,

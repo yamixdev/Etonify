@@ -66,6 +66,8 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentNotificationTrafficDisplayMode,
     required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
+    this.currentSendHwidToProviders = false,
+    this.onSendHwidToProvidersChanged,
     required this.onLocaleChanged,
     required this.onThemePreferenceChanged,
     required this.onAccentColorChanged,
@@ -85,6 +87,8 @@ class SettingsGeneralPage extends StatelessWidget {
   final NotificationTrafficDisplayMode currentNotificationTrafficDisplayMode;
   final int currentNotificationTrafficRefreshSeconds;
   final bool currentHideServerIp;
+  final bool currentSendHwidToProviders;
+  final ValueChanged<bool>? onSendHwidToProvidersChanged;
   final ValueChanged<String> onLocaleChanged;
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final ValueChanged<String> onAccentColorChanged;
@@ -295,6 +299,10 @@ class SettingsGeneralPage extends StatelessWidget {
                     value: currentHideServerIp,
                     onChanged: onHideServerIpChanged,
                   ),
+                  _HwidSharingTile(
+                    value: currentSendHwidToProviders,
+                    onChanged: onSendHwidToProvidersChanged,
+                  ),
                 ],
               ),
             ),
@@ -308,6 +316,46 @@ class SettingsGeneralPage extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Section label
 // ---------------------------------------------------------------------------
+
+class _HwidSharingTile extends StatefulWidget {
+  const _HwidSharingTile({required this.value, required this.onChanged});
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  State<_HwidSharingTile> createState() => _HwidSharingTileState();
+}
+
+class _HwidSharingTileState extends State<_HwidSharingTile> {
+  late bool _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _HwidSharingTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SwitchListTile(
+      key: const ValueKey('send-hwid-to-providers'),
+      secondary: SettingsLeadingIcon(
+        icon: Icons.phonelink_lock_rounded,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(l10n.sendHwidToProvidersTitle),
+      subtitle: Text(l10n.sendHwidToProvidersDescription),
+      value: _value,
+      onChanged: widget.onChanged == null
+          ? null
+          : (value) {
+              widget.onChanged!(value);
+              setState(() => _value = value);
+            },
+    );
+  }
+}
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.label});

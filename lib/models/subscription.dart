@@ -362,6 +362,7 @@ class SubscriptionGroup {
   final String type;
   final String? country;
   final List<String> outboundTags;
+
   /// Resolved provider fallback references, not ordinary URLTest candidates.
   /// Preserved for ownership/visibility; sing-box URLTest has no fallback field.
   final List<String> fallbackOutboundTags;

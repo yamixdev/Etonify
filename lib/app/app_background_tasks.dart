@@ -621,7 +621,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   for (final summary in chainSummaries) {
     proxySummariesByTag[summary.tag] = summary;
   }
-  final groupedOutboundTags = <String>{};
+  final groupedOutboundTags = <String>{...catalog.memberTags};
   final groupTagByChildTag = <String, String>{};
   final groupSummaries = <AppProxySummary>[];
   final lowestCandidateGroupSummaries = <AppProxySummary>[];

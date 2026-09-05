@@ -9,6 +9,17 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get subscriptionErrorHwid =>
+      'Could not obtain a valid HWID. A custom ID must contain 10 to 64 Latin letters, digits, = or - characters.';
+
+  @override
+  String get sendHwidToProvidersTitle => 'Send HWID to providers';
+
+  @override
+  String get sendHwidToProvidersDescription =>
+      'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.';
+
+  @override
   String get profiles => 'Profiles';
 
   @override

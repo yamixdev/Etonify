@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
@@ -13,6 +14,123 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  final localExport = Platform.environment['ETONIFY_TEST_PROFILE'];
+  test(
+    'local exported provider profile has no exposed fallback candidates',
+    () {
+      final exported = jsonDecode(File(localExport!).readAsStringSync()) as Map;
+      final saved =
+          ((exported['profile'] as Map)['subscriptions'] as List).single as Map;
+      final parsed = SubscriptionParser.parse(saved['raw_content'] as String);
+      final payload = SubscriptionStore.buildSubscriptionPayloadForTest(parsed);
+      final outbounds = payload.outbounds.map(Outbound.fromMap).toList();
+      final groups = payload.groups.map(SubscriptionGroup.fromMap).toList();
+      final catalog = ProxySelectionCatalog(outbounds, groups);
+      expect(outbounds, hasLength(318));
+      expect(groups, hasLength(11));
+      expect(
+        groups.expand((group) => group.fallbackOutboundTags).toSet(),
+        hasLength(10),
+      );
+      expect(catalog.memberTags, hasLength(54));
+      expect(catalog.standaloneOutbounds, hasLength(264));
+      expect(
+        catalog.standaloneOutbounds.where(
+          (outbound) => outbound.name.startsWith('cand-'),
+        ),
+        isEmpty,
+      );
+      expect(catalog.candidateTags, hasLength(275));
+    },
+    skip: localExport == null
+        ? 'Set ETONIFY_TEST_PROFILE for private local fixture'
+        : false,
+  );
+  test('Xray fallback is hidden and scoped, not promoted into URLTest', () {
+    final parsed = SubscriptionParser.parse(
+      jsonEncode([
+        for (final scope in ['one', 'two'])
+          {
+            'remarks': 'Provider $scope',
+            'routing': {
+              'balancers': [
+                {
+                  'tag': 'auto',
+                  'selector': ['primary'],
+                  'fallbackTag': 'reserve',
+                },
+              ],
+            },
+            'outbounds': [
+              _xrayVlessOutbound('primary', '$scope.example'),
+              _xrayVlessOutbound('reserve', 'backup-$scope.example'),
+              _xrayVlessOutbound('reserve-extra', 'own-$scope.example'),
+            ],
+          },
+      ]),
+    );
+    // Exercise the isolate serialization boundary too.
+    expect(
+      ParsedOutboundGroup.fromMap(
+        parsed.groups.first.toMap(),
+      ).sourceFallbackTag,
+      'reserve',
+    );
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(parsed);
+    final subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: 'file:///sub',
+      outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+      groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+    );
+    final backups = subscription.groups
+        .expand((group) => group.fallbackOutboundTags)
+        .toSet();
+    expect(backups, hasLength(2));
+    final config = _defaultBuilder(
+      subscription,
+      selectedProxyTag: backups.first,
+    ).build();
+    final runtime = (config['outbounds'] as List).cast<Map<String, dynamic>>();
+    expect(runtime.map((outbound) => outbound['tag']), containsAll(backups));
+    for (final route in runtime.where(
+      (outbound) =>
+          outbound['type'] == 'urltest' || outbound['type'] == 'selector',
+    )) {
+      expect((route['outbounds'] as List).where(backups.contains), isEmpty);
+      expect(route.containsKey('fallback_tag'), isFalse);
+    }
+    final select = runtime.singleWhere(
+      (outbound) => outbound['tag'] == 'select',
+    );
+    expect(select['default'], subscription.groups.first.tag);
+    final cache = buildProxyCache(
+      ProxyCacheBuildInput(
+        subscription: subscription,
+        selectedProxyTag: subscription.groups.first.tag,
+        lowestLatency: null,
+        runtimeLowestOutboundTag: null,
+        runtimeLowestSelections: const {},
+        urlTestInFlight: false,
+        runtimeLatencies: const {},
+        unavailableLatencyTags: const {},
+        latencyErrors: const {},
+        runtimeGroupSelections: const {},
+        markAllServersRussia: false,
+      ),
+    );
+    expect(
+      cache.activeProxies.where((proxy) => backups.contains(proxy.tag)),
+      isEmpty,
+    );
+    expect(
+      cache.activeProxies.where(
+        (proxy) => proxy.displayName == 'reserve-extra',
+      ),
+      hasLength(2),
+    );
+  });
   test('provider candidates stay in runtime but never bypass their group', () {
     final parsed = SubscriptionParser.parse(
       jsonEncode({

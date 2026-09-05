@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 
@@ -101,6 +102,7 @@ class AppSettingsController {
       NotificationTrafficDisplayMode.speed;
   int notificationTrafficRefreshSeconds = 2;
   bool hideServerIp = false;
+  bool sendHwidToProviders = false;
   String proxySort = 'source';
   bool progressiveBlurEnabled = false;
   bool vpnInboundEnabled = true;
@@ -180,6 +182,7 @@ class AppSettingsController {
       notificationTrafficDisplayMode: notificationTrafficDisplayMode,
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp,
+      sendHwidToProviders: sendHwidToProviders,
       progressiveBlurEnabled: progressiveBlurEnabled,
       progressiveBlurConfigured: true,
       memoryLimitEnabled: memoryLimitEnabled,
@@ -247,6 +250,8 @@ class AppSettingsController {
     notificationTrafficDisplayMode = state.notificationTrafficDisplayMode;
     notificationTrafficRefreshSeconds = state.notificationTrafficRefreshSeconds;
     hideServerIp = state.hideServerIp;
+    sendHwidToProviders = state.sendHwidToProviders;
+    SubscriptionFetcher.configureHwidSharing(sendHwidToProviders);
     proxySort =
         const {'source', 'latency', 'name', 'country'}.contains(state.proxySort)
         ? state.proxySort
@@ -385,6 +390,13 @@ class AppSettingsController {
     }
     hideServerIp = value;
     return const AppSettingsChange(changed: true, publishTraffic: true);
+  }
+
+  AppSettingsChange setSendHwidToProviders(bool value) {
+    if (sendHwidToProviders == value) return const AppSettingsChange.none();
+    sendHwidToProviders = value;
+    SubscriptionFetcher.configureHwidSharing(value);
+    return const AppSettingsChange(changed: true);
   }
 
   AppSettingsChange setProxySort(String value) {

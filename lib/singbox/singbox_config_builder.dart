@@ -948,11 +948,16 @@ class SingboxConfigBuilder {
       }
     }
 
+    final ownedTags = ProxySelectionCatalog(
+      outbounds,
+      activeSubscription?.groups ?? const [],
+    ).memberTags;
     final leafCandidateTags = outbounds
         .where(
           (outbound) =>
               !_isGroupOnlyOutbound(outbound) &&
               !groupedCandidateChildTags.contains(outbound.tag) &&
+              !ownedTags.contains(outbound.tag) &&
               lowestProxyAllowsCountry(
                 tag,
                 markAllServersRussia ? 'RU' : outbound.info.country,

@@ -98,6 +98,24 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @subscriptionErrorHwid.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not obtain a valid HWID. A custom ID must contain 10 to 64 Latin letters, digits, = or - characters.'**
+  String get subscriptionErrorHwid;
+
+  /// No description provided for @sendHwidToProvidersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send HWID to providers'**
+  String get sendHwidToProvidersTitle;
+
+  /// No description provided for @sendHwidToProvidersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.'**
+  String get sendHwidToProvidersDescription;
+
   /// No description provided for @profiles.
   ///
   /// In en, this message translates to:
