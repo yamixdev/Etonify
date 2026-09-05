@@ -28,6 +28,9 @@ object MeowDiagnostics {
     private val diagnosticsFile: File
         get() = File(MeowApplication.application.filesDir, "meow-native-diagnostics.log")
 
+    private val diagnosticsBackupFile: File
+        get() = File(MeowApplication.application.filesDir, "meow-native-diagnostics.log.1")
+
     fun log(tag: String, message: String, error: Throwable? = null) {
         runCatching {
             val flushNow = synchronized(pendingLock) {
@@ -60,11 +63,7 @@ object MeowDiagnostics {
         flushPendingBlocking()
         return runCatching {
             synchronized(fileLock) {
-                val file = diagnosticsFile
-                if (!file.exists()) {
-                    return ""
-                }
-                MeowLogSanitizer.redact(readFileTail(file, maxBytes))
+                readTailFromFiles(diagnosticsFile, diagnosticsBackupFile, maxBytes)
             }
         }.getOrDefault("")
     }
@@ -72,11 +71,7 @@ object MeowDiagnostics {
     fun readCrashReportTail(maxBytes: Int = CRASH_LOG_BYTES): String {
         return runCatching {
             synchronized(fileLock) {
-                val workingDir = File(
-                    MeowApplication.application.getExternalFilesDir(null)
-                        ?: MeowApplication.application.filesDir,
-                    "singbox-work",
-                )
+                val workingDir = MeowApplication.singboxWorkingDirectory
                 val report = workingDir.listFiles()
                     ?.filter { it.isFile && it.name.startsWith("CrashReport-") && it.length() > 0L }
                     ?.maxByOrNull { it.lastModified() }
@@ -92,11 +87,7 @@ object MeowDiagnostics {
     fun readLatestOomReportMetadata(): String {
         return runCatching {
             synchronized(fileLock) {
-                val workingDir = File(
-                    MeowApplication.application.getExternalFilesDir(null)
-                        ?: MeowApplication.application.filesDir,
-                    "singbox-work/oom_reports",
-                )
+                val workingDir = File(MeowApplication.singboxWorkingDirectory, "oom_reports")
                 val metadata = workingDir.walkTopDown()
                     .filter { it.isFile && it.name == "metadata.json" }
                     .maxByOrNull { it.lastModified() }
@@ -128,7 +119,7 @@ object MeowDiagnostics {
                 val file = diagnosticsFile
                 file.parentFile?.mkdirs()
                 file.appendText(payload)
-                trimIfNeeded(file)
+                rotateIfNeeded(file, diagnosticsBackupFile, MAX_LOG_BYTES)
             }
         }
     }
@@ -150,19 +141,54 @@ object MeowDiagnostics {
         }
     }
 
-    private fun trimIfNeeded(file: File) {
-        if (file.length() <= MAX_LOG_BYTES) {
-            return
+    internal fun rotateIfNeeded(file: File, backup: File, maxBytes: Int = MAX_LOG_BYTES): Boolean {
+        if (!file.exists() || file.length() <= maxBytes) {
+            return false
         }
-        val bytes = file.readBytes()
-        var start = (bytes.size - KEEP_LOG_BYTES).coerceAtLeast(0)
-        while (start < bytes.size && start > 0 && bytes[start - 1] != '\n'.code.toByte()) {
-            start++
+        if (backup.exists()) {
+            backup.delete()
         }
-        file.writeBytes(bytes.copyOfRange(start, bytes.size))
+        val renamed = file.renameTo(backup)
+        if (!renamed) {
+            runCatching {
+                file.copyTo(backup, overwrite = true)
+                file.delete()
+            }
+        }
+        return true
     }
 
-    private fun readFileTail(file: File, maxBytes: Int): String {
+    internal fun readTailFromFiles(file: File, backup: File, maxBytes: Int): String {
+        val fileExists = file.exists() && file.length() > 0L
+        val backupExists = backup.exists() && backup.length() > 0L
+
+        if (!fileExists && !backupExists) {
+            return ""
+        }
+
+        val fileTail = if (fileExists) readFileTail(file, maxBytes) else ""
+        val fileTailByteCount = fileTail.toByteArray(Charsets.UTF_8).size
+        val remainingBytes = maxBytes - fileTailByteCount
+
+        val result = if (remainingBytes > 0 && backupExists) {
+            val backupTail = readFileTail(backup, remainingBytes)
+            if (backupTail.isNotEmpty() && fileTail.isNotEmpty()) {
+                "$backupTail\n$fileTail"
+            } else if (backupTail.isNotEmpty()) {
+                backupTail
+            } else {
+                fileTail
+            }
+        } else {
+            fileTail
+        }
+        return MeowLogSanitizer.redact(result)
+    }
+
+    internal fun readFileTail(file: File, maxBytes: Int): String {
+        if (!file.exists() || file.length() == 0L || maxBytes <= 0) {
+            return ""
+        }
         val bytes = file.readBytes()
         var start = (bytes.size - maxBytes.coerceAtLeast(0)).coerceAtLeast(0)
         if (start > 0) {

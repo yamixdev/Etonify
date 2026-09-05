@@ -69,11 +69,12 @@ class MeowApplication : Application() {
             get() = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val configFile: File
             get() = File(application.filesDir, "singbox-config.json")
-        val singboxWorkingDirectory: File
-            get() = File(
-                application.getExternalFilesDir(null) ?: application.filesDir,
-                "singbox-work",
-            ).apply { mkdirs() }
+        val singboxWorkingDirectory: File by lazy {
+            val baseDir = runCatching {
+                application.getExternalFilesDir(null)
+            }.getOrNull() ?: application.filesDir
+            File(baseDir, "singbox-work").apply { mkdirs() }
+        }
         val serviceStateFile: File
             get() = File(application.filesDir, "singbox-service-state.txt")
         val runtimeIntentFile: File
