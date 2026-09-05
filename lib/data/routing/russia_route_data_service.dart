@@ -1263,7 +1263,7 @@ class RussiaRouteDataService {
 
   Future<_RussiaRouteStoragePaths> _storagePaths() async {
     final baseDirPath = Platform.isAndroid
-        ? AndroidFilesDir.path
+        ? await AndroidFilesDir.ensureInitialized()
         : Directory.systemTemp.path;
     final base = Directory('$baseDirPath/route-data/russia-v2ray-rules-dat');
     return _RussiaRouteStoragePaths(

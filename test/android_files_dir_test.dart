@@ -20,10 +20,19 @@ void main() {
       expect(AndroidFilesDir.path, equals('/mock/files'));
     });
 
+    test('initialize caches path', () {
+      AndroidFilesDir.initialize('/custom/files');
+      expect(AndroidFilesDir.path, equals('/custom/files'));
+    });
+
     test('throws UnsupportedError on non-Android platform without mock', () {
       if (!Platform.isAndroid) {
         AndroidFilesDir.setMockPathForTesting(null);
         expect(() => AndroidFilesDir.path, throwsUnsupportedError);
+        expect(
+          () => AndroidFilesDir.ensureInitialized(),
+          throwsUnsupportedError,
+        );
       }
     });
   });

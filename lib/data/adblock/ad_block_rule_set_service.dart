@@ -318,7 +318,7 @@ class AdBlockRuleSetService {
 
   Future<_AdBlockStoragePaths> _storagePaths() async {
     final baseDirPath = Platform.isAndroid
-        ? AndroidFilesDir.path
+        ? await AndroidFilesDir.ensureInitialized()
         : Directory.systemTemp.path;
     final base = Directory('$baseDirPath/adblock');
     return _AdBlockStoragePaths(

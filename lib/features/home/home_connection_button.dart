@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -50,9 +51,9 @@ class _ConnectionButtonState extends State<ConnectionButton> {
         Semantics(
           button: true,
           label: label,
-          child: TweenAnimationBuilder<_ConnectionButtonShape>(
+          child: TweenAnimationBuilder<ConnectionButtonShape>(
             tween: _ConnectionButtonShapeTween(
-              end: _ConnectionButtonShape.forState(
+              end: ConnectionButtonShape.forState(
                 connected: widget.connected,
                 connecting: widget.connecting,
                 resolvingProxy: widget.resolvingProxy,
@@ -156,56 +157,56 @@ class _ConnectionButtonState extends State<ConnectionButton> {
 }
 
 @immutable
-class _ConnectionButtonShape {
-  const _ConnectionButtonShape({
+class ConnectionButtonShape {
+  const ConnectionButtonShape({
     required this.phase,
     required this.rotation,
     required this.emphasis,
   });
 
-  factory _ConnectionButtonShape.forState({
+  factory ConnectionButtonShape.forState({
     required bool connected,
     required bool connecting,
     required bool resolvingProxy,
   }) {
     if (resolvingProxy) {
-      return const _ConnectionButtonShape(phase: 3, rotation: 0, emphasis: .96);
+      return const ConnectionButtonShape(phase: 3, rotation: 0, emphasis: .96);
     }
     if (connected) {
-      return const _ConnectionButtonShape(
+      return const ConnectionButtonShape(
         phase: 2,
         rotation: 0,
         emphasis: 1.16,
       );
     }
     if (connecting) {
-      return const _ConnectionButtonShape(phase: 1, rotation: 0, emphasis: .52);
+      return const ConnectionButtonShape(phase: 1, rotation: 0, emphasis: .52);
     }
-    return const _ConnectionButtonShape(phase: 0, rotation: 0, emphasis: 0);
+    return const ConnectionButtonShape(phase: 0, rotation: 0, emphasis: 0);
   }
 
   final double phase;
   final double rotation;
   final double emphasis;
 
-  _ConnectionButtonShape copyWith({
+  ConnectionButtonShape copyWith({
     double? phase,
     double? rotation,
     double? emphasis,
   }) {
-    return _ConnectionButtonShape(
+    return ConnectionButtonShape(
       phase: phase ?? this.phase,
       rotation: rotation ?? this.rotation,
       emphasis: emphasis ?? this.emphasis,
     );
   }
 
-  static _ConnectionButtonShape lerp(
-    _ConnectionButtonShape a,
-    _ConnectionButtonShape b,
+  static ConnectionButtonShape lerp(
+    ConnectionButtonShape a,
+    ConnectionButtonShape b,
     double t,
   ) {
-    return _ConnectionButtonShape(
+    return ConnectionButtonShape(
       phase: _lerp(a.phase, b.phase, t),
       rotation: _lerpAngle(a.rotation, b.rotation, t),
       emphasis: _lerp(a.emphasis, b.emphasis, t),
@@ -213,13 +214,13 @@ class _ConnectionButtonShape {
   }
 }
 
-class _ConnectionButtonShapeTween extends Tween<_ConnectionButtonShape> {
-  _ConnectionButtonShapeTween({required _ConnectionButtonShape end})
+class _ConnectionButtonShapeTween extends Tween<ConnectionButtonShape> {
+  _ConnectionButtonShapeTween({required ConnectionButtonShape end})
     : super(end: end);
 
   @override
-  _ConnectionButtonShape lerp(double t) {
-    return _ConnectionButtonShape.lerp(begin ?? end!, end!, t);
+  ConnectionButtonShape lerp(double t) {
+    return ConnectionButtonShape.lerp(begin ?? end!, end!, t);
   }
 }
 
@@ -271,11 +272,32 @@ class _ConnectionButtonShadowPainter extends CustomPainter {
   }
 }
 
-Path _connectionButtonCookiePath(Size size, _ConnectionButtonShape shape) {
-  final center = Offset(size.width / 2, size.height / 2);
+Path _connectionButtonCookiePath(Size size, ConnectionButtonShape shape) {
+  // Fast path: if the button is at canonical size and resting (no rotation),
+  // return pre-generated cached Path instance immediately without computation or allocation.
+  if (size.width == _kConnectionButtonSize &&
+      size.height == _kConnectionButtonSize &&
+      shape.rotation == 0.0) {
+    if (shape.phase == 0.0) return _kIdleConnectionButtonPath;
+    if (shape.phase == 1.0) return _kConnectingConnectionButtonPath;
+    if (shape.phase == 2.0) return _kConnectedConnectionButtonPath;
+    if (shape.phase == 3.0) return _kResolvingConnectionButtonPath;
+  }
+
+  return _buildConnectionButtonCookiePath(size, shape);
+}
+
+@visibleForTesting
+Path connectionButtonCookiePathForTesting(
+  Size size,
+  ConnectionButtonShape shape,
+) => _connectionButtonCookiePath(size, shape);
+
+Path _buildConnectionButtonCookiePath(Size size, ConnectionButtonShape shape) {
+  final centerX = size.width / 2;
+  final centerY = size.height / 2;
   final radius = math.min(size.width, size.height) / 2;
   const samples = _kConnectionButtonPathSamples;
-  final points = <Offset>[];
   final phase = shape.phase.clamp(0.0, 3.0);
   final (from, to, t) = switch (phase) {
     <= 1 => (_kConnectionCircle, _kConnectionConnectingCookie, phase),
@@ -287,39 +309,44 @@ Path _connectionButtonCookiePath(Size size, _ConnectionButtonShape shape) {
     _ => (_kConnectionConnectedCookie, _kConnectionResolvingCookie, phase - 2),
   };
 
+  final hasRotation = shape.rotation != 0.0;
+  final rotCos = hasRotation ? math.cos(shape.rotation) : 1.0;
+  final rotSin = hasRotation ? math.sin(shape.rotation) : 0.0;
+
   for (var index = 0; index < samples; index += 1) {
-    final theta = (index / samples * math.pi * 2) + shape.rotation;
-    final radiusFactor = _lerp(from[index], to[index], t);
-    points.add(
-      center + Offset(math.cos(theta), math.sin(theta)) * radius * radiusFactor,
-    );
+    final cosTheta = hasRotation
+        ? (_kBaseCos[index] * rotCos - _kBaseSin[index] * rotSin)
+        : _kBaseCos[index];
+    final sinTheta = hasRotation
+        ? (_kBaseSin[index] * rotCos + _kBaseCos[index] * rotSin)
+        : _kBaseSin[index];
+    final r = radius * _lerp(from[index], to[index], t);
+    _reusablePointsX[index] = centerX + cosTheta * r;
+    _reusablePointsY[index] = centerY + sinTheta * r;
   }
 
   final path = Path();
-  for (var index = 0; index < points.length; index += 1) {
-    final current = points[index];
-    final next = points[(index + 1) % points.length];
-    final midpoint = Offset(
-      (current.dx + next.dx) / 2,
-      (current.dy + next.dy) / 2,
+  final firstMidX = (_reusablePointsX[0] + _reusablePointsX[1]) / 2;
+  final firstMidY = (_reusablePointsY[0] + _reusablePointsY[1]) / 2;
+  path.moveTo(firstMidX, firstMidY);
+
+  for (var index = 1; index < samples; index += 1) {
+    final nextIndex = (index + 1) % samples;
+    final midX = (_reusablePointsX[index] + _reusablePointsX[nextIndex]) / 2;
+    final midY = (_reusablePointsY[index] + _reusablePointsY[nextIndex]) / 2;
+    path.quadraticBezierTo(
+      _reusablePointsX[index],
+      _reusablePointsY[index],
+      midX,
+      midY,
     );
-    if (index == 0) {
-      path.moveTo(midpoint.dx, midpoint.dy);
-    } else {
-      path.quadraticBezierTo(current.dx, current.dy, midpoint.dx, midpoint.dy);
-    }
   }
-  final first = points.first;
-  final second = points[1];
-  final firstMidpoint = Offset(
-    (first.dx + second.dx) / 2,
-    (first.dy + second.dy) / 2,
-  );
+
   path.quadraticBezierTo(
-    first.dx,
-    first.dy,
-    firstMidpoint.dx,
-    firstMidpoint.dy,
+    _reusablePointsX[0],
+    _reusablePointsY[0],
+    firstMidX,
+    firstMidY,
   );
   path.close();
   return path;
@@ -327,6 +354,21 @@ Path _connectionButtonCookiePath(Size size, _ConnectionButtonShape shape) {
 
 const _kConnectionButtonPathSamples = 96;
 const _kConnectionButtonSize = 148.0;
+
+final Float64List _reusablePointsX = Float64List(_kConnectionButtonPathSamples);
+final Float64List _reusablePointsY = Float64List(_kConnectionButtonPathSamples);
+
+final List<double> _kBaseCos = List<double>.generate(
+  _kConnectionButtonPathSamples,
+  (index) => math.cos(index / _kConnectionButtonPathSamples * math.pi * 2),
+  growable: false,
+);
+
+final List<double> _kBaseSin = List<double>.generate(
+  _kConnectionButtonPathSamples,
+  (index) => math.sin(index / _kConnectionButtonPathSamples * math.pi * 2),
+  growable: false,
+);
 
 final List<double> _kConnectionCircle = List<double>.filled(
   _kConnectionButtonPathSamples,
@@ -370,6 +412,26 @@ final List<double> _kConnectionResolvingCookie = List<double>.generate(
     rotation: -math.pi / 2,
   ),
   growable: false,
+);
+
+final Path _kIdleConnectionButtonPath = _buildConnectionButtonCookiePath(
+  const Size.square(_kConnectionButtonSize),
+  const ConnectionButtonShape(phase: 0, rotation: 0, emphasis: 0),
+);
+
+final Path _kConnectingConnectionButtonPath = _buildConnectionButtonCookiePath(
+  const Size.square(_kConnectionButtonSize),
+  const ConnectionButtonShape(phase: 1, rotation: 0, emphasis: .52),
+);
+
+final Path _kConnectedConnectionButtonPath = _buildConnectionButtonCookiePath(
+  const Size.square(_kConnectionButtonSize),
+  const ConnectionButtonShape(phase: 2, rotation: 0, emphasis: 1.16),
+);
+
+final Path _kResolvingConnectionButtonPath = _buildConnectionButtonCookiePath(
+  const Size.square(_kConnectionButtonSize),
+  const ConnectionButtonShape(phase: 3, rotation: 0, emphasis: .96),
 );
 
 double _cookieRadius({

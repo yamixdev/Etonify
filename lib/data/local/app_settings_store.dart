@@ -970,7 +970,7 @@ class HiveAppSettingsStore extends AppSettingsStore {
   static Future<void> initHive() async {
     if (_hiveInitialized) return;
     if (Platform.isAndroid) {
-      final filesDir = AndroidFilesDir.path;
+      final filesDir = await AndroidFilesDir.ensureInitialized();
       Hive.init('$filesDir/meow_hive');
     } else {
       await Hive.initFlutter('meow_hive');

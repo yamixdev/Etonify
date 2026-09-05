@@ -2192,6 +2192,11 @@ class MainActivity : FlutterFragmentActivity() {
             SingboxController.clearEventSink(registration)
         }
         deepLinkEventSink = null
+        mainHandler.removeCallbacksAndMessages(null)
+        ioExecutor.shutdownNow()
+        subscriptionNetworkExecutor.shutdownNow()
+        endpointDnsExecutor.shutdownNow()
+        appIconExecutor.shutdownNow()
         super.onDestroy()
     }
 }

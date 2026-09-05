@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/app/app.dart';
+import 'package:meow_client/core/platform/android_files_dir.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 void _recordFatalError(String source, Object error, StackTrace stackTrace) {
@@ -16,6 +18,9 @@ Future<void> main() async {
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      if (Platform.isAndroid) {
+        await AndroidFilesDir.ensureInitialized();
+      }
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
         _recordFatalError(

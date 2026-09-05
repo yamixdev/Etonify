@@ -50,8 +50,6 @@ dependencies:
   hive_ce_flutter: ^2.3.4
   asn1lib: ^1.6.5
   file_picker: ^11.0.3
-  jni: ^1.0.3
-  jni_flutter: ^1.0.2
   path_provider: ^2.1.6
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
