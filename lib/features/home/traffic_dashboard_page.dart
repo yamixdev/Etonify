@@ -533,6 +533,7 @@ class _TrafficChartPainter extends CustomPainter {
           chartRect.top + (chartRect.height - painter.height) / 2,
         ),
       );
+      painter.dispose();
       return;
     }
 
@@ -602,6 +603,7 @@ class _TrafficChartPainter extends CustomPainter {
             .toDouble(),
       ),
     );
+    painter.dispose();
   }
 
   @override

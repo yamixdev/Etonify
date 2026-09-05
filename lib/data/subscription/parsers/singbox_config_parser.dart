@@ -79,6 +79,7 @@ class SingboxConfigParser {
       final type = (ob['type'] ?? '') as String;
       if (_metaTypes.contains(type)) continue;
       if (type.isEmpty) continue;
+      _normalizePort(ob);
       if (!_validate(ob, type)) continue;
 
       final tag = (ob['tag'] ?? '') as String;
@@ -140,8 +141,19 @@ class SingboxConfigParser {
     return v is String && v.isNotEmpty;
   }
 
+  static void _normalizePort(Map<String, dynamic> ob) {
+    final v = ob['server_port'];
+    if (v is int) return;
+    if (v is String) {
+      final parsed = int.tryParse(v.trim());
+      if (parsed != null && parsed > 0 && parsed <= 65535) {
+        ob['server_port'] = parsed;
+      }
+    }
+  }
+
   static bool _hasPort(Map<String, dynamic> ob) {
     final v = ob['server_port'];
-    return v is int && v > 0;
+    return v is int && v > 0 && v <= 65535;
   }
 }

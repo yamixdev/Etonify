@@ -60,12 +60,13 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'vless',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
       'uuid': Uri.decodeComponent(uri.userInfo),
     };
 
@@ -88,7 +89,7 @@ class LinkParser {
       result['tls'] = tls;
     }
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -107,7 +108,8 @@ class LinkParser {
     }
 
     final server = _str(v['add']);
-    final port = _toInt(v['port']);
+    final parsedPort = _toInt(v['port']);
+    final port = parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 443;
     final uuid = _str(v['id']);
     final aid = _toInt(v['aid']);
     final security = _str(v['scy'], 'auto');
@@ -163,12 +165,13 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'trojan',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
       'password': Uri.decodeComponent(uri.userInfo),
     };
 
@@ -182,7 +185,7 @@ class LinkParser {
     final transport = _buildTransport(p);
     if (transport != null) result['transport'] = transport;
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -459,12 +462,13 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'hysteria2',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
     };
 
     if (uri.userInfo.isNotEmpty) {
@@ -490,7 +494,7 @@ class LinkParser {
       };
     }
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -501,12 +505,13 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'hysteria',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
     };
 
     _putIfPresent(result, 'auth_string', p['auth']);
@@ -528,7 +533,7 @@ class LinkParser {
     if (alpn.isNotEmpty) tls['alpn'] = alpn.split(',');
     result['tls'] = tls;
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -548,12 +553,13 @@ class LinkParser {
     } else {
       uuid = Uri.decodeComponent(uri.userInfo);
     }
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'tuic',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
       'uuid': uuid,
       'password': password,
     };
@@ -575,7 +581,7 @@ class LinkParser {
     if (alpn.isNotEmpty) tls['alpn'] = alpn.split(',');
     result['tls'] = tls;
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -585,12 +591,13 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
+    final port = _portOr(uri, 443);
 
     final result = <String, dynamic>{
       'type': 'anytls',
       'tag': '',
       'server': uri.host,
-      'server_port': uri.port,
+      'server_port': port,
       'password': Uri.decodeComponent(uri.userInfo),
     };
 
@@ -608,7 +615,7 @@ class LinkParser {
     }
     result['tls'] = tls;
 
-    result['_name'] = name.isNotEmpty ? name : '${uri.host}:${uri.port}';
+    result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }
 
@@ -765,6 +772,13 @@ class LinkParser {
     if (v is double) return v.toInt();
     if (v is String) return int.tryParse(v) ?? 0;
     return 0;
+  }
+
+  static int _portOr(Uri uri, [int defaultPort = 443]) {
+    if (uri.hasPort && uri.port > 0 && uri.port <= 65535) {
+      return uri.port;
+    }
+    return defaultPort;
   }
 
   static String _str(dynamic v, [String fallback = '']) {

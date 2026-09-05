@@ -470,7 +470,9 @@ class _LogEntryRow extends StatelessWidget {
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
     )..layout(maxWidth: maxWidth);
-    return painter.didExceedMaxLines;
+    final exceeded = painter.didExceedMaxLines;
+    painter.dispose();
+    return exceeded;
   }
 }
 

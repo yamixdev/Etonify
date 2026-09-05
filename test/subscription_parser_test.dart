@@ -1901,5 +1901,47 @@ proxies:
         SubscriptionFormat.unknown,
       );
     });
+
+    test('singbox config parser normalizes string ports to integers', () {
+      final config = jsonEncode({
+        'outbounds': [
+          {
+            'type': 'vless',
+            'tag': 'vless-string-port',
+            'server': 'example.com',
+            'server_port': '8443',
+            'uuid': '00000000-0000-0000-0000-000000000001',
+          },
+        ],
+      });
+      final outbounds = SingboxConfigParser.parse(config);
+      expect(outbounds, hasLength(1));
+      expect(outbounds.first['server_port'], 8443);
+      expect(outbounds.first['server_port'], isA<int>());
+    });
+
+    test('link parser defaults to port 443 when no explicit port is in uri', () {
+      final vlessUri =
+          'vless://00000000-0000-0000-0000-000000000001@example.com?security=reality#TestVless';
+      final vlessNode = LinkParser.tryParse(vlessUri);
+      expect(vlessNode, isNotNull);
+      expect(vlessNode!['server_port'], 443);
+      expect(vlessNode['server_port'], isA<int>());
+
+      final trojanUri = 'trojan://secret@example.com?security=tls#TestTrojan';
+      final trojanNode = LinkParser.tryParse(trojanUri);
+      expect(trojanNode, isNotNull);
+      expect(trojanNode!['server_port'], 443);
+
+      final hy2Uri = 'hysteria2://secret@example.com#TestHy2';
+      final hy2Node = LinkParser.tryParse(hy2Uri);
+      expect(hy2Node, isNotNull);
+      expect(hy2Node!['server_port'], 443);
+
+      final tuicUri = 'tuic://uuid:password@example.com#TestTuic';
+      final tuicNode = LinkParser.tryParse(tuicUri);
+      expect(tuicNode, isNotNull);
+      expect(tuicNode!['server_port'], 443);
+    });
   });
 }
