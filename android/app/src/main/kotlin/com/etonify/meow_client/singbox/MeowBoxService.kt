@@ -27,7 +27,6 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.system.exitProcess
 
 class MeowBoxService(
     private val service: Service,
@@ -175,6 +174,8 @@ class MeowBoxService(
 
     private val startRequestGeneration = AtomicLong(0L)
     private val terminalForceStopScheduled = AtomicBoolean(false)
+    @Volatile
+    private var terminalForceStopRunnable: Runnable? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
@@ -296,6 +297,7 @@ class MeowBoxService(
         startRequestGeneration.set(Long.MIN_VALUE)
         cancelPendingStartRetry("service_onDestroy")
         cancelPendingNetworkHandoverProbe("service_onDestroy")
+        cancelPendingTerminalForceStop("service_onDestroy")
         retryExecutor.shutdownNow()
         recoveryGate.reset()
         recoveryExecutor.shutdownNow()
@@ -506,6 +508,18 @@ class MeowBoxService(
         }
     }
 
+    @Synchronized
+    private fun cancelPendingTerminalForceStop(reason: String) {
+        val runnable = terminalForceStopRunnable
+        if (runnable != null) {
+            mainHandler.removeCallbacks(runnable)
+            terminalForceStopRunnable = null
+        }
+        if (terminalForceStopScheduled.getAndSet(false)) {
+            MeowDiagnostics.log(TAG, "terminal force stop cancelled reason=$reason")
+        }
+    }
+
     private fun submitServiceTask(
         source: String,
         allowAfterDestroy: Boolean = false,
@@ -595,6 +609,7 @@ class MeowBoxService(
             return
         }
         Log.i(TAG, "startOrReloadInternal begin service=${service.javaClass.simpleName}")
+        cancelPendingTerminalForceStop("startOrReloadInternal")
         val mode = currentMode()
         MeowApplication.writeRuntimeIntent(mode, "start_or_reload")
         SingboxController.log(
@@ -918,6 +933,7 @@ class MeowBoxService(
         runCatching {
             service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
         }
+        cancelPendingTerminalForceStop("stopInternal_complete:$source")
 
         if (stopSelf) {
             if (startId != null) {
@@ -1041,29 +1057,60 @@ class MeowBoxService(
     }
 
     private fun requestTerminalForceStop(source: String) {
+        if (destroyed) return
         if (!terminalForceStopScheduled.compareAndSet(false, true)) return
         MeowApplication.clearRuntimeIntent()
         cancelStartRequests("terminal_force_stop:$source")
         cancelPendingNetworkHandoverProbe("terminal_force_stop:$source")
         foregroundNotification.stopAndClear()
         runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
-        mainHandler.postDelayed({
-            val shouldTerminate = VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(
+        val runnable = Runnable {
+            terminalForceStopRunnable = null
+            if (destroyed) {
+                terminalForceStopScheduled.set(false)
+                return@Runnable
+            }
+            val shouldForceStop = VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
                 runtimeRunning = SingboxController.running,
                 activeRuntimeOwner = ownsActiveRuntime(),
                 freshRuntimeIntent = MeowApplication.isRuntimeIntentFresh(currentMode()),
             )
             MeowDiagnostics.log(
                 TAG,
-                "terminal force stop verification source=$source terminate=$shouldTerminate " +
+                "terminal force stop verification source=$source forceStop=$shouldForceStop " +
                     "running=${SingboxController.running} generation=$serviceGeneration",
             )
-            if (!shouldTerminate) return@postDelayed
+            if (!shouldForceStop) {
+                terminalForceStopScheduled.set(false)
+                return@Runnable
+            }
+            MeowDiagnostics.log(
+                TAG,
+                "terminal force stop executing graceful teardown source=$source " +
+                    "running=${SingboxController.running} generation=$serviceGeneration",
+            )
+            val server = commandServer
+            commandServer = null
+            runningConfigHash = null
+            serviceGeneration = 0L
+            clearPendingDnsCache(runtimeActive = false, source = "terminal_force_stop:$source")
+            if (server != null) {
+                runCleanupStep("terminal force close command server source=$source", 500L) {
+                    server.close()
+                }
+            }
+            SingboxController.forceMarkServiceStopped("terminal_force_stop:$source")
             MeowApplication.clearServiceState()
             MeowApplication.clearRuntimeIntent()
-            android.os.Process.killProcess(android.os.Process.myPid())
-            exitProcess(0)
-        }, TERMINAL_FORCE_STOP_DELAY_MS)
+            foregroundNotification.stopAndClear()
+            MeowDefaultNetworkMonitor.stop()
+            MeowQuickSettingsTileService.requestRefresh(service)
+            runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
+            runCatching { service.stopSelf() }
+            terminalForceStopScheduled.set(false)
+        }
+        terminalForceStopRunnable = runnable
+        mainHandler.postDelayed(runnable, TERMINAL_FORCE_STOP_DELAY_MS)
     }
 
     private fun fail(message: String) {

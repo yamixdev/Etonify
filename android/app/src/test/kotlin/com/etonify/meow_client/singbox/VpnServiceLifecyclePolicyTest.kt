@@ -54,6 +54,39 @@ class VpnServiceLifecyclePolicyTest {
     }
 
     @Test
+    fun `hung native stop triggers force stop only for the stale owning service`() {
+        assertTrue(
+            VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
+                runtimeRunning = false,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = false,
+                freshRuntimeIntent = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
+                runtimeRunning = true,
+                activeRuntimeOwner = true,
+                freshRuntimeIntent = true,
+            ),
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
     fun `hung native stop terminates only the stale owning process`() {
         assertTrue(
             VpnServiceLifecyclePolicy.shouldTerminateProcessAfterStopTimeout(

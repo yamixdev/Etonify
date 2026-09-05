@@ -25,11 +25,32 @@ internal object VpnServiceLifecyclePolicy {
         return !runtimeRunning
     }
 
-    fun shouldTerminateProcessAfterStopTimeout(
+    /**
+     * Governs whether the active VPN service should execute an emergency forced
+     * teardown (stopSelf + SingboxController reset) after a normal stop sequence
+     * has timed out, without terminating the host application process.
+     */
+    fun shouldForceStopServiceAfterTimeout(
         runtimeRunning: Boolean,
         activeRuntimeOwner: Boolean,
         freshRuntimeIntent: Boolean,
     ): Boolean {
         return runtimeRunning && activeRuntimeOwner && !freshRuntimeIntent
+    }
+
+    @Deprecated(
+        "Renamed to shouldForceStopServiceAfterTimeout to reflect graceful teardown without process exit",
+        ReplaceWith("shouldForceStopServiceAfterTimeout(runtimeRunning, activeRuntimeOwner, freshRuntimeIntent)"),
+    )
+    fun shouldTerminateProcessAfterStopTimeout(
+        runtimeRunning: Boolean,
+        activeRuntimeOwner: Boolean,
+        freshRuntimeIntent: Boolean,
+    ): Boolean {
+        return shouldForceStopServiceAfterTimeout(
+            runtimeRunning = runtimeRunning,
+            activeRuntimeOwner = activeRuntimeOwner,
+            freshRuntimeIntent = freshRuntimeIntent,
+        )
     }
 }
