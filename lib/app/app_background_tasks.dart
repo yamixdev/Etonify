@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/outbound_location.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
@@ -390,9 +391,8 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
       .where((outbound) => !outbound.info.deleted)
       .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
-  final selectableOutbounds = visibleOutbounds
-      .where((outbound) => !_isGroupOnlyOutbound(outbound))
-      .toList(growable: false);
+  final catalog = ProxySelectionCatalog(visibleOutbounds, subscription.groups);
+  final selectableOutbounds = catalog.standaloneOutbounds;
   final activeProfile = _buildProfileSummary(subscription);
   final displayProxy = _buildHomeDisplayProxy(
     input,
@@ -404,7 +404,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     activeProfile: activeProfile,
     displayProxy: displayProxy,
     activeProxies: const <AppProxySummary>[],
-    totalTopLevelProxyCount: selectableOutbounds.length,
+    totalTopLevelProxyCount: catalog.candidateTags.length,
     includesFullProxyList: false,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
   );
@@ -432,36 +432,19 @@ AppProxySummary _buildHomeDisplayProxy(
 
   AppProxySummary? selectedGroupChild(SubscriptionGroup group) {
     final runtimeSelected = input.runtimeGroupSelections[group.tag]?.trim();
-    if (runtimeSelected != null && runtimeSelected.isNotEmpty) {
+    if (runtimeSelected != null &&
+        group.outboundTags.contains(runtimeSelected)) {
       final selected = outboundByTag[runtimeSelected];
       if (selected != null && !selected.info.deleted) {
         return summaryForOutbound(selected);
       }
     }
-    AppProxySummary? first;
-    AppProxySummary? best;
-    int? bestLatency;
-    for (final tag in group.outboundTags) {
-      final outbound = outboundByTag[tag];
-      if (outbound == null || outbound.info.deleted) {
-        continue;
-      }
-      final summary = summaryForOutbound(outbound);
-      first ??= summary;
-      if (summary.latencyUnavailable || summary.latency == null) {
-        continue;
-      }
-      if (bestLatency == null || summary.latency! < bestLatency) {
-        bestLatency = summary.latency;
-        best = summary;
-      }
-    }
-    return best ?? first;
+    return null;
   }
 
   AppProxySummary groupSummary(SubscriptionGroup group) {
     final child = selectedGroupChild(group);
-    final childName = child?.displayName;
+    final childName = child?.protocolLabel;
     final childCountry = child?.countryCode ?? '';
     final childCount = group.outboundTags
         .where(outboundByTag.containsKey)
@@ -492,9 +475,10 @@ AppProxySummary _buildHomeDisplayProxy(
           : 'URLTest · $childName',
       endpointLabel: child?.endpointLabel ?? '',
       isGroup: true,
+      membersSelectable: false,
       childCount: count,
       selectedChildTag: child?.tag,
-      selectedChildName: childName,
+      selectedChildName: null,
       highlighted: selectedTag == group.tag,
     );
   }
@@ -507,7 +491,7 @@ AppProxySummary _buildHomeDisplayProxy(
     if (selectedTagForLowest != null && selectedTagForLowest.isNotEmpty) {
       final group = groupByTag[selectedTagForLowest];
       if (group != null) {
-        selected = selectedGroupChild(group);
+        selected = groupSummary(group);
       } else {
         final outbound = outboundByTag[selectedTagForLowest];
         if (outbound != null) {
@@ -617,9 +601,8 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
       .where((outbound) => !outbound.info.deleted)
       .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
-  final selectableOutbounds = visibleOutbounds
-      .where((outbound) => !_isGroupOnlyOutbound(outbound))
-      .toList(growable: false);
+  final catalog = ProxySelectionCatalog(visibleOutbounds, subscription.groups);
+  final selectableOutbounds = catalog.standaloneOutbounds;
   final proxySummaries = visibleOutbounds
       .map((outbound) => _buildProxySummary(input, outbound))
       .toList(growable: false);
@@ -647,7 +630,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     final visibleChildTags = group.outboundTags
         .where(proxySummariesByTag.containsKey)
         .toList(growable: false);
-    if (visibleChildTags.length < 2) {
+    if (visibleChildTags.isEmpty) {
       continue;
     }
     groupedOutboundTags.addAll(visibleChildTags);
@@ -662,10 +645,8 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     );
     groupSummaries.add(groupSummary);
     proxySummariesByTag[groupSummary.tag] = groupSummary;
-    if (_isSetbackUrlTestGroup(group)) {
-      lowestCandidateGroupSummaries.add(groupSummary);
-      lowestCandidateGroupChildTags.addAll(visibleChildTags);
-    }
+    lowestCandidateGroupSummaries.add(groupSummary);
+    lowestCandidateGroupChildTags.addAll(visibleChildTags);
   }
 
   final lowestProxies = <AppProxySummary>[];
@@ -690,9 +671,9 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   };
 
   final activeProxy =
-      selectableOutbounds.length == 1 &&
+      catalog.candidateTags.length == 1 &&
           isLowestProxyTag(input.selectedProxyTag)
-      ? proxySummariesByTag[selectableOutbounds.single.tag]
+      ? proxySummariesByTag[catalog.candidateTags.single]
       : isLowestProxyTag(input.selectedProxyTag)
       ? lowestProxyByTag[input.selectedProxyTag]
       : chainSummariesByTag[input.selectedProxyTag] ??
@@ -1035,10 +1016,10 @@ AppProfileSummary _buildProfileSummary(Subscription subscription) {
     consumed: info?.consumed.toDouble() ?? 0,
     total: info?.total?.toDouble() ?? 0,
     remainingDays: info?.remainingDays,
-    outboundsCount: subscription.outbounds
-        .where((outbound) => !outbound.info.deleted)
-        .where((outbound) => !_isGroupOnlyOutbound(outbound))
-        .length,
+    outboundsCount: ProxySelectionCatalog(
+      subscription.outbounds,
+      subscription.groups,
+    ).candidateTags.length,
     sourceLabel: '',
   );
 }
@@ -1165,7 +1146,8 @@ AppProxySummary? _lowestSelectedSummary(
         final selectedLeafTag = candidate.isGroup
             ? input.runtimeGroupSelections[candidate.tag]?.trim()
             : candidate.tag;
-        final isUnavailable = selectedLeafTag == null ||
+        final isUnavailable =
+            selectedLeafTag == null ||
             selectedLeafTag.isEmpty ||
             input.unavailableLatencyTags.contains(selectedLeafTag) ||
             input.latencyErrors.containsKey(selectedLeafTag) ||
@@ -1178,39 +1160,7 @@ AppProxySummary? _lowestSelectedSummary(
       }
     }
   }
-  AppProxySummary? bestCandidate;
-  int? bestLatency;
-  for (final candidate in candidates) {
-    final selectedLeafTag = candidate.isGroup
-        ? input.runtimeGroupSelections[candidate.tag]?.trim()
-        : candidate.tag;
-    if (selectedLeafTag == null ||
-        selectedLeafTag.isEmpty ||
-        input.unavailableLatencyTags.contains(selectedLeafTag) ||
-        input.latencyErrors.containsKey(selectedLeafTag) ||
-        candidate.latencyUnavailable ||
-        candidate.latencyError != null) {
-      continue;
-    }
-    final latency = candidate.latency;
-    if (latency != null && latency > 0) {
-      if (bestLatency == null || latency < bestLatency) {
-        bestLatency = latency;
-        bestCandidate = candidate;
-      }
-    } else {
-      bestCandidate ??= candidate;
-    }
-  }
-  return bestCandidate;
-}
-
-bool _isSetbackUrlTestGroup(SubscriptionGroup group) {
-  final type = group.type.trim();
-  if (type.isNotEmpty && type != 'urltest') {
-    return false;
-  }
-  return group.urlTestConfig.method?.trim().toLowerCase() == 'setback';
+  return null;
 }
 
 AppProxySummary _buildProxySummary(
@@ -1379,7 +1329,7 @@ AppProxySummary _buildGroupProxySummary(
       runtimeSelectedTag != null &&
           visibleChildTags.contains(runtimeSelectedTag)
       ? runtimeSelectedTag
-      : _bestChildTag(input, visibleChildTags, childSummariesByTag);
+      : null;
   final selectedChild = selectedChildTag == null
       ? null
       : childSummariesByTag[selectedChildTag];
@@ -1387,7 +1337,7 @@ AppProxySummary _buildGroupProxySummary(
   final groupCountry = input.markAllServersRussia
       ? 'RU'
       : _normalizeCountryCode(group.country);
-  final selectedChildName = selectedChild?.displayName ?? selectedChildTag;
+  final selectedChildName = selectedChild?.protocolLabel;
   final hasSelectedChild =
       selectedChildName != null && selectedChildName.isNotEmpty;
   final unavailable = visibleChildTags.every(
@@ -1416,40 +1366,17 @@ AppProxySummary _buildGroupProxySummary(
         : 'URLTest · ${visibleChildTags.length} outbounds',
     endpointLabel: selectedChild?.endpointLabel ?? '',
     isGroup: true,
+    membersSelectable: false,
     childTags: visibleChildTags,
     childCount: visibleChildTags.length,
     selectedChildTag: selectedChildTag,
-    selectedChildName: selectedChildName,
+    selectedChildName: null,
     highlighted:
         input.selectedProxyTag == group.tag ||
         visibleChildTags.contains(input.selectedProxyTag) ||
         (runtimeLowestTag != null &&
             visibleChildTags.contains(runtimeLowestTag)),
   );
-}
-
-String? _bestChildTag(
-  ProxyCacheBuildInput input,
-  List<String> childTags,
-  Map<String, AppProxySummary> summariesByTag,
-) {
-  String? bestTag;
-  int? bestLatency;
-  for (final tag in childTags) {
-    if (input.unavailableLatencyTags.contains(tag)) {
-      continue;
-    }
-    final summary = summariesByTag[tag];
-    final latency = summary?.latency;
-    if (latency == null) {
-      continue;
-    }
-    if (bestLatency == null || latency < bestLatency) {
-      bestLatency = latency;
-      bestTag = tag;
-    }
-  }
-  return bestTag ?? (childTags.isEmpty ? null : childTags.first);
 }
 
 AppProxySummary? _groupSummaryByTag(List<AppProxySummary> groups, String tag) {

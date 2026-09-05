@@ -62,7 +62,6 @@ class LatencyCoordinator {
     required LatencyBoolReader isConnected,
     required LatencyBoolReader isForeground,
     required LatencyStringReader activeOutboundTag,
-    LatencyStringReader? activeGroupTag,
     required LatencyStringReader testUrl,
     required LatencyIntReader outboundCount,
     required LatencyIntReader timeoutSeconds,
@@ -78,7 +77,6 @@ class LatencyCoordinator {
        _isConnected = isConnected,
        _isForeground = isForeground,
        _activeOutboundTag = activeOutboundTag,
-       _activeGroupTag = activeGroupTag ?? _defaultGroupTag,
        _testUrl = testUrl,
        _outboundCount = outboundCount,
        _timeoutSeconds = timeoutSeconds,
@@ -101,7 +99,6 @@ class LatencyCoordinator {
   final LatencyBoolReader _isConnected;
   final LatencyBoolReader _isForeground;
   final LatencyStringReader _activeOutboundTag;
-  final LatencyStringReader _activeGroupTag;
   final LatencyStringReader _testUrl;
   final LatencyIntReader _outboundCount;
   final LatencyIntReader _timeoutSeconds;
@@ -116,7 +113,6 @@ class LatencyCoordinator {
 
   static bool _alwaysReady() => true;
   static int _zeroGeneration() => 0;
-  static String _defaultGroupTag() => 'select';
   static Map<String, int> _emptyEventTimes() => const <String, int>{};
   static Iterable<String> _emptyExpectedTags() => const <String>[];
 
@@ -197,13 +193,15 @@ class LatencyCoordinator {
       );
       return Future<bool>.value(false);
     }
-    final groupTag = _activeGroupTag().trim();
     return _runSession(
       kind: LatencySessionKind.targeted,
       reason: reason,
       targetTag: targetTag,
       request: LatencyTestRequest(
-        groupTag: groupTag.isEmpty ? 'select' : groupTag,
+        // Resolve targets under the root selector, including a node outside
+        // the currently selected provider group. The core refreshes nested
+        // URLTest selections without changing the user's root selection.
+        groupTag: 'select',
         targetOutboundTag: targetTag,
         priorityOutboundTag: targetTag,
         url: _testUrl(),
@@ -342,9 +340,8 @@ class LatencyCoordinator {
   }
 
   LatencyTestRequest _groupRequest() {
-    final groupTag = _activeGroupTag().trim();
     return LatencyTestRequest(
-      groupTag: groupTag.isEmpty ? 'select' : groupTag,
+      groupTag: 'select',
       priorityOutboundTag: _activeOutboundTag().trim(),
       url: _testUrl(),
       timeoutMillis: _configuredTimeoutMillis,

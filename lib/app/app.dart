@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
@@ -398,7 +399,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (tag != null && tag.isNotEmpty) {
       return tag;
     }
-    return _currentResolvedActiveOutbound()?.tag;
+    return null;
   }
 
   Outbound? _lowestSelectedOutbound(
@@ -426,24 +427,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         }
       }
     }
-    Outbound? bestOutbound;
-    int? bestLatency;
-    for (final outbound in visibleOutbounds) {
-      if (_unavailableLatencyTags.contains(outbound.tag) ||
-          _latencyErrors.containsKey(outbound.tag)) {
-        continue;
-      }
-      final latency = _effectiveOutboundLatency(outbound);
-      if (latency != null && latency > 0) {
-        if (bestLatency == null || latency < bestLatency) {
-          bestLatency = latency;
-          bestOutbound = outbound;
-        }
-      } else {
-        bestOutbound ??= outbound;
-      }
-    }
-    return bestOutbound;
+    return null;
   }
 
   void _rebuildDerivedCaches() {
@@ -1248,10 +1232,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       consumed: info?.consumed.toDouble() ?? 0,
       total: info?.total?.toDouble() ?? 0,
       remainingDays: info?.remainingDays,
-      outboundsCount: subscription.outbounds
-          .where((outbound) => !outbound.info.deleted)
-          .where((outbound) => outbound.config['_group_only'] != true)
-          .length,
+      outboundsCount: ProxySelectionCatalog(
+        subscription.outbounds,
+        subscription.groups,
+      ).candidateTags.length,
       sourceLabel: '',
     );
   }
@@ -1344,7 +1328,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
           highlighted: true,
         );
       }
-      final selectedSummary = _displaySummaryForOutbound(selectedOutbound);
+      final selectedGroup = _subscriptionGroupForTag(
+        _runtimeLowestOutboundTagFor(normalizedTag) ?? '',
+      );
+      final selectedSummary = selectedGroup == null
+          ? _displaySummaryForOutbound(selectedOutbound)
+          : _displaySummaryForGroup(selectedGroup);
       return selectedSummary.copyWith(
         tag: normalizedTag,
         displayName: lowestProxyDisplayName(
@@ -1461,8 +1450,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final groupCountry = _markAllServersRussia
         ? 'RU'
         : _normalizeCountryCode(group.country);
-    final selectedChildName =
-        selectedSummary?.displayName ?? selectedChild?.name.trim();
+    final selectedChildName = selectedSummary?.protocolLabel;
     final hasSelectedChild =
         selectedChildName != null && selectedChildName.isNotEmpty;
     final childCount = visibleChildTags.isEmpty
@@ -1491,9 +1479,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
           : 'URLTest · $childCount outbounds',
       endpointLabel: selectedSummary?.endpointLabel ?? '',
       isGroup: true,
+      membersSelectable: false,
       childCount: childCount,
       selectedChildTag: selectedChild?.tag,
-      selectedChildName: selectedChildName,
+      selectedChildName: null,
       highlighted: true,
     );
   }
@@ -1517,6 +1506,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _unavailableLatencyTags.contains(selectedLeafTag) ||
               _latencyErrors.containsKey(selectedLeafTag)
           ? null
+          : selectedGroupTag != null
+          ? _displaySummaryForGroup(_activeGroupByTagLookup[selectedGroupTag]!)
           : summariesByTag[selectedLeafTag];
       if (selected == null) {
         return proxy.copyWith(
@@ -1543,7 +1534,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           highlighted: proxy.tag == _selectedProxyTag,
         );
       }
-      final selectedWithRuntime = _withDirectRuntimeProxyState(selected);
+      final selectedWithRuntime = selected.isGroup
+          ? selected
+          : _withDirectRuntimeProxyState(selected);
       return proxy.copyWith(
         displayName: lowestProxyDisplayName(
           proxy.tag,
@@ -1570,6 +1563,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
 
     if (proxy.isGroup) {
+      final managedGroup = _activeGroupByTagLookup[proxy.tag];
+      if (managedGroup != null) {
+        return _displaySummaryForGroup(managedGroup).copyWith(
+          childTags: proxy.childTags,
+          highlighted:
+              _selectedProxyTag == proxy.tag ||
+              _activeRuntimeLowestOutboundTag() == proxy.tag,
+        );
+      }
       final fullChildTags = _fullChildTagsForProxy(proxy);
       final runtimeSelected = _runtimeGroupSelections[proxy.tag];
       final selectedChildTag =
@@ -2038,7 +2040,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       isConnected: () => _connected,
       isForeground: () => _foregroundLifecycleActive,
       activeOutboundTag: () => _currentResolvedActiveOutboundTag() ?? '',
-      activeGroupTag: _activeUrlTestGroupTag,
       testUrl: () => _urlTestUrl,
       outboundCount: () {
         _ensureActiveLookupCaches();
@@ -2277,7 +2278,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     return total;
   }
-
 
   void _showAppSnackBar(
     String message, {
@@ -2724,7 +2724,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _adBlockStatus = adBlockStatus;
       _russiaRouteDataStatus = russiaRouteDataStatus;
       ref.read(adBlockStatusProvider.notifier).update(adBlockStatus);
-      ref.read(russiaRouteDataStatusProvider.notifier).update(russiaRouteDataStatus);
+      ref
+          .read(russiaRouteDataStatusProvider.notifier)
+          .update(russiaRouteDataStatus);
       _setConnectionPhase(AppConnectionPhase.idle);
       _refreshThemeCache();
       _applyMetadataActiveProfile(
@@ -2819,7 +2821,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _adBlockStatus = statuses.adBlockStatus;
       _russiaRouteDataStatus = statuses.russiaRouteDataStatus;
       ref.read(adBlockStatusProvider.notifier).update(statuses.adBlockStatus);
-      ref.read(russiaRouteDataStatusProvider.notifier).update(statuses.russiaRouteDataStatus);
+      ref
+          .read(russiaRouteDataStatusProvider.notifier)
+          .update(statuses.russiaRouteDataStatus);
     });
   }
 
@@ -4822,9 +4826,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
     await navigator.push(
-      MaterialPageRoute<void>(
-        builder: (context) => const SettingsDnsPage(),
-      ),
+      MaterialPageRoute<void>(builder: (context) => const SettingsDnsPage()),
     );
   }
 
@@ -5227,9 +5229,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
     await navigator.push(
-      MaterialPageRoute<void>(
-        builder: (_) => const SettingsLogsPage(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const SettingsLogsPage()),
     );
   }
 
@@ -5573,22 +5573,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return capabilities;
   }
 
-  bool get _hasAvailableLowestGroup {
-    _ensureActiveLookupCaches();
-    return _activeVisibleOutboundsLookup.length > 1;
-  }
-
-  String _activeUrlTestGroupTag() {
-    final activeGroup = _subscriptionGroupForTag(_selectedProxyTag);
-    if (activeGroup != null) {
-      return activeGroup.tag;
-    }
-    if (isLowestProxyTag(_selectedProxyTag) || _hasAvailableLowestGroup) {
-      return lowestProxyTag;
-    }
-    return 'select';
-  }
-
   void _startSingboxEvents() {
     _runtimeEvents.start();
     if (_foregroundLifecycleActive) {
@@ -5670,7 +5654,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _scheduleActiveOutboundIpRefresh();
     }
   }
-
 
   void _handleRuntimeNetworkEvent(Map<String, dynamic> event) {
     final reason = event['reason']?.toString() ?? 'network';
@@ -6510,28 +6493,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
     }
 
-    Outbound? firstChild;
-    Outbound? bestChild;
-    int? bestLatency;
-    for (final tag in group.outboundTags) {
-      final outbound = _activeOutboundByTagLookup[tag];
-      if (outbound == null) {
-        continue;
-      }
-      firstChild ??= outbound;
-      if (_unavailableLatencyTags.contains(tag)) {
-        continue;
-      }
-      final latency = _effectiveOutboundLatency(outbound);
-      if (latency == null) {
-        continue;
-      }
-      if (bestLatency == null || latency < bestLatency) {
-        bestLatency = latency;
-        bestChild = outbound;
-      }
-    }
-    return bestChild ?? firstChild;
+    return null;
   }
 
   String? _currentResolvedActiveOutboundTag() {
@@ -7074,7 +7036,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 }
-
 
 class _LocalizedSubscriptionError implements Exception {
   const _LocalizedSubscriptionError(this.message);

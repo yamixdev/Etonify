@@ -271,68 +271,73 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       child: SizedBox(
         width: panelRect.width,
         height: panelRect.height,
-        child: Stack(
-          children: [
-            ListView.builder(
-              physics: const ClampingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              itemExtent: _kProxySheetRowExtent,
-              scrollCacheExtent: _kProxyListScrollCacheExtent,
-              addAutomaticKeepAlives: false,
-              addRepaintBoundaries: true,
-              addSemanticIndexes: false,
-              padding: EdgeInsets.only(
-                top: _kProxyGroupSheetListTopReserve,
-                bottom: bottomInset + 18,
-              ),
-              itemCount: children.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
+        child: ColoredBox(
+          key: const ValueKey('proxy-group-sheet-surface'),
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Stack(
+            children: [
+              ListView.builder(
+                physics: const ClampingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                itemExtent: _kProxySheetRowExtent,
+                scrollCacheExtent: _kProxyListScrollCacheExtent,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: true,
+                addSemanticIndexes: false,
+                padding: EdgeInsets.only(
+                  top: _kProxyGroupSheetListTopReserve,
+                  bottom: bottomInset + 18,
+                ),
+                itemCount: children.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _runtimeTile(
+                      proxy: widget.group,
+                      selected: widget.group.tag == _selectedTag,
+                      highlighted: false,
+                      titleOverride: groupTitle,
+                      subtitleOverride: groupSubtitle,
+                      showGroupHandle: true,
+                      onTap: () => _select(widget.group.tag),
+                    );
+                  }
+                  final proxy = children[index - 1];
                   return _runtimeTile(
-                    proxy: widget.group,
-                    selected: widget.group.tag == _selectedTag,
-                    highlighted: false,
-                    titleOverride: groupTitle,
-                    subtitleOverride: groupSubtitle,
-                    showGroupHandle: true,
-                    onTap: () => _select(widget.group.tag),
+                    proxy: proxy,
+                    selected: proxy.tag == _selectedTag,
+                    highlighted:
+                        proxy.tag == activeChildTag || proxy.highlighted,
+                    onTap: () => _select(proxy.tag),
+                    onLongPress: () => _openProxyShareSheet(proxy),
                   );
-                }
-                final proxy = children[index - 1];
-                return _runtimeTile(
-                  proxy: proxy,
-                  selected: proxy.tag == _selectedTag,
-                  highlighted: proxy.tag == activeChildTag || proxy.highlighted,
-                  onTap: () => _select(proxy.tag),
-                  onLongPress: () => _openProxyShareSheet(proxy),
-                );
-              },
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: AnimatedBuilder(
-                animation: widget.routeAnimation,
-                builder: (context, child) => _ProxySheetHeaderBackdrop(
-                  enabled:
-                      widget.progressiveBlurEnabled &&
-                      widget.routeAnimation.value >= 0.985,
-                  cornerRadius: 28,
-                  height: _kProxySheetHeaderHeight,
-                  child: child!,
-                ),
-                child: _GroupOutboundsSheetHeader(
-                  title: l10n.proxySelectorTitle,
-                  l10n: l10n,
-                  sort: _sort,
-                  onSortSelected: _setSort,
-                  onClose: () => Navigator.of(context).pop(),
+                },
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: AnimatedBuilder(
+                  animation: widget.routeAnimation,
+                  builder: (context, child) => _ProxySheetHeaderBackdrop(
+                    enabled:
+                        widget.progressiveBlurEnabled &&
+                        widget.routeAnimation.value >= 0.985,
+                    cornerRadius: 28,
+                    height: _kProxySheetHeaderHeight,
+                    child: child!,
+                  ),
+                  child: _GroupOutboundsSheetHeader(
+                    title: l10n.proxySelectorTitle,
+                    l10n: l10n,
+                    sort: _sort,
+                    onSortSelected: _setSort,
+                    onClose: () => Navigator.of(context).pop(),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

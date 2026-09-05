@@ -11,6 +11,107 @@ import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 
 void main() {
+  test('imports flat and legacy Xray VLESS TCP without dropping nodes', () {
+    final result = SubscriptionParser.parse(
+      jsonEncode([
+        {
+          'remarks': 'Finland TCP',
+          'outbounds': [
+            {
+              'protocol': 'vless',
+              'tag': 'proxy',
+              'settings': {
+                'address': 'fi.example',
+                'port': 443,
+                'id': '00000000-0000-0000-0000-000000000001',
+                'encryption': 'none',
+              },
+              'streamSettings': {'network': 'tcp', 'security': 'none'},
+            },
+          ],
+        },
+        {
+          'remarks': 'Finland legacy',
+          'outbounds': [
+            {
+              'protocol': 'vless',
+              'tag': 'proxy',
+              'settings': {
+                'vnext': [
+                  {
+                    'address': 'fi2.example',
+                    'port': 8443,
+                    'users': [
+                      {
+                        'id': '00000000-0000-0000-0000-000000000002',
+                        'encryption': 'none',
+                      },
+                    ],
+                  },
+                ],
+              },
+              'streamSettings': {'network': 'raw', 'security': 'none'},
+            },
+          ],
+        },
+      ]),
+    );
+    expect(result.outbounds, hasLength(2));
+    expect(result.outbounds.map((node) => node['_name']), [
+      'Finland TCP',
+      'Finland legacy',
+    ]);
+    expect(result.outbounds.map((node) => node['server']), [
+      'fi.example',
+      'fi2.example',
+    ]);
+    for (final node in result.outbounds) {
+      expect(node['transport'], isNull);
+      expect(node['tls'], isNull);
+      expect(ParsedOutboundSchema.validate(node), isNull);
+    }
+  });
+
+  test(
+    'flat Xray VLESS preserves TLS and flow without merging legacy fields',
+    () {
+      final node = XrayConfigParser.parse(
+        jsonEncode({
+          'outbounds': [
+            {
+              'protocol': 'vless',
+              'settings': {
+                'address': 'flat.example',
+                'port': 443,
+                'id': 'flat-id',
+                'encryption': 'none',
+                'flow': 'xtls-rprx-vision',
+                'vnext': [
+                  {
+                    'address': 'old.example',
+                    'port': 80,
+                    'users': [
+                      {'id': 'old-id'},
+                    ],
+                  },
+                ],
+              },
+              'streamSettings': {
+                'network': 'tcp',
+                'security': 'tls',
+                'tlsSettings': {'serverName': 'tls.example'},
+              },
+            },
+          ],
+        }),
+      ).single;
+      expect(node['server'], 'flat.example');
+      expect(node['uuid'], 'flat-id');
+      expect(node['flow'], 'xtls-rprx-vision');
+      expect(node['tls']['server_name'], 'tls.example');
+    },
+  );
+
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // Link Parser Tests
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

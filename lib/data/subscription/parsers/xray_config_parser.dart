@@ -369,12 +369,21 @@ class XrayConfigParser {
     Map<String, dynamic> settings,
     Map<String, dynamic> stream,
   ) {
-    final vnext = _list(settings['vnext']);
-    if (vnext.isEmpty) return null;
-    final node = _map(vnext.first);
-    final users = _list(node['users']);
-    if (users.isEmpty) return null;
-    final user = _map(users.first);
+    // Current Xray uses flat address/port/id settings. Keep the legacy
+    // vnext/users representation without mixing fields from both formats.
+    final Map<String, dynamic> node;
+    final Map<String, dynamic> user;
+    if (settings.containsKey('address')) {
+      node = settings;
+      user = settings;
+    } else {
+      final vnext = _list(settings['vnext']);
+      if (vnext.isEmpty) return null;
+      node = _map(vnext.first);
+      final users = _list(node['users']);
+      if (users.isEmpty) return null;
+      user = _map(users.first);
+    }
 
     final r = <String, dynamic>{
       'type': 'vless',

@@ -92,6 +92,7 @@ class AppProxySummary {
     required this.protocolLabel,
     required this.endpointLabel,
     this.isGroup = false,
+    this.membersSelectable = true,
     this.parentGroupTag,
     this.childTags = const [],
     this.childCount = 0,
@@ -117,6 +118,7 @@ class AppProxySummary {
   final String protocolLabel;
   final String endpointLabel;
   final bool isGroup;
+  final bool membersSelectable;
   final String? parentGroupTag;
   final List<String> childTags;
   final int childCount;
@@ -146,6 +148,7 @@ class AppProxySummary {
     String? protocolLabel,
     String? endpointLabel,
     bool? isGroup,
+    bool? membersSelectable,
     String? parentGroupTag,
     bool clearParentGroupTag = false,
     List<String>? childTags,
@@ -176,6 +179,7 @@ class AppProxySummary {
       protocolLabel: protocolLabel ?? this.protocolLabel,
       endpointLabel: endpointLabel ?? this.endpointLabel,
       isGroup: isGroup ?? this.isGroup,
+      membersSelectable: membersSelectable ?? this.membersSelectable,
       parentGroupTag: clearParentGroupTag
           ? null
           : parentGroupTag ?? this.parentGroupTag,
@@ -211,6 +215,7 @@ class AppProxySummary {
         other.protocolLabel == protocolLabel &&
         other.endpointLabel == endpointLabel &&
         other.isGroup == isGroup &&
+        other.membersSelectable == membersSelectable &&
         other.parentGroupTag == parentGroupTag &&
         listEquals(other.childTags, childTags) &&
         other.childCount == childCount &&
@@ -238,6 +243,7 @@ class AppProxySummary {
     protocolLabel,
     endpointLabel,
     isGroup,
+    membersSelectable,
     parentGroupTag,
     Object.hashAll(childTags),
     childCount,

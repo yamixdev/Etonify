@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_support.dart';
@@ -142,15 +143,11 @@ class SingboxConfigBuilder {
     final outboundTags = outbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);
-    final groupOnlyOutboundTags = outbounds
-        .where(_isGroupOnlyOutbound)
-        .map((outbound) => outbound.tag)
-        .toSet();
-    final selectableOutboundTags = outbounds
-        .where((outbound) => !groupOnlyOutboundTags.contains(outbound.tag))
+    final visibleGroups = _visibleGroups(outboundTags.toSet());
+    final selectionCatalog = ProxySelectionCatalog(outbounds, visibleGroups);
+    final selectableOutboundTags = selectionCatalog.standaloneOutbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);
-    final visibleGroups = _visibleGroups(outboundTags.toSet());
     final requestedTrafficRulePreset =
         trafficRulePreset == TrafficRulePreset.none && useRussiaRouteData
         ? TrafficRulePreset.russianServicesDirect
@@ -189,9 +186,7 @@ class SingboxConfigBuilder {
       outbounds,
       visibleGroups,
     );
-    final urlTestAvailable =
-        selectableOutboundTags.length > 1 ||
-        visibleGroups.any(_isSetbackUrlTestGroup);
+    final urlTestAvailable = selectionCatalog.hasLowest;
     final lowestOutboundTags =
         urlTestAvailable && defaultLowestOutboundTags.isNotEmpty
         ? <String, List<String>>{lowestProxyTag: defaultLowestOutboundTags}
@@ -255,9 +250,7 @@ class SingboxConfigBuilder {
         ? (normalizedSelectedProxyTag.isNotEmpty &&
                   selectableTags.contains(normalizedSelectedProxyTag)
               ? normalizedSelectedProxyTag
-              : availableLowestTags.isNotEmpty
-              ? lowestProxyTag
-              : outboundTags.first)
+              : selectionCatalog.resolveSelection(normalizedSelectedProxyTag))
         : 'direct';
     final proxyOutboundIndexes = <int, String>{};
     final proxyStartIndex = hasProxies
@@ -940,13 +933,10 @@ class SingboxConfigBuilder {
     final groupCandidateTags = <String>[];
 
     for (final group in groups) {
-      if (!_isSetbackUrlTestGroup(group)) {
-        continue;
-      }
       final visibleChildTags = group.outboundTags
           .where(outboundTags.contains)
           .toList(growable: false);
-      if (visibleChildTags.length < 2) {
+      if (visibleChildTags.isEmpty) {
         continue;
       }
       groupedCandidateChildTags.addAll(visibleChildTags);
@@ -969,14 +959,6 @@ class SingboxConfigBuilder {
         .toList(growable: false);
 
     return [...groupCandidateTags, ...leafCandidateTags];
-  }
-
-  bool _isSetbackUrlTestGroup(SubscriptionGroup group) {
-    final type = group.type.trim();
-    if (type.isNotEmpty && type != 'urltest') {
-      return false;
-    }
-    return group.urlTestConfig.method?.trim().toLowerCase() == 'setback';
   }
 
   Map<String, dynamic> _buildLowestOutbound(String tag, List<String> tags) {

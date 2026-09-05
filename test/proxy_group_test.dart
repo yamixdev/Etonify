@@ -13,6 +13,79 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  test('provider candidates stay in runtime but never bypass their group', () {
+    final parsed = SubscriptionParser.parse(
+      jsonEncode({
+        'remarks': 'Provider auto',
+        'routing': {
+          'balancers': [
+            {
+              'tag': 'auto',
+              'selector': ['cand-'],
+              'strategy': {'type': 'leastPing'},
+            },
+          ],
+        },
+        'outbounds': [
+          _xrayVlessOutbound('cand-01', 'one.example'),
+          _xrayVlessOutbound('cand-02', 'two.example'),
+        ],
+      }),
+    );
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(parsed);
+    final subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: 'file:///sub',
+      outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+      groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+    );
+    final group = subscription.groups.single;
+    final config = _defaultBuilder(
+      subscription,
+      selectedProxyTag: 'cand-01',
+    ).build();
+    final outbounds = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final select = outbounds.singleWhere(
+      (outbound) => outbound['tag'] == 'select',
+    );
+    expect(select['outbounds'], [group.tag]);
+    expect(select['default'], group.tag);
+    expect(
+      outbounds.map((outbound) => outbound['tag']),
+      containsAll(group.outboundTags),
+    );
+    final input = ProxyCacheBuildInput(
+      subscription: subscription,
+      selectedProxyTag: group.tag,
+      lowestLatency: null,
+      runtimeLowestOutboundTag: null,
+      runtimeLowestSelections: const {},
+      urlTestInFlight: false,
+      runtimeLatencies: const {'cand-01': 200, 'cand-02': 50},
+      unavailableLatencyTags: const {},
+      latencyErrors: const {},
+      runtimeGroupSelections: {group.tag: 'cand-01'},
+      markAllServersRussia: false,
+    );
+    for (final cache in [buildProxyCache(input), buildHomeProxyCache(input)]) {
+      final proxy = cache.displayProxy!;
+      expect(proxy.tag, group.tag);
+      expect(proxy.displayName, 'Provider auto');
+      expect(
+        proxy.latency,
+        200,
+      ); // Actual selection, not the minimum measurement.
+      expect(proxy.membersSelectable, isFalse);
+      expect(proxy.protocolLabel, isNot(contains('cand-')));
+      expect(proxy.selectedChildName, isNull);
+    }
+    expect(buildProxyCache(input).activeProxies.map((proxy) => proxy.tag), [
+      group.tag,
+    ]);
+  });
+
   test('parses Xray balancer as a proxy group', () {
     final content = jsonEncode({
       'remarks': '🇪🇺 Авто | Самый быстрый',
@@ -330,6 +403,16 @@ void main() {
       ),
       outbounds: [
         Outbound(
+          tag: 'standalone',
+          name: 'Standalone',
+          config: {
+            'type': 'vless',
+            'server': 'standalone.example',
+            'server_port': 443,
+            'uuid': 'standalone-uuid',
+          },
+        ),
+        Outbound(
           tag: 'leaf-1',
           name: 'Leaf 1',
           config: {
@@ -396,9 +479,9 @@ void main() {
       (entry) => entry['tag'] == 'group-auto',
     );
 
-    expect(selector['outbounds'], ['lowest', 'group-auto', 'leaf-1', 'leaf-2']);
+    expect(selector['outbounds'], ['lowest', 'group-auto', 'standalone']);
     expect(selector['default'], 'group-auto');
-    expect(lowest['outbounds'], ['group-auto']);
+    expect(lowest['outbounds'], ['group-auto', 'standalone']);
     expect(lowest['timeout'], '8s');
     expect(lowest['idle_timeout'], '77s');
     expect(lowest['concurrency'], 8);
@@ -872,8 +955,10 @@ void main() {
       experimentalFakeIpEnabled: true,
     ).build();
     final fullTunDns = (fullTunConfig['dns'] as Map).cast<String, dynamic>();
-    final fullTunServers = (fullTunDns['servers'] as List).cast<Map<dynamic, dynamic>>();
-    final fullTunRules = (fullTunDns['rules'] as List).cast<Map<dynamic, dynamic>>();
+    final fullTunServers = (fullTunDns['servers'] as List)
+        .cast<Map<dynamic, dynamic>>();
+    final fullTunRules = (fullTunDns['rules'] as List)
+        .cast<Map<dynamic, dynamic>>();
 
     expect(
       fullTunServers.any(
@@ -898,7 +983,8 @@ void main() {
       splitRoutingPackages: const ['com.example.app'],
     ).build();
     final splitTunDns = (splitTunConfig['dns'] as Map).cast<String, dynamic>();
-    final splitTunServers = (splitTunDns['servers'] as List).cast<Map<dynamic, dynamic>>();
+    final splitTunServers = (splitTunDns['servers'] as List)
+        .cast<Map<dynamic, dynamic>>();
 
     expect(
       splitTunServers.any((server) => server['tag'] == 'dns-fakeip'),
@@ -1329,6 +1415,16 @@ void main() {
         ),
       ],
       outbounds: [
+        Outbound(
+          tag: 'standalone',
+          name: 'Standalone',
+          config: {
+            'type': 'vless',
+            'server': 'standalone.example',
+            'server_port': 443,
+            'uuid': 'standalone-uuid',
+          },
+        ),
         Outbound(
           tag: 'leaf-fi',
           name: 'Leaf FI',
@@ -2182,9 +2278,9 @@ void main() {
       ],
     ).build();
 
-    final tunInbound = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
-      (inbound) => inbound['type'] == 'tun',
-    );
+    final tunInbound = (config['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
     expect(tunInbound['include_package'], [
       'com.example.app',
       'com.etonify.meow_client',
@@ -2202,7 +2298,8 @@ void main() {
           rule['type'] == 'logical' &&
           rule['mode'] == 'or',
     );
-    final dnsHijackChildren = (dnsHijackRule['rules'] as List).cast<Map<dynamic, dynamic>>();
+    final dnsHijackChildren = (dnsHijackRule['rules'] as List)
+        .cast<Map<dynamic, dynamic>>();
     expect(dnsHijackChildren, contains(containsPair('protocol', 'dns')));
     expect(dnsHijackChildren, contains(containsPair('port', 53)));
     expect(route['default_domain_resolver'], 'dns-local');
@@ -2251,7 +2348,8 @@ void main() {
       ),
     ).build();
 
-    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map<dynamic, dynamic>>();
+    final routeRules = ((config['route'] as Map)['rules'] as List)
+        .cast<Map<dynamic, dynamic>>();
     final privateIndex = routeRules.indexWhere(
       (rule) => rule.containsKey('ip_is_private'),
     );
@@ -2390,13 +2488,14 @@ void main() {
       splitRoutingPackages: const ['com.example.bypass'],
     ).build();
 
-    final tunInbound = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
-      (inbound) => inbound['type'] == 'tun',
-    );
+    final tunInbound = (config['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
     expect(tunInbound['exclude_package'], ['com.example.bypass']);
     expect(tunInbound.containsKey('include_package'), isFalse);
 
-    final routeRules = ((config['route'] as Map)['rules'] as List).cast<Map<dynamic, dynamic>>();
+    final routeRules = ((config['route'] as Map)['rules'] as List)
+        .cast<Map<dynamic, dynamic>>();
     expect(routeRules.any((rule) => rule.containsKey('package_name')), isFalse);
   });
 
@@ -2442,9 +2541,9 @@ void main() {
       subscription,
       vpnInboundEnabled: true,
     ).build();
-    final tun = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
-      (inbound) => inbound['type'] == 'tun',
-    );
+    final tun = (config['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
 
     expect(tun['address'], contains('172.19.0.1/30'));
     expect(tun['address'], contains('fdfe:dcba:9876::1/126'));
@@ -2549,9 +2648,9 @@ void main() {
       proxyUsername: 'sergey',
       proxyPassword: 'LocalOnlyPassword123456',
     ).build();
-    final mixed = (config['inbounds'] as List).cast<Map<dynamic, dynamic>>().firstWhere(
-      (inbound) => inbound['type'] == 'mixed',
-    );
+    final mixed = (config['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'mixed');
 
     expect(mixed['users'], [
       {'username': 'sergey', 'password': 'LocalOnlyPassword123456'},

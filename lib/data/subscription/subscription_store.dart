@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
 import 'package:meow_client/data/local/secure_hive_storage.dart';
 import 'package:meow_client/logging/app_log_store.dart';
@@ -1103,38 +1104,10 @@ class SubscriptionStore {
     String? preferredTag,
     List<SubscriptionGroup> groups = const [],
   }) {
-    if (outbounds.isEmpty) {
-      return '';
-    }
-    if (outbounds.length == 1) {
-      return outbounds.first.tag;
-    }
-    final normalizedPreferred = normalizeProxySelectionTag(preferredTag ?? '');
-    if (normalizedPreferred.isEmpty) {
-      return lowestProxyTag;
-    }
-    if (isLowestProxyTag(normalizedPreferred)) {
-      return lowestProxyTag;
-    }
-    final liveOutboundTags = outbounds
-        .where(
-          (outbound) =>
-              !outbound.info.deleted && outbound.config['_group_only'] != true,
-        )
-        .map((outbound) => outbound.tag)
-        .toSet();
-    for (final group in groups) {
-      if (group.tag == normalizedPreferred &&
-          group.outboundTags.any(liveOutboundTags.contains)) {
-        return normalizedPreferred;
-      }
-    }
-    for (final outbound in outbounds) {
-      if (outbound.tag == normalizedPreferred && !outbound.info.deleted) {
-        return normalizedPreferred;
-      }
-    }
-    return lowestProxyTag;
+    return ProxySelectionCatalog(
+      outbounds,
+      groups,
+    ).resolveSelection(preferredTag ?? '');
   }
 
   static bool _hasUsableOutbounds(List<Outbound> outbounds) {

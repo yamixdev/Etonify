@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/models/subscription.dart';
 
 class ProxySelectionTimeout {
@@ -159,23 +160,6 @@ class ProxySelectionController {
     String preferredTag,
   ) {
     final normalized = normalizeProxySelectionTag(preferredTag);
-    final liveOutbounds = subscription.outbounds
-        .where(
-          (outbound) =>
-              !outbound.info.deleted && outbound.config['_group_only'] != true,
-        )
-        .toList(growable: false);
-    if (liveOutbounds.isEmpty) {
-      return '';
-    }
-    if (normalized.isEmpty) {
-      return liveOutbounds.length == 1
-          ? liveOutbounds.first.tag
-          : lowestProxyTag;
-    }
-    if (isLowestProxyTag(normalized)) {
-      return liveOutbounds.length == 1 ? liveOutbounds.first.tag : normalized;
-    }
     final proxyChainTags = subscription.proxyChains
         .map((chain) => chain.tag.trim())
         .where((tag) => tag.isNotEmpty)
@@ -183,22 +167,10 @@ class ProxySelectionController {
     if (proxyChainTags.contains(normalized)) {
       return normalized;
     }
-    final liveOutboundTags = liveOutbounds
-        .where((outbound) => outbound.config['_group_only'] != true)
-        .map((outbound) => outbound.tag)
-        .toSet();
-    for (final group in subscription.groups) {
-      if (group.tag == normalized &&
-          group.outboundTags.any(liveOutboundTags.contains)) {
-        return normalized;
-      }
-    }
-    for (final outbound in liveOutbounds) {
-      if (outbound.tag == normalized) {
-        return normalized;
-      }
-    }
-    return liveOutbounds.length == 1 ? liveOutbounds.first.tag : lowestProxyTag;
+    return ProxySelectionCatalog(
+      subscription.outbounds,
+      subscription.groups,
+    ).resolveSelection(normalized);
   }
 
   static String effectiveSelectedProxyTag({

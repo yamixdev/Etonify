@@ -1160,7 +1160,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
               : _isProxyChain(proxy)
               ? () => _openProxyChainActionSheet(proxy)
               : () => _openProxyShareSheet(proxy),
-          onOpenGroup: proxy.isGroup
+          onOpenGroup: proxy.isGroup && proxy.membersSelectable
               ? (rect) => _openGroupOutbounds(proxy, rect)
               : null,
         );

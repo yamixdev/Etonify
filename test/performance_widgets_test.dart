@@ -7,6 +7,101 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
+  testWidgets('provider group selects the group without exposing members', (
+    tester,
+  ) async {
+    final selected = <String>[];
+    final group = _performanceProxy(0).copyWith(
+      tag: 'provider-auto',
+      displayName: 'Provider auto',
+      isGroup: true,
+      membersSelectable: false,
+      childTags: ['cand-1'],
+      childCount: 1,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ProxiesPage(
+            proxies: [group],
+            selectedTag: '',
+            connected: true,
+            progressiveBlurEnabled: false,
+            onSelected: selected.add,
+            onUrlTest: () async {},
+            groupChildrenByTag: {
+              'provider-auto': [
+                _performanceProxy(
+                  1,
+                ).copyWith(tag: 'cand-1', displayName: 'cand-1'),
+              ],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tile = find.byWidgetPredicate(
+      (widget) => widget is ProxyTile && widget.proxy.tag == 'provider-auto',
+    );
+    expect(tester.widget<ProxyTile>(tile).onOpenGroup, isNull);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(selected, ['provider-auto']);
+    expect(find.text('cand-1'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expandable group sheet paints an opaque full panel', (
+    tester,
+  ) async {
+    final group = _performanceProxy(0).copyWith(
+      tag: 'group',
+      displayName: 'Group',
+      isGroup: true,
+      childTags: ['child'],
+      childCount: 1,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ProxiesPage(
+            proxies: [group],
+            selectedTag: '',
+            connected: false,
+            progressiveBlurEnabled: false,
+            onSelected: (_) {},
+            onUrlTest: () async {},
+            groupChildrenByTag: {
+              'group': [_performanceProxy(1).copyWith(tag: 'child')],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tile = tester.widget<ProxyTile>(
+      find.byWidgetPredicate(
+        (widget) => widget is ProxyTile && widget.proxy.tag == 'group',
+      ),
+    );
+    tile.onOpenGroup!(Rect.zero);
+    await tester.pumpAndSettle();
+    final surface = find.byKey(const ValueKey('proxy-group-sheet-surface'));
+    expect(surface, findsOneWidget);
+    expect(tester.widget<ColoredBox>(surface).color.a, 1);
+    expect(
+      tester.getSize(surface).width,
+      tester.view.physicalSize.width / tester.view.devicePixelRatio,
+    );
+    expect(tester.getSize(surface).height, greaterThan(400));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'proxy latency dots update discretely and pause with TickerMode',
     (tester) async {
