@@ -302,6 +302,70 @@ void main() {
     expect(result.success, isTrue);
     expect(result.policy, RuntimeApplyPolicy.fullServiceRestart);
   });
+
+  test('stop runtime confirms stopped reactively from event stream', () async {
+    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      stopSettleDelay: Duration.zero,
+      stopVerificationTimeout: const Duration(seconds: 3),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final stopFuture = controller.stopRuntime(reason: 'test_reactive_stop');
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    runtime.confirmStopped();
+
+    final stopped = await stopFuture;
+    expect(stopped, isTrue);
+    expect(runtime.stopCalls, 1);
+  });
+
+  test('stop runtime falls back to heartbeat status poll if event dropped', () async {
+    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      stopSettleDelay: Duration.zero,
+      stopVerificationTimeout: const Duration(seconds: 3),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final stopFuture = controller.stopRuntime(reason: 'test_fallback_heartbeat');
+
+    // Update state directly without emitting event
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    runtime.running = false;
+    runtime.recordedServiceAlive = false;
+    runtime.activeRuntimeOwner = false;
+
+    final stopped = await stopFuture;
+    expect(stopped, isTrue);
+    expect(runtime.stopCalls, 1);
+  });
+
+  test('stop runtime returns false if stop verification times out', () async {
+    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      stopSettleDelay: Duration.zero,
+      stopVerificationTimeout: const Duration(milliseconds: 100),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final stopped = await controller.stopRuntime(reason: 'test_timeout');
+    expect(stopped, isFalse);
+    expect(runtime.stopCalls, 1);
+  });
 }
 
 SingboxConfigBuildResult _build() {
@@ -468,6 +532,20 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     _eventsController.add(<String, dynamic>{
       'type': 'state',
       'running': true,
+      'mode': mode,
+      'runtimeGeneration': runtimeGeneration,
+      'error': null,
+    });
+  }
+
+  void confirmStopped() {
+    running = false;
+    recordedServiceAlive = false;
+    activeRuntimeOwner = false;
+    runtimeGeneration = 0;
+    _eventsController.add(<String, dynamic>{
+      'type': 'state',
+      'running': false,
       'mode': mode,
       'runtimeGeneration': runtimeGeneration,
       'error': null,

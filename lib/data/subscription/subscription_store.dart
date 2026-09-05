@@ -496,7 +496,12 @@ class SubscriptionStore {
 
   /// Saves only lightweight subscription metadata.
   static Future<void> saveMetadata(Subscription sub) async {
-    await _withSubscriptionWriteLock(sub.id, () => _saveMetadataUnlocked(sub));
+    await _withSubscriptionWriteLock(sub.id, () async {
+      if (!_metaStore.containsKey(sub.id)) {
+        return;
+      }
+      await _saveMetadataUnlocked(sub);
+    });
   }
 
   /// Persists a proxy selection without letting an older in-memory snapshot
@@ -557,6 +562,9 @@ class SubscriptionStore {
     required Map<String, int> latestPings,
     required Map<String, Map<String, String?>> externalInfos,
   }) async {
+    if (!_metaStore.containsKey(id)) {
+      return false;
+    }
     // Latency belongs to the current runtime session. Persisting it makes an
     // old value look fresh after reconnect or process restart.
     final updates = <String, Map<String, Object?>>{};
@@ -608,19 +616,33 @@ class SubscriptionStore {
   /// Deletes a subscription by ID.
   static Future<void> delete(String id) async {
     await ensurePayloadReady();
-    await _metaStore.delete(id);
-    await _payloadStore.delete(id);
+    await _withSubscriptionWriteLock(id, () async {
+      await _metaStore.delete(id);
+      await _payloadStore.delete(id);
+    });
   }
 
   static Future<void> deleteMany(Iterable<String> ids) async {
     await ensurePayloadReady();
-    await _metaStore.deleteAll(ids);
-    await _payloadStore.deleteAll(ids);
+    final idList = ids.toList(growable: false);
+    for (final id in idList) {
+      await _withSubscriptionWriteLock(id, () async {
+        await _metaStore.delete(id);
+        await _payloadStore.delete(id);
+      });
+    }
   }
 
   /// Deletes all subscriptions.
   static Future<void> clear() async {
     await ensurePayloadReady();
+    final ids = getAllMetadata().map((s) => s.id).toList(growable: false);
+    for (final id in ids) {
+      await _withSubscriptionWriteLock(id, () async {
+        await _metaStore.delete(id);
+        await _payloadStore.delete(id);
+      });
+    }
     await _metaStore.clear();
     await _payloadStore.clear();
   }
@@ -1544,10 +1566,15 @@ class SubscriptionStore {
   static Future<void> _saveOrdered(List<Subscription> subscriptions) async {
     final payload = <dynamic, String>{};
     for (var i = 0; i < subscriptions.length; i++) {
+      if (!_metaStore.containsKey(subscriptions[i].id)) {
+        continue;
+      }
       final normalized = subscriptions[i].copyWith(sortOrder: i);
       payload[normalized.id] = jsonEncode(normalized.toMetadataMap());
     }
-    await _metaStore.putAll(payload);
+    if (payload.isNotEmpty) {
+      await _metaStore.putAll(payload);
+    }
   }
 
   static void _logBuildWarningEntries(List<dynamic> warnings) {

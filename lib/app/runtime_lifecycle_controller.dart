@@ -586,29 +586,94 @@ class RuntimeLifecycleController {
       await Future<void>.delayed(stopSettleDelay);
     }
     final deadline = DateTime.now().add(stopVerificationTimeout);
-    do {
-      try {
-        final remaining = deadline.difference(DateTime.now());
-        final status = await _runtime.status().timeout(
-          remaining > Duration.zero
-              ? remaining
-              : const Duration(milliseconds: 1),
-        );
-        final stopped =
-            status['running'] != true &&
-            status['recordedServiceAlive'] != true &&
-            status['activeRuntimeOwner'] != true;
-        if (stopped) {
-          return true;
+
+    // 1. Fast path: check current status immediately.
+    try {
+      final status = await _runtime.status().timeout(
+        const Duration(milliseconds: 300),
+      );
+      if (_isStoppedRuntimeStatus(status)) {
+        return true;
+      }
+    } catch (error) {
+      AppLogStore.warning(
+        'runtime',
+        'initial status probe during stop check was non-fatal: $error',
+      );
+    }
+
+    // 2. Reactively await stop event from the runtime event stream.
+    final completer = Completer<bool>();
+    StreamSubscription<Map<String, dynamic>>? subscription;
+    Timer? fallbackTimer;
+
+    void completeOnce(bool result) {
+      if (!completer.isCompleted) {
+        completer.complete(result);
+      }
+    }
+
+    try {
+      subscription = _runtime.events.listen((event) {
+        final type = event['type']?.toString() ?? '';
+        if (type == pigeon.runtimeEventState) {
+          final running = event['running'] == true;
+          if (!running) {
+            AppLogStore.info('runtime', 'runtime stop confirmed via event');
+            completeOnce(true);
+          }
         }
-      } catch (error) {
-        AppLogStore.warning('runtime', 'failed to verify native stop: $error');
+      }, onError: (Object error) {
+        AppLogStore.warning('runtime', 'runtime event error during stop: $error');
+      });
+
+      // Low-frequency heartbeat (1.5s) to guard against dropped stream frames
+      fallbackTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+        if (completer.isCompleted) return;
+        final currentRemaining = deadline.difference(DateTime.now());
+        if (currentRemaining <= Duration.zero) {
+          completeOnce(false);
+          return;
+        }
+        try {
+          final status = await _runtime.status().timeout(
+            const Duration(milliseconds: 800),
+          );
+          if (_isStoppedRuntimeStatus(status)) {
+            AppLogStore.info(
+              'runtime',
+              'runtime stop confirmed via heartbeat poll',
+            );
+            completeOnce(true);
+          }
+        } catch (error) {
+          AppLogStore.warning(
+            'runtime',
+            'fallback stop heartbeat poll failed: $error',
+          );
+        }
+      });
+
+      final remainingWait = deadline.difference(DateTime.now());
+      if (remainingWait <= Duration.zero) {
+        return false;
       }
-      if (DateTime.now().isBefore(deadline)) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-    } while (DateTime.now().isBefore(deadline));
-    return false;
+
+      final confirmed = await completer.future.timeout(
+        remainingWait,
+        onTimeout: () => false,
+      );
+      return confirmed;
+    } finally {
+      fallbackTimer?.cancel();
+      await subscription?.cancel();
+    }
+  }
+
+  bool _isStoppedRuntimeStatus(Map<String, dynamic> status) {
+    return status['running'] != true &&
+        status['recordedServiceAlive'] != true &&
+        status['activeRuntimeOwner'] != true;
   }
 
   Future<void> _applyBuild({
