@@ -153,7 +153,7 @@ class LatencyCoordinator {
     final tag = rawTag.trim();
     if (!isRunning || tag.isEmpty) return false;
     if (_targetTag.isNotEmpty) {
-      return _targetTag == tag;
+      return _targetTag == tag && !_acceptedEventTimes.containsKey(tag);
     }
     if (_sessionExpectedTags.isEmpty) {
       return true;
@@ -253,6 +253,10 @@ class LatencyCoordinator {
       );
       return true;
     }
+    // Silence does not mean completion while known targets are still queued.
+    // A slow batch may take longer than the inactivity timeout; retain its
+    // checking state until results arrive or the bounded session deadline.
+    if (_sessionExpectedTags.isNotEmpty) return true;
     _settleTimer?.cancel();
     final generation = _generation;
     _settleTimer = Timer(uiPolicy.eventInactivityTimeout, () {
@@ -408,7 +412,16 @@ class LatencyCoordinator {
           '${capabilities.urlTestCompletionModel.name}',
     );
 
-    _watchdogTimer = Timer(uiPolicy.hardWatchdog, () {
+    // Allow the coalesced result stream to drain after the native deadline.
+    final nativeBudget =
+        Duration(milliseconds: request.deadlineMillis) +
+        const Duration(seconds: 5);
+    final sessionBudget =
+        capabilities.supportsUrlTestDeadline &&
+            nativeBudget < uiPolicy.hardWatchdog
+        ? nativeBudget
+        : uiPolicy.hardWatchdog;
+    _watchdogTimer = Timer(sessionBudget, () {
       if (generation != _generation) return;
       _settleCurrent(
         success: _successfulTags.isNotEmpty,
@@ -458,7 +471,7 @@ class LatencyCoordinator {
         return;
       }
       _phase = LatencySessionPhase.collectingEvents;
-      if (_acceptedEventTimes.isNotEmpty) {
+      if (_acceptedEventTimes.isNotEmpty || _sessionExpectedTags.isNotEmpty) {
         return;
       }
       _firstEventTimer?.cancel();

@@ -1623,7 +1623,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         latencyFresh: selectedChildWithRuntime?.latencyFresh ?? false,
         latencyChecking:
             selectedChildWithRuntime?.latencyChecking ??
-            (_urlTestInFlight && selectedChildTag == null),
+            (selectedChildTag != null
+                ? _latencyCoordinator.isChecking(selectedChildTag)
+                : _urlTestInFlight),
         latencyUnavailable: unavailable,
         latencyError: selectedChildWithRuntime?.latencyError,
         clearLatencyError: selectedChildWithRuntime?.latencyError == null,
@@ -6469,7 +6471,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final affectedTags = _proxyRuntime
         .markMissingStartupMeasurementsUnavailable(
-          _expectedLatencyTagsForSession(''),
+          _expectedLatencyTagsForSession(
+            '',
+          ).where((tag) => !_latencyCoordinator.isChecking(tag)),
         );
     AppLogStore.info(
       'latency',

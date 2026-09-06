@@ -12,6 +12,59 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  test(
+    '900 queued proxies keep checking across gaps between batches',
+    () async {
+      final tags = List.generate(900, (index) => 'proxy-$index');
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => tags,
+        outboundCount: () => tags.length,
+      );
+      addTearDown(coordinator.dispose);
+      final result = coordinator.runFull(reason: 'large subscription');
+      expect(tags.every(coordinator.isChecking), isTrue);
+      expect(coordinator.isChecking('excluded-proxy'), isFalse);
+
+      // The queue must outlive both the first-event and inactivity heuristics.
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      expect(coordinator.isChecking(tags.last), isTrue);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      coordinator.handleGroupEvent(
+        tag: tags.first,
+        timeSeconds: now,
+        available: true,
+      );
+      coordinator.handleGroupEvent(
+        tag: tags[1],
+        timeSeconds: now,
+        available: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(coordinator.isRunning, isTrue);
+      expect(coordinator.isChecking(tags.first), isFalse);
+      expect(coordinator.isChecking(tags[1]), isFalse);
+      expect(coordinator.isChecking(tags.last), isTrue);
+      coordinator.cancel();
+      expect(await result, isFalse);
+      expect(tags.any(coordinator.isChecking), isFalse);
+    },
+  );
+
+  test(
+    'deadline releases untested queue without fabricating success',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => ['never-reached'],
+      );
+      addTearDown(coordinator.dispose);
+      expect(await coordinator.runFull(reason: 'deadline'), isFalse);
+      expect(coordinator.isChecking('never-reached'), isFalse);
+      expect(coordinator.isRunning, isFalse);
+    },
+  );
+
   test('bundled core capabilities do not advertise unsupported controls', () {
     const capabilities = LibboxCapabilities.bundledLegacy;
 
