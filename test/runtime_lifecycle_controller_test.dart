@@ -239,7 +239,10 @@ void main() {
   );
 
   test('start service confirms reactively via events stream', () async {
-    final runtime = _FakeRuntime(running: false, confirmStartImmediately: false);
+    final runtime = _FakeRuntime(
+      running: false,
+      confirmStartImmediately: false,
+    );
     final controller = RuntimeLifecycleController(
       runtime: runtime,
       startTimeout: const Duration(seconds: 2),
@@ -269,39 +272,45 @@ void main() {
     expect(runtime.running, isTrue);
   });
 
-  test('start service falls back to heartbeat status poll if event dropped', () async {
-    final runtime = _FakeRuntime(running: false, confirmStartImmediately: false);
-    final controller = RuntimeLifecycleController(
-      runtime: runtime,
-      startTimeout: const Duration(seconds: 3),
-    );
-    addTearDown(() {
-      controller.dispose();
-      runtime.dispose();
-    });
+  test(
+    'start service falls back to heartbeat status poll if event dropped',
+    () async {
+      final runtime = _FakeRuntime(
+        running: false,
+        confirmStartImmediately: false,
+      );
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        startTimeout: const Duration(seconds: 3),
+      );
+      addTearDown(() {
+        controller.dispose();
+        runtime.dispose();
+      });
 
-    final startFuture = controller.startRuntimeWithBuild(
-      build: _build(),
-      useVpn: true,
-      promotePreparedConfig: (_) {},
-      cacheStartedBuild: (_) {},
-      logCall: (_, _) {},
-      trimMemory: (_) {},
-      onWatchdogTimeout: (_) {},
-    );
+      final startFuture = controller.startRuntimeWithBuild(
+        build: _build(),
+        useVpn: true,
+        promotePreparedConfig: (_) {},
+        cacheStartedBuild: (_) {},
+        logCall: (_, _) {},
+        trimMemory: (_) {},
+        onWatchdogTimeout: (_) {},
+      );
 
-    // Update status WITHOUT emitting on events stream
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    runtime.running = true;
-    runtime.mode = 'vpn';
-    runtime.recordedServiceAlive = true;
-    runtime.activeRuntimeOwner = true;
-    runtime.runtimeGeneration = 1;
+      // Update status WITHOUT emitting on events stream
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      runtime.running = true;
+      runtime.mode = 'vpn';
+      runtime.recordedServiceAlive = true;
+      runtime.activeRuntimeOwner = true;
+      runtime.runtimeGeneration = 1;
 
-    final result = await startFuture;
-    expect(result.success, isTrue);
-    expect(result.policy, RuntimeApplyPolicy.fullServiceRestart);
-  });
+      final result = await startFuture;
+      expect(result.success, isTrue);
+      expect(result.policy, RuntimeApplyPolicy.fullServiceRestart);
+    },
+  );
 
   test('stop runtime confirms stopped reactively from event stream', () async {
     final runtime = _FakeRuntime(running: true, ignoreStop: true);
@@ -325,70 +334,204 @@ void main() {
     expect(runtime.stopCalls, 1);
   });
 
-  test('stop runtime does not confirm stop when running is false but cleanup is pending', () async {
-    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+  test(
+    'stop runtime does not confirm stop when running is false but cleanup is pending',
+    () async {
+      final runtime = _FakeRuntime(running: true, ignoreStop: true);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        stopSettleDelay: Duration.zero,
+        stopVerificationTimeout: const Duration(seconds: 3),
+      );
+      addTearDown(() {
+        controller.dispose();
+        runtime.dispose();
+      });
+
+      final stopFuture = controller.stopRuntime(reason: 'test_pending_cleanup');
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      // Simulate fail() where running=false is emitted, but service is still cleaning up
+      runtime.running = false;
+      runtime.recordedServiceAlive = true;
+      runtime.activeRuntimeOwner = true;
+      runtime.emitStateEvent(
+        running: false,
+        recordedServiceAlive: true,
+        activeRuntimeOwner: true,
+        error: 'test_fail',
+      );
+
+      // Give it a short delay: stopFuture must NOT have completed yet
+      var completedEarly = false;
+      unawaited(stopFuture.then((_) => completedEarly = true));
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(completedEarly, isFalse);
+
+      // Now complete the actual service cleanup
+      runtime.confirmStopped();
+
+      final stopped = await stopFuture;
+      expect(stopped, isTrue);
+      expect(runtime.stopCalls, 1);
+    },
+  );
+
+  test(
+    'stop runtime falls back to heartbeat status poll if event dropped',
+    () async {
+      final runtime = _FakeRuntime(running: true, ignoreStop: true);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        stopSettleDelay: Duration.zero,
+        stopVerificationTimeout: const Duration(seconds: 3),
+      );
+      addTearDown(() {
+        controller.dispose();
+        runtime.dispose();
+      });
+
+      final stopFuture = controller.stopRuntime(
+        reason: 'test_fallback_heartbeat',
+      );
+
+      // Update state directly without emitting event
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      runtime.running = false;
+      runtime.recordedServiceAlive = false;
+      runtime.activeRuntimeOwner = false;
+
+      final stopped = await stopFuture;
+      expect(stopped, isTrue);
+      expect(runtime.stopCalls, 1);
+    },
+  );
+
+  test(
+    'stale stopped event cannot override current native ownership',
+    () async {
+      final runtime = _FakeRuntime(ignoreStop: true);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        stopSettleDelay: Duration.zero,
+        stopVerificationTimeout: const Duration(milliseconds: 100),
+      );
+      addTearDown(controller.dispose);
+      addTearDown(runtime.dispose);
+      final stopping = controller.stopRuntime(reason: 'stale_event');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      runtime.emitStateEvent(
+        running: false,
+        recordedServiceAlive: false,
+        activeRuntimeOwner: false,
+      );
+      expect(await stopping, isFalse);
+      expect(runtime.statusCalls, greaterThanOrEqualTo(2));
+    },
+  );
+
+  test('incomplete status never confirms native cleanup', () async {
+    final runtime = _FakeRuntime(ignoreStop: true)
+      ..statusResponse = () async => <String, dynamic>{'running': false};
     final controller = RuntimeLifecycleController(
       runtime: runtime,
       stopSettleDelay: Duration.zero,
-      stopVerificationTimeout: const Duration(seconds: 3),
+      stopVerificationTimeout: const Duration(milliseconds: 50),
     );
-    addTearDown(() {
-      controller.dispose();
-      runtime.dispose();
-    });
-
-    final stopFuture = controller.stopRuntime(reason: 'test_pending_cleanup');
-
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    // Simulate fail() where running=false is emitted, but service is still cleaning up
-    runtime.running = false;
-    runtime.recordedServiceAlive = true;
-    runtime.activeRuntimeOwner = true;
-    runtime.emitStateEvent(
-      running: false,
-      recordedServiceAlive: true,
-      activeRuntimeOwner: true,
-      error: 'test_fail',
-    );
-
-    // Give it a short delay: stopFuture must NOT have completed yet
-    var completedEarly = false;
-    unawaited(stopFuture.then((_) => completedEarly = true));
-    await Future<void>.delayed(const Duration(milliseconds: 60));
-    expect(completedEarly, isFalse);
-
-    // Now complete the actual service cleanup
-    runtime.confirmStopped();
-
-    final stopped = await stopFuture;
-    expect(stopped, isTrue);
-    expect(runtime.stopCalls, 1);
+    addTearDown(controller.dispose);
+    addTearDown(runtime.dispose);
+    expect(await controller.stopRuntime(reason: 'incomplete_status'), isFalse);
   });
 
-  test('stop runtime falls back to heartbeat status poll if event dropped', () async {
-    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+  test(
+    'events during initial probe are coalesced into one follow-up',
+    () async {
+      final firstProbe = Completer<Map<String, dynamic>>();
+      final runtime = _FakeRuntime(ignoreStop: true);
+      runtime.statusResponse = () => firstProbe.future;
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        stopSettleDelay: Duration.zero,
+        stopVerificationTimeout: const Duration(milliseconds: 400),
+      );
+      addTearDown(controller.dispose);
+      addTearDown(runtime.dispose);
+      final stopping = controller.stopRuntime(reason: 'event_burst');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(runtime.statusCalls, 1);
+      runtime.confirmStopped();
+      for (var i = 0; i < 50; i++) {
+        runtime.emitStateEvent(running: false);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(runtime.statusCalls, 1);
+      runtime.statusResponse = null;
+      firstProbe.complete(<String, dynamic>{
+        'running': true,
+        'recordedServiceAlive': true,
+        'activeRuntimeOwner': true,
+      });
+      expect(await stopping, isTrue);
+      expect(runtime.statusCalls, 2);
+    },
+  );
+
+  test('hung initial probe respects stop verification deadline', () async {
+    final pending = Completer<Map<String, dynamic>>();
+    final runtime = _FakeRuntime(ignoreStop: true)
+      ..statusResponse = () => pending.future;
     final controller = RuntimeLifecycleController(
       runtime: runtime,
       stopSettleDelay: Duration.zero,
-      stopVerificationTimeout: const Duration(seconds: 3),
+      stopVerificationTimeout: const Duration(milliseconds: 30),
     );
-    addTearDown(() {
-      controller.dispose();
-      runtime.dispose();
+    addTearDown(controller.dispose);
+    addTearDown(runtime.dispose);
+    expect(
+      await controller
+          .stopRuntime(reason: 'hung_status')
+          .timeout(const Duration(milliseconds: 200)),
+      isFalse,
+    );
+    pending.complete(<String, dynamic>{
+      'running': false,
+      'recordedServiceAlive': false,
+      'activeRuntimeOwner': false,
     });
-
-    final stopFuture = controller.stopRuntime(reason: 'test_fallback_heartbeat');
-
-    // Update state directly without emitting event
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    runtime.running = false;
-    runtime.recordedServiceAlive = false;
-    runtime.activeRuntimeOwner = false;
-
-    final stopped = await stopFuture;
-    expect(stopped, isTrue);
-    expect(runtime.stopCalls, 1);
+    await Future<void>.delayed(Duration.zero);
+    expect(runtime.statusCalls, 1);
   });
+
+  test(
+    'early failure event does not allow full restart over old core',
+    () async {
+      final runtime = _FakeRuntime(ignoreStop: true);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        stopSettleDelay: Duration.zero,
+        stopVerificationTimeout: const Duration(milliseconds: 80),
+      );
+      addTearDown(controller.dispose);
+      addTearDown(runtime.dispose);
+      final restarting = controller.applyRuntimeBuild(
+        build: _build(),
+        useVpn: true,
+        policy: RuntimeApplyPolicy.fullServiceRestart,
+        promotePreparedConfig: (_) {},
+        cacheStartedBuild: (_) {},
+        logCall: (_, _) {},
+        trimMemory: (_) {},
+        onWatchdogTimeout: (_) {},
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      runtime.running = false;
+      runtime.emitStateEvent(running: false, error: 'close_failed');
+      final result = await restarting;
+      expect(result.success, isFalse);
+      expect(runtime.startPreparedCalls, 0);
+      expect(runtime.prepareVpnCalls, 0);
+    },
+  );
 
   test('stop runtime returns false if stop verification times out', () async {
     final runtime = _FakeRuntime(running: true, ignoreStop: true);
@@ -456,6 +599,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   int prepareVpnCalls = 0;
   int startPreparedCalls = 0;
   int statusCalls = 0;
+  Future<Map<String, dynamic>> Function()? statusResponse;
   bool? lastRestartCore;
 
   final StreamController<Map<String, dynamic>> _eventsController =
@@ -543,6 +687,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   @override
   Future<Map<String, dynamic>> status() async {
     statusCalls++;
+    if (statusResponse != null) return statusResponse!();
     return <String, dynamic>{
       'running': running,
       'mode': mode,

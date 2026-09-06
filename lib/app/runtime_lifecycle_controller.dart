@@ -271,7 +271,7 @@ class RuntimeLifecycleController {
         AppLogStore.info(
           'runtime',
           'runtime start confirmed immediately mode=${lastStatus['mode']} '
-          'generation=${lastStatus['runtimeGeneration']}',
+              'generation=${lastStatus['runtimeGeneration']}',
         );
         return true;
       }
@@ -294,29 +294,37 @@ class RuntimeLifecycleController {
     }
 
     try {
-      subscription = _runtime.events.listen((event) {
-        final type = event['type']?.toString() ?? '';
-        if (type == pigeon.runtimeEventState) {
-          final expectedMode = useVpn ? 'vpn' : 'proxy';
-          final running = event['running'] == true;
-          final mode = event['mode']?.toString() ?? '';
-          final runtimeGeneration =
-              (event['runtimeGeneration'] as num?)?.toInt() ?? 0;
-          if (running && mode == expectedMode && runtimeGeneration > 0) {
-            AppLogStore.info(
-              'runtime',
-              'runtime start confirmed via event mode=$mode '
-              'generation=$runtimeGeneration',
-            );
-            completeOnce(true);
+      subscription = _runtime.events.listen(
+        (event) {
+          final type = event['type']?.toString() ?? '';
+          if (type == pigeon.runtimeEventState) {
+            final expectedMode = useVpn ? 'vpn' : 'proxy';
+            final running = event['running'] == true;
+            final mode = event['mode']?.toString() ?? '';
+            final runtimeGeneration =
+                (event['runtimeGeneration'] as num?)?.toInt() ?? 0;
+            if (running && mode == expectedMode && runtimeGeneration > 0) {
+              AppLogStore.info(
+                'runtime',
+                'runtime start confirmed via event mode=$mode '
+                    'generation=$runtimeGeneration',
+              );
+              completeOnce(true);
+            }
           }
-        }
-      }, onError: (Object error) {
-        AppLogStore.warning('runtime', 'runtime event error during start: $error');
-      });
+        },
+        onError: (Object error) {
+          AppLogStore.warning(
+            'runtime',
+            'runtime event error during start: $error',
+          );
+        },
+      );
 
       // Low-frequency heartbeat (1.5s) to guard against dropped stream frames
-      fallbackTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+      fallbackTimer = Timer.periodic(const Duration(milliseconds: 1500), (
+        _,
+      ) async {
         if (completer.isCompleted) return;
         final currentRemaining = deadline.difference(DateTime.now());
         if (currentRemaining <= Duration.zero) {
@@ -332,7 +340,7 @@ class RuntimeLifecycleController {
             AppLogStore.info(
               'runtime',
               'runtime start confirmed via heartbeat poll mode=${status['mode']} '
-              'generation=${status['runtimeGeneration']}',
+                  'generation=${status['runtimeGeneration']}',
             );
             completeOnce(true);
           }
@@ -358,10 +366,10 @@ class RuntimeLifecycleController {
         AppLogStore.warning(
           'runtime',
           'runtime start was not confirmed useVpn=$useVpn '
-          'running=${lastStatus['running']} mode=${lastStatus['mode']} '
-          'generation=${lastStatus['runtimeGeneration']} '
-          'recordedServiceAlive=${lastStatus['recordedServiceAlive']} '
-          'activeRuntimeOwner=${lastStatus['activeRuntimeOwner']}',
+              'running=${lastStatus['running']} mode=${lastStatus['mode']} '
+              'generation=${lastStatus['runtimeGeneration']} '
+              'recordedServiceAlive=${lastStatus['recordedServiceAlive']} '
+              'activeRuntimeOwner=${lastStatus['activeRuntimeOwner']}',
         );
       }
       return confirmed;
@@ -587,25 +595,12 @@ class RuntimeLifecycleController {
     }
     final deadline = DateTime.now().add(stopVerificationTimeout);
 
-    // 1. Fast path: check current status immediately.
-    try {
-      final status = await _runtime.status().timeout(
-        const Duration(milliseconds: 300),
-      );
-      if (_isStoppedRuntimeStatus(status)) {
-        return true;
-      }
-    } catch (error) {
-      AppLogStore.warning(
-        'runtime',
-        'initial status probe during stop check was non-fatal: $error',
-      );
-    }
-
-    // 2. Reactively await stop event from the runtime event stream.
     final completer = Completer<bool>();
     StreamSubscription<Map<String, dynamic>>? subscription;
     Timer? fallbackTimer;
+    var disposed = false;
+    var probing = false;
+    var probeRequested = false;
 
     void completeOnce(bool result) {
       if (!completer.isCompleted) {
@@ -613,75 +608,63 @@ class RuntimeLifecycleController {
       }
     }
 
-    try {
-      subscription = _runtime.events.listen((event) async {
-        final type = event['type']?.toString() ?? '';
-        if (type == pigeon.runtimeEventState) {
-          final running = event['running'] == true;
-          if (!running) {
-            final eventRecordedAlive = event['recordedServiceAlive'];
-            final eventActiveOwner = event['activeRuntimeOwner'];
-            if (eventRecordedAlive == false && eventActiveOwner == false) {
-              AppLogStore.info('runtime', 'runtime stop confirmed via state event');
+    Future<void> probeStatus() async {
+      if (disposed || completer.isCompleted) return;
+      probeRequested = true;
+      if (probing) return;
+      probing = true;
+      try {
+        do {
+          probeRequested = false;
+          final remaining = deadline.difference(DateTime.now());
+          if (remaining <= Duration.zero) {
+            completeOnce(false);
+            return;
+          }
+          try {
+            final status = await _runtime.status().timeout(
+              remaining < const Duration(milliseconds: 500)
+                  ? remaining
+                  : const Duration(milliseconds: 500),
+            );
+            if (!disposed && _isStoppedRuntimeStatus(status)) {
               completeOnce(true);
-              return;
             }
-            try {
-              final status = await _runtime.status().timeout(
-                const Duration(milliseconds: 400),
-              );
-              if (_isStoppedRuntimeStatus(status)) {
-                AppLogStore.info(
-                  'runtime',
-                  'runtime stop confirmed via event verified by status',
-                );
-                completeOnce(true);
-              } else {
-                AppLogStore.info(
-                  'runtime',
-                  'runtime stop event received running=false but service still active '
-                  '(serviceAlive=${status['recordedServiceAlive']}, '
-                  'activeOwner=${status['activeRuntimeOwner']})',
-                );
-              }
-            } catch (error) {
+          } catch (error) {
+            if (!disposed) {
               AppLogStore.warning(
                 'runtime',
-                'status verification after stop event was non-fatal: $error',
+                'status verification during stop was non-fatal: $error',
               );
             }
           }
-        }
-      }, onError: (Object error) {
-        AppLogStore.warning('runtime', 'runtime event error during stop: $error');
-      });
+        } while (probeRequested && !disposed && !completer.isCompleted);
+      } finally {
+        probing = false;
+      }
+    }
 
-      // Low-frequency heartbeat (500ms) to guard against dropped stream frames
-      fallbackTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
-        if (completer.isCompleted) return;
-        final currentRemaining = deadline.difference(DateTime.now());
-        if (currentRemaining <= Duration.zero) {
-          completeOnce(false);
-          return;
-        }
-        try {
-          final status = await _runtime.status().timeout(
-            const Duration(milliseconds: 500),
-          );
-          if (_isStoppedRuntimeStatus(status)) {
-            AppLogStore.info(
-              'runtime',
-              'runtime stop confirmed via heartbeat poll',
-            );
-            completeOnce(true);
+    try {
+      // Subscribe before the first probe so a stop during that probe is not
+      // lost. Events are hints, never authoritative cleanup acknowledgements.
+      subscription = _runtime.events.listen(
+        (event) {
+          if (event['type'] == pigeon.runtimeEventState &&
+              event['running'] == false) {
+            unawaited(probeStatus());
           }
-        } catch (error) {
+        },
+        onError: (Object error) {
           AppLogStore.warning(
             'runtime',
-            'fallback stop heartbeat poll failed: $error',
+            'runtime event error during stop: $error',
           );
-        }
+        },
+      );
+      fallbackTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        unawaited(probeStatus());
       });
+      unawaited(probeStatus());
 
       final remainingWait = deadline.difference(DateTime.now());
       if (remainingWait <= Duration.zero) {
@@ -694,15 +677,16 @@ class RuntimeLifecycleController {
       );
       return confirmed;
     } finally {
+      disposed = true;
       fallbackTimer?.cancel();
       await subscription?.cancel();
     }
   }
 
   bool _isStoppedRuntimeStatus(Map<String, dynamic> status) {
-    return status['running'] != true &&
-        status['recordedServiceAlive'] != true &&
-        status['activeRuntimeOwner'] != true;
+    return status['running'] == false &&
+        status['recordedServiceAlive'] == false &&
+        status['activeRuntimeOwner'] == false;
   }
 
   Future<void> _applyBuild({

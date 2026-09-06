@@ -75,6 +75,30 @@ cd android
     No operation may leave the client permanently in “building config”,
     “restoring”, or “stopping”.
 
+## Stop acknowledgement regression checks
+
+- An error event with `running=false` is not a stop acknowledgement. Verify that
+  a full restart stays blocked while status reports an active native owner or
+  a recorded live service. Delayed state events must not override current status.
+- Normal stop, terminal timeout recovery and core restart share one
+  `NativeServiceCloseTask` per native lifetime. Repeated stop requests must not
+  call `closeService()` concurrently. A wait timeout does not cancel JNI/Go work.
+- After a slow close eventually succeeds, cleanup must finish and ownership must
+  be released without a second native close or a manual retry. This also applies
+  if Android already called the hosting service's `onDestroy()`.
+- Start/reload must remain blocked across both VPN/proxy service instances while
+  an earlier native close is unconfirmed. Do not clear ownership, DNS cache or
+  stop waiters as successful merely to remove a stuck notification.
+- If native close throws or never returns, stop remains unconfirmed. This is a
+  deliberate safety failure, not successful recovery; a fresh application
+  process may be required. Do not replace the original close result with the
+  result of an independently retried `closeService()` call.
+- No native cleanup waits may run on the Android main looper.
+
+Automated coverage: `NativeServiceCloseTaskTest`, `VpnServiceLifecyclePolicyTest`
+and `test/runtime_lifecycle_controller_test.dart`. Device soak testing is still
+required for actual JNI/TUN shutdown and Android service recreation.
+
 ## Runtime sampling
 
 Capture a baseline after the VPN has been stable for two minutes, then sample

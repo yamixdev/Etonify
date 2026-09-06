@@ -94,6 +94,9 @@ class MeowBoxService(
             }
         }
 
+        private fun hasClosingRuntime(except: MeowBoxService? = null): Boolean =
+            activeServices.any { it !== except && it.nativeCloseTask != null }
+
         /**
          * Flutter may be paused or its event sink detached while the VPN keeps
          * running. Keep the notification snapshot with the foreground service.
@@ -165,6 +168,11 @@ class MeowBoxService(
 
     @Volatile
     private var commandServer: CommandServer? = null
+
+    // Written on the service executor; other service instances read it to
+    // prevent a new Android Service from replacing a still-closing runtime.
+    @Volatile
+    private var nativeCloseTask: NativeServiceCloseTask? = null
 
     @Volatile
     private var receiverRegistered = false
@@ -293,7 +301,7 @@ class MeowBoxService(
         }
         destroyed = true
         MeowDiagnostics.log(TAG, "onDestroy")
-        activeServices -= this
+        // Keep native ownership visible until closeService really finishes.
         startRequestGeneration.set(Long.MIN_VALUE)
         cancelPendingStartRetry("service_onDestroy")
         cancelPendingNetworkHandoverProbe("service_onDestroy")
@@ -304,7 +312,6 @@ class MeowBoxService(
         submitServiceTask("service_onDestroy", allowAfterDestroy = true) {
             stopInternal("service_onDestroy", stopSelf = false, cancelStarts = false)
         }
-        executor.shutdown()
     }
 
     fun requestStop(source: String) {
@@ -409,9 +416,9 @@ class MeowBoxService(
             return false
         }
         val generation = serviceGeneration
-        return generation != 0L &&
-            generation == SingboxController.activeRuntimeGeneration &&
-            commandServer != null
+        return commandServer != null &&
+            (nativeCloseTask != null ||
+                (generation != 0L && generation == SingboxController.activeRuntimeGeneration))
     }
 
     private fun currentConfigHash(): Int? =
@@ -555,6 +562,10 @@ class MeowBoxService(
     }
 
     private fun startInternal(source: String, token: Long) {
+        if (hasClosingRuntime()) {
+            MeowDiagnostics.log(TAG, "start blocked by unconfirmed native stop source=$source")
+            return
+        }
         if (!startTokenCurrent(token)) {
             MeowDiagnostics.log(TAG, "start ignored for stale token=$token source=$source")
             return
@@ -603,6 +614,10 @@ class MeowBoxService(
         token: Long = nextStartToken("startOrReloadInternal"),
         networkWaitAttempt: Int = 0,
     ) {
+        if (hasClosingRuntime()) {
+            MeowDiagnostics.log(TAG, "reload blocked by unconfirmed native stop")
+            return
+        }
         if (!startTokenCurrent(token)) {
             Log.i(TAG, "startOrReloadInternal ignored stale token=$token")
             MeowDiagnostics.log(TAG, "startOrReloadInternal ignored stale token=$token")
@@ -808,6 +823,7 @@ class MeowBoxService(
                     service.stopSelf()
                 }
             }
+            releaseDestroyedService()
             return
         }
         unregisterRuntimeReceiver()
@@ -850,12 +866,7 @@ class MeowBoxService(
 
         // Затем закрываем native runtime и CommandServer.
         if (server != null) {
-            nativeServiceClosed = runCleanupStep(
-                "closeService source=$source",
-                NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
-            ) {
-                server.closeService()
-            }
+            nativeServiceClosed = awaitNativeServiceClose(server, source)
 
             // CommandServer is only the local RPC/status endpoint. Once
             // closeService() has acknowledged the native VPN shutdown, a slow
@@ -884,7 +895,8 @@ class MeowBoxService(
                     "nativeServiceClosed=false",
             )
 
-            showForeground("Stopping")
+            if (!destroyed) showForeground("Stopping")
+            if (shouldStopRuntimeState) SingboxController.notifyStopWaiters(false)
             return
         }
 
@@ -904,6 +916,7 @@ class MeowBoxService(
         clearPendingDnsCache(runtimeActive = false, source = "after_stop:$source")
 
         commandServer = null
+        nativeCloseTask = null
         runningConfigHash = null
         serviceGeneration = 0L
 
@@ -947,9 +960,42 @@ class MeowBoxService(
                 MeowDiagnostics.log(TAG, "stopSelf source=$source")
             }
         }
+        releaseDestroyedService()
+    }
+
+    private fun releaseDestroyedService() {
+        if (destroyed && commandServer == null) {
+            activeServices -= this
+            executor.shutdown()
+        }
+    }
+
+    private fun awaitNativeServiceClose(server: CommandServer, source: String): Boolean {
+        val task = nativeCloseTask ?: NativeServiceCloseTask { server.closeService() }.also { task ->
+            nativeCloseTask = task
+            task.start { result ->
+                result.exceptionOrNull()?.let { error ->
+                    MeowDiagnostics.log(TAG, "native service close failed source=$source", error)
+                }
+                if (result.isSuccess) {
+                    // This also finishes a close that outlived the caller's
+                    // timeout. Identity checks exclude completed stops/restarts.
+                    submitServiceTask("native_close_completed", allowAfterDestroy = true) {
+                        if (nativeCloseTask === task && commandServer === server) {
+                            stopInternal("native_close_completed", stopSelf = !destroyed)
+                        }
+                    }
+                }
+            }
+        }
+        return task.awaitClosed(NATIVE_SERVICE_CLOSE_TIMEOUT_MS)
     }
 
     private fun restartCoreInternal(source: String, token: Long = nextStartToken("restartCoreInternal:$source")) {
+        if (hasClosingRuntime(except = this)) {
+            MeowDiagnostics.log(TAG, "restart blocked by another closing service source=$source")
+            return
+        }
         if (!startTokenCurrent(token)) {
             MeowDiagnostics.log(TAG, "core restart ignored for stale token=$token source=$source")
             return
@@ -963,12 +1009,7 @@ class MeowBoxService(
         )
         val server = commandServer
         if (server != null) {
-            val closed = runCleanupStep(
-                "restart closeService source=$source",
-                NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
-            ) {
-                server.closeService()
-            }
+            val closed = awaitNativeServiceClose(server, "restart:$source")
             if (!closed) {
                 SingboxController.log(
                     "error",
@@ -983,6 +1024,7 @@ class MeowBoxService(
             fail("Failed to clear persistent DNS cache")
             return
         }
+        nativeCloseTask = null
         runningConfigHash = null
         startOrReloadInternal(token)
     }
@@ -1062,85 +1104,24 @@ class MeowBoxService(
         MeowApplication.clearRuntimeIntent()
         cancelStartRequests("terminal_force_stop:$source")
         cancelPendingNetworkHandoverProbe("terminal_force_stop:$source")
-        foregroundNotification.stopAndClear()
-        runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
         val runnable = Runnable {
             terminalForceStopRunnable = null
-            if (destroyed) {
-                terminalForceStopScheduled.set(false)
-                return@Runnable
-            }
-            val shouldForceStop = VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
-                runtimeRunning = SingboxController.running,
-                activeRuntimeOwner = ownsActiveRuntime(),
-                freshRuntimeIntent = MeowApplication.isRuntimeIntentFresh(currentMode()),
-            )
-            MeowDiagnostics.log(
-                TAG,
-                "terminal force stop verification source=$source forceStop=$shouldForceStop " +
-                    "running=${SingboxController.running} generation=$serviceGeneration",
-            )
-            if (!shouldForceStop) {
-                terminalForceStopScheduled.set(false)
-                return@Runnable
-            }
-            MeowDiagnostics.log(
-                TAG,
-                "terminal force stop executing graceful teardown source=$source " +
-                    "running=${SingboxController.running} generation=$serviceGeneration",
-            )
-            val server = commandServer
-            var nativeServiceClosed = true
-            var commandServerClosed = true
-            if (server != null) {
-                nativeServiceClosed = runCleanupStep(
-                    "terminal force closeService source=$source",
-                    NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
-                ) {
-                    server.closeService()
-                }
-                if (nativeServiceClosed) {
-                    commandServerClosed = runCleanupStep(
-                        "terminal force close command server source=$source",
-                        COMMAND_SERVER_CLOSE_TIMEOUT_MS,
-                    ) {
-                        server.close()
-                    }
+            // Never join native cleanup on the main looper, or race the normal
+            // stop/restart path. Both paths wait on the same close operation.
+            val submitted = submitServiceTask("terminal_force_stop:$source") {
+                try {
+                    if (!terminalForceStopScheduled.get() || destroyed) return@submitServiceTask
+                    val shouldStop = VpnServiceLifecyclePolicy.shouldForceStopServiceAfterTimeout(
+                        runtimeRunning = SingboxController.running,
+                        activeRuntimeOwner = ownsActiveRuntime(),
+                        freshRuntimeIntent = MeowApplication.isRuntimeIntentFresh(currentMode()),
+                    )
+                    if (shouldStop) stopInternal("terminal_force_stop:$source")
+                } finally {
+                    terminalForceStopScheduled.set(false)
                 }
             }
-            val cleanupSuccess = nativeServiceClosed && commandServerClosed
-            if (cleanupSuccess) {
-                commandServer = null
-                runningConfigHash = null
-                val generation = serviceGeneration
-                serviceGeneration = 0L
-                clearPendingDnsCache(runtimeActive = false, source = "terminal_force_stop:$source")
-                MeowApplication.clearServiceState()
-                MeowApplication.clearRuntimeIntent()
-                SingboxController.markServiceStopped(generation, "terminal_force_stop:$source")
-                foregroundNotification.stopAndClear()
-                MeowDefaultNetworkMonitor.stop()
-                MeowQuickSettingsTileService.requestRefresh(service)
-                runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
-                runCatching { service.stopSelf() }
-                terminalForceStopScheduled.set(false)
-            } else {
-                MeowDiagnostics.log(
-                    TAG,
-                    "terminal force stop cleanup failed source=$source " +
-                        "nativeServiceClosed=$nativeServiceClosed commandServerClosed=$commandServerClosed",
-                )
-                SingboxController.log(
-                    "error",
-                    "VPN native service cleanup timed out during terminal force stop source=$source",
-                )
-                foregroundNotification.stopAndClear()
-                MeowDefaultNetworkMonitor.stop()
-                MeowQuickSettingsTileService.requestRefresh(service)
-                runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
-                runCatching { service.stopSelf() }
-                SingboxController.setRunning(false, error = "runtime_cleanup_timeout")
-                SingboxController.notifyStopWaiters(false)
+            if (!submitted) {
                 terminalForceStopScheduled.set(false)
             }
         }

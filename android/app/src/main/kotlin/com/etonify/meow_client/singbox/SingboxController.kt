@@ -538,20 +538,23 @@ object SingboxController {
     }
 
     fun awaitStopped(timeoutMs: Long = 8_500L, callback: (Boolean) -> Unit) {
-        if (!running) {
-            mainHandler.post { callback(true) }
-            return
-        }
         var fired = false
         lateinit var waiter: (Boolean) -> Unit
         waiter = { success ->
             if (!fired) {
                 fired = true
-                callback(success)
+                callback(success && !running && activeRuntimeGeneration == 0L &&
+                    !MeowBoxService.hasActiveRuntimeOwner())
             }
         }
         synchronized(stopWaiterLock) {
             stopWaiters += waiter
+        }
+        // Register first to avoid losing a completion between the status check
+        // and waiter registration. running=false alone may be a fail() event.
+        if (!running && activeRuntimeGeneration == 0L && !MeowBoxService.hasActiveRuntimeOwner()) {
+            val removed = synchronized(stopWaiterLock) { stopWaiters.remove(waiter) }
+            if (removed) mainHandler.post { waiter(true) }
         }
         mainHandler.postDelayed({
             val removed = synchronized(stopWaiterLock) {
