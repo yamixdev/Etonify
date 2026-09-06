@@ -60,7 +60,7 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'vless',
@@ -108,8 +108,18 @@ class LinkParser {
     }
 
     final server = _str(v['add']);
-    final parsedPort = _toInt(v['port']);
-    final port = parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 443;
+    final rawPort = v['port'];
+    final port = !v.containsKey('port')
+        ? 443
+        : _validatedPort(
+            rawPort is String
+                ? int.tryParse(rawPort.trim())
+                : rawPort is num &&
+                      rawPort.isFinite &&
+                      rawPort == rawPort.truncateToDouble()
+                ? rawPort.toInt()
+                : null,
+          );
     final uuid = _str(v['id']);
     final aid = _toInt(v['aid']);
     final security = _str(v['scy'], 'auto');
@@ -165,7 +175,7 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'trojan',
@@ -462,7 +472,7 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'hysteria2',
@@ -505,7 +515,7 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'hysteria',
@@ -553,7 +563,7 @@ class LinkParser {
     } else {
       uuid = Uri.decodeComponent(uri.userInfo);
     }
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'tuic',
@@ -591,7 +601,7 @@ class LinkParser {
     final name = _fragment(raw);
     final uri = Uri.parse(raw);
     final p = uri.queryParameters;
-    final port = _portOr(uri, 443);
+    final port = _portOr(raw, 443);
 
     final result = <String, dynamic>{
       'type': 'anytls',
@@ -774,11 +784,20 @@ class LinkParser {
     return 0;
   }
 
-  static int _portOr(Uri uri, [int defaultPort = 443]) {
-    if (uri.hasPort && uri.port > 0 && uri.port <= 65535) {
-      return uri.port;
+  static int _portOr(String raw, [int defaultPort = 443]) {
+    // Uri normalizes an explicit :0 away for custom schemes. Inspect the
+    // original authority so invalid input cannot become a missing port.
+    final port = _explicitPortText(raw);
+    return port == null ? defaultPort : _validatedPort(int.tryParse(port));
+  }
+
+  static int _validatedPort(int? port) {
+    if (port == null || port < 1 || port > 65535) {
+      throw const FormatException(
+        'Proxy port must be an integer from 1 to 65535.',
+      );
     }
-    return defaultPort;
+    return port;
   }
 
   static String _str(dynamic v, [String fallback = '']) {
@@ -833,6 +852,11 @@ class LinkParser {
   }
 
   static int? _explicitPort(String raw) {
+    final port = _explicitPortText(raw);
+    return port == null ? null : int.tryParse(port);
+  }
+
+  static String? _explicitPortText(String raw) {
     final schemeEnd = raw.indexOf('://');
     if (schemeEnd < 0) return null;
 
@@ -852,12 +876,12 @@ class LinkParser {
       if (close < 0) return null;
       final rest = authority.substring(close + 1);
       if (!rest.startsWith(':')) return null;
-      return int.tryParse(rest.substring(1));
+      return rest.substring(1);
     }
 
     final colon = authority.lastIndexOf(':');
     if (colon < 0) return null;
-    return int.tryParse(authority.substring(colon + 1));
+    return authority.substring(colon + 1);
   }
 
   static dynamic _parseJsonValue(String? input) {

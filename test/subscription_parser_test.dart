@@ -11,6 +11,76 @@ import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 
 void main() {
+  group('explicit proxy port validation', () {
+    for (final scheme in [
+      'vless',
+      'trojan',
+      'hysteria2',
+      'hy2',
+      'hysteria',
+      'hy',
+      'tuic',
+      'anytls',
+    ]) {
+      test('$scheme defaults only a missing port', () {
+        for (final host in ['example.com', '[2001:db8::1]']) {
+          expect(
+            LinkParser.tryParse('$scheme://user@$host')?['server_port'],
+            443,
+          );
+          for (final port in [1, 443, 8443, 65535]) {
+            expect(
+              LinkParser.tryParse('$scheme://user@$host:$port')?['server_port'],
+              port,
+            );
+          }
+          for (final port in ['0', '-1', '65536', '70000', 'abc', '443.5']) {
+            expect(
+              LinkParser.tryParse('$scheme://user@$host:$port'),
+              isNull,
+              reason: '$scheme must reject explicit port $port',
+            );
+          }
+        }
+      });
+    }
+
+    test('VMess rejects invalid values without truncation or defaulting', () {
+      String link(Map<String, dynamic> fields) =>
+          'vmess://${base64Encode(utf8.encode(jsonEncode({'add': 'example.com', 'id': '00000000-0000-0000-0000-000000000001', ...fields})))}';
+      expect(LinkParser.tryParse(link({}))?['server_port'], 443);
+      for (final port in [1, 65535, '8443', ' 443 ', 443.0]) {
+        expect(LinkParser.tryParse(link({'port': port})), isNotNull);
+      }
+      for (final port in [
+        null,
+        '',
+        'abc',
+        false,
+        0,
+        -1,
+        65536,
+        '70000',
+        443.5,
+      ]) {
+        expect(
+          LinkParser.tryParse(link({'port': port})),
+          isNull,
+          reason: 'Invalid VMess port: $port',
+        );
+      }
+    });
+
+    test('invalid link does not discard valid neighbors in a subscription', () {
+      final result = SubscriptionParser.parse(
+        'vless://00000000-0000-0000-0000-000000000001@example.com:70000#Bad\n'
+        'vless://00000000-0000-0000-0000-000000000002@example.com:8443#Good',
+      );
+      expect(result.outbounds, hasLength(1));
+      expect(result.outbounds.single['server_port'], 8443);
+    });
+  });
+
   test('imports flat and legacy Xray VLESS TCP without dropping nodes', () {
     final result = SubscriptionParser.parse(
       jsonEncode([
