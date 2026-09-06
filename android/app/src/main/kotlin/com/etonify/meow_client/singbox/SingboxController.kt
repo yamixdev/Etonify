@@ -563,7 +563,7 @@ object SingboxController {
         }, timeoutMs)
     }
 
-    private fun notifyStopWaiters(success: Boolean) {
+    fun notifyStopWaiters(success: Boolean) {
         val waiters = synchronized(stopWaiterLock) {
             stopWaiters.toList().also { stopWaiters.clear() }
         }
@@ -1110,6 +1110,8 @@ object SingboxController {
                 "running" to running,
                 "mode" to serviceMode,
                 "runtimeGeneration" to activeRuntimeGeneration,
+                "recordedServiceAlive" to MeowApplication.isRecordedServiceAlive(),
+                "activeRuntimeOwner" to MeowBoxService.hasActiveRuntimeOwner(serviceMode.takeIf { it.isNotBlank() }),
                 "error" to error,
             ),
         )

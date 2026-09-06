@@ -908,9 +908,9 @@ class MeowBoxService(
         serviceGeneration = 0L
 
         if (shouldStopRuntimeState) {
-            SingboxController.markServiceStopped(generation, source)
             MeowApplication.clearServiceState()
             MeowApplication.clearRuntimeIntent()
+            SingboxController.markServiceStopped(generation, source)
             // Make notification shutdown terminal before stopForeground(). A
             // traffic/latency refresh already queued on the main looper must
             // not be able to publish notification 42 again after removal.
@@ -1090,24 +1090,59 @@ class MeowBoxService(
                     "running=${SingboxController.running} generation=$serviceGeneration",
             )
             val server = commandServer
-            commandServer = null
-            runningConfigHash = null
-            serviceGeneration = 0L
-            clearPendingDnsCache(runtimeActive = false, source = "terminal_force_stop:$source")
+            var nativeServiceClosed = true
+            var commandServerClosed = true
             if (server != null) {
-                runCleanupStep("terminal force close command server source=$source", 500L) {
-                    server.close()
+                nativeServiceClosed = runCleanupStep(
+                    "terminal force closeService source=$source",
+                    NATIVE_SERVICE_CLOSE_TIMEOUT_MS,
+                ) {
+                    server.closeService()
+                }
+                if (nativeServiceClosed) {
+                    commandServerClosed = runCleanupStep(
+                        "terminal force close command server source=$source",
+                        COMMAND_SERVER_CLOSE_TIMEOUT_MS,
+                    ) {
+                        server.close()
+                    }
                 }
             }
-            SingboxController.forceMarkServiceStopped("terminal_force_stop:$source")
-            MeowApplication.clearServiceState()
-            MeowApplication.clearRuntimeIntent()
-            foregroundNotification.stopAndClear()
-            MeowDefaultNetworkMonitor.stop()
-            MeowQuickSettingsTileService.requestRefresh(service)
-            runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
-            runCatching { service.stopSelf() }
-            terminalForceStopScheduled.set(false)
+            val cleanupSuccess = nativeServiceClosed && commandServerClosed
+            if (cleanupSuccess) {
+                commandServer = null
+                runningConfigHash = null
+                val generation = serviceGeneration
+                serviceGeneration = 0L
+                clearPendingDnsCache(runtimeActive = false, source = "terminal_force_stop:$source")
+                MeowApplication.clearServiceState()
+                MeowApplication.clearRuntimeIntent()
+                SingboxController.markServiceStopped(generation, "terminal_force_stop:$source")
+                foregroundNotification.stopAndClear()
+                MeowDefaultNetworkMonitor.stop()
+                MeowQuickSettingsTileService.requestRefresh(service)
+                runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
+                runCatching { service.stopSelf() }
+                terminalForceStopScheduled.set(false)
+            } else {
+                MeowDiagnostics.log(
+                    TAG,
+                    "terminal force stop cleanup failed source=$source " +
+                        "nativeServiceClosed=$nativeServiceClosed commandServerClosed=$commandServerClosed",
+                )
+                SingboxController.log(
+                    "error",
+                    "VPN native service cleanup timed out during terminal force stop source=$source",
+                )
+                foregroundNotification.stopAndClear()
+                MeowDefaultNetworkMonitor.stop()
+                MeowQuickSettingsTileService.requestRefresh(service)
+                runCatching { service.stopForeground(Service.STOP_FOREGROUND_REMOVE) }
+                runCatching { service.stopSelf() }
+                SingboxController.setRunning(false, error = "runtime_cleanup_timeout")
+                SingboxController.notifyStopWaiters(false)
+                terminalForceStopScheduled.set(false)
+            }
         }
         terminalForceStopRunnable = runnable
         mainHandler.postDelayed(runnable, TERMINAL_FORCE_STOP_DELAY_MS)

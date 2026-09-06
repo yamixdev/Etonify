@@ -614,21 +614,50 @@ class RuntimeLifecycleController {
     }
 
     try {
-      subscription = _runtime.events.listen((event) {
+      subscription = _runtime.events.listen((event) async {
         final type = event['type']?.toString() ?? '';
         if (type == pigeon.runtimeEventState) {
           final running = event['running'] == true;
           if (!running) {
-            AppLogStore.info('runtime', 'runtime stop confirmed via event');
-            completeOnce(true);
+            final eventRecordedAlive = event['recordedServiceAlive'];
+            final eventActiveOwner = event['activeRuntimeOwner'];
+            if (eventRecordedAlive == false && eventActiveOwner == false) {
+              AppLogStore.info('runtime', 'runtime stop confirmed via state event');
+              completeOnce(true);
+              return;
+            }
+            try {
+              final status = await _runtime.status().timeout(
+                const Duration(milliseconds: 400),
+              );
+              if (_isStoppedRuntimeStatus(status)) {
+                AppLogStore.info(
+                  'runtime',
+                  'runtime stop confirmed via event verified by status',
+                );
+                completeOnce(true);
+              } else {
+                AppLogStore.info(
+                  'runtime',
+                  'runtime stop event received running=false but service still active '
+                  '(serviceAlive=${status['recordedServiceAlive']}, '
+                  'activeOwner=${status['activeRuntimeOwner']})',
+                );
+              }
+            } catch (error) {
+              AppLogStore.warning(
+                'runtime',
+                'status verification after stop event was non-fatal: $error',
+              );
+            }
           }
         }
       }, onError: (Object error) {
         AppLogStore.warning('runtime', 'runtime event error during stop: $error');
       });
 
-      // Low-frequency heartbeat (1.5s) to guard against dropped stream frames
-      fallbackTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+      // Low-frequency heartbeat (500ms) to guard against dropped stream frames
+      fallbackTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
         if (completer.isCompleted) return;
         final currentRemaining = deadline.difference(DateTime.now());
         if (currentRemaining <= Duration.zero) {
@@ -637,7 +666,7 @@ class RuntimeLifecycleController {
         }
         try {
           final status = await _runtime.status().timeout(
-            const Duration(milliseconds: 800),
+            const Duration(milliseconds: 500),
           );
           if (_isStoppedRuntimeStatus(status)) {
             AppLogStore.info(

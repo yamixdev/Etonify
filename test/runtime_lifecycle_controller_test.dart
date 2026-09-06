@@ -325,6 +325,46 @@ void main() {
     expect(runtime.stopCalls, 1);
   });
 
+  test('stop runtime does not confirm stop when running is false but cleanup is pending', () async {
+    final runtime = _FakeRuntime(running: true, ignoreStop: true);
+    final controller = RuntimeLifecycleController(
+      runtime: runtime,
+      stopSettleDelay: Duration.zero,
+      stopVerificationTimeout: const Duration(seconds: 3),
+    );
+    addTearDown(() {
+      controller.dispose();
+      runtime.dispose();
+    });
+
+    final stopFuture = controller.stopRuntime(reason: 'test_pending_cleanup');
+
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    // Simulate fail() where running=false is emitted, but service is still cleaning up
+    runtime.running = false;
+    runtime.recordedServiceAlive = true;
+    runtime.activeRuntimeOwner = true;
+    runtime.emitStateEvent(
+      running: false,
+      recordedServiceAlive: true,
+      activeRuntimeOwner: true,
+      error: 'test_fail',
+    );
+
+    // Give it a short delay: stopFuture must NOT have completed yet
+    var completedEarly = false;
+    unawaited(stopFuture.then((_) => completedEarly = true));
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(completedEarly, isFalse);
+
+    // Now complete the actual service cleanup
+    runtime.confirmStopped();
+
+    final stopped = await stopFuture;
+    expect(stopped, isTrue);
+    expect(runtime.stopCalls, 1);
+  });
+
   test('stop runtime falls back to heartbeat status poll if event dropped', () async {
     final runtime = _FakeRuntime(running: true, ignoreStop: true);
     final controller = RuntimeLifecycleController(
@@ -538,6 +578,23 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     });
   }
 
+  void emitStateEvent({
+    required bool running,
+    bool? recordedServiceAlive,
+    bool? activeRuntimeOwner,
+    String? error,
+  }) {
+    _eventsController.add(<String, dynamic>{
+      'type': 'state',
+      'running': running,
+      'mode': mode,
+      'runtimeGeneration': runtimeGeneration,
+      'recordedServiceAlive': recordedServiceAlive ?? this.recordedServiceAlive,
+      'activeRuntimeOwner': activeRuntimeOwner ?? this.activeRuntimeOwner,
+      'error': error,
+    });
+  }
+
   void confirmStopped() {
     running = false;
     recordedServiceAlive = false;
@@ -548,6 +605,8 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
       'running': false,
       'mode': mode,
       'runtimeGeneration': runtimeGeneration,
+      'recordedServiceAlive': false,
+      'activeRuntimeOwner': false,
       'error': null,
     });
   }
