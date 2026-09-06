@@ -5,6 +5,34 @@ import 'package:meow_client/app/runtime_event_controller.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 void main() {
+  test(
+    'early group snapshots coalesce and replay once for the same runtime',
+    () {
+      final pending = PendingRuntimeGroups();
+      for (var i = 0; i < 50; i++) {
+        pending.remember(RuntimeGroupsEvent(groups: [i], runtimeGeneration: 7));
+      }
+      pending.remember(
+        const RuntimeGroupsEvent(groups: ['old'], runtimeGeneration: 6),
+      );
+      expect(pending.take(7)?.groups, [49]);
+      expect(pending.take(7), isNull);
+      pending.remember(
+        const RuntimeGroupsEvent(groups: [1], runtimeGeneration: 7),
+      );
+      expect(pending.take(8), isNull);
+      pending.remember(
+        const RuntimeGroupsEvent(groups: [1], runtimeGeneration: 8),
+      );
+      pending.clear();
+      expect(pending.take(8), isNull);
+      pending.remember(
+        const RuntimeGroupsEvent(groups: [1], runtimeGeneration: 0),
+      );
+      expect(pending.take(0), isNull);
+    },
+  );
+
   tearDown(AppLogStore.clear);
 
   test('dispatch routes typed runtime events to callbacks', () {

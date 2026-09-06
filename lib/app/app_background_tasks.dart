@@ -44,6 +44,46 @@ class ProxyCacheBuildInput {
 
 enum ProxyCacheBuildScope { home, full }
 
+/// Retains only the active subscription's presentation snapshot. Latency
+/// refreshes must not repeatedly traverse every full outbound on the UI isolate.
+class ProxyPresentationSnapshotCache {
+  Subscription? _source;
+  Future<Subscription?>? _snapshot;
+
+  Future<Subscription?> get(Subscription? source) {
+    if (source == null) {
+      _source = null;
+      _snapshot = null;
+      return Future.value(null);
+    }
+    if (identical(source, _source) && _snapshot != null) return _snapshot!;
+    _source = source;
+    return _snapshot = _build(source);
+  }
+
+  Future<Subscription> _build(Subscription source) async {
+    try {
+      return await _compactInBackground(source);
+    } catch (_) {
+      if (identical(source, _source)) {
+        _source = null;
+        _snapshot = null;
+      }
+      rethrow;
+    }
+  }
+
+  void seed(Subscription source, Subscription snapshot) {
+    _source = source;
+    _snapshot = Future.value(snapshot);
+  }
+}
+
+Future<Subscription> _compactInBackground(Subscription source) => Isolate.run(
+  () => compactSubscriptionForProxyCache(source),
+  debugName: 'meow-proxy-presentation',
+);
+
 /// Serializes proxy presentation builds and retains at most one pending build.
 ///
 /// Multiple runtime events often arrive together after URLTest or a network

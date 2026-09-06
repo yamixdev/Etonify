@@ -472,6 +472,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final subscription = _activeSubscription;
     if (subscription == null) {
       _proxyCacheBuildCoordinator.complete();
+      unawaited(_proxyPresentationSnapshots.get(null));
       _activeProfileCache = null;
       _displayProxyCache = null;
       _activeProxiesCache = const [];
@@ -487,10 +488,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
     final generation = _derivedCacheBuildGeneration;
     final buildFullProxyList = buildScope == ProxyCacheBuildScope.full;
-    final input = _currentProxyCacheBuildInput(subscription);
     unawaited(() async {
       ProxyCacheBuildScope? pendingScope;
       try {
+        final input = await _currentProxyCacheBuildInput(subscription);
         final result = buildFullProxyList
             ? await buildProxyCacheInBackground(input)
             : await buildHomeProxyCacheInBackground(input);
@@ -644,13 +645,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return true;
   }
 
-  ProxyCacheBuildInput _currentProxyCacheBuildInput(
+  final _proxyPresentationSnapshots = ProxyPresentationSnapshotCache();
+
+  Future<ProxyCacheBuildInput> _currentProxyCacheBuildInput(
     Subscription? subscription,
-  ) {
+  ) async {
+    final snapshot = await _proxyPresentationSnapshots.get(subscription);
     return ProxyCacheBuildInput(
-      subscription: subscription == null
-          ? null
-          : compactSubscriptionForProxyCache(subscription),
+      subscription: snapshot,
       selectedProxyTag: _selectedProxyTag,
       lowestLatency: _lowestLatency,
       runtimeLowestOutboundTag: _runtimeLowestOutboundTag,
@@ -3079,6 +3081,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _resetActiveProxyIpState();
     }
     if (transition.transitionStarted) {
+      _pendingRuntimeGroups.clear();
       _runtimeCommands.invalidate();
       _runtimeOperations.beginRuntimeTransition();
     } else if (transition.transitionFinished) {
@@ -3099,6 +3102,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _proxyRuntime.endTransition();
     }
     _runtimeRecovery.setRetryScheduled(retryScheduled);
+    if (phase == AppConnectionPhase.connected) {
+      scheduleMicrotask(_replayPendingRuntimeGroups);
+    } else if (phase == AppConnectionPhase.idle ||
+        phase == AppConnectionPhase.failed ||
+        phase == AppConnectionPhase.stopping) {
+      _pendingRuntimeGroups.clear();
+    }
   }
 
   void _applyActiveProxyIpSnapshot(ActiveProxyIpSnapshot snapshot) {
@@ -4572,9 +4582,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     setState(() {
       _subscriptions = _replaceSubscription(hydrated.subscription);
+      final presentationSnapshot = hydrated.presentationSnapshot;
+      if (presentationSnapshot != null) {
+        _proxyPresentationSnapshots.seed(
+          hydrated.subscription,
+          presentationSnapshot,
+        );
+      }
       _selectedProxyTag = hydrated.normalized.selectedProxyTag;
       _applyProxyCacheBuildResult(hydrated.proxyCache);
     });
+    _replayPendingRuntimeGroups();
     unawaited(_syncQuickSettingsTileLabel());
     return true;
   }
@@ -6260,10 +6278,33 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applyGroupUpdatesImpl(event);
   }
 
+  final _pendingRuntimeGroups = PendingRuntimeGroups();
+
+  void _replayPendingRuntimeGroups() {
+    if (!mounted ||
+        !_connected ||
+        _runtimeTransitionInProgress ||
+        _activeSubscription?.outbounds.isNotEmpty != true) {
+      return;
+    }
+    final event = _pendingRuntimeGroups.take(
+      _runtimeOperations.nativeRuntimeGeneration,
+    );
+    if (event != null) _applyGroupUpdates(event);
+  }
+
   void _applyGroupUpdatesImpl(RuntimeGroupsEvent event) {
     final rawGroups = event.groups;
     _recordGroupsDiagnostics(rawGroups.length);
     final activeSubscription = _activeSubscription;
+    if (mounted &&
+        rawGroups.isNotEmpty &&
+        _connectionPhase != AppConnectionPhase.stopping &&
+        (_runtimeTransitionInProgress ||
+            (_connected && activeSubscription?.outbounds.isNotEmpty != true))) {
+      _pendingRuntimeGroups.remember(event);
+      return;
+    }
     if (activeSubscription == null || rawGroups.isEmpty || !mounted) {
       return;
     }
@@ -6290,6 +6331,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final diagnosticsBecameReady =
         !diagnosticsWereReady && _runtimeOperations.diagnosticsReady;
+    _pendingRuntimeGroups.clear();
     final previousActiveOutboundTag = _connected
         ? _currentResolvedActiveOutboundTag()
         : null;

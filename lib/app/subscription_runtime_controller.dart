@@ -35,9 +35,11 @@ class HydratedActiveSubscription {
     required this.subscription,
     required this.normalized,
     required this.proxyCache,
+    this.presentationSnapshot,
   });
 
   final Subscription subscription;
+  final Subscription? presentationSnapshot;
   final SubscriptionRuntimeSelection normalized;
   final ProxyCacheBuildResult proxyCache;
 }
@@ -325,6 +327,9 @@ class SubscriptionRuntimeController {
           : buildHomeProxyCache(cacheInput);
       return HydratedActiveSubscription(
         subscription: normalizedSubscription.withoutRawContentForRuntime(),
+        presentationSnapshot: compactSubscriptionForProxyCache(
+          normalizedSubscription,
+        ),
         normalized: normalized,
         proxyCache: proxyCache,
       );

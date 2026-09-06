@@ -3,6 +3,38 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test(
+    'large presentation snapshots are reused and invalidated by identity',
+    () async {
+      final cache = ProxyPresentationSnapshotCache();
+      final source = Subscription(
+        id: 'large',
+        name: 'Large',
+        url: '',
+        outbounds: List.generate(
+          10000,
+          (i) => Outbound(
+            tag: 'proxy-$i',
+            name: 'Proxy $i',
+            config: {'type': 'vless', 'uuid': 'secret-$i'},
+          ),
+        ),
+      );
+      final pending = cache.get(source);
+      expect(identical(pending, cache.get(source)), isTrue);
+      final compact = (await pending)!;
+      expect(compact.outbounds.length, 10000);
+      expect(compact.outbounds.last.config, {'type': 'vless'});
+      expect(identical(await cache.get(source), compact), isTrue);
+      final changed = source.copyWith(name: 'Updated');
+      expect((await cache.get(changed))!.name, 'Updated');
+      cache.seed(source, compact);
+      expect(identical(await cache.get(source), compact), isTrue);
+      expect(await cache.get(null), isNull);
+      expect(identical(await cache.get(source), compact), isFalse);
+    },
+  );
+
   group('ProxyCacheBuildCoordinator', () {
     test('coalesces repeated work and preserves a pending full build', () {
       final coordinator = ProxyCacheBuildCoordinator();

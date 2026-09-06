@@ -27,7 +27,6 @@ import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
 import org.json.JSONObject
 import java.util.ArrayDeque
-import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -52,9 +51,8 @@ object SingboxController {
     // Standalone clients still control one daemon/runtime. Keep command RPCs
     // on one lane: concurrent URLTest and selector clients can otherwise see
     // different runtime state and interfere with the active outbound.
-    private val commandExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "MeowCommand").apply { isDaemon = true }
-    }
+    private val commandLanes = CommandExecutionLanes()
+    private val commandExecutor = commandLanes.commands
     private val lookupExecutor = ThreadPoolExecutor(
         4,
         4,
@@ -785,7 +783,7 @@ object SingboxController {
     }
 
     fun connectClient() {
-        commandExecutor.execute {
+        commandLanes.stream.execute {
             val epoch = commandClientLifecycle.beginConnect(
                 shouldConnect = shouldCommandClientBeConnected(),
             ) ?: return@execute
@@ -835,7 +833,7 @@ object SingboxController {
 
     fun disconnectClient() {
         cancelCommandClientReconnect("async_disconnect")
-        commandExecutor.execute {
+        commandLanes.stream.execute {
             disconnectClientOnExecutor("async")
         }
     }
@@ -843,7 +841,7 @@ object SingboxController {
     fun disconnectClientBlocking(timeoutMs: Long = 1_500L): Boolean {
         cancelCommandClientReconnect("blocking_disconnect")
         val latch = CountDownLatch(1)
-        commandExecutor.execute {
+        commandLanes.stream.execute {
             try {
                 disconnectClientOnExecutor("blocking")
             } finally {

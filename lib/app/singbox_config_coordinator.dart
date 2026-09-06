@@ -610,6 +610,7 @@ class SingboxConfigCoordinator {
     bool returnConfig = false,
     bool validateConfig = true,
   }) async {
+    final preparationWatch = Stopwatch()..start();
     var capabilities = _readSnapshot().capabilities;
     if (!capabilities.isCompatible && _refreshCapabilities != null) {
       capabilities = await _refreshCapabilities();
@@ -643,12 +644,20 @@ class SingboxConfigCoordinator {
     );
     late final SingboxConfigBuildResult result;
     try {
+      final inputReadyMs = preparationWatch.elapsedMilliseconds;
       result = await buildSingboxConfigInBackground(input);
+      final builtMs = preparationWatch.elapsedMilliseconds;
       if (validateConfig && input.capabilities.supportsConfigCheck) {
         await SingboxRuntime.instance.checkConfig(
           await _configContentForValidation(result),
         );
       }
+      AppLogStore.info(
+        'config performance',
+        'inputMs=$inputReadyMs buildMs=${builtMs - inputReadyMs} '
+            'validationMs=${preparationWatch.elapsedMilliseconds - builtMs} '
+            'totalMs=${preparationWatch.elapsedMilliseconds}',
+      );
     } catch (_) {
       _deletePreparedConfigCandidate(stagedConfigPath);
       rethrow;

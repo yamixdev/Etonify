@@ -847,9 +847,12 @@ class MeowBoxService(
 
         // Сначала отключаем активный CommandClient.
         if (shouldStopRuntimeState) {
+            val disconnectStarted = SystemClock.elapsedRealtime()
             val clientDisconnected = SingboxController.disconnectClientBlocking(
                 timeoutMs = COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS,
             )
+            MeowDiagnostics.log(TAG, "stop phase=command_stream source=$source " +
+                "elapsedMs=${SystemClock.elapsedRealtime() - disconnectStarted} completed=$clientDisconnected")
 
             if (!clientDisconnected) {
                 MeowDiagnostics.log(
@@ -971,7 +974,15 @@ class MeowBoxService(
     }
 
     private fun awaitNativeServiceClose(server: CommandServer, source: String): Boolean {
-        val task = nativeCloseTask ?: NativeServiceCloseTask { server.closeService() }.also { task ->
+        val task = nativeCloseTask ?: NativeServiceCloseTask {
+            val started = SystemClock.elapsedRealtime()
+            try {
+                server.closeService()
+            } finally {
+                MeowDiagnostics.log(TAG, "stop phase=native_service source=$source " +
+                    "elapsedMs=${SystemClock.elapsedRealtime() - started}")
+            }
+        }.also { task ->
             nativeCloseTask = task
             task.start { result ->
                 result.exceptionOrNull()?.let { error ->

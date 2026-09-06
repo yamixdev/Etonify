@@ -28,6 +28,30 @@ class RuntimeGroupsEvent {
 }
 
 typedef RuntimeStateHandler = void Function(RuntimeStateEvent event);
+
+/// A full snapshot replaces its predecessor; never queue thousands of rows
+/// for every event received while the active profile is still hydrating.
+class PendingRuntimeGroups {
+  RuntimeGroupsEvent? _latest;
+
+  void remember(RuntimeGroupsEvent event) {
+    if (event.runtimeGeneration <= 0) return;
+    if (_latest != null &&
+        event.runtimeGeneration < _latest!.runtimeGeneration) {
+      return;
+    }
+    _latest = event;
+  }
+
+  RuntimeGroupsEvent? take(int generation) {
+    final latest = _latest;
+    _latest = null;
+    return latest?.runtimeGeneration == generation ? latest : null;
+  }
+
+  void clear() => _latest = null;
+}
+
 typedef RuntimeRawEventHandler = void Function(Map<String, dynamic> event);
 typedef RuntimeGroupsHandler = void Function(RuntimeGroupsEvent event);
 typedef RuntimeLogFilter = bool Function(String level);
