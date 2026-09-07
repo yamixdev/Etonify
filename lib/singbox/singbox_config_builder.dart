@@ -623,6 +623,14 @@ class SingboxConfigBuilder {
       },
       proxyOutboundTagsByIndex: proxyOutboundIndexes,
       visibleProxyOutboundCount: outbounds.length,
+      // Only concrete outbounds included in this exact config can produce a
+      // terminal URLTest event. Selector/urltest group tags resolve to one of
+      // these leaves in the core and must not keep a Flutter session pending.
+      urlTestOutboundTags: List<String>.unmodifiable(<String>{
+        ...selectableOutboundTags,
+        for (final group in visibleGroups) ...group.outboundTags,
+        ...chainTags,
+      }),
     );
   }
 
@@ -1361,9 +1369,11 @@ class SingboxBuildPlan {
     required this.config,
     required this.proxyOutboundTagsByIndex,
     required this.visibleProxyOutboundCount,
+    this.urlTestOutboundTags = const <String>[],
   });
 
   final Map<String, dynamic> config;
   final Map<int, String> proxyOutboundTagsByIndex;
   final int visibleProxyOutboundCount;
+  final List<String> urlTestOutboundTags;
 }

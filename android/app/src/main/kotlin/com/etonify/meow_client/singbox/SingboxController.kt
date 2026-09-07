@@ -148,6 +148,7 @@ object SingboxController {
     private var commandReconnectRunnable: Runnable? = null
 
     private fun createCommandClientHandler(epoch: Long) = object : CommandClientHandler {
+        private val groupResults = GroupResultCache()
         override fun connected() {
             handleCommandClientConnected(epoch)
         }
@@ -179,6 +180,7 @@ object SingboxController {
             val selectedGroups = mutableListOf<String>()
             var itemCount = 0
             val uniqueItemTags = mutableSetOf<String>()
+            val resultLocations = HashMap<String, Pair<MutableList<Map<String, Any?>>, Int>>()
             var availableCount = 0
             var unavailableCount = 0
             var maxDelay = 0L
@@ -189,10 +191,17 @@ object SingboxController {
                 if (!selected.isNullOrBlank()) {
                     selectedGroups += "${group.tag}=$selected"
                 }
-                val items = mutableListOf<GroupItemPayload>()
+                val items = mutableListOf<Map<String, Any?>>()
                 val iterator = group.items
                 while (iterator.hasNext()) {
                     val item = iterator.next()
+                    // A concrete outbound can belong to several provider and
+                    // synthetic groups. Its history is global by tag; send it
+                    // once while retaining every group's selection metadata.
+                    val itemTag = item.tag
+                    if (itemTag.isNullOrBlank()) {
+                        continue
+                    }
                     val delay = item.urlTestDelay
                     val time = item.urlTestTime
                     val status = item.urlTestStatus
@@ -206,8 +215,12 @@ object SingboxController {
                     ) {
                         continue
                     }
+                    val location = resultLocations[itemTag]
+                    if (location != null &&
+                        (location.first[location.second]["time"] as Long) >= time
+                    ) continue
                     itemCount++
-                    item.tag?.takeIf { it.isNotBlank() }?.let(uniqueItemTags::add)
+                    uniqueItemTags.add(itemTag)
                     if (delay > 0L) {
                         availableCount++
                         if (delay > maxDelay) {
@@ -218,15 +231,16 @@ object SingboxController {
                     if ((status ?: "").equals("unavailable", ignoreCase = true)) {
                         unavailableCount++
                     }
-                    items += GroupItemPayload(
-                        tag = item.tag,
-                        type = item.type,
-                        delay = delay.toLong(),
-                        time = time,
-                        status = status,
-                        error = error,
-                        errorCode = errorCode,
+                    val result = groupResults.result(
+                        itemTag, item.type, delay.toLong(), time,
+                        status, error, errorCode,
                     )
+                    if (location == null) {
+                        resultLocations[itemTag] = items to items.size
+                        items += result
+                    } else {
+                        location.first[location.second] = result
+                    }
                     // A notification action can outlive Flutter's event sink.
                     // Feed its targeted URLTest from the same native stream that
                     // backs the proxy list, never from a synthetic TCP probe.
@@ -243,9 +257,13 @@ object SingboxController {
                     "selectable" to group.selectable,
                     "selected" to group.selected,
                     "expanded" to group.isExpand,
-                    "items" to limitedGroupItems(group.tag, group.selected, items),
+                    // The proxy UI owns its presentation order. Sorting every
+                    // native snapshot duplicates work and allocates another
+                    // full list for large provider groups.
+                    "items" to items,
                 )
             }
+            groupResults.retain(uniqueItemTags)
             if (itemCount > 0 && now - lastGroupsDiagnosticLogUptimeMs >= GROUPS_DIAGNOSTIC_LOG_THROTTLE_MS) {
                 lastGroupsDiagnosticLogUptimeMs = now
                 val summary =
@@ -347,51 +365,6 @@ object SingboxController {
                 ),
             )
         }
-    }
-
-    private data class GroupItemPayload(
-        val tag: String?,
-        val type: String?,
-        val delay: Long,
-        val time: Long,
-        val status: String?,
-        val error: String?,
-        val errorCode: String?,
-    ) {
-        fun toEventMap(): Map<String, Any?> = mapOf(
-            "tag" to tag,
-            "type" to type,
-            "delay" to delay,
-            "time" to time,
-            "status" to status,
-            "error" to error,
-            "errorCode" to errorCode,
-        )
-    }
-
-    private fun limitedGroupItems(
-        groupTag: String?,
-        selectedTag: String?,
-        items: List<GroupItemPayload>,
-    ): List<Map<String, Any?>> {
-        if (items.isEmpty()) {
-            return emptyList()
-        }
-        val selected = selectedTag?.trim().orEmpty()
-        val sorted = items.sortedWith(
-            compareBy<GroupItemPayload> {
-                if (it.tag == selected) 0 else 1
-            }.thenBy {
-                if (it.delay > 0L) 0 else 1
-            }.thenBy {
-                if ((it.status ?: "").equals("unavailable", ignoreCase = true)) 1 else 0
-            }.thenBy {
-                if (it.delay > 0L) it.delay else Long.MAX_VALUE
-            }.thenByDescending {
-                it.time
-            },
-        )
-        return sorted.map { it.toEventMap() }
     }
 
     fun registerEventSink(sink: EventChannel.EventSink): Long {

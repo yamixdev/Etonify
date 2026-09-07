@@ -618,6 +618,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _derivedCacheBuildTimer = null;
     _proxyCacheBuildCoordinator.cancelPending();
     final proxyRows = _activeProxiesCache.length;
+    unawaited(_proxyPresentationSnapshots.releaseStrongReference());
     final groupRows = _activeGroupChildrenByTagCache.values.fold<int>(
       0,
       (total, children) => total + children.length,
@@ -3559,6 +3560,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
       build = await _configCoordinator.buildCurrentSingboxConfigInBackground(
         returnConfig: true,
+        // Native service startup parses and validates the same staged config
+        // before owning a runtime. Avoid parsing a large profile twice on a
+        // cold/manual start; reload paths still preflight before replacement.
+        validateConfig: false,
       );
       if (!_manualRuntimeStartCurrent(startGeneration)) {
         if (build != null) {
@@ -3827,21 +3832,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (normalizedTarget.isNotEmpty) {
       return <String>{normalizedTarget};
     }
-    _ensureActiveLookupCaches();
-    final expectedTags = <String>{
-      for (final tag in _activeOutboundByTagLookup.keys)
-        if (!_excludedRuntimeOutboundTags.contains(tag)) tag,
-    };
-    final activeSubscription = _activeSubscription;
-    if (activeSubscription != null) {
-      for (final chain in activeSubscription.proxyChains) {
-        final tag = chain.tag.trim();
-        if (tag.isNotEmpty && !_excludedRuntimeOutboundTags.contains(tag)) {
-          expectedTags.add(tag);
-        }
-      }
-    }
-    return expectedTags;
+    return _runtimeRecovery.lastStartedUrlTestOutboundTags;
   }
 
   void _scheduleGroupUrlTest({
@@ -6159,6 +6150,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         config: mutation.config,
         proxyOutboundTagsByIndex: mutation.proxyOutboundTagsByIndex,
         visibleProxyOutboundCount: mutation.startableProxyCount,
+        urlTestOutboundTags: _runtimeRecovery.lastStartedUrlTestOutboundTags
+            .toList(growable: false),
       ),
       configJson: '',
       configPath: mutation.configPath,
@@ -6353,7 +6346,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         visibleGroupProxyCacheMissingChild: _visibleGroupProxyCacheMissingChild,
       ),
     );
-    _forwardLatencyGroupEvents(rawGroups);
+    _forwardLatencyEvents(result.latencyEvents);
     if (!result.changed) {
       if (diagnosticsBecameReady) {
         _onRuntimeDiagnosticsReady();
@@ -6398,36 +6391,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  void _forwardLatencyGroupEvents(List<dynamic> rawGroups) {
+  void _forwardLatencyEvents(List<ProxyRuntimeLatencyEvent> events) {
     if (!_latencyCoordinator.isRunning) {
       return;
     }
-    for (final rawGroup in rawGroups) {
-      if (rawGroup is! Map) continue;
-      final items = rawGroup['items'];
-      if (items is! List) continue;
-      for (final rawItem in items) {
-        if (rawItem is! Map) continue;
-        final tag = rawItem['tag']?.toString().trim() ?? '';
-        final time = (rawItem['time'] as num?)?.toInt() ?? 0;
-        final delay = (rawItem['delay'] as num?)?.toInt() ?? 0;
-        final status = rawItem['status']?.toString().trim().toLowerCase() ?? '';
-        final error = rawItem['error']?.toString().trim() ?? '';
-        final terminalResult =
-            delay > 0 ||
-            status == ProxyRuntimeController.urlTestStatusUnavailable ||
-            error.isNotEmpty;
-        if (terminalResult) {
-          _latencyCoordinator.handleGroupEvent(
-            tag: tag,
-            timeSeconds: time,
-            available:
-                delay > 0 &&
-                status != ProxyRuntimeController.urlTestStatusUnavailable &&
-                error.isEmpty,
-          );
-        }
-      }
+    for (final event in events) {
+      _latencyCoordinator.handleGroupEvent(
+        tag: event.tag,
+        timeSeconds: event.timeSeconds,
+        available: event.available,
+      );
     }
   }
 

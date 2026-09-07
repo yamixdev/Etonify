@@ -41,12 +41,15 @@ class RuntimeRecoveryController {
   final Set<String> _excludedOutboundTags = <String>{};
   Map<int, String>? _proxyOutboundTagsByIndex;
   Map<String, dynamic>? _lastStartedConfig;
+  Set<String> _lastStartedUrlTestOutboundTags = <String>{};
   String? _pendingMutationExcludedTag;
   String? _lastPresentedRuntimeError;
 
   bool get retryScheduled => _retryScheduled;
   Set<String> get excludedOutboundTags =>
       Set<String>.unmodifiable(_excludedOutboundTags);
+  Set<String> get lastStartedUrlTestOutboundTags =>
+      Set<String>.unmodifiable(_lastStartedUrlTestOutboundTags);
 
   void dispose() {
     cancelRetry();
@@ -95,11 +98,16 @@ class RuntimeRecoveryController {
     _lastStartedConfig = build.plan.config.isEmpty
         ? null
         : Map<String, dynamic>.from(build.plan.config);
+    _lastStartedUrlTestOutboundTags = build.plan.urlTestOutboundTags
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toSet();
   }
 
   void clearBuildCache() {
     _proxyOutboundTagsByIndex = null;
     _lastStartedConfig = null;
+    _lastStartedUrlTestOutboundTags.clear();
     _pendingMutationExcludedTag = null;
   }
 
@@ -148,7 +156,11 @@ class RuntimeRecoveryController {
   }
 
   void applyMutation(ConfigMutationResult mutation) {
+    final excludedTag = _pendingMutationExcludedTag;
     _pendingMutationExcludedTag = null;
+    if (excludedTag != null) {
+      _lastStartedUrlTestOutboundTags.remove(excludedTag);
+    }
     _lastStartedConfig = Map<String, dynamic>.from(mutation.config);
     _proxyOutboundTagsByIndex = Map<int, String>.from(
       mutation.proxyOutboundTagsByIndex,

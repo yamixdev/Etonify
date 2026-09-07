@@ -48,7 +48,16 @@ void main() {
     'mutation input uses cached config and updates it after mutation',
     () async {
       final controller = RuntimeRecoveryController();
-      controller.cacheStartedBuild(_buildResult(tagsByIndex: {1: 'bad-tag'}));
+      controller.cacheStartedBuild(
+        _buildResult(
+          tagsByIndex: {1: 'bad-tag'},
+          urlTestTags: const ['bad-tag', 'healthy-tag'],
+        ),
+      );
+      expect(controller.lastStartedUrlTestOutboundTags, {
+        'bad-tag',
+        'healthy-tag',
+      });
       await controller.registerInvalidOutboundError(
         'initialize outbound[1]: unsupported transport',
       );
@@ -67,6 +76,9 @@ void main() {
         ),
       );
       expect(controller.createMutationInput('config.json'), isNull);
+      expect(controller.lastStartedUrlTestOutboundTags, {'healthy-tag'});
+      controller.clearBuildCache();
+      expect(controller.lastStartedUrlTestOutboundTags, isEmpty);
     },
   );
 
@@ -100,12 +112,14 @@ SingboxConfigBuildResult _buildResult({
   List<InvalidStartupOutbound> invalidOutbounds =
       const <InvalidStartupOutbound>[],
   bool selectedProxyInvalid = false,
+  List<String> urlTestTags = const <String>[],
 }) {
   return SingboxConfigBuildResult(
     plan: SingboxBuildPlan(
       config: const <String, dynamic>{'outbounds': <Object>[]},
       proxyOutboundTagsByIndex: tagsByIndex,
       visibleProxyOutboundCount: startableCount,
+      urlTestOutboundTags: urlTestTags,
     ),
     configJson: '',
     configPath: 'config.json',

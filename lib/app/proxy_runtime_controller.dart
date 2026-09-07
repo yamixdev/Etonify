@@ -40,6 +40,7 @@ class ProxyRuntimeGroupUpdateResult {
     required this.shouldClearRuntimeProxySelectionGuard,
     required this.realOutboundRuntimeStateChanged,
     required this.affectedProxyTags,
+    required this.latencyEvents,
   });
 
   static const noChanges = ProxyRuntimeGroupUpdateResult(
@@ -49,6 +50,7 @@ class ProxyRuntimeGroupUpdateResult {
     shouldClearRuntimeProxySelectionGuard: false,
     realOutboundRuntimeStateChanged: false,
     affectedProxyTags: <String>{},
+    latencyEvents: <ProxyRuntimeLatencyEvent>[],
   );
 
   final bool changed;
@@ -61,6 +63,19 @@ class ProxyRuntimeGroupUpdateResult {
   /// only these rows (plus their derived groups) instead of recreating visual
   /// state for every proxy in a large subscription.
   final Set<String> affectedProxyTags;
+  final List<ProxyRuntimeLatencyEvent> latencyEvents;
+}
+
+class ProxyRuntimeLatencyEvent {
+  const ProxyRuntimeLatencyEvent({
+    required this.tag,
+    required this.timeSeconds,
+    required this.available,
+  });
+
+  final String tag;
+  final int timeSeconds;
+  final bool available;
 }
 
 class ProxyRuntimeController {
@@ -532,6 +547,18 @@ class ProxyRuntimeController {
     }
     lowestLatency = nextLowestLatency;
     runtimeLowestOutboundTag = nextRuntimeLowestOutboundTag;
+    final latencyEvents = <ProxyRuntimeLatencyEvent>[
+      for (final tag in touchedTags)
+        if ((updatedTimes[tag] ?? 0) > 0)
+          ProxyRuntimeLatencyEvent(
+            tag: tag,
+            timeSeconds: updatedTimes[tag]!,
+            available:
+                (delays[tag] ?? 0) > 0 &&
+                statuses[tag] != urlTestStatusUnavailable &&
+                (errors[tag]?.isEmpty ?? true),
+          ),
+    ];
     return ProxyRuntimeGroupUpdateResult(
       changed: true,
       requiresRootRebuild: requiresRootRebuild,
@@ -539,6 +566,7 @@ class ProxyRuntimeController {
       shouldClearRuntimeProxySelectionGuard: runtimeSelectionConfirmsPending,
       realOutboundRuntimeStateChanged: realOutboundRuntimeStateChanged,
       affectedProxyTags: Set<String>.unmodifiable(touchedTags),
+      latencyEvents: List<ProxyRuntimeLatencyEvent>.unmodifiable(latencyEvents),
     );
   }
 

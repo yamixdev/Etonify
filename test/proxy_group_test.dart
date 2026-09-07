@@ -825,6 +825,8 @@ void main() {
     expect(groupUrltest['concurrency'], 8);
     expect(groupUrltest['unavailable_check_interval'], '120s');
     expect(groupUrltest['tolerance'], 1);
+    expect(plan.urlTestOutboundTags, ['leaf-1', 'leaf-2']);
+    expect(plan.urlTestOutboundTags, isNot(contains('group-auto')));
   });
 
   test('does not build lowest proxies for a single outbound subscription', () {
@@ -942,10 +944,11 @@ void main() {
     expect(cache.activeProxies.map((proxy) => proxy.tag), ['vless-node']);
     expect(cache.displayProxy?.tag, 'vless-node');
 
-    final config = _defaultBuilder(
+    final plan = _defaultBuilder(
       subscription,
       selectedProxyTag: 'wireguard-node',
-    ).build();
+    ).buildPlan();
+    final config = plan.config;
     final outbounds = (config['outbounds'] as List)
         .cast<Map<String, dynamic>>();
     final selector = outbounds.firstWhere((entry) => entry['tag'] == 'select');
@@ -954,6 +957,7 @@ void main() {
     expect(selector['default'], 'vless-node');
     expect(outbounds.any((entry) => entry['tag'] == 'wireguard-node'), isFalse);
     expect(outbounds.any((entry) => entry['tag'] == lowestProxyTag), isFalse);
+    expect(plan.urlTestOutboundTags, ['vless-node']);
   });
 
   test('applies TLS record fragmentation only to TLS proxy outbounds', () {

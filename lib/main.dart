@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/app/app.dart';
-import 'package:meow_client/core/platform/android_files_dir.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 void _recordFatalError(String source, Object error, StackTrace stackTrace) {
@@ -18,9 +16,6 @@ Future<void> main() async {
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      if (Platform.isAndroid) {
-        await AndroidFilesDir.ensureInitialized();
-      }
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
         _recordFatalError(
@@ -33,13 +28,22 @@ Future<void> main() async {
         _recordFatalError('platform', error, stackTrace);
         return true;
       };
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setSystemUIOverlayStyle(
         const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
           systemNavigationBarDividerColor: Colors.transparent,
           systemNavigationBarContrastEnforced: false,
+        ),
+      );
+      // AndroidFilesDir initializes lazily at its call sites. Neither that
+      // platform round-trip nor the system UI RPC should delay runApp and the
+      // first visible Flutter frame.
+      unawaited(
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge).catchError(
+          (Object error, StackTrace stackTrace) {
+            _recordFatalError('system_ui', error, stackTrace);
+          },
         ),
       );
       runApp(const ProviderScope(child: MeowClient()));

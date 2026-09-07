@@ -10,6 +10,13 @@ internal enum class VpnTaskRemovalAction {
  * process-recovery behavior can be covered by local JVM tests.
  */
 internal object VpnServiceLifecyclePolicy {
+    fun runtimeFullyStopped(
+        runtimeRunning: Boolean,
+        activeRuntimeOwner: Boolean,
+    ): Boolean {
+        return !runtimeRunning && !activeRuntimeOwner
+    }
+
     fun taskRemovalAction(
         runtimeRunning: Boolean,
         activeRuntimeOwner: Boolean,

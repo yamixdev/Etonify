@@ -131,7 +131,9 @@ class RuntimeLifecycleController {
   RuntimeLifecycleController({
     RuntimeLifecycleRuntime? runtime,
     this.startTimeout = const Duration(seconds: 15),
-    this.stopTimeout = const Duration(seconds: 7),
+    // Android's native stop path can wait 8.5 s and then verify service owner
+    // release. Keep the Dart RPC deadline longer than the native contract.
+    this.stopTimeout = const Duration(seconds: 12),
     this.stopVerificationTimeout = const Duration(seconds: 2),
     this.stopSettleDelay = const Duration(milliseconds: 200),
     this.healthCheckTimeout = const Duration(seconds: 6),

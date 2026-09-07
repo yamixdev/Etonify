@@ -12,6 +12,27 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  testWidgets('missing expected results release the session before watchdog', (
+    tester,
+  ) async {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => ['never-reached'],
+      outboundCount: () => 900,
+      timeoutSeconds: () => 1,
+      uiPolicy: const LatencyUiPolicy(hardWatchdog: Duration(seconds: 125)),
+    );
+    addTearDown(coordinator.dispose);
+    final result = coordinator.runFull(reason: 'no events');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    expect(coordinator.isChecking('never-reached'), isTrue);
+    await tester.pump(const Duration(seconds: 15));
+    expect(coordinator.isRunning, isFalse);
+    expect(await result, isFalse);
+    expect(coordinator.isChecking('never-reached'), isFalse);
+  });
+
   test(
     '900 queued proxies keep checking across gaps between batches',
     () async {
@@ -453,6 +474,7 @@ LatencyCoordinator _coordinator({
   LatencyIntReader? operationGeneration,
   LatencyExpectedTagsReader? expectedTags,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
+  LatencyUiPolicy uiPolicy = _testPolicy,
 }) {
   return LatencyCoordinator(
     runTest: runTest,
@@ -468,6 +490,6 @@ LatencyCoordinator _coordinator({
     operationGeneration: operationGeneration,
     capabilities: capabilities,
     onSessionChanged: (_, _, _) {},
-    uiPolicy: _testPolicy,
+    uiPolicy: uiPolicy,
   );
 }

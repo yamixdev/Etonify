@@ -7,6 +7,28 @@ import org.junit.Test
 
 class VpnServiceLifecyclePolicyTest {
     @Test
+    fun `runtime is stopped only after native state and service owner are released`() {
+        assertTrue(
+            VpnServiceLifecyclePolicy.runtimeFullyStopped(
+                runtimeRunning = false,
+                activeRuntimeOwner = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.runtimeFullyStopped(
+                runtimeRunning = true,
+                activeRuntimeOwner = false,
+            ),
+        )
+        assertFalse(
+            VpnServiceLifecyclePolicy.runtimeFullyStopped(
+                runtimeRunning = false,
+                activeRuntimeOwner = true,
+            ),
+        )
+    }
+
+    @Test
     fun `active VPN runtime survives task removal`() {
         assertEquals(
             VpnTaskRemovalAction.RECOVER_RUNTIME_AND_ARM_RESTART,

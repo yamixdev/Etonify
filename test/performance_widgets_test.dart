@@ -4,9 +4,66 @@ import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
+  testWidgets('latency updates keep list mounted until order changes', (
+    tester,
+  ) async {
+    final proxies = List.generate(900, _performanceProxy);
+    final runtime = ProxyRuntimeVisualStore();
+    addTearDown(runtime.dispose);
+    runtime.replaceAll({
+      for (var i = 0; i < proxies.length; i++)
+        proxies[i].tag: ProxyRuntimeVisualState(latency: 100 + i),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ProxiesPage(
+          proxies: proxies,
+          selectedTag: '',
+          connected: true,
+          initialSort: ProxySort.latency,
+          runtimeStates: runtime,
+          progressiveBlurEnabled: false,
+          onSelected: (_) {},
+          onUrlTest: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = tester.widget<ListView>(find.byType(ListView));
+    expect(find.byType(ProxyTile).evaluate().length, lessThan(30));
+    runtime.updateTags({
+      proxies.first.tag: const ProxyRuntimeVisualState(latency: 90),
+    });
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      identical(tester.widget<ListView>(find.byType(ListView)), before),
+      isTrue,
+    );
+    expect(
+      tester
+          .widgetList<ProxyTile>(find.byType(ProxyTile))
+          .first
+          .runtimeState
+          ?.latency,
+      90,
+    );
+    runtime.updateTags({
+      proxies[1].tag: const ProxyRuntimeVisualState(latency: 50),
+    });
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      tester.widgetList<ProxyTile>(find.byType(ProxyTile)).first.proxy.tag,
+      proxies[1].tag,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('provider group selects the group without exposing members', (
     tester,
   ) async {

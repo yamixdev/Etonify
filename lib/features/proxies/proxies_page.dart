@@ -591,7 +591,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
           (_sort != ProxySort.latency && _sort != ProxySort.working)) {
         return;
       }
-      setState(_rebuildVisibleItems);
+      if (_rebuildVisibleItems()) {
+        setState(() {});
+      }
     });
   }
 
@@ -606,11 +608,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
     widget.onSortChanged?.call(value);
   }
 
-  void _rebuildVisibleItems() {
+  bool _rebuildVisibleItems() {
     if (widget.embedded && !_embeddedListActivated) {
       _visibleItems = const <AppProxySummary>[];
       _invalidateVisibleEntries();
-      return;
+      return false;
     }
     final pinnedItems = <AppProxySummary>[];
     final visibleItems = <AppProxySummary>[];
@@ -631,8 +633,15 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
 
     _sortItems(visibleItems);
-    _visibleItems = [...pinnedItems, ...visibleItems];
+    final nextItems = [...pinnedItems, ...visibleItems];
+    // Individual rows already listen to their runtime state. Rebuilding the
+    // list is only necessary when filtering or sorting changes its contents.
+    if (listEquals(_visibleItems, nextItems)) {
+      return false;
+    }
+    _visibleItems = nextItems;
     _invalidateVisibleEntries();
+    return true;
   }
 
   bool _isPinnedHeaderProxy(AppProxySummary proxy) =>
@@ -1165,7 +1174,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
               : null,
         );
         final runtimeStates = widget.runtimeStates;
-        if (!widget.embedded || runtimeStates == null) {
+        if (runtimeStates == null) {
           return buildTile(null);
         }
         return ValueListenableBuilder<ProxyRuntimeVisualState?>(

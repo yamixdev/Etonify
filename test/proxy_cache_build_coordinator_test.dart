@@ -26,6 +26,12 @@ void main() {
       expect(compact.outbounds.length, 10000);
       expect(compact.outbounds.last.config, {'type': 'vless'});
       expect(identical(await cache.get(source), compact), isTrue);
+      await cache.releaseStrongReference();
+      expect(identical(await cache.get(source), compact), isTrue);
+      final release = cache.releaseStrongReference();
+      cache.seed(source, compact);
+      await release;
+      expect(identical(await cache.get(source), compact), isTrue);
       final changed = source.copyWith(name: 'Updated');
       expect((await cache.get(changed))!.name, 'Updated');
       cache.seed(source, compact);

@@ -471,11 +471,18 @@ class LatencyCoordinator {
         return;
       }
       _phase = LatencySessionPhase.collectingEvents;
-      if (_acceptedEventTimes.isNotEmpty || _sessionExpectedTags.isNotEmpty) {
+      if (_acceptedEventTimes.isNotEmpty) {
         return;
       }
       _firstEventTimer?.cancel();
-      _firstEventTimer = Timer(uiPolicy.initialEventTimeout, () {
+      final nativeResultWindow = Duration(
+        milliseconds: request.timeoutMillis + 5000,
+      );
+      final firstEventTimeout =
+          nativeResultWindow > uiPolicy.initialEventTimeout
+          ? nativeResultWindow
+          : uiPolicy.initialEventTimeout;
+      _firstEventTimer = Timer(firstEventTimeout, () {
         if (generation != _generation) return;
         _settleCurrent(success: false, reason: 'no_fresh_events');
       });

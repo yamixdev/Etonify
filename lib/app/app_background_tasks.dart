@@ -47,17 +47,24 @@ enum ProxyCacheBuildScope { home, full }
 /// Retains only the active subscription's presentation snapshot. Latency
 /// refreshes must not repeatedly traverse every full outbound on the UI isolate.
 class ProxyPresentationSnapshotCache {
-  Subscription? _source;
+  WeakReference<Subscription>? _source;
   Future<Subscription?>? _snapshot;
+  WeakReference<Subscription>? _releasedSnapshot;
 
   Future<Subscription?> get(Subscription? source) {
     if (source == null) {
       _source = null;
       _snapshot = null;
+      _releasedSnapshot = null;
       return Future.value(null);
     }
-    if (identical(source, _source) && _snapshot != null) return _snapshot!;
-    _source = source;
+    if (identical(source, _source?.target)) {
+      if (_snapshot != null) return _snapshot!;
+      final retained = _releasedSnapshot?.target;
+      if (retained != null) return _snapshot = Future.value(retained);
+    }
+    _source = WeakReference(source);
+    _releasedSnapshot = null;
     return _snapshot = _build(source);
   }
 
@@ -65,7 +72,7 @@ class ProxyPresentationSnapshotCache {
     try {
       return await _compactInBackground(source);
     } catch (_) {
-      if (identical(source, _source)) {
+      if (identical(source, _source?.target)) {
         _source = null;
         _snapshot = null;
       }
@@ -74,8 +81,24 @@ class ProxyPresentationSnapshotCache {
   }
 
   void seed(Subscription source, Subscription snapshot) {
-    _source = source;
+    _source = WeakReference(source);
+    _releasedSnapshot = null;
     _snapshot = Future.value(snapshot);
+  }
+
+  /// Keep a reusable snapshot if it survives GC, without keeping a closed
+  /// large panel's presentation data alive solely for this cache.
+  Future<void> releaseStrongReference() async {
+    final pending = _snapshot;
+    if (pending == null) return;
+    try {
+      final value = await pending;
+      if (!identical(pending, _snapshot)) return;
+      _releasedSnapshot = value == null ? null : WeakReference(value);
+      _snapshot = null;
+    } catch (_) {
+      // The build caller owns error reporting.
+    }
   }
 }
 
@@ -854,6 +877,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
           config: const <String, dynamic>{},
           proxyOutboundTagsByIndex: plan.proxyOutboundTagsByIndex,
           visibleProxyOutboundCount: plan.visibleProxyOutboundCount,
+          urlTestOutboundTags: plan.urlTestOutboundTags,
         );
   return SingboxConfigBuildResult(
     plan: resultPlan,

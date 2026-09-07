@@ -36,6 +36,7 @@ import com.etonify.meow_client.singbox.OwnProcessMemory
 import com.etonify.meow_client.singbox.PersistentDnsCache
 import com.etonify.meow_client.singbox.RuntimeMeasurement
 import com.etonify.meow_client.singbox.SingboxController
+import com.etonify.meow_client.singbox.VpnServiceLifecyclePolicy
 import com.etonify.meow_client.generated.ApkInspectionMessage
 import com.etonify.meow_client.generated.FlutterError as PigeonFlutterError
 import com.etonify.meow_client.generated.HttpHeaderMessage
@@ -1004,15 +1005,36 @@ class MainActivity : FlutterFragmentActivity() {
         MeowApplication.clearServiceState()
         MeowApplication.clearRuntimeIntent()
         MeowQuickSettingsTileService.requestRefresh(this)
-        val stopped =
-            !SingboxController.running &&
-                !MeowBoxService.hasActiveRuntimeOwner()
+        val stopped = VpnServiceLifecyclePolicy.runtimeFullyStopped(
+            runtimeRunning = SingboxController.running,
+            activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner(),
+        )
         MeowDiagnostics.log(
             TAG,
             "cleanupStoppedRuntimeState completed reason=$reason source=$source force=$force " +
                 "stopped=$stopped targets=${targets.joinToString { it.simpleName }}",
         )
         return stopped
+    }
+
+    private fun completeStopAfterOwnerRelease(
+        timeoutMillis: Long,
+        onComplete: (Boolean) -> Unit,
+    ) {
+        val deadline = SystemClock.uptimeMillis() + timeoutMillis
+        lateinit var verify: Runnable
+        verify = Runnable {
+            val stopped = VpnServiceLifecyclePolicy.runtimeFullyStopped(
+                runtimeRunning = SingboxController.running,
+                activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner(),
+            )
+            if (stopped || SystemClock.uptimeMillis() >= deadline) {
+                onComplete(stopped)
+            } else {
+                mainHandler.postDelayed(verify, 100L)
+            }
+        }
+        verify.run()
     }
 
     private fun dispatchStopRuntime(reason: String, onComplete: (Boolean) -> Unit) {
@@ -1076,14 +1098,18 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }, 1_200L)
         if (!SingboxController.running) {
-            cleanupStoppedRuntimeState(
+            val cleanupConfirmed = cleanupStoppedRuntimeState(
                 reason = reason,
                 source = "already_stopped",
                 stopRequestedAtMillis = stopRequestedAtMillis,
                 targets = cleanupTargets,
                 force = false,
             )
-            onComplete(true)
+            if (cleanupConfirmed) {
+                onComplete(true)
+            } else {
+                completeStopAfterOwnerRelease(2_000L, onComplete)
+            }
             return
         }
         SingboxController.awaitStopped { stopped ->
@@ -1098,9 +1124,10 @@ class MainActivity : FlutterFragmentActivity() {
                 // Give Service.onDestroy() and the native cleanup worker a short
                 // final window, but never turn a timeout into a fake success.
                 mainHandler.postDelayed({
-                    val verifiedStopped =
-                        !SingboxController.running &&
-                            !MeowBoxService.hasActiveRuntimeOwner()
+                    val verifiedStopped = VpnServiceLifecyclePolicy.runtimeFullyStopped(
+                        runtimeRunning = SingboxController.running,
+                        activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner(),
+                    )
                     MeowDiagnostics.log(
                         TAG,
                         "dispatchStopRuntime timeout verification reason=$reason " +
@@ -1111,14 +1138,18 @@ class MainActivity : FlutterFragmentActivity() {
                 }, 750L)
                 return@awaitStopped
             }
-            cleanupStoppedRuntimeState(
+            val cleanupConfirmed = cleanupStoppedRuntimeState(
                 reason = reason,
                 source = "await_stopped",
                 stopRequestedAtMillis = stopRequestedAtMillis,
                 targets = cleanupTargets,
                 force = false,
             )
-            onComplete(true)
+            if (cleanupConfirmed) {
+                onComplete(true)
+            } else {
+                completeStopAfterOwnerRelease(2_000L, onComplete)
+            }
         }
     }
 
