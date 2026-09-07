@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'package:crypto/crypto.dart';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/outbound_location.dart';
@@ -13,6 +14,8 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
+
+part 'singbox_config_cache.dart';
 
 class ProxyCacheBuildInput {
   const ProxyCacheBuildInput({
@@ -359,6 +362,9 @@ class SingboxConfigBuildResult {
     required this.invalidOutboundCount,
     required this.selectedProxyInvalid,
     required this.startableOutboundCount,
+    this.inputFingerprint,
+    this.fallbackInputFingerprint,
+    this.reusedConfig = false,
   });
 
   final SingboxBuildPlan plan;
@@ -372,6 +378,9 @@ class SingboxConfigBuildResult {
   final int invalidOutboundCount;
   final bool selectedProxyInvalid;
   final int startableOutboundCount;
+  final String? inputFingerprint;
+  final String? fallbackInputFingerprint;
+  final bool reusedConfig;
 
   bool get hasReturnedConfig => plan.config.isNotEmpty;
   bool get hasPreparedConfig =>
@@ -907,9 +916,7 @@ String _writeConfigJsonAtomically(String path, String configJson) {
   );
   try {
     temp.writeAsStringSync(configJson, flush: true);
-    if (target.existsSync()) {
-      target.deleteSync();
-    }
+    // Same-directory rename replaces the complete file, with no delete gap.
     temp.renameSync(target.path);
     return target.path;
   } catch (_) {

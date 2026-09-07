@@ -72,9 +72,8 @@ android {
 
     packaging {
         jniLibs {
-            // Compress native libraries in the APK; Android extracts them on
-            // installation. This reduces download size at the cost of storage.
-            useLegacyPackaging = true
+            // Load uncompressed native libraries directly from the APK.
+            useLegacyPackaging = false
             // Keep the old Happ native library on disk, but do not package it.
             excludes += setOf("**/liberror-code.so")
         }

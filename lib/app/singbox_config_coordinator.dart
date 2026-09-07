@@ -247,6 +247,7 @@ class SingboxConfigCoordinator {
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
+  final Expando<int> _preparedBuildGenerations = Expando<int>();
   Future<String?>? _singboxConfigPathFuture;
   Future<void> _runtimeConfigApplyQueue = Future<void>.value();
   Timer? _fullServiceRestartDebounceTimer;
@@ -645,7 +646,12 @@ class SingboxConfigCoordinator {
     late final SingboxConfigBuildResult result;
     try {
       final inputReadyMs = preparationWatch.elapsedMilliseconds;
-      result = await buildSingboxConfigInBackground(input);
+      result = configPath == null
+          ? await buildSingboxConfigInBackground(input)
+          : await buildOrReuseSingboxConfigInBackground(
+              input,
+              cachePath: '$configPath.build-cache',
+            );
       final builtMs = preparationWatch.elapsedMilliseconds;
       if (validateConfig && input.capabilities.supportsConfigCheck) {
         await SingboxRuntime.instance.checkConfig(
@@ -655,6 +661,7 @@ class SingboxConfigCoordinator {
       AppLogStore.info(
         'config performance',
         'inputMs=$inputReadyMs buildMs=${builtMs - inputReadyMs} '
+            'cacheHit=${result.reusedConfig} '
             'validationMs=${preparationWatch.elapsedMilliseconds - builtMs} '
             'totalMs=${preparationWatch.elapsedMilliseconds}',
       );
@@ -670,7 +677,45 @@ class SingboxConfigCoordinator {
       _deletePreparedConfigCandidate(stagedConfigPath);
       return null;
     }
+    try {
+      if (!await _matchesCurrentConfigInputs(result) ||
+          !_isMounted() ||
+          (dropStale && generation != _singboxConfigBuildGeneration)) {
+        _deletePreparedConfigCandidate(stagedConfigPath);
+        return null;
+      }
+    } catch (_) {
+      _deletePreparedConfigCandidate(stagedConfigPath);
+      rethrow;
+    }
+    if (dropStale) _preparedBuildGenerations[result] = generation;
     return result;
+  }
+
+  Future<bool> _matchesCurrentConfigInputs(
+    SingboxConfigBuildResult build,
+  ) async {
+    final fingerprint = build.inputFingerprint;
+    if (fingerprint == null) return true;
+    final current = await singboxConfigFingerprintInBackground(
+      _currentSingboxConfigBuildInput(returnConfig: false),
+    );
+    return fingerprint == current || build.fallbackInputFingerprint == current;
+  }
+
+  Future<void> _requireCurrentConfigInputs(
+    SingboxConfigBuildResult build,
+  ) async {
+    final matches = await _matchesCurrentConfigInputs(build);
+    final generation = _preparedBuildGenerations[build];
+    if (!matches ||
+        !_isMounted() ||
+        (generation != null && generation != _singboxConfigBuildGeneration)) {
+      discardPreparedConfigCandidate(build);
+      throw StateError(
+        'Config inputs changed before activation. Retry connection.',
+      );
+    }
   }
 
   Future<String> _configContentForValidation(
@@ -696,6 +741,7 @@ class SingboxConfigCoordinator {
     if (targetPath == null || targetPath.trim().isEmpty) {
       throw StateError('Prepared config target path is unavailable.');
     }
+    await _requireCurrentConfigInputs(build);
     _promotePreparedConfigCandidate(
       sourcePath: build.configPath!,
       targetPath: targetPath,
@@ -711,6 +757,7 @@ class SingboxConfigCoordinator {
     if (targetPath == null || targetPath.trim().isEmpty) {
       throw StateError('Prepared config target path is unavailable.');
     }
+    await _requireCurrentConfigInputs(build);
     final source = File(build.configPath!);
     final target = File(targetPath);
     final backup = File('$targetPath.rollback.$generation');
@@ -719,7 +766,7 @@ class SingboxConfigCoordinator {
     var hadTarget = false;
     try {
       if (target.existsSync()) {
-        target.renameSync(backup.path);
+        target.copySync(backup.path);
         hadTarget = true;
       }
       source.renameSync(target.path);
@@ -924,14 +971,7 @@ class SingboxConfigCoordinator {
     final source = File(sourcePath);
     final target = File(targetPath);
     target.parent.createSync(recursive: true);
-    try {
-      source.renameSync(target.path);
-      return;
-    } on FileSystemException {
-      if (target.existsSync()) {
-        target.deleteSync();
-      }
-    }
+    // Never delete the previous valid config when replacement fails.
     source.renameSync(target.path);
   }
 
@@ -969,11 +1009,11 @@ class _PreparedConfigTransaction {
   Future<void> rollback() async {
     if (_finished) return;
     _finished = true;
-    if (target.existsSync()) target.deleteSync();
     if (hadTarget && backup.existsSync()) {
       backup.renameSync(target.path);
-    } else if (backup.existsSync()) {
-      backup.deleteSync();
+    } else {
+      if (!hadTarget && target.existsSync()) target.deleteSync();
+      if (backup.existsSync()) backup.deleteSync();
     }
   }
 }

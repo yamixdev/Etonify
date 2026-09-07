@@ -95,7 +95,10 @@ class SingboxRuntime {
     'meow_client/singbox_events',
   );
 
-  Stream<Map<String, dynamic>> get events => _events
+  // EventChannel installs one binary-message handler per channel name. All
+  // consumers must share this broadcast stream: a separate stream per getter
+  // call replaces that handler, and cancelling it disconnects other consumers.
+  late final Stream<Map<String, dynamic>> events = _events
       .receiveBroadcastStream()
       .map((event) => Map<String, dynamic>.from(event as Map));
 
@@ -194,8 +197,7 @@ class SingboxRuntime {
         networkHeartbeatIntervalSeconds:
             (value['networkHeartbeatIntervalSeconds'] as num?)?.toInt() ?? 180,
         memoryLimitEnabled: value['memoryLimitEnabled'] == true,
-        goMemoryLimitBytes:
-            (value['goMemoryLimitBytes'] as num?)?.toInt() ?? 0,
+        goMemoryLimitBytes: (value['goMemoryLimitBytes'] as num?)?.toInt() ?? 0,
       );
     } on MissingPluginException {
       return const RuntimeFlags();
@@ -691,9 +693,9 @@ class SingboxRuntime {
       return LibboxCapabilities.bundledLegacy;
     }
     try {
-      final value = await _hostApi
-          .getCoreCapabilities()
-          .timeout(const Duration(seconds: 5));
+      final value = await _hostApi.getCoreCapabilities().timeout(
+        const Duration(seconds: 5),
+      );
       return LibboxCapabilities.parseStrict(value);
     } on TimeoutException {
       return LibboxCapabilities.incompatible;

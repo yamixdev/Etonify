@@ -228,9 +228,8 @@ void main() {
 
       var refreshCalled = false;
       final coordinator = SingboxConfigCoordinator(
-        readSnapshot: () => _snapshot(
-          capabilities: LibboxCapabilities.incompatible,
-        ),
+        readSnapshot: () =>
+            _snapshot(capabilities: LibboxCapabilities.incompatible),
         isMounted: () => true,
         ensureActiveSubscriptionHydrated: () async => true,
         runtimeLifecycle: lifecycle,
@@ -259,6 +258,68 @@ void main() {
       expect(build, isNotNull);
     },
   );
+  test(
+    'cached coordinator build rejects settings changed before promotion',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('config-state-test-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final target = File('${dir.path}/config.json')
+        ..writeAsStringSync('previous');
+      final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+      addTearDown(lifecycle.dispose);
+      var mtu = 1500;
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+        snapshot: () => _snapshot(mtu: mtu),
+      );
+      addTearDown(coordinator.dispose);
+      final build = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      mtu = 1400;
+      await expectLater(
+        coordinator.promotePreparedConfigBuild(build),
+        throwsStateError,
+      );
+      expect(target.readAsStringSync(), 'previous');
+      expect(File(build.configPath!).existsSync(), isFalse);
+      final updated = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      expect(updated.reusedConfig, isFalse);
+      await coordinator.promotePreparedConfigBuild(updated);
+      final cached = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      expect(cached.reusedConfig, isTrue);
+      await coordinator.promotePreparedConfigBuild(cached);
+    },
+  );
+
+  test('cancelling prepared build preserves the active config', () async {
+    final dir = Directory.systemTemp.createTempSync('config-cancel-test-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final target = File('${dir.path}/config.json')
+      ..writeAsStringSync('previous');
+    final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(
+      runtimeLifecycle: lifecycle,
+      readConfigPath: () async => target.path,
+    );
+    addTearDown(coordinator.dispose);
+    final build = (await coordinator.buildCurrentSingboxConfigInBackground(
+      validateConfig: false,
+    ))!;
+    coordinator.cancelPendingWork(reason: 'test');
+    await expectLater(
+      coordinator.promotePreparedConfigBuild(build),
+      throwsStateError,
+    );
+    expect(target.readAsStringSync(), 'previous');
+    expect(File(build.configPath!).existsSync(), isFalse);
+  });
 }
 
 SingboxConfigCoordinator _coordinator({
@@ -266,9 +327,10 @@ SingboxConfigCoordinator _coordinator({
   bool connected = true,
   Duration fullServiceRestartDebounce = const Duration(milliseconds: 450),
   SingboxConfigPathReader? readConfigPath,
+  SingboxConfigCoordinatorSnapshot Function()? snapshot,
 }) {
   return SingboxConfigCoordinator(
-    readSnapshot: () => _snapshot(connected: connected),
+    readSnapshot: snapshot ?? () => _snapshot(connected: connected),
     isMounted: () => true,
     ensureActiveSubscriptionHydrated: () async => true,
     runtimeLifecycle: runtimeLifecycle,
@@ -294,6 +356,7 @@ SingboxConfigCoordinator _coordinator({
 
 SingboxConfigCoordinatorSnapshot _snapshot({
   bool connected = true,
+  int mtu = 9000,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
 }) {
   return SingboxConfigCoordinatorSnapshot(
@@ -304,7 +367,7 @@ SingboxConfigCoordinatorSnapshot _snapshot({
     selectedProxyTag: '',
     excludedOutboundTags: <String>{},
     vpnInboundEnabled: true,
-    vpnMtu: 9000,
+    vpnMtu: mtu,
     vpnStrictRoute: false,
     vpnTunImplementation: TunImplementationPreference.mixed,
     proxyInboundEnabled: false,
