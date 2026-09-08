@@ -65,6 +65,7 @@ import 'package:meow_client/features/settings/settings_about_page.dart';
 import 'package:meow_client/features/settings/settings_backup_actions.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
+import 'package:meow_client/features/settings/settings_core_page.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/features/settings/settings_logs_page.dart';
@@ -2852,7 +2853,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await _applySettingsState(state, configReason: 'settings backup imported');
   }
 
-  Future<void> _applySettingsState(
+  Future<bool> _applySettingsState(
     AppSettingsState state, {
     required String configReason,
   }) async {
@@ -2869,14 +2870,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
       applyWhenNativeRunning: true,
       forceFullServiceRestart: true,
     );
-    if (!mounted) return;
+    if (!mounted) return false;
     if (!result.success) {
       _restoreAppliedSettings(previousState, reason: result.error);
-      return;
+      return false;
     }
     _lastAppliedSettingsState = _currentSettingsState();
     await _persistState();
     await _syncRuntimeFlags();
+    return true;
   }
 
   Future<void> _importBackupSubscriptions(
@@ -4707,6 +4709,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ),
         resetSettings: () => unawaited(_resetSettingsToDefaults()),
         openExperimental: _showExperimentalSettingsPage,
+        openCore: _showCoreSettingsPage,
         openLogs: _showLogsPage,
         openAbout: _showAboutSettingsPage,
       ),
@@ -5230,6 +5233,40 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  Future<void> _showCoreSettingsPage() async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    await _ensureActiveSubscriptionHydratedForRuntime();
+    if (!mounted || !navigator.mounted) return;
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (context) => SettingsCorePage(
+          settings: _settings.coreSettings,
+          vpnInboundEnabled: _settings.vpnInboundEnabled,
+          noticeAcknowledged: _settings.coreSettingsNoticeAcknowledged,
+          subscription: _activeSubscription,
+          onAcknowledgeNotice: () async {
+            _applySettingsChange(_settings.acknowledgeCoreSettingsNotice);
+            _lastAppliedSettingsState =
+                (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+                  coreSettingsNoticeAcknowledged: true,
+                );
+            await _persistState();
+          },
+          onApply: (value) async {
+            if (_connectionBusy || _pendingSettingsConfigApplyGeneration != 0) {
+              return false;
+            }
+            return _applySettingsState(
+              _currentSettingsState().copyWith(coreSettings: value),
+              configReason: 'core settings changed',
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _showSecuritySettingsPage() async {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
@@ -5579,6 +5616,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       experimentalFakeIpEnabled: _experimentalFakeIpEnabled,
       markAllServersRussia: _activeSubscription?.markAllServersRussia ?? false,
       capabilities: _latencyCoordinator.capabilities,
+      coreSettings: _settings.coreSettings,
     );
   }
 

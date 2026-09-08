@@ -1,5 +1,7 @@
 import 'dart:io' show InternetAddress, InternetAddressType, Platform;
 import 'dart:math';
+import 'dart:convert';
+import 'package:meow_client/models/core_settings.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:meow_client/core/platform/android_files_dir.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
@@ -142,6 +144,8 @@ List<String> normalizeSplitRoutingPackages(Iterable<String> values) {
 class AppSettingsState {
   const AppSettingsState({
     this.coreConfigSchemaVersion = 0,
+    this.coreSettings = const CoreSettings(),
+    this.coreSettingsNoticeAcknowledged = false,
     required this.onboardingCompleted,
     this.acceptedLegalVersion = '',
     this.acceptedLegalAtMillis,
@@ -208,6 +212,8 @@ class AppSettingsState {
   });
 
   final int coreConfigSchemaVersion;
+  final CoreSettings coreSettings;
+  final bool coreSettingsNoticeAcknowledged;
   final bool onboardingCompleted;
   final String acceptedLegalVersion;
   final int? acceptedLegalAtMillis;
@@ -274,6 +280,8 @@ class AppSettingsState {
 
   AppSettingsState copyWith({
     int? coreConfigSchemaVersion,
+    CoreSettings? coreSettings,
+    bool? coreSettingsNoticeAcknowledged,
     bool? onboardingCompleted,
     String? acceptedLegalVersion,
     int? acceptedLegalAtMillis,
@@ -341,6 +349,9 @@ class AppSettingsState {
     return AppSettingsState(
       coreConfigSchemaVersion:
           coreConfigSchemaVersion ?? this.coreConfigSchemaVersion,
+      coreSettings: coreSettings ?? this.coreSettings,
+      coreSettingsNoticeAcknowledged:
+          coreSettingsNoticeAcknowledged ?? this.coreSettingsNoticeAcknowledged,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       acceptedLegalVersion: acceptedLegalVersion ?? this.acceptedLegalVersion,
       acceptedLegalAtMillis:
@@ -445,6 +456,8 @@ abstract class AppSettingsStore {
 
   static const _onboardingCompletedKey = 'onboarding_completed';
   static const _coreConfigSchemaVersionKey = 'core_config_schema_version';
+  static const _coreSettingsKey = 'core_settings_v1';
+  static const _coreSettingsNoticeKey = 'core_settings_notice_acknowledged';
   static const _acceptedLegalVersionKey = 'accepted_legal_version';
   static const _acceptedLegalAtMillisKey = 'accepted_legal_at_millis';
   static const _activeProfileIdKey = 'active_profile_id';
@@ -525,6 +538,7 @@ abstract class AppSettingsStore {
   Future<void> close();
 
   static const Set<String> safeExportKeys = {
+    _coreSettingsKey,
     _localeCodeKey,
     _themePreferenceKey,
     _accentColorHexKey,
@@ -655,6 +669,11 @@ abstract class AppSettingsStore {
     return AppSettingsState(
       coreConfigSchemaVersion:
           int.tryParse(map[_coreConfigSchemaVersionKey]?.toString() ?? '') ?? 0,
+      coreSettings: CoreSettings.decode(map[_coreSettingsKey]),
+      coreSettingsNoticeAcknowledged: boolValue(
+        _coreSettingsNoticeKey,
+        defaultValue: false,
+      ),
       onboardingCompleted: boolValue(
         _onboardingCompletedKey,
         defaultValue: false,
@@ -885,6 +904,8 @@ abstract class AppSettingsStore {
   Map<String, dynamic> stateToMap(AppSettingsState state) {
     return {
       _coreConfigSchemaVersionKey: state.coreConfigSchemaVersion.toString(),
+      _coreSettingsKey: jsonEncode(state.coreSettings.toMap()),
+      _coreSettingsNoticeKey: state.coreSettingsNoticeAcknowledged ? '1' : '0',
       _onboardingCompletedKey: state.onboardingCompleted ? '1' : '0',
       _acceptedLegalVersionKey: state.acceptedLegalVersion,
       _acceptedLegalAtMillisKey: state.acceptedLegalAtMillis?.toString() ?? '',

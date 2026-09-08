@@ -12,6 +12,7 @@ import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
@@ -240,6 +241,7 @@ class ProxyCacheBuildResult {
 class SingboxConfigBuildInput {
   const SingboxConfigBuildInput({
     required this.activeSubscription,
+    this.coreSettings = const CoreSettings(),
     required this.selectedProxyTag,
     required this.excludedOutboundTags,
     required this.vpnInboundEnabled,
@@ -295,6 +297,7 @@ class SingboxConfigBuildInput {
   });
 
   final Subscription? activeSubscription;
+  final CoreSettings coreSettings;
   final String selectedProxyTag;
   final Set<String> excludedOutboundTags;
   final bool vpnInboundEnabled;
@@ -817,6 +820,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     ...invalidOutboundTags,
   };
   final plan = SingboxConfigBuilder(
+    coreSettings: input.coreSettings,
     activeSubscription: input.activeSubscription,
     selectedProxyTag: input.selectedProxyTag,
     excludedOutboundTags: excludedOutboundTags,

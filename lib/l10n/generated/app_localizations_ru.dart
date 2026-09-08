@@ -9,6 +9,238 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get coreSettingsNatIndependent => 'Независимо от адресата';
+
+  @override
+  String get coreSettingsNatAddress => 'По адресу';
+
+  @override
+  String get coreSettingsNatAddressPort => 'По адресу и порту';
+
+  @override
+  String get coreSettingsChooseServer => 'Выберите сервер';
+
+  @override
+  String get coreSettingsMuxConnections => 'Максимум соединений';
+
+  @override
+  String get coreSettingsMuxMinStreams => 'Потоков до нового соединения';
+
+  @override
+  String get coreSettingsTitle => 'Настройки ядра';
+
+  @override
+  String get coreSettingsNoticeTitle => 'Перед изменением настроек';
+
+  @override
+  String get coreSettingsNotice =>
+      'Обычно эти параметры менять не нужно. Неподходящие значения могут привести к обрывам связи, увеличить расход трафика и батареи. Меняйте по одному параметру. Вернуть исходные значения можно кнопкой сброса справа сверху.';
+
+  @override
+  String get coreSettingsContinue => 'Продолжить';
+
+  @override
+  String get coreSettingsDefault => 'По умолчанию';
+
+  @override
+  String get coreSettingsOff => 'Выключено';
+
+  @override
+  String get coreSettingsOn => 'Включено';
+
+  @override
+  String get coreSettingsManual => 'Вручную';
+
+  @override
+  String get coreSettingsAuto => 'Авто';
+
+  @override
+  String get coreSettingsApply => 'Применить';
+
+  @override
+  String get coreSettingsApplying => 'Проверка и применение…';
+
+  @override
+  String get coreSettingsFailed =>
+      'Не удалось применить настройки. Прежние значения сохранены. Проверьте журнал или дождитесь завершения текущей операции подключения.';
+
+  @override
+  String get coreSettingsSaved => 'Настройки ядра применены';
+
+  @override
+  String get coreSettingsReset => 'Сбросить настройки ядра';
+
+  @override
+  String get coreSettingsResetBody =>
+      'Сбросить только этот раздел? Подписки, DNS, маршрутизация и остальные настройки не изменятся. VPN может переподключиться.';
+
+  @override
+  String get coreSettingsDiscard => 'Отменить изменения?';
+
+  @override
+  String get coreSettingsDiscardBody => 'Изменения ещё не применены.';
+
+  @override
+  String get coreSettingsDiscardAction => 'Не сохранять';
+
+  @override
+  String get coreSettingsNetwork => 'Сеть';
+
+  @override
+  String get coreSettingsStrategy => 'Выбор сети';
+
+  @override
+  String get coreSettingsStrategyHelp =>
+      'По умолчанию сеть выбирает ядро. Hybrid пробует доступные сети параллельно: скорость не суммируется, возможен расход мобильного трафика. Fallback пробует резервную сеть с задержкой. Явные настройки сети или интерфейса от провайдера имеют приоритет. Доступность сетей зависит от Android.';
+
+  @override
+  String get coreSettingsPrimaryNetwork => 'Предпочтительная сеть';
+
+  @override
+  String get coreSettingsFallbackNetwork => 'Резервная сеть';
+
+  @override
+  String get coreSettingsNetworkHelp =>
+      'Авто оставляет выбор ядру. Выбор сети не включает Wi-Fi или мобильный интернет. Не выбирайте одну и ту же сеть основной и резервной.';
+
+  @override
+  String get coreSettingsCellular => 'Мобильная сеть';
+
+  @override
+  String get coreSettingsFallbackDelay => 'Задержка резерва, мс';
+
+  @override
+  String get coreSettingsFallbackDelayHelp =>
+      'Сколько ждать перед попыткой через резервную сеть. 0 оставляет значение ядра.';
+
+  @override
+  String get coreSettingsConnections => 'Соединения';
+
+  @override
+  String get coreSettingsConnectTimeout => 'Таймаут подключения, с';
+
+  @override
+  String get coreSettingsConnectTimeoutHelp =>
+      'Время ожидания соединения с прокси. Это не таймаут проверки пинга. 0 сохраняет значение подписки или ядра. Ручное значение заменяет настройки подключения прокси; в цепочке сокетом управляет выход, через который идёт соединение.';
+
+  @override
+  String get coreSettingsKeepAliveHelp =>
+      'Проверяет простаивающие TCP-соединения. Это не ускорение интернета; на QUIC не влияет. По умолчанию сохраняются настройки провайдера. Короткие интервалы могут увеличить расход батареи.';
+
+  @override
+  String get coreSettingsKeepAlivePeriod => 'Простой до проверки, с';
+
+  @override
+  String get coreSettingsKeepAliveInterval => 'Интервал проверок, с';
+
+  @override
+  String get coreSettingsUdpFragment => 'Фрагментация UDP';
+
+  @override
+  String get coreSettingsUdpFragmentHelp =>
+      'Разрешить или запретить IP-фрагментацию исходящих UDP-пакетов. Это не фрагментация TLS. По умолчанию сохраняется значение подписки или ядра. Сеть может отбрасывать фрагментированные пакеты.';
+
+  @override
+  String get coreSettingsNat => 'UDP / NAT';
+
+  @override
+  String get coreSettingsNatInactive =>
+      'Применяется только при включённом VPN-входе.';
+
+  @override
+  String get coreSettingsMapping => 'Сопоставление UDP';
+
+  @override
+  String get coreSettingsMappingHelp =>
+      'Определяет, используется ли одно UDP-сопоставление для разных адресатов или отдельное для каждого адреса и порта. По умолчанию выбор остаётся за ядром. Более строгие режимы могут повлиять на звонки и игры.';
+
+  @override
+  String get coreSettingsFiltering => 'Фильтрация UDP';
+
+  @override
+  String get coreSettingsFilteringHelp =>
+      'Определяет, кто может присылать пакеты через существующее UDP-сопоставление: любой адресат, адрес после обращения к нему или конкретная пара адреса и порта. Не заменяет маршрутизацию и защиту от утечек.';
+
+  @override
+  String get coreSettingsNatMax => 'Максимум UDP-сессий';
+
+  @override
+  String get coreSettingsNatMaxHelp =>
+      '0 оставляет автоматический лимит ядра. Высокий лимит может увеличить расход памяти, низкий может мешать работе при большом числе UDP-сессий. Без конкретной причины оставьте Авто.';
+
+  @override
+  String get coreSettingsUdpTimeout => 'Таймаут простоя UDP, с';
+
+  @override
+  String get coreSettingsUdpTimeoutHelp =>
+      'Удаляет UDP-сессии после указанного периода бездействия. 0 оставляет значение ядра. Короткий таймаут может прерывать звонки и игры между пакетами.';
+
+  @override
+  String get coreSettingsAdvanced => 'Дополнительно';
+
+  @override
+  String get coreSettingsTlsTimeout => 'Таймаут TLS-рукопожатия, с';
+
+  @override
+  String get coreSettingsTlsTimeoutHelp =>
+      'Время ожидания TLS-рукопожатия на поддерживаемых TCP-прокси. Не меняет проверку сертификатов или рукопожатие QUIC. 0 сохраняет значение подписки или ядра.';
+
+  @override
+  String get coreSettingsMux => 'Мультиплексирование';
+
+  @override
+  String get coreSettingsMuxHelp =>
+      'Настройки применяются к одному серверу текущей подписки. Авто сохраняет явную настройку multiplex формата sing-box; без неё мультиплексирование выключено. Авто не определяет поддержку сервером. Xray Mux и XHTTP xmux работают иначе. Внутренние участники групп сохраняют настройки провайдера.';
+
+  @override
+  String get coreSettingsMuxServer => 'Сервер';
+
+  @override
+  String get coreSettingsMuxNoServer =>
+      'В активной подписке нет подходящих отдельных серверов';
+
+  @override
+  String get coreSettingsMuxMode => 'Режим';
+
+  @override
+  String get coreSettingsMuxInheritedOn => 'Включено · задано подпиской';
+
+  @override
+  String get coreSettingsMuxInheritedOff => 'Выключено · задано подпиской';
+
+  @override
+  String get coreSettingsMuxNotSet => 'Выключено · не задано';
+
+  @override
+  String get coreSettingsMuxOverrideTitle => 'Изменить настройки сервера?';
+
+  @override
+  String get coreSettingsMuxOverrideBody =>
+      'Сервер должен поддерживать мультиплексирование sing-box. Несовместимый протокол или padding могут помешать подключению. Локальная настройка заменит параметры multiplex из подписки только для этого сервера. Авто вернёт исходные значения.';
+
+  @override
+  String get coreSettingsMuxProtocol => 'Протокол мультиплексирования';
+
+  @override
+  String get coreSettingsMuxStreams => 'Потоков на соединение';
+
+  @override
+  String get coreSettingsMuxStreamsHelp =>
+      'Максимум потоков на соединение перед открытием следующего. Используется max_streams, без несовместимых max_connections и min_streams. Большее значение не обязательно быстрее.';
+
+  @override
+  String get coreSettingsMuxPaddingHelp =>
+      'Добавляет заполнение к мультиплексированному трафику. Требует поддержки на сервере; это не универсальный способ обхода блокировок.';
+
+  @override
+  String get coreSettingsInputRange =>
+      'Введите целое число в указанном диапазоне.';
+
+  @override
+  String get coreSettingsSameNetwork =>
+      'Выберите разные основную и резервную сети либо Авто.';
+
+  @override
   String get subscriptionErrorHwid =>
       'Не удалось получить корректный HWID. Если задан свой ID, используйте от 10 до 64 латинских букв, цифр, знаков = или -.';
 

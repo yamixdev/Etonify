@@ -1,0 +1,201 @@
+[
+  {
+    "name": "hysteria legacy migration",
+    "input": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "hysteria",
+      "tag": "proxy",
+      "up_mbps": 10,
+      "down_mbps": 50,
+      "auth_str": "test",
+      "domain_strategy": "prefer_ipv4",
+      "recv_window_conn": 1048576,
+      "recv_window": 4194304,
+      "disable_mtu_discovery": true,
+      "initial_packet_size": 1200,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "max_concurrent_streams": 64
+    },
+    "expected": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "hysteria",
+      "tag": "proxy",
+      "up_mbps": 10,
+      "down_mbps": 50,
+      "auth_str": "test",
+      "domain_resolver": {
+        "server": "dns-local",
+        "strategy": "prefer_ipv4"
+      },
+      "initial_packet_size": 1200,
+      "disable_path_mtu_discovery": true,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "stream_receive_window": 1048576,
+      "connection_receive_window": 4194304,
+      "max_concurrent_streams": 64
+    }
+  },
+  {
+    "name": "hysteria2 gecko",
+    "input": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "hysteria2",
+      "tag": "proxy",
+      "password": "test",
+      "obfs": {
+        "type": "gecko",
+        "password": "secret",
+        "min_packet_size": 512,
+        "max_packet_size": 1200
+      },
+      "initial_packet_size": 1200,
+      "disable_path_mtu_discovery": true,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "stream_receive_window": 1048576,
+      "connection_receive_window": 4194304,
+      "max_concurrent_streams": 64
+    },
+    "expected": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "hysteria2",
+      "tag": "proxy",
+      "password": "test",
+      "obfs": {
+        "type": "gecko",
+        "password": "secret",
+        "min_packet_size": 512,
+        "max_packet_size": 1200
+      },
+      "initial_packet_size": 1200,
+      "disable_path_mtu_discovery": true,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "stream_receive_window": 1048576,
+      "connection_receive_window": 4194304,
+      "max_concurrent_streams": 64
+    }
+  },
+  {
+    "name": "tuic shared QUIC",
+    "input": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "tuic",
+      "tag": "proxy",
+      "uuid": "7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f",
+      "password": "test",
+      "initial_packet_size": 1200,
+      "disable_path_mtu_discovery": true,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "stream_receive_window": 1048576,
+      "connection_receive_window": 4194304,
+      "max_concurrent_streams": 64
+    },
+    "expected": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "tuic",
+      "tag": "proxy",
+      "uuid": "7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f",
+      "password": "test",
+      "initial_packet_size": 1200,
+      "disable_path_mtu_discovery": true,
+      "idle_timeout": "30s",
+      "keep_alive_period": "10s",
+      "stream_receive_window": 1048576,
+      "connection_receive_window": 4194304,
+      "max_concurrent_streams": 64
+    }
+  },
+  {
+    "name": "TLS ECH cleanup",
+    "input": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false,
+          "pq_signature_schemes_enabled": true,
+          "dynamic_record_sizing_disabled": true
+        }
+      },
+      "type": "trojan",
+      "tag": "proxy",
+      "password": "test"
+    },
+    "expected": {
+      "server": "example.com",
+      "server_port": 443,
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "handshake_timeout": "5s",
+        "ech": {
+          "enabled": false
+        }
+      },
+      "type": "trojan",
+      "tag": "proxy",
+      "password": "test"
+    }
+  }
+]

@@ -14,6 +14,43 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  final schema114Corpus =
+      jsonDecode(
+            File('test/fixtures/etonify_schema114.json').readAsStringSync(),
+          )
+          as List;
+  for (final fixture in schema114Corpus.cast<Map<String, dynamic>>()) {
+    test('saved profile 1.14 migration: ${fixture['name']}', () {
+      final input = fixture['input'] as Map<String, dynamic>;
+      final original = jsonEncode(input);
+      final subscription = Subscription(
+        id: 'schema114',
+        name: 'Schema 1.14',
+        url: 'file:///schema114',
+        outbounds: [Outbound(tag: 'proxy', name: 'Proxy', config: input)],
+      );
+      final built = _defaultBuilder(subscription).build();
+      final outbound = (built['outbounds'] as List)
+          .cast<Map<String, dynamic>>()
+          .singleWhere((outbound) => outbound['tag'] == 'proxy');
+      expect(
+        outbound,
+        containsPair('tls', (fixture['expected'] as Map)['tls']),
+      );
+      for (final entry in (fixture['expected'] as Map).entries) {
+        expect(outbound, containsPair(entry.key, entry.value));
+      }
+      for (final key in [
+        'domain_strategy',
+        'recv_window_conn',
+        'recv_window',
+        'disable_mtu_discovery',
+      ]) {
+        expect(outbound.containsKey(key), false);
+      }
+      expect(jsonEncode(input), original);
+    });
+  }
   final localExport = Platform.environment['ETONIFY_TEST_PROFILE'];
   test(
     'local exported provider profile has no exposed fallback candidates',

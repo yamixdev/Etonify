@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
@@ -23,6 +24,7 @@ class AppSettingsImpactRegistry {
   const AppSettingsImpactRegistry._();
 
   static const _fullServiceRestartReasons = <String>{
+    'core settings changed',
     'vpn inbound changed',
     'vpn mtu changed',
     'vpn strict route changed',
@@ -86,6 +88,24 @@ class AppSettingsChange {
 
 class AppSettingsController {
   int coreConfigSchemaVersion = 0;
+  CoreSettings coreSettings = const CoreSettings();
+  bool coreSettingsNoticeAcknowledged = false;
+
+  AppSettingsChange setCoreSettings(CoreSettings value) {
+    if (coreSettings == value) return const AppSettingsChange(changed: false);
+    coreSettings = CoreSettings.fromMap(value.toMap());
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'core settings changed',
+    );
+  }
+
+  AppSettingsChange acknowledgeCoreSettingsNotice() {
+    final changed = !coreSettingsNoticeAcknowledged;
+    coreSettingsNoticeAcknowledged = true;
+    return AppSettingsChange(changed: changed);
+  }
+
   String localeCode = 'system';
   AppThemePreference themePreference = AppThemePreference.system;
   String accentColorHex = 'default';
@@ -168,6 +188,8 @@ class AppSettingsController {
   }) {
     return AppSettingsState(
       coreConfigSchemaVersion: coreConfigSchemaVersion,
+      coreSettings: coreSettings,
+      coreSettingsNoticeAcknowledged: coreSettingsNoticeAcknowledged,
       onboardingCompleted: onboardingCompleted,
       acceptedLegalVersion: acceptedLegalVersion,
       acceptedLegalAtMillis: acceptedLegalAtMillis,
@@ -242,6 +264,8 @@ class AppSettingsController {
     bool progressiveBlurEnabledOverride = false,
   }) {
     coreConfigSchemaVersion = state.coreConfigSchemaVersion;
+    coreSettings = state.coreSettings;
+    coreSettingsNoticeAcknowledged = state.coreSettingsNoticeAcknowledged;
     localeCode = state.localeCode;
     themePreference = state.themePreference;
     accentColorHex = normalizeAccentColorHex(state.accentColorHex);

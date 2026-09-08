@@ -98,6 +98,426 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @coreSettingsNatIndependent.
+  ///
+  /// In en, this message translates to:
+  /// **'Independent of destination'**
+  String get coreSettingsNatIndependent;
+
+  /// No description provided for @coreSettingsNatAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'By address'**
+  String get coreSettingsNatAddress;
+
+  /// No description provided for @coreSettingsNatAddressPort.
+  ///
+  /// In en, this message translates to:
+  /// **'By address and port'**
+  String get coreSettingsNatAddressPort;
+
+  /// No description provided for @coreSettingsChooseServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a server'**
+  String get coreSettingsChooseServer;
+
+  /// No description provided for @coreSettingsMuxConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum connections'**
+  String get coreSettingsMuxConnections;
+
+  /// No description provided for @coreSettingsMuxMinStreams.
+  ///
+  /// In en, this message translates to:
+  /// **'Streams before a new connection'**
+  String get coreSettingsMuxMinStreams;
+
+  /// No description provided for @coreSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Core settings'**
+  String get coreSettingsTitle;
+
+  /// No description provided for @coreSettingsNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Before changing these settings'**
+  String get coreSettingsNoticeTitle;
+
+  /// No description provided for @coreSettingsNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'These parameters usually do not need changing. Unsuitable values can interrupt connections or increase battery and data use. Change one parameter at a time. Use the reset button at the top right to restore defaults.'**
+  String get coreSettingsNotice;
+
+  /// No description provided for @coreSettingsContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get coreSettingsContinue;
+
+  /// No description provided for @coreSettingsDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get coreSettingsDefault;
+
+  /// No description provided for @coreSettingsOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get coreSettingsOff;
+
+  /// No description provided for @coreSettingsOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get coreSettingsOn;
+
+  /// No description provided for @coreSettingsManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual'**
+  String get coreSettingsManual;
+
+  /// No description provided for @coreSettingsAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get coreSettingsAuto;
+
+  /// No description provided for @coreSettingsApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get coreSettingsApply;
+
+  /// No description provided for @coreSettingsApplying.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking and applying…'**
+  String get coreSettingsApplying;
+
+  /// No description provided for @coreSettingsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply settings. Previous settings are retained. Check the log, or wait for the current connection operation to finish.'**
+  String get coreSettingsFailed;
+
+  /// No description provided for @coreSettingsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Core settings applied'**
+  String get coreSettingsSaved;
+
+  /// No description provided for @coreSettingsReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset core settings'**
+  String get coreSettingsReset;
+
+  /// No description provided for @coreSettingsResetBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset only this section? Subscriptions, DNS, routing and other settings will not change. The VPN may reconnect.'**
+  String get coreSettingsResetBody;
+
+  /// No description provided for @coreSettingsDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get coreSettingsDiscard;
+
+  /// No description provided for @coreSettingsDiscardBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes have not been applied.'**
+  String get coreSettingsDiscardBody;
+
+  /// No description provided for @coreSettingsDiscardAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get coreSettingsDiscardAction;
+
+  /// No description provided for @coreSettingsNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get coreSettingsNetwork;
+
+  /// No description provided for @coreSettingsStrategy.
+  ///
+  /// In en, this message translates to:
+  /// **'Network strategy'**
+  String get coreSettingsStrategy;
+
+  /// No description provided for @coreSettingsStrategyHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Default keeps the core behavior. Hybrid tries available networks in parallel; it does not combine their speeds and may use cellular data. Fallback tries a backup network after a delay. A provider\'s explicit network or interface settings take priority. Android must make the networks available.'**
+  String get coreSettingsStrategyHelp;
+
+  /// No description provided for @coreSettingsPrimaryNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferred network'**
+  String get coreSettingsPrimaryNetwork;
+
+  /// No description provided for @coreSettingsFallbackNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Fallback network'**
+  String get coreSettingsFallbackNetwork;
+
+  /// No description provided for @coreSettingsNetworkHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto lets the core choose. Selecting a network does not turn Wi-Fi or cellular data on. Do not select the same explicit network for both roles.'**
+  String get coreSettingsNetworkHelp;
+
+  /// No description provided for @coreSettingsCellular.
+  ///
+  /// In en, this message translates to:
+  /// **'Cellular'**
+  String get coreSettingsCellular;
+
+  /// No description provided for @coreSettingsFallbackDelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Fallback delay, ms'**
+  String get coreSettingsFallbackDelay;
+
+  /// No description provided for @coreSettingsFallbackDelayHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'How long to wait before trying the backup network. 0 keeps the core default.'**
+  String get coreSettingsFallbackDelayHelp;
+
+  /// No description provided for @coreSettingsConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Connections'**
+  String get coreSettingsConnections;
+
+  /// No description provided for @coreSettingsConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timeout, s'**
+  String get coreSettingsConnectTimeout;
+
+  /// No description provided for @coreSettingsConnectTimeoutHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum time for a socket connection to a proxy. Not the URLTest timeout. 0 preserves the subscription or core default. Manual values override applicable proxy dial settings; detour hops use their transport owner\'s settings.'**
+  String get coreSettingsConnectTimeoutHelp;
+
+  /// No description provided for @coreSettingsKeepAliveHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'TCP keepalive checks idle TCP connections. It is not a speed boost and does not affect QUIC. Default preserves provider settings. Short intervals may increase battery use.'**
+  String get coreSettingsKeepAliveHelp;
+
+  /// No description provided for @coreSettingsKeepAlivePeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle time before checks, s'**
+  String get coreSettingsKeepAlivePeriod;
+
+  /// No description provided for @coreSettingsKeepAliveInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Check interval, s'**
+  String get coreSettingsKeepAliveInterval;
+
+  /// No description provided for @coreSettingsUdpFragment.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP fragmentation'**
+  String get coreSettingsUdpFragment;
+
+  /// No description provided for @coreSettingsUdpFragmentHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow or prohibit IP fragmentation for outgoing UDP sockets. This is not TLS fragmentation. Default preserves provider or core settings. Fragmented packets may be dropped by the network.'**
+  String get coreSettingsUdpFragmentHelp;
+
+  /// No description provided for @coreSettingsNat.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP / NAT'**
+  String get coreSettingsNat;
+
+  /// No description provided for @coreSettingsNatInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Available when the VPN inbound is enabled.'**
+  String get coreSettingsNatInactive;
+
+  /// No description provided for @coreSettingsMapping.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP mapping'**
+  String get coreSettingsMapping;
+
+  /// No description provided for @coreSettingsMappingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls whether a UDP mapping is shared across destinations or separated by destination address and port. Default leaves the choice to the core. More restrictive modes may affect calls and games.'**
+  String get coreSettingsMappingHelp;
+
+  /// No description provided for @coreSettingsFiltering.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP filtering'**
+  String get coreSettingsFiltering;
+
+  /// No description provided for @coreSettingsFilteringHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Controls which remote endpoints may send packets through an existing UDP mapping: any, a contacted address, or a contacted address and port. This does not replace routing or leak protection.'**
+  String get coreSettingsFilteringHelp;
+
+  /// No description provided for @coreSettingsNatMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum UDP sessions'**
+  String get coreSettingsNatMax;
+
+  /// No description provided for @coreSettingsNatMaxHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'0 selects the core\'s automatic limit. A higher limit can use more memory; a low limit can interrupt busy UDP traffic. Leave Auto unless there is a specific reason to change it.'**
+  String get coreSettingsNatMaxHelp;
+
+  /// No description provided for @coreSettingsUdpTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP idle timeout, s'**
+  String get coreSettingsUdpTimeout;
+
+  /// No description provided for @coreSettingsUdpTimeoutHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Removes idle UDP sessions after this period. 0 uses the core default. A short timeout can interrupt calls or games between packets.'**
+  String get coreSettingsUdpTimeoutHelp;
+
+  /// No description provided for @coreSettingsAdvanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get coreSettingsAdvanced;
+
+  /// No description provided for @coreSettingsTlsTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'TLS handshake timeout, s'**
+  String get coreSettingsTlsTimeout;
+
+  /// No description provided for @coreSettingsTlsTimeoutHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Time allowed for a TLS handshake on supported TCP proxies. Does not change certificate checks or QUIC handshakes. 0 preserves provider or core settings.'**
+  String get coreSettingsTlsTimeoutHelp;
+
+  /// No description provided for @coreSettingsMux.
+  ///
+  /// In en, this message translates to:
+  /// **'Multiplexing'**
+  String get coreSettingsMux;
+
+  /// No description provided for @coreSettingsMuxHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings apply to one server in the current subscription. Auto preserves an explicit sing-box multiplex setting; otherwise it stays off. Auto does not detect server support. Xray Mux and XHTTP xmux are separate mechanisms. Group members keep their provider settings.'**
+  String get coreSettingsMuxHelp;
+
+  /// No description provided for @coreSettingsMuxServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get coreSettingsMuxServer;
+
+  /// No description provided for @coreSettingsMuxNoServer.
+  ///
+  /// In en, this message translates to:
+  /// **'No eligible individual servers in the active subscription'**
+  String get coreSettingsMuxNoServer;
+
+  /// No description provided for @coreSettingsMuxMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get coreSettingsMuxMode;
+
+  /// No description provided for @coreSettingsMuxInheritedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On · set by subscription'**
+  String get coreSettingsMuxInheritedOn;
+
+  /// No description provided for @coreSettingsMuxInheritedOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off · set by subscription'**
+  String get coreSettingsMuxInheritedOff;
+
+  /// No description provided for @coreSettingsMuxNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Off · not configured'**
+  String get coreSettingsMuxNotSet;
+
+  /// No description provided for @coreSettingsMuxOverrideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Override server settings?'**
+  String get coreSettingsMuxOverrideTitle;
+
+  /// No description provided for @coreSettingsMuxOverrideBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The server must support sing-box multiplexing. An incompatible protocol or padding setting can prevent connections. This local override replaces the subscription\'s multiplex settings for this server only. Auto restores the original settings.'**
+  String get coreSettingsMuxOverrideBody;
+
+  /// No description provided for @coreSettingsMuxProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Multiplex protocol'**
+  String get coreSettingsMuxProtocol;
+
+  /// No description provided for @coreSettingsMuxStreams.
+  ///
+  /// In en, this message translates to:
+  /// **'Streams per connection'**
+  String get coreSettingsMuxStreams;
+
+  /// No description provided for @coreSettingsMuxStreamsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum streams per connection before opening another. Uses max_streams, without the conflicting max_connections and min_streams settings. A higher value is not necessarily faster.'**
+  String get coreSettingsMuxStreamsHelp;
+
+  /// No description provided for @coreSettingsMuxPaddingHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds padding to multiplexed traffic. Requires compatible server support; it is not a general-purpose bypass option.'**
+  String get coreSettingsMuxPaddingHelp;
+
+  /// No description provided for @coreSettingsInputRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an integer within the displayed range.'**
+  String get coreSettingsInputRange;
+
+  /// No description provided for @coreSettingsSameNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose different preferred and fallback networks, or Auto.'**
+  String get coreSettingsSameNetwork;
+
   /// No description provided for @subscriptionErrorHwid.
   ///
   /// In en, this message translates to:

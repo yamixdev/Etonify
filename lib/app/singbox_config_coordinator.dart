@@ -8,6 +8,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
@@ -54,6 +55,7 @@ class SingboxConfigCoordinatorSnapshot {
     required this.connected,
     required this.runtimeTransitionInProgress,
     required this.activeSubscription,
+    this.coreSettings = const CoreSettings(),
     required this.selectedProxyTag,
     required this.excludedOutboundTags,
     required this.vpnInboundEnabled,
@@ -112,6 +114,7 @@ class SingboxConfigCoordinatorSnapshot {
   final bool connected;
   final bool runtimeTransitionInProgress;
   final Subscription? activeSubscription;
+  final CoreSettings coreSettings;
   final String selectedProxyTag;
   final Set<String> excludedOutboundTags;
   final bool vpnInboundEnabled;
@@ -956,6 +959,7 @@ class SingboxConfigCoordinator {
       experimentalFakeIpEnabled: snapshot.experimentalFakeIpEnabled,
       markAllServersRussia: snapshot.markAllServersRussia,
       capabilities: capabilitiesOverride ?? snapshot.capabilities,
+      coreSettings: snapshot.coreSettings,
       outputConfigPath: outputConfigPath,
       returnConfig: returnConfig,
     );

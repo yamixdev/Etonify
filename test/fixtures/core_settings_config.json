@@ -1,0 +1,485 @@
+[
+  {
+    "name": "core-settings-endpoint_independent",
+    "settings": {
+      "networkStrategy": "hybrid",
+      "networkType": "wifi",
+      "fallbackNetworkType": "cellular",
+      "fallbackDelayMs": 500,
+      "connectTimeoutSeconds": 20,
+      "keepAlive": "disabled",
+      "keepAliveSeconds": 30,
+      "keepAliveIntervalSeconds": 15,
+      "udpFragment": "disabled",
+      "udpMapping": "endpointIndependent",
+      "udpFiltering": "endpointIndependent",
+      "udpNatMax": 8192,
+      "udpTimeoutSeconds": 300,
+      "tlsHandshakeTimeoutSeconds": 10,
+      "multiplex": {
+        "[\"profile\",\"proxy\"]": {
+          "mode": "manual",
+          "protocol": "h2mux",
+          "maxStreams": 8,
+          "padding": false
+        }
+      }
+    },
+    "input": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false
+          }
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select"
+      }
+    },
+    "expected": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor",
+          "udp_mapping": "endpoint_independent",
+          "udp_filtering": "endpoint_independent",
+          "udp_nat_max": 8192,
+          "udp_timeout": "300s"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false,
+            "handshake_timeout": "10s"
+          },
+          "connect_timeout": "20s",
+          "disable_tcp_keep_alive": true,
+          "udp_fragment": false,
+          "multiplex": {
+            "enabled": true,
+            "protocol": "h2mux",
+            "max_streams": 8,
+            "padding": false
+          }
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select",
+        "default_network_strategy": "hybrid",
+        "default_network_type": [
+          "wifi"
+        ]
+      }
+    }
+  },
+  {
+    "name": "core-settings-address_dependent",
+    "settings": {
+      "networkStrategy": "fallback",
+      "networkType": "wifi",
+      "fallbackNetworkType": "cellular",
+      "fallbackDelayMs": 500,
+      "connectTimeoutSeconds": 20,
+      "keepAlive": "manual",
+      "keepAliveSeconds": 30,
+      "keepAliveIntervalSeconds": 15,
+      "udpFragment": "disabled",
+      "udpMapping": "addressDependent",
+      "udpFiltering": "addressDependent",
+      "udpNatMax": 8192,
+      "udpTimeoutSeconds": 300,
+      "tlsHandshakeTimeoutSeconds": 10,
+      "multiplex": {
+        "[\"profile\",\"proxy\"]": {
+          "mode": "manual",
+          "protocol": "smux",
+          "maxStreams": 8,
+          "padding": false
+        }
+      }
+    },
+    "input": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false
+          }
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select"
+      }
+    },
+    "expected": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor",
+          "udp_mapping": "address_dependent",
+          "udp_filtering": "address_dependent",
+          "udp_nat_max": 8192,
+          "udp_timeout": "300s"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false,
+            "handshake_timeout": "10s"
+          },
+          "connect_timeout": "20s",
+          "disable_tcp_keep_alive": false,
+          "udp_fragment": false,
+          "multiplex": {
+            "enabled": true,
+            "protocol": "smux",
+            "max_streams": 8,
+            "padding": false
+          },
+          "tcp_keep_alive": "30s",
+          "tcp_keep_alive_interval": "15s"
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select",
+        "default_network_strategy": "fallback",
+        "default_network_type": [
+          "wifi"
+        ],
+        "default_fallback_network_type": [
+          "cellular"
+        ],
+        "default_fallback_delay": "500ms"
+      }
+    }
+  },
+  {
+    "name": "core-settings-address_and_port_dependent",
+    "settings": {
+      "networkStrategy": "fallback",
+      "networkType": "wifi",
+      "fallbackNetworkType": "cellular",
+      "fallbackDelayMs": 500,
+      "connectTimeoutSeconds": 20,
+      "keepAlive": "manual",
+      "keepAliveSeconds": 30,
+      "keepAliveIntervalSeconds": 15,
+      "udpFragment": "disabled",
+      "udpMapping": "addressAndPortDependent",
+      "udpFiltering": "addressAndPortDependent",
+      "udpNatMax": 8192,
+      "udpTimeoutSeconds": 300,
+      "tlsHandshakeTimeoutSeconds": 10,
+      "multiplex": {
+        "[\"profile\",\"proxy\"]": {
+          "mode": "manual",
+          "protocol": "yamux",
+          "maxStreams": 8,
+          "padding": false
+        }
+      }
+    },
+    "input": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false
+          }
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select"
+      }
+    },
+    "expected": {
+      "log": {
+        "level": "panic"
+      },
+      "dns": {
+        "servers": [
+          {
+            "type": "local",
+            "tag": "dns-local"
+          }
+        ],
+        "final": "dns-local"
+      },
+      "inbounds": [
+        {
+          "type": "tun",
+          "tag": "tun-in",
+          "address": [
+            "172.19.0.1/30"
+          ],
+          "mtu": 1500,
+          "auto_route": true,
+          "stack": "gvisor",
+          "udp_mapping": "address_and_port_dependent",
+          "udp_filtering": "address_and_port_dependent",
+          "udp_nat_max": 8192,
+          "udp_timeout": "300s"
+        }
+      ],
+      "outbounds": [
+        {
+          "type": "selector",
+          "tag": "select",
+          "outbounds": [
+            "proxy"
+          ]
+        },
+        {
+          "type": "trojan",
+          "tag": "proxy",
+          "server": "example.com",
+          "server_port": 443,
+          "password": "fixture",
+          "tls": {
+            "enabled": true,
+            "server_name": "example.com",
+            "insecure": false,
+            "handshake_timeout": "10s"
+          },
+          "connect_timeout": "20s",
+          "disable_tcp_keep_alive": false,
+          "udp_fragment": false,
+          "multiplex": {
+            "enabled": true,
+            "protocol": "yamux",
+            "max_streams": 8,
+            "padding": false
+          },
+          "tcp_keep_alive": "30s",
+          "tcp_keep_alive_interval": "15s"
+        },
+        {
+          "type": "direct",
+          "tag": "direct"
+        }
+      ],
+      "route": {
+        "auto_detect_interface": true,
+        "default_domain_resolver": "dns-local",
+        "final": "select",
+        "default_network_strategy": "fallback",
+        "default_network_type": [
+          "wifi"
+        ],
+        "default_fallback_network_type": [
+          "cellular"
+        ],
+        "default_fallback_delay": "500ms"
+      }
+    }
+  }
+]

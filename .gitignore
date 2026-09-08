@@ -81,3 +81,5 @@ Desktop.ini
 assets/happ_crypto/
 happ_crypto_assets.zip
 .github/private/*.zip
+# Widget Preview related
+.widget_preview/

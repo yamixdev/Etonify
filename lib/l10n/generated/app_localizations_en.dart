@@ -9,6 +9,238 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get coreSettingsNatIndependent => 'Independent of destination';
+
+  @override
+  String get coreSettingsNatAddress => 'By address';
+
+  @override
+  String get coreSettingsNatAddressPort => 'By address and port';
+
+  @override
+  String get coreSettingsChooseServer => 'Choose a server';
+
+  @override
+  String get coreSettingsMuxConnections => 'Maximum connections';
+
+  @override
+  String get coreSettingsMuxMinStreams => 'Streams before a new connection';
+
+  @override
+  String get coreSettingsTitle => 'Core settings';
+
+  @override
+  String get coreSettingsNoticeTitle => 'Before changing these settings';
+
+  @override
+  String get coreSettingsNotice =>
+      'These parameters usually do not need changing. Unsuitable values can interrupt connections or increase battery and data use. Change one parameter at a time. Use the reset button at the top right to restore defaults.';
+
+  @override
+  String get coreSettingsContinue => 'Continue';
+
+  @override
+  String get coreSettingsDefault => 'Default';
+
+  @override
+  String get coreSettingsOff => 'Off';
+
+  @override
+  String get coreSettingsOn => 'On';
+
+  @override
+  String get coreSettingsManual => 'Manual';
+
+  @override
+  String get coreSettingsAuto => 'Auto';
+
+  @override
+  String get coreSettingsApply => 'Apply';
+
+  @override
+  String get coreSettingsApplying => 'Checking and applying…';
+
+  @override
+  String get coreSettingsFailed =>
+      'Could not apply settings. Previous settings are retained. Check the log, or wait for the current connection operation to finish.';
+
+  @override
+  String get coreSettingsSaved => 'Core settings applied';
+
+  @override
+  String get coreSettingsReset => 'Reset core settings';
+
+  @override
+  String get coreSettingsResetBody =>
+      'Reset only this section? Subscriptions, DNS, routing and other settings will not change. The VPN may reconnect.';
+
+  @override
+  String get coreSettingsDiscard => 'Discard changes?';
+
+  @override
+  String get coreSettingsDiscardBody => 'Changes have not been applied.';
+
+  @override
+  String get coreSettingsDiscardAction => 'Discard';
+
+  @override
+  String get coreSettingsNetwork => 'Network';
+
+  @override
+  String get coreSettingsStrategy => 'Network strategy';
+
+  @override
+  String get coreSettingsStrategyHelp =>
+      'Default keeps the core behavior. Hybrid tries available networks in parallel; it does not combine their speeds and may use cellular data. Fallback tries a backup network after a delay. A provider\'s explicit network or interface settings take priority. Android must make the networks available.';
+
+  @override
+  String get coreSettingsPrimaryNetwork => 'Preferred network';
+
+  @override
+  String get coreSettingsFallbackNetwork => 'Fallback network';
+
+  @override
+  String get coreSettingsNetworkHelp =>
+      'Auto lets the core choose. Selecting a network does not turn Wi-Fi or cellular data on. Do not select the same explicit network for both roles.';
+
+  @override
+  String get coreSettingsCellular => 'Cellular';
+
+  @override
+  String get coreSettingsFallbackDelay => 'Fallback delay, ms';
+
+  @override
+  String get coreSettingsFallbackDelayHelp =>
+      'How long to wait before trying the backup network. 0 keeps the core default.';
+
+  @override
+  String get coreSettingsConnections => 'Connections';
+
+  @override
+  String get coreSettingsConnectTimeout => 'Connection timeout, s';
+
+  @override
+  String get coreSettingsConnectTimeoutHelp =>
+      'Maximum time for a socket connection to a proxy. Not the URLTest timeout. 0 preserves the subscription or core default. Manual values override applicable proxy dial settings; detour hops use their transport owner\'s settings.';
+
+  @override
+  String get coreSettingsKeepAliveHelp =>
+      'TCP keepalive checks idle TCP connections. It is not a speed boost and does not affect QUIC. Default preserves provider settings. Short intervals may increase battery use.';
+
+  @override
+  String get coreSettingsKeepAlivePeriod => 'Idle time before checks, s';
+
+  @override
+  String get coreSettingsKeepAliveInterval => 'Check interval, s';
+
+  @override
+  String get coreSettingsUdpFragment => 'UDP fragmentation';
+
+  @override
+  String get coreSettingsUdpFragmentHelp =>
+      'Allow or prohibit IP fragmentation for outgoing UDP sockets. This is not TLS fragmentation. Default preserves provider or core settings. Fragmented packets may be dropped by the network.';
+
+  @override
+  String get coreSettingsNat => 'UDP / NAT';
+
+  @override
+  String get coreSettingsNatInactive =>
+      'Available when the VPN inbound is enabled.';
+
+  @override
+  String get coreSettingsMapping => 'UDP mapping';
+
+  @override
+  String get coreSettingsMappingHelp =>
+      'Controls whether a UDP mapping is shared across destinations or separated by destination address and port. Default leaves the choice to the core. More restrictive modes may affect calls and games.';
+
+  @override
+  String get coreSettingsFiltering => 'UDP filtering';
+
+  @override
+  String get coreSettingsFilteringHelp =>
+      'Controls which remote endpoints may send packets through an existing UDP mapping: any, a contacted address, or a contacted address and port. This does not replace routing or leak protection.';
+
+  @override
+  String get coreSettingsNatMax => 'Maximum UDP sessions';
+
+  @override
+  String get coreSettingsNatMaxHelp =>
+      '0 selects the core\'s automatic limit. A higher limit can use more memory; a low limit can interrupt busy UDP traffic. Leave Auto unless there is a specific reason to change it.';
+
+  @override
+  String get coreSettingsUdpTimeout => 'UDP idle timeout, s';
+
+  @override
+  String get coreSettingsUdpTimeoutHelp =>
+      'Removes idle UDP sessions after this period. 0 uses the core default. A short timeout can interrupt calls or games between packets.';
+
+  @override
+  String get coreSettingsAdvanced => 'Advanced';
+
+  @override
+  String get coreSettingsTlsTimeout => 'TLS handshake timeout, s';
+
+  @override
+  String get coreSettingsTlsTimeoutHelp =>
+      'Time allowed for a TLS handshake on supported TCP proxies. Does not change certificate checks or QUIC handshakes. 0 preserves provider or core settings.';
+
+  @override
+  String get coreSettingsMux => 'Multiplexing';
+
+  @override
+  String get coreSettingsMuxHelp =>
+      'Settings apply to one server in the current subscription. Auto preserves an explicit sing-box multiplex setting; otherwise it stays off. Auto does not detect server support. Xray Mux and XHTTP xmux are separate mechanisms. Group members keep their provider settings.';
+
+  @override
+  String get coreSettingsMuxServer => 'Server';
+
+  @override
+  String get coreSettingsMuxNoServer =>
+      'No eligible individual servers in the active subscription';
+
+  @override
+  String get coreSettingsMuxMode => 'Mode';
+
+  @override
+  String get coreSettingsMuxInheritedOn => 'On · set by subscription';
+
+  @override
+  String get coreSettingsMuxInheritedOff => 'Off · set by subscription';
+
+  @override
+  String get coreSettingsMuxNotSet => 'Off · not configured';
+
+  @override
+  String get coreSettingsMuxOverrideTitle => 'Override server settings?';
+
+  @override
+  String get coreSettingsMuxOverrideBody =>
+      'The server must support sing-box multiplexing. An incompatible protocol or padding setting can prevent connections. This local override replaces the subscription\'s multiplex settings for this server only. Auto restores the original settings.';
+
+  @override
+  String get coreSettingsMuxProtocol => 'Multiplex protocol';
+
+  @override
+  String get coreSettingsMuxStreams => 'Streams per connection';
+
+  @override
+  String get coreSettingsMuxStreamsHelp =>
+      'Maximum streams per connection before opening another. Uses max_streams, without the conflicting max_connections and min_streams settings. A higher value is not necessarily faster.';
+
+  @override
+  String get coreSettingsMuxPaddingHelp =>
+      'Adds padding to multiplexed traffic. Requires compatible server support; it is not a general-purpose bypass option.';
+
+  @override
+  String get coreSettingsInputRange =>
+      'Enter an integer within the displayed range.';
+
+  @override
+  String get coreSettingsSameNetwork =>
+      'Choose different preferred and fallback networks, or Auto.';
+
+  @override
   String get subscriptionErrorHwid =>
       'Could not obtain a valid HWID. A custom ID must contain 10 to 64 Latin letters, digits, = or - characters.';
 

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
@@ -40,6 +41,41 @@ void main() {
       );
       expect(second.plan.urlTestOutboundTags, first.plan.urlTestOutboundTags);
       expect(second.invalidOutboundCount, first.invalidOutboundCount);
+    },
+  );
+
+  test(
+    'core settings invalidate the config and reach background builder',
+    () async {
+      final defaults = _input(output: output);
+      final changed = _input(
+        output: output,
+        coreSettings: const CoreSettings(connectTimeoutSeconds: 17),
+      );
+      final first = await buildOrReuseSingboxConfigInBackground(
+        defaults,
+        cachePath: cache,
+      );
+      final second = await buildOrReuseSingboxConfigInBackground(
+        changed,
+        cachePath: cache,
+      );
+      expect(first.reusedConfig, isFalse);
+      expect(second.reusedConfig, isFalse);
+      final proxies = (second.plan.config['outbounds'] as List).where(
+        (o) => o['server'] != null,
+      );
+      expect(proxies, isNotEmpty);
+      for (final proxy in proxies) {
+        expect(proxy['connect_timeout'], '17s');
+      }
+      expect(
+        (await buildOrReuseSingboxConfigInBackground(
+          changed,
+          cachePath: cache,
+        )).reusedConfig,
+        isTrue,
+      );
     },
   );
 
@@ -294,6 +330,7 @@ Subscription _subscription(int count, {int port = 443}) => Subscription(
 );
 
 SingboxConfigBuildInput _input({
+  CoreSettings coreSettings = const CoreSettings(),
   required String output,
   String selected = 'first',
   int mtu = 1500,
@@ -302,6 +339,7 @@ SingboxConfigBuildInput _input({
   bool returnConfig = true,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
 }) => SingboxConfigBuildInput(
+  coreSettings: coreSettings,
   activeSubscription: subscription ?? _subscription(2),
   selectedProxyTag: selected,
   excludedOutboundTags: <String>{},

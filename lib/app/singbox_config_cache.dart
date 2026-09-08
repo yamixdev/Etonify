@@ -2,7 +2,7 @@ part of 'app_background_tasks.dart';
 
 // Bump when config generation/validation semantics change, even if the native
 // contract stays the same. Only one entry is retained, in private app storage.
-const _configCacheSchema = 1;
+const _configCacheSchema = 2;
 
 Future<String> singboxConfigFingerprintInBackground(
   SingboxConfigBuildInput input,
@@ -36,6 +36,7 @@ Future<String> _configFingerprint(
   }
   final identity = <String, Object?>{
     'schema': _configCacheSchema,
+    'coreSettings': input.coreSettings.toMap(),
     'activeSubscription': input.activeSubscription?.toMap(),
     'selectedProxyTag': selectedProxyTagOverride ?? input.selectedProxyTag,
     'excludedOutboundTags': (input.excludedOutboundTags.toList()..sort()),

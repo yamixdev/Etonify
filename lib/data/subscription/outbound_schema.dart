@@ -39,7 +39,7 @@ class ParsedOutboundSchema {
     'randomized',
   };
 
-  static const Set<String> _validHysteria2ObfsTypes = {'salamander'};
+  static const Set<String> _validHysteria2ObfsTypes = {'salamander', 'gecko'};
 
   static final RegExp _uuidPattern = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
@@ -91,7 +91,6 @@ class ParsedOutboundSchema {
     'network_type',
     'fallback_network_type',
     'fallback_delay',
-    'domain_strategy',
     'server',
     'server_port',
     'network',
@@ -105,6 +104,7 @@ class ParsedOutboundSchema {
     'disable_sni',
     'server_name',
     'insecure',
+    'handshake_timeout',
     'alpn',
     'min_version',
     'max_version',
@@ -132,8 +132,6 @@ class ParsedOutboundSchema {
     'config',
     'config_path',
     'query_server_name',
-    'pq_signature_schemes_enabled',
-    'dynamic_record_sizing_disabled',
   };
 
   static const Set<String> _tlsUtlsKeys = {'enabled', 'fingerprint'};
@@ -337,7 +335,18 @@ class ParsedOutboundSchema {
     'quic_session_receive_window',
   };
 
+  static const Set<String> _quicKeys = {
+    'initial_packet_size',
+    'disable_path_mtu_discovery',
+    'idle_timeout',
+    'keep_alive_period',
+    'stream_receive_window',
+    'connection_receive_window',
+    'max_concurrent_streams',
+  };
+
   static const Set<String> _typeSpecificKeysHysteria = {
+    ..._quicKeys,
     'server_ports',
     'hop_interval',
     'up',
@@ -347,12 +356,10 @@ class ParsedOutboundSchema {
     'obfs',
     'auth',
     'auth_str',
-    'recv_window_conn',
-    'recv_window',
-    'disable_mtu_discovery',
   };
 
   static const Set<String> _typeSpecificKeysHysteria2 = {
+    ..._quicKeys,
     'server_ports',
     'hop_interval',
     'hop_interval_max',
@@ -365,6 +372,7 @@ class ParsedOutboundSchema {
   };
 
   static const Set<String> _typeSpecificKeysTuic = {
+    ..._quicKeys,
     'uuid',
     'password',
     'congestion_control',
@@ -852,6 +860,7 @@ class ParsedOutboundSchema {
   static Map<String, dynamic> _canonicalize(Map<String, dynamic> outbound) {
     final canonical = Map<String, dynamic>.from(outbound);
     canonical['type'] = _normalizedType(canonical['type']);
+    migrateTo114(canonical);
 
     if (canonical['type'] == 'hysteria' &&
         canonical.containsKey('auth_string') &&
@@ -872,6 +881,46 @@ class ParsedOutboundSchema {
     }
 
     return canonical;
+  }
+
+  /// Normalize imported and previously persisted outbounds before use by 1.14.
+  /// Mutates only the supplied map; nested maps are copied before modification.
+  /// Etonify's generated DNS configuration always defines `dns-local`.
+  static void migrateTo114(Map<String, dynamic> outbound) {
+    final strategy = outbound.remove('domain_strategy');
+    if (strategy != null &&
+        strategy != '' &&
+        strategy != 'as_is' &&
+        (outbound['detour']?.toString().trim().isEmpty ?? true)) {
+      final existing = outbound['domain_resolver'];
+      final resolver = existing is Map
+          ? Map<String, dynamic>.from(existing)
+          : <String, dynamic>{
+              'server': existing is String && existing.trim().isNotEmpty
+                  ? existing.trim()
+                  : 'dns-local',
+            };
+      resolver.putIfAbsent('server', () => 'dns-local');
+      resolver.putIfAbsent('strategy', () => strategy);
+      outbound['domain_resolver'] = resolver;
+    }
+    if (_normalizedType(outbound['type']) == 'hysteria') {
+      for (final entry in const {
+        'recv_window_conn': 'stream_receive_window',
+        'recv_window': 'connection_receive_window',
+        'disable_mtu_discovery': 'disable_path_mtu_discovery',
+      }.entries) {
+        final value = outbound.remove(entry.key);
+        if (value != null) outbound.putIfAbsent(entry.value, () => value);
+      }
+    }
+    final tls = outbound['tls'];
+    if (tls is Map && tls['ech'] is Map) {
+      final ech = Map<String, dynamic>.from(tls['ech'] as Map)
+        ..remove('pq_signature_schemes_enabled')
+        ..remove('dynamic_record_sizing_disabled');
+      outbound['tls'] = Map<String, dynamic>.from(tls)..['ech'] = ech;
+    }
   }
 
   static Map<String, dynamic>? _sanitizeOutbound(
@@ -1254,7 +1303,20 @@ class ParsedOutboundSchema {
       return null;
     }
     if (type == 'hysteria2') {
-      return _sanitizeNestedMap(value, const {'type', 'password'});
+      final obfs = _sanitizeNestedMap(value, const {
+        'type',
+        'password',
+        'min_packet_size',
+        'max_packet_size',
+      });
+      if (obfs != null) {
+        obfs['type'] = _normalizedType(obfs['type']);
+        if (obfs['type'] != 'gecko') {
+          obfs.remove('min_packet_size');
+          obfs.remove('max_packet_size');
+        }
+      }
+      return obfs;
     }
     if (value is String) {
       final trimmed = value.trim();
@@ -1336,9 +1398,7 @@ class ParsedOutboundSchema {
     return sanitized;
   }
 
-  static Map<String, dynamic> _sanitizeHeaders(
-    Map<dynamic, dynamic> headers,
-  ) {
+  static Map<String, dynamic> _sanitizeHeaders(Map<dynamic, dynamic> headers) {
     final sanitized = <String, dynamic>{};
     for (final entry in headers.entries) {
       final key = entry.key.toString();

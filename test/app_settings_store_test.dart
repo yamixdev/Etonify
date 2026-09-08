@@ -1,9 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/models/core_settings.dart';
+import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 
 void main() {
+  test(
+    'core settings round trip and scoped reset retains entry acknowledgement',
+    () {
+      final store = _TestSettingsStore();
+      final state = store
+          .mapState({})
+          .copyWith(
+            coreSettings: const CoreSettings(
+              connectTimeoutSeconds: 12,
+              udpNatMax: 8192,
+            ),
+            coreSettingsNoticeAcknowledged: true,
+          );
+      final restored = store.mapState(store.stateToMap(state));
+      expect(restored.coreSettings, state.coreSettings);
+      expect(restored.coreSettingsNoticeAcknowledged, isTrue);
+      final exported = store.stateToSafeExportMap(restored);
+      expect(
+        exported.containsKey('core_settings_notice_acknowledged'),
+        isFalse,
+      );
+      expect(
+        store
+            .mergeSafeImportMap(store.mapState({}), exported)
+            .coreSettings,
+        restored.coreSettings,
+      );
+      final controller = AppSettingsController()..applyState(restored);
+      final change = controller.setCoreSettings(const CoreSettings());
+      expect(change.forceFullServiceRestart, isTrue);
+      expect(controller.coreSettings, const CoreSettings());
+      expect(controller.coreSettingsNoticeAcknowledged, isTrue);
+      expect(controller.dnsDirectResolver, state.dnsDirectResolver);
+    },
+  );
   test('HWID sharing consent persists locally but cannot be imported', () {
     final store = _TestSettingsStore();
     final off = store.mapState(const {});

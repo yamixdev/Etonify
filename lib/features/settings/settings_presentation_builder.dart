@@ -5,6 +5,7 @@ import 'package:meow_client/features/settings/settings_page.dart';
 class SettingsPresentationCallbacks {
   const SettingsPresentationCallbacks({
     required this.openGeneral,
+    this.openCore,
     required this.openDns,
     required this.openSubscriptions,
     required this.openInbound,
@@ -21,6 +22,7 @@ class SettingsPresentationCallbacks {
   });
 
   final VoidCallback openGeneral;
+  final VoidCallback? openCore;
   final VoidCallback openDns;
   final VoidCallback openSubscriptions;
   final VoidCallback openInbound;
@@ -44,6 +46,7 @@ class SettingsPresentationBuilder {
   SettingsPage build() {
     return SettingsPage(
       onOpenGeneral: callbacks.openGeneral,
+      onOpenCore: callbacks.openCore,
       onOpenDns: callbacks.openDns,
       onOpenSubscriptions: callbacks.openSubscriptions,
       onOpenInbound: callbacks.openInbound,
