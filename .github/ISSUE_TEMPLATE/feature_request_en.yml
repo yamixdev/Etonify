@@ -1,34 +1,39 @@
-name: "✨ Feature — English"
-description: Suggest an Etonify improvement or a new use case.
-title: "[Feature]: "
-labels: ["enhancement"]
+name: "Feature request (English)"
+description: "Suggest a capability or usability improvement for Etonify."
+title: "[Feature] "
+labels:
+  - "enhancement"
 body:
-  - type: textarea
-    id: problem
+  - type: "markdown"
     attributes:
-      label: What problem would this solve?
-      description: Describe a real workflow that is currently difficult or unavailable.
+      value: "Describe the task you want to accomplish. Use the bug report form for broken behavior. Do not include subscription URLs, credentials or other secrets."
+  - type: "textarea"
+    id: "problem"
+    attributes:
+      label: "What task or capability is missing?"
+      description: "Explain what is difficult or impossible to do today."
     validations:
       required: true
-  - type: textarea
-    id: proposal
+  - type: "textarea"
+    id: "solution"
     attributes:
-      label: Proposed solution
-      description: Describe the expected behavior without including private subscription or server data.
+      label: "How should it work?"
+      description: "Describe the intended behavior. A mockup or example is helpful but not required."
     validations:
       required: true
-  - type: textarea
-    id: alternatives
+  - type: "textarea"
+    id: "alternatives"
     attributes:
-      label: What alternatives have you tried?
+      label: "Alternatives considered"
+      description: "Mention existing settings or workarounds, if any."
     validations:
       required: false
-  - type: checkboxes
-    id: checks
+  - type: "checkboxes"
+    id: "checks"
     attributes:
-      label: Before submitting
+      label: "Before submitting"
       options:
-        - label: I checked that a similar request has not already been submitted.
+        - label: "I searched for similar feature requests."
           required: true
-        - label: This request contains no subscription URLs, keys, passwords, or other secrets.
+        - label: "The request and attachments contain no secrets."
           required: true

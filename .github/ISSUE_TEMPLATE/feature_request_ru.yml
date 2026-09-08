@@ -1,34 +1,39 @@
-name: "✨ Предложение — Русский"
-description: Предложить улучшение Etonify или новый сценарий использования.
-title: "[Предложение]: "
-labels: ["enhancement"]
+name: "Предложить улучшение (Русский)"
+description: "Предложение по возможностям или удобству Etonify."
+title: "[Предложение] "
+labels:
+  - "enhancement"
 body:
-  - type: textarea
-    id: problem
+  - type: "markdown"
     attributes:
-      label: Какую проблему решает предложение?
-      description: Опишите реальный сценарий, который сейчас неудобен или недоступен.
+      value: "Расскажите, какую задачу вы хотите решить. Для неисправностей используйте форму сообщения об ошибке. Не добавляйте ссылки подписок, учётные данные и другие секреты."
+  - type: "textarea"
+    id: "problem"
+    attributes:
+      label: "Какой задачи или возможности не хватает?"
+      description: "Опишите, что сейчас неудобно или невозможно сделать."
     validations:
       required: true
-  - type: textarea
-    id: proposal
+  - type: "textarea"
+    id: "solution"
     attributes:
-      label: Предлагаемое решение
-      description: Опишите ожидаемое поведение без секретных данных подписки или серверов.
+      label: "Как это должно работать?"
+      description: "Опишите ожидаемое поведение. Макет или пример помогут, но не обязательны."
     validations:
       required: true
-  - type: textarea
-    id: alternatives
+  - type: "textarea"
+    id: "alternatives"
     attributes:
-      label: Какие варианты вы уже пробовали?
+      label: "Какие варианты вы уже пробовали?"
+      description: "Укажите существующие настройки или обходные решения, если они есть."
     validations:
       required: false
-  - type: checkboxes
-    id: checks
+  - type: "checkboxes"
+    id: "checks"
     attributes:
-      label: Проверка перед отправкой
+      label: "Перед отправкой"
       options:
-        - label: Я проверил, что похожее предложение ещё не создано.
+        - label: "Я поискал похожие предложения в issues."
           required: true
-        - label: В сообщении нет ссылок подписок, ключей, паролей и других секретов.
+        - label: "В тексте и вложениях нет секретных данных."
           required: true

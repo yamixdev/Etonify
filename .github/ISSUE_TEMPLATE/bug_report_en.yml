@@ -1,78 +1,99 @@
-name: "🐞 Bug — English"
-description: Report a reproducible Android client, subscription, or VPN problem.
-title: "[Bug]: "
-labels: ["bug"]
+name: "Bug report (English)"
+description: "Report an Android connection, subscription, update or interface problem."
+title: "[Bug] "
+labels:
+  - "bug"
 body:
-  - type: markdown
+  - type: "markdown"
     attributes:
-      value: |
-        Thank you for reporting a problem. Remove subscription URLs, UUIDs, keys, passwords, HWID, private server IP addresses, and other secrets from text and logs before submitting.
-  - type: input
-    id: version
+      value: "This report and its attachments are public. Remove subscription URLs, UUIDs, keys, passwords and HWID. Check logs and screenshots before submitting. Report vulnerabilities [privately](https://github.com/yamixdev/Etonify/security/advisories/new)."
+  - type: "input"
+    id: "version"
     attributes:
-      label: Etonify version
-      placeholder: For example, 0.3.0-beta.3
+      label: "Etonify version"
+      description: "Use the version shown in About and include the build number if available."
     validations:
       required: true
-  - type: input
-    id: device
+  - type: "dropdown"
+    id: "channel"
     attributes:
-      label: Device and Android version
-      placeholder: For example, Pixel 8, Android 16
-    validations:
-      required: true
-  - type: dropdown
-    id: area
-    attributes:
-      label: Where does the problem occur?
+      label: "Release channel or build source"
       options:
-        - VPN connection, disconnection, or background operation
-        - Wi-Fi and mobile network switching
-        - DNS or routing
-        - Server selection or latency testing
-        - Subscription add, refresh, or import
-        - Application update or installation
-        - Application interface
-        - Other
+        - "Stable"
+        - "Beta"
+        - "Custom build"
+        - "Not sure"
     validations:
       required: true
-  - type: textarea
-    id: problem
+  - type: "input"
+    id: "device"
     attributes:
-      label: What happened?
-      description: Describe the result and whether the same server or subscription works in another client.
+      label: "Device model"
+      placeholder: "For example, Honor X9a"
     validations:
       required: true
-  - type: textarea
-    id: reproduction
+  - type: "input"
+    id: "android"
     attributes:
-      label: How can we reproduce it?
-      description: List the actions in order, starting with launching Etonify.
-      placeholder: |
-        1. Opened Etonify…
-        2. Selected…
-        3. Observed…
+      label: "Android and vendor software version"
+      placeholder: "For example, Android 13, MagicOS 7.1"
     validations:
       required: true
-  - type: textarea
-    id: expected
+  - type: "dropdown"
+    id: "area"
     attributes:
-      label: What did you expect?
+      label: "Where does the problem occur?"
+      options:
+        - "VPN start, stop or background operation"
+        - "Switching between Wi-Fi and mobile data"
+        - "DNS or routing"
+        - "Server selection or latency testing"
+        - "Adding, importing or refreshing a subscription"
+        - "Installing or updating the application"
+        - "Interface, performance or memory usage"
+        - "Other"
     validations:
       required: true
-  - type: textarea
-    id: diagnostics
+  - type: "textarea"
+    id: "problem"
     attributes:
-      label: Additional information
-      description: Attach a screenshot or a diagnostics export with secrets removed. Send large or private logs through the support link above.
+      label: "What happens?"
+      description: "Describe the observed problem. Include the full error message with any secrets removed."
+    validations:
+      required: true
+  - type: "textarea"
+    id: "reproduction"
+    attributes:
+      label: "Steps to reproduce"
+      description: "List the actions in order. If it happens intermittently, describe how often."
+    validations:
+      required: true
+  - type: "textarea"
+    id: "expected"
+    attributes:
+      label: "Expected result"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "context"
+    attributes:
+      label: "Conditions and previous versions"
+      description: "For network problems, include Wi-Fi/mobile data, protocol, TUN stack and changed DNS settings if known. For regressions, give the last working version and whether this was an upgrade or a fresh install. Reinstalling the app is not required."
     validations:
       required: false
-  - type: checkboxes
-    id: checks
+  - type: "textarea"
+    id: "diagnostics"
     attributes:
-      label: Before submitting
+      label: "Logs and screenshots"
+      description: "Attach logs covering the problem and relevant screenshots. Remove secrets first. If you cannot provide logs, say so. Private support is available at https://t.me/etonify?direct."
+    validations:
+      required: false
+  - type: "checkboxes"
+    id: "checks"
+    attributes:
+      label: "Before submitting"
       options:
-        - label: I checked that a similar issue has not already been reported.
+        - label: "I searched for similar open issues."
           required: true
-        - label: I removed secrets and private infrastructure data from the report and attachments.
+        - label: "I checked the report and attachments and removed secrets."
           required: true
