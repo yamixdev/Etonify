@@ -8,6 +8,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
+import 'package:meow_client/data/local/payload_box_opener.dart';
 import 'package:meow_client/data/local/secure_hive_storage.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -99,12 +100,10 @@ class SubscriptionStore {
         }
         final totalStopwatch = Stopwatch()..start();
         final payloadStopwatch = Stopwatch()..start();
-        _payloadBox = Hive.isBoxOpen(_payloadBoxName)
-            ? Hive.box(_payloadBoxName)
-            : await Hive.openBox(
-                _payloadBoxName,
-                encryptionCipher: SecureHiveStorage.cipher,
-              );
+        _payloadBox = await openPayloadBox(
+          name: _payloadBoxName,
+          cipher: SecureHiveStorage.cipher,
+        );
         payloadStopwatch.stop();
         await _runStorageMigrations();
         _payloadMigrationRequired = false;
