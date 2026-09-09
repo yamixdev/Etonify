@@ -32,6 +32,7 @@ class LibboxCapabilities {
     this.supportsSplitHttpAlias = false,
     this.supportsVlessEncryption = false,
     this.supportsUrlTestFailover = false,
+    this.supportsUrlTestQueuePriority = false,
     this.xHttpClientOnly = false,
     this.xHttpProfile = '',
     this.xHttpModes = const <String>{},
@@ -193,6 +194,10 @@ class LibboxCapabilities {
       supportsUrlTestDeadline: _readBool(json, 'supports_url_test_deadline'),
       supportsUrlTestForce: _readBool(json, 'supports_url_test_force'),
       supportsUrlTestFailover: _readBool(json, 'supports_url_test_failover'),
+      supportsUrlTestQueuePriority: _readBool(
+        json,
+        'supports_url_test_queue_priority',
+      ),
       supportsUrlTestUnavailableCheckInterval: _readBool(
         json,
         'supports_url_test_unavailable_check_interval',
@@ -271,6 +276,7 @@ class LibboxCapabilities {
   final bool supportsUrlTestDeadline;
   final bool supportsUrlTestForce;
   final bool supportsUrlTestFailover;
+  final bool supportsUrlTestQueuePriority;
   final bool supportsUrlTestUnavailableCheckInterval;
   final bool supportsUrlTestMethod;
   final bool supportsUrlTestInterruptDelayThreshold;
@@ -365,6 +371,7 @@ class LibboxCapabilities {
       supportsUrlTestDeadline: supportsUrlTestDeadline,
       supportsUrlTestForce: supportsUrlTestForce,
       supportsUrlTestFailover: supportsUrlTestFailover,
+      supportsUrlTestQueuePriority: supportsUrlTestQueuePriority,
       supportsUrlTestUnavailableCheckInterval:
           supportsUrlTestUnavailableCheckInterval,
       supportsUrlTestMethod: supportsUrlTestMethod,

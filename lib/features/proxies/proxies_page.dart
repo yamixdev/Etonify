@@ -22,6 +22,7 @@ import 'package:meow_client/widgets/ip_refresh_dots.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 import 'proxy_list_ordering.dart';
+import 'proxy_latency_button.dart';
 import 'proxy_panel_shell.dart';
 
 part 'proxies_page_chains.dart';
@@ -361,6 +362,7 @@ class ProxiesPage extends StatefulWidget {
     required this.progressiveBlurEnabled,
     required this.onSelected,
     required this.onUrlTest,
+    this.onProxyUrlTest,
     this.outboundForTag,
     this.loadProxyChainTargetSources,
     this.loadProxyChainTargetsForSource,
@@ -400,6 +402,7 @@ class ProxiesPage extends StatefulWidget {
   final bool progressiveBlurEnabled;
   final ValueChanged<String> onSelected;
   final Future<void> Function() onUrlTest;
+  final Future<void> Function(String tag)? onProxyUrlTest;
   final Outbound? Function(String tag)? outboundForTag;
   final Future<List<AppProfileSummary>> Function()? loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)?
@@ -780,6 +783,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                 runtimeStates: widget.runtimeStates,
                 routeAnimation: animation,
                 onSelected: widget.onSelected,
+                onProxyUrlTest: widget.connected ? widget.onProxyUrlTest : null,
                 outboundForTag: widget.outboundForTag,
                 initialSort: _sort,
                 onSortChanged: (value) {
@@ -1164,6 +1168,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
           highlighted: proxy.highlighted,
           animate: !widget.embedded,
           onTap: () => widget.onSelected(proxy.tag),
+          onTestLatency: widget.connected && widget.onProxyUrlTest != null
+              ? () => unawaited(widget.onProxyUrlTest!(proxy.tag))
+              : null,
           onLongPress: proxy.isGroup
               ? null
               : _isProxyChain(proxy)

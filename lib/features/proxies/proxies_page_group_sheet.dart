@@ -12,6 +12,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
     this.outboundForTag,
     required this.initialSort,
     this.onSortChanged,
+    this.onProxyUrlTest,
   });
 
   final AppProxySummary group;
@@ -24,6 +25,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
   final Outbound? Function(String tag)? outboundForTag;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
+  final Future<void> Function(String tag)? onProxyUrlTest;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
       outboundForTag: outboundForTag,
       initialSort: initialSort,
       onSortChanged: onSortChanged,
+      onProxyUrlTest: onProxyUrlTest,
     );
   }
 }
@@ -54,6 +57,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
     this.outboundForTag,
     required this.initialSort,
     this.onSortChanged,
+    this.onProxyUrlTest,
   });
 
   final AppProxySummary group;
@@ -66,6 +70,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   final Outbound? Function(String tag)? outboundForTag;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
+  final Future<void> Function(String tag)? onProxyUrlTest;
 
   @override
   State<_GroupOutboundsSheetBody> createState() =>
@@ -218,6 +223,9 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
         showGroupHandle: showGroupHandle,
         animate: false,
         onTap: onTap,
+        onTestLatency: widget.onProxyUrlTest == null
+            ? null
+            : () => unawaited(widget.onProxyUrlTest!(proxy.tag)),
         onLongPress: onLongPress,
       );
     }

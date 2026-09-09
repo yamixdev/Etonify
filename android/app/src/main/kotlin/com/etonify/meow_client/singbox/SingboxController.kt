@@ -38,6 +38,8 @@ object SingboxController {
     private const val TAG = "MeowSingbox"
     private const val STATUS_EVENT_THROTTLE_MS = 1_000L
     private const val GROUPS_EVENT_THROTTLE_COOL_MS = 1_500L
+    private const val GROUPS_EVENT_THROTTLE_TEST_MS = 250L
+    @Volatile private var interactiveUrlTestUntilMs = 0L
     private const val GROUPS_DIAGNOSTIC_LOG_THROTTLE_MS = 2_000L
     private const val NO_INTERFACE_REASSERT_THROTTLE_MS = 2_000L
     private const val INTERFACE_DIAL_FAILURE_WINDOW_MS = 8_000L
@@ -903,6 +905,8 @@ object SingboxController {
         force: Boolean,
         callback: (Result<Unit>) -> Unit,
     ) {
+        interactiveUrlTestUntilMs = maxOf(interactiveUrlTestUntilMs,
+            SystemClock.uptimeMillis() + deadlineMillis.toLong().coerceIn(500L, 120_000L) + 5_000L)
         log(
             "info",
             "libbox urlTest group=$groupTag target=$targetOutboundTag priority=$priorityOutboundTag " +
@@ -1065,7 +1069,9 @@ object SingboxController {
             return
         }
         val now = SystemClock.uptimeMillis()
-        val throttleMs = GROUPS_EVENT_THROTTLE_COOL_MS
+        val throttleMs = if (now < interactiveUrlTestUntilMs) {
+            GROUPS_EVENT_THROTTLE_TEST_MS
+        } else GROUPS_EVENT_THROTTLE_COOL_MS
         val remaining = throttleMs - (now - lastGroupsEventUptimeMs)
         if (remaining > 0) {
             mainHandler.postDelayed({ drainGroupsEvent() }, remaining)

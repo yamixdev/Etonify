@@ -15,6 +15,7 @@ class ProxyTile extends StatelessWidget {
     this.runtimeState,
     this.onOpenGroup,
     this.onLongPress,
+    this.onTestLatency,
   });
 
   final AppProxySummary proxy;
@@ -29,6 +30,7 @@ class ProxyTile extends StatelessWidget {
   final VoidCallback onTap;
   final ValueChanged<Rect>? onOpenGroup;
   final VoidCallback? onLongPress;
+  final VoidCallback? onTestLatency;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +77,7 @@ class ProxyTile extends StatelessWidget {
               ? Colors.orange
               : Colors.deepOrangeAccent)
         : Colors.red;
-    final latencyLabel = _ProxyLatencyLabel(
+    final latencyContent = _ProxyLatencyLabel(
       text: latencyText,
       color: delayColor,
       checking: latencyChecking && !selecting,
@@ -90,6 +92,12 @@ class ProxyTile extends StatelessWidget {
           : null,
     );
 
+    final latencyLabel = ProxyLatencyButton(
+      key: ValueKey('proxy-latency-action-${proxy.tag}'),
+      label: '${l10n.urlTestTitle}: ${_localizedProxyTitle(l10n, proxy)}',
+      onPressed: selecting ? null : onTestLatency,
+      child: latencyContent,
+    );
     final horizontalInset = !forceBaseInset && proxy.isGroupChild ? 24.0 : 6.0;
     final emphasized = selected || highlighted;
     final groupHandleVisible = showGroupHandle || onOpenGroup != null;
@@ -109,10 +117,6 @@ class ProxyTile extends StatelessWidget {
       color: emphasized
           ? theme.colorScheme.primary.withValues(alpha: selected ? 1 : .46)
           : Colors.transparent,
-    );
-    final groupHandleDecoration = BoxDecoration(
-      color: theme.colorScheme.primary.withValues(alpha: .82),
-      borderRadius: BorderRadius.circular(99),
     );
     final rowChild = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -163,49 +167,32 @@ class ProxyTile extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: selecting ? 104 : 72,
+            width: groupHandleVisible ? 120 : (selecting ? 104 : 72),
             child: !groupHandleVisible
                 ? latencyLabel
-                : GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onOpenGroup == null
-                        ? null
-                        : () {
-                            final box =
-                                context.findRenderObject() as RenderBox?;
-                            final rect = box != null && box.attached
-                                ? box.localToGlobal(Offset.zero) & box.size
-                                : Rect.zero;
-                            onOpenGroup!(rect);
-                          },
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        latencyLabel,
-                        SizedBox(
-                          height: 10,
-                          child: Align(
-                            alignment: Alignment.bottomRight,
-                            child: animate
-                                ? Tooltip(
-                                    message: _localizedProxyTitle(l10n, proxy),
-                                    child: AnimatedContainer(
-                                      duration: animationDuration,
-                                      width: 28,
-                                      height: 3,
-                                      decoration: groupHandleDecoration,
-                                    ),
-                                  )
-                                : Container(
-                                    width: 28,
-                                    height: 3,
-                                    decoration: groupHandleDecoration,
-                                  ),
-                          ),
+                : Row(
+                    children: [
+                      Expanded(child: latencyLabel),
+                      SizedBox(
+                        width: 48,
+                        child: IconButton(
+                          key: ValueKey('proxy-group-action-${proxy.tag}'),
+                          tooltip: _localizedProxyTitle(l10n, proxy),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          onPressed: onOpenGroup == null
+                              ? null
+                              : () {
+                                  final box =
+                                      context.findRenderObject() as RenderBox?;
+                                  final rect = box != null && box.attached
+                                      ? box.localToGlobal(Offset.zero) &
+                                            box.size
+                                      : Rect.zero;
+                                  onOpenGroup!(rect);
+                                },
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
           ),
         ],

@@ -12,6 +12,45 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  test(
+    'full session accepts partial results and promotes a queued target without force',
+    () async {
+      final calls = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async {
+          calls.add(request);
+        },
+        expectedTags: () => ['a', 'b', 'c'],
+        capabilities: LibboxCapabilities.parseOrLegacy('''{
+        "api_version": 2, "core_version": "1.14.0",
+        "supports_targeted_url_test": true,
+        "supports_url_test_queue_priority": true
+      }'''),
+      );
+      addTearDown(coordinator.dispose);
+      final full = coordinator.runFull(reason: 'test');
+      await Future<void>.delayed(Duration.zero);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      coordinator.handleGroupEvent(tag: 'a', timeSeconds: now, available: true);
+      expect(coordinator.isChecking('a'), isFalse);
+      expect(coordinator.isChecking('b'), isTrue);
+      expect(coordinator.isRunning, isTrue);
+      await coordinator.runTarget(targetOutboundTag: 'c', reason: 'tap');
+      expect(calls, hasLength(2));
+      expect(calls.last.targetOutboundTag, 'c');
+      expect(calls.last.force, isFalse);
+      coordinator.handleGroupEvent(
+        tag: 'c',
+        timeSeconds: now,
+        available: false,
+      );
+      expect(coordinator.isChecking('c'), isFalse);
+      await coordinator.runTarget(targetOutboundTag: 'c', reason: 'repeat');
+      expect(calls, hasLength(2));
+      coordinator.handleGroupEvent(tag: 'b', timeSeconds: now, available: true);
+      expect(await full, isTrue);
+    },
+  );
   testWidgets('missing expected results release the session before watchdog', (
     tester,
   ) async {

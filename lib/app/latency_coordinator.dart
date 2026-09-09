@@ -130,6 +130,7 @@ class LatencyCoordinator {
   Set<String> _sessionExpectedTags = const <String>{};
   final Map<String, int> _acceptedEventTimes = <String, int>{};
   final Set<String> _successfulTags = <String>{};
+  final Set<String> _priorityRequests = <String>{};
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
 
@@ -193,6 +194,21 @@ class LatencyCoordinator {
       );
       return Future<bool>.value(false);
     }
+    if (isRunning) {
+      if (_acceptedEventTimes.containsKey(targetTag)) {
+        return Future<bool>.value(_successfulTags.contains(targetTag));
+      }
+      if (_kind != LatencySessionKind.full ||
+          !_capabilities.supportsUrlTestQueuePriority ||
+          !_sessionExpectedTags.contains(targetTag) ||
+          !_isConnected() ||
+          !_isForeground() ||
+          !_canRunDiagnostics() ||
+          !_priorityRequests.add(targetTag)) {
+        return Future<bool>.value(false);
+      }
+      return _prioritizeTarget(targetTag);
+    }
     return _runSession(
       kind: LatencySessionKind.targeted,
       reason: reason,
@@ -210,6 +226,31 @@ class LatencyCoordinator {
         deadlineMillis: _targetDeadlineMillis,
       ),
     );
+  }
+
+  /// Moves a queued leaf forward without replacing the full native session.
+  Future<bool> _prioritizeTarget(String targetTag) async {
+    final generation = _generation;
+    try {
+      await _runTest(
+        LatencyTestRequest(
+          groupTag: 'select',
+          targetOutboundTag: targetTag,
+          priorityOutboundTag: targetTag,
+          url: _testUrl(),
+          timeoutMillis: _configuredTimeoutMillis,
+          concurrency: 1,
+          deadlineMillis: _targetDeadlineMillis,
+          force: false,
+        ),
+      ).timeout(uiPolicy.nativeCommandTimeout);
+      return _isActiveGeneration(generation);
+    } catch (error) {
+      AppLogStore.warning('latency', 'priority URLTest request failed: $error');
+      return false;
+    } finally {
+      if (generation == _generation) _priorityRequests.remove(targetTag);
+    }
   }
 
   /// Records one timestamped result from the command client's group stream.
@@ -271,6 +312,7 @@ class LatencyCoordinator {
 
   void cancel() {
     _generation++;
+    _priorityRequests.clear();
     final wasRunning = isRunning;
     final previousKind = _kind;
     final previousTarget = _targetTag;
@@ -386,6 +428,7 @@ class LatencyCoordinator {
     }
 
     final generation = ++_generation;
+    _priorityRequests.clear();
     _sessionOperationGeneration = _operationGeneration();
     _sessionStartedAtSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     _baselineEventTimes = Map<String, int>.from(_eventBaselineTimes());

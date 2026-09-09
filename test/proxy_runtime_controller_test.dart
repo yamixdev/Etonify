@@ -3,6 +3,39 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test('network handover drops every ping and rejects cached snapshots', () {
+    final controller = ProxyRuntimeController();
+    controller.runtimeLatencies.addAll({'vless-1': 50, 'vless-2': 70});
+    controller.invalidateNetworkMeasurements([
+      'vless-1',
+      'vless-2',
+    ], invalidatedAtSeconds: 100);
+    expect(controller.runtimeLatencies, isEmpty);
+    expect(controller.isLatencyInvalidated('vless-2'), isTrue);
+    void update(int time, int delay) => controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {
+                'tag': 'vless-2',
+                'delay': delay,
+                'time': time,
+                'status': 'available',
+              },
+            ],
+          },
+        ],
+      ),
+    );
+    update(99, 70);
+    update(100, 70);
+    expect(controller.runtimeLatencies, isEmpty);
+    update(101, 180);
+    expect(controller.runtimeLatencies['vless-2'], 180);
+    expect(controller.isLatencyInvalidated('vless-2'), isFalse);
+  });
   test('startup deadline marks only proxies without terminal telemetry', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);

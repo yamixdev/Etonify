@@ -19,6 +19,7 @@ import 'package:meow_client/app/coordinators/app_traffic_monitor.dart';
 import 'package:meow_client/app/coordinators/deep_link_import_coordinator.dart';
 import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
+import 'package:meow_client/app/latency_dependencies.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
@@ -767,7 +768,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       return;
     }
-    final affectedTags = <String>{...directTags};
+    final affectedTags = latencyAffectedTags(directTags, {
+      for (final entry in _activeGroupByTagLookup.entries)
+        entry.key: entry.value.outboundTags,
+    });
     for (final proxy in _activeProxiesCache) {
       if (isLowestProxyTag(proxy.tag)) {
         affectedTags.add(proxy.tag);
@@ -5306,13 +5310,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!_connected || !_foregroundLifecycleActive) {
       return;
     }
-    if (_urlTestInFlight) {
-      AppLogStore.debug(
-        'latency',
-        'targeted URLTest skipped: native session is still producing results',
-      );
-      return;
-    }
     final targetTag = _currentResolvedActiveOutboundTag()?.trim() ?? '';
     if (targetTag.isEmpty) {
       AppLogStore.warning(
@@ -5331,6 +5328,27 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await _latencyCoordinator.runTarget(
       targetOutboundTag: targetTag,
       reason: 'manual_active',
+    );
+  }
+
+  Future<void> _runProxyUrlTest(String tag) async {
+    if (!_connected ||
+        !_foregroundLifecycleActive ||
+        !_runtimeOperations.diagnosticsReady) {
+      return;
+    }
+    _ensureActiveLookupCaches();
+    // A visible provider group represents its selected concrete route.
+    if (_runtimeVisualStateForTag(tag) == null) return;
+    final target = latencyTargetTag(
+      isLowestProxyTag(tag) ? (_runtimeLowestOutboundTagFor(tag) ?? tag) : tag,
+      _runtimeGroupSelections,
+    );
+    if (target == null) return;
+    _haptic();
+    await _latencyCoordinator.runTarget(
+      targetOutboundTag: target,
+      reason: 'manual_row',
     );
   }
 
@@ -5752,26 +5770,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
 
-    // Keep historic results for unrelated servers. Invalidating every proxy
-    // makes the sorted list rebuild and resort thousands of rows exactly when
-    // Android is already handling a network handover. Only the active route
-    // must be revalidated before it can be presented as current again.
-    final activeOutboundTag = _currentResolvedActiveOutboundTag();
+    // Every measurement belongs to the previous network, not only the active
+    // route. Refresh retained/visible rows lazily through the visual store.
     final invalidatedTags = <String>{
-      ?activeOutboundTag,
-      if (!isLowestProxyTag(_selectedProxyTag) &&
-          !_activeGroupByTagLookup.containsKey(_selectedProxyTag))
-        _selectedProxyTag,
+      ..._activeOutboundByTagLookup.keys,
+      ..._runtimeLatencies.keys,
+      ..._proxySummariesByTagCache.keys,
     };
     final measurementsChanged = _proxyRuntime.invalidateNetworkMeasurements(
       invalidatedTags,
-      preserveUnrelatedMeasurements: true,
+      invalidatedAtSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     _resetActiveProxyIpState(rebuild: false);
     _proxyLocationCoordinator.reset();
     _proxyLocationCoordinator.invalidateSignature();
     if (measurementsChanged) {
-      _publishProxyRuntimeVisualStatesForTags(invalidatedTags);
+      _publishProxyRuntimeVisualStates();
     }
     _scheduleVpnNotificationSync();
     if (!diagnosticsWereReady && _runtimeOperations.diagnosticsReady) {
@@ -6941,6 +6955,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         changeSort: _setProxySort,
         selectProxy: _selectProxy,
         runUrlTest: _runUrlTest,
+        runProxyUrlTest: _runProxyUrlTest,
         refreshActiveProxyIp: _refreshActiveProxyIp,
         outboundForTag: _outboundForProxyTag,
         loadProxyChainTargetSources: _loadProxyChainTargetSources,

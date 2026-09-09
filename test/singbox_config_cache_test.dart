@@ -19,6 +19,31 @@ void main() {
   });
   tearDown(() => directory.deleteSync(recursive: true));
 
+  test('builds and reuses a profile with more than 5000 servers', () async {
+    final subscription = _subscription(5001);
+    for (var i = 0; i < subscription.outbounds.length; i++) {
+      subscription.outbounds[i].config['server'] = 'proxy-$i.example.test';
+    }
+    final input = _input(output: output, subscription: subscription);
+    final first = await buildOrReuseSingboxConfigInBackground(
+      input,
+      cachePath: cache,
+    );
+    expect(first.invalidOutboundCount, 0);
+    final config =
+        jsonDecode(File(output).readAsStringSync()) as Map<String, dynamic>;
+    expect(
+      (config['outbounds'] as List).where((o) => o['type'] == 'trojan').length,
+      5001,
+    );
+    final second = await buildOrReuseSingboxConfigInBackground(
+      input,
+      cachePath: cache,
+    );
+    expect(second.reusedConfig, isTrue);
+    expect(second.plan.urlTestOutboundTags, first.plan.urlTestOutboundTags);
+  });
+
   test(
     'reuses a disk entry even after the previous candidate was moved',
     () async {

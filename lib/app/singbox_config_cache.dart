@@ -110,6 +110,8 @@ Future<String> _configFingerprint(
       'supportsUrlTestDeadline': input.capabilities.supportsUrlTestDeadline,
       'supportsUrlTestForce': input.capabilities.supportsUrlTestForce,
       'supportsUrlTestFailover': input.capabilities.supportsUrlTestFailover,
+      'supportsUrlTestQueuePriority':
+          input.capabilities.supportsUrlTestQueuePriority,
       'supportsUrlTestUnavailableCheckInterval':
           input.capabilities.supportsUrlTestUnavailableCheckInterval,
       'supportsUrlTestMethod': input.capabilities.supportsUrlTestMethod,

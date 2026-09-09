@@ -8,6 +8,63 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
+  testWidgets('individual result renders while another proxy is still queued', (
+    tester,
+  ) async {
+    final proxies = List.generate(2, _performanceProxy);
+    final runtime = ProxyRuntimeVisualStore();
+    addTearDown(runtime.dispose);
+    final tested = <String>[];
+    final selected = <String>[];
+    runtime.replaceAll({
+      for (final proxy in proxies)
+        proxy.tag: const ProxyRuntimeVisualState(latencyChecking: true),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ProxiesPage(
+            proxies: proxies,
+            selectedTag: '',
+            connected: true,
+            runtimeStates: runtime,
+            progressiveBlurEnabled: false,
+            onSelected: selected.add,
+            onUrlTest: () async {},
+            onProxyUrlTest: (tag) async {
+              tested.add(tag);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.byKey(ValueKey('proxy-latency-action-${proxies.first.tag}')),
+    );
+    expect(tested, [proxies.first.tag]);
+    expect(selected, isEmpty);
+    runtime.updateTags({
+      proxies.first.tag: const ProxyRuntimeVisualState(
+        latency: 123,
+        latencyFresh: true,
+      ),
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('123 ms'), findsOneWidget);
+    expect(find.byType(ProxyLatencyDots), findsOneWidget);
+    runtime.updateTags({
+      proxies.last.tag: const ProxyRuntimeVisualState(latencyUnavailable: true),
+    });
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('123 ms'), findsOneWidget);
+    expect(find.byType(ProxyLatencyDots), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('latency updates keep list mounted until order changes', (
     tester,
   ) async {
@@ -174,16 +231,27 @@ void main() {
       }
 
       await tester.pumpWidget(buildDots(enabled: true));
-      expect(find.text('.'), findsOneWidget);
+      String dotsText() => tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(dotsKey),
+              matching: find.byType(Text),
+            ),
+          )
+          .data!;
+      // The shared clock survives previous widgets; its phase is not always 1.
+      final initial = dotsText();
+      expect(initial, matches(r'^\.{1,3}$'));
 
       await tester.pump(const Duration(milliseconds: 299));
-      expect(find.text('.'), findsOneWidget);
+      expect(dotsText(), initial);
       await tester.pump(const Duration(milliseconds: 1));
-      expect(find.text('..'), findsOneWidget);
+      final next = '.' * (initial.length % 3 + 1);
+      expect(dotsText(), next);
 
       await tester.pumpWidget(buildDots(enabled: false));
       await tester.pump(const Duration(milliseconds: 900));
-      expect(find.text('..'), findsOneWidget);
+      expect(dotsText(), next);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 600));

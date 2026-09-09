@@ -112,6 +112,7 @@ class ProxyRuntimeController {
   final Map<String, String> runtimeGroupSelections = <String, String>{};
 
   bool _updatesFrozen = false;
+  int _networkMeasurementsInvalidatedAtSeconds = 0;
 
   bool get updatesFrozen => _updatesFrozen;
 
@@ -141,6 +142,7 @@ class ProxyRuntimeController {
 
   void reset() {
     _updatesFrozen = false;
+    _networkMeasurementsInvalidatedAtSeconds = 0;
     runtimeLatencies.clear();
     runtimeLatencyTimes.clear();
     unavailableLatencyTags.clear();
@@ -192,7 +194,11 @@ class ProxyRuntimeController {
   bool invalidateNetworkMeasurements(
     Iterable<String> tags, {
     bool preserveUnrelatedMeasurements = false,
+    int invalidatedAtSeconds = 0,
   }) {
+    if (invalidatedAtSeconds > _networkMeasurementsInvalidatedAtSeconds) {
+      _networkMeasurementsInvalidatedAtSeconds = invalidatedAtSeconds;
+    }
     final nextInvalidatedTags = tags
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
@@ -332,6 +338,12 @@ class ProxyRuntimeController {
         final terminalFailure =
             status == urlTestStatusUnavailable ||
             (error.isNotEmpty && !positiveDelay);
+        if (_networkMeasurementsInvalidatedAtSeconds > 0 &&
+            (positiveDelay || terminalFailure) &&
+            (nextTime == null ||
+                nextTime <= _networkMeasurementsInvalidatedAtSeconds)) {
+          continue;
+        }
         if (nextTime != null &&
             (positiveDelay || terminalFailure) &&
             input.shouldIgnoreLatencyResult(itemTag, nextTime)) {
