@@ -112,7 +112,6 @@ class ProxyRuntimeController {
   final Map<String, String> runtimeGroupSelections = <String, String>{};
 
   bool _updatesFrozen = false;
-  int _networkMeasurementsInvalidatedAtSeconds = 0;
 
   bool get updatesFrozen => _updatesFrozen;
 
@@ -142,7 +141,6 @@ class ProxyRuntimeController {
 
   void reset() {
     _updatesFrozen = false;
-    _networkMeasurementsInvalidatedAtSeconds = 0;
     runtimeLatencies.clear();
     runtimeLatencyTimes.clear();
     unavailableLatencyTags.clear();
@@ -183,6 +181,7 @@ class ProxyRuntimeController {
       lowestLatency = _computeLowestLatency(
         runtimeLatencies,
         unavailableLatencyTags,
+        invalidatedLatencyTags,
       );
     }
     return Set<String>.unmodifiable(affectedTags);
@@ -194,11 +193,7 @@ class ProxyRuntimeController {
   bool invalidateNetworkMeasurements(
     Iterable<String> tags, {
     bool preserveUnrelatedMeasurements = false,
-    int invalidatedAtSeconds = 0,
   }) {
-    if (invalidatedAtSeconds > _networkMeasurementsInvalidatedAtSeconds) {
-      _networkMeasurementsInvalidatedAtSeconds = invalidatedAtSeconds;
-    }
     final nextInvalidatedTags = tags
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
@@ -206,7 +201,6 @@ class ProxyRuntimeController {
     if (preserveUnrelatedMeasurements) {
       var changed = false;
       for (final tag in nextInvalidatedTags) {
-        changed = runtimeLatencies.remove(tag) != null || changed;
         changed = runtimeLatencyTimes.remove(tag) != null || changed;
         changed = unavailableLatencyTags.remove(tag) || changed;
         changed = latencyErrors.remove(tag) != null || changed;
@@ -219,7 +213,6 @@ class ProxyRuntimeController {
       return changed;
     }
     final changed =
-        runtimeLatencies.isNotEmpty ||
         runtimeLatencyTimes.isNotEmpty ||
         unavailableLatencyTags.isNotEmpty ||
         latencyErrors.isNotEmpty ||
@@ -227,7 +220,9 @@ class ProxyRuntimeController {
         lowestLatency != null ||
         !setEquals(invalidatedLatencyTags, nextInvalidatedTags);
 
-    runtimeLatencies.clear();
+    runtimeLatencies.removeWhere(
+      (tag, _) => !nextInvalidatedTags.contains(tag),
+    );
     runtimeLatencyTimes.clear();
     unavailableLatencyTags.clear();
     invalidatedLatencyTags
@@ -338,12 +333,6 @@ class ProxyRuntimeController {
         final terminalFailure =
             status == urlTestStatusUnavailable ||
             (error.isNotEmpty && !positiveDelay);
-        if (_networkMeasurementsInvalidatedAtSeconds > 0 &&
-            (positiveDelay || terminalFailure) &&
-            (nextTime == null ||
-                nextTime <= _networkMeasurementsInvalidatedAtSeconds)) {
-          continue;
-        }
         if (nextTime != null &&
             (positiveDelay || terminalFailure) &&
             input.shouldIgnoreLatencyResult(itemTag, nextTime)) {
@@ -537,6 +526,7 @@ class ProxyRuntimeController {
     final nextLowestLatency = _computeLowestLatency(
       runtimeLatencies,
       unavailableLatencyTags,
+      invalidatedLatencyTags,
     );
     final latencyStateChanged =
         latencyCollectionsChanged ||
@@ -584,11 +574,13 @@ class ProxyRuntimeController {
 
   static int? _computeLowestLatency(
     Map<String, int> latencies,
-    Set<String> unavailableTags,
-  ) {
+    Set<String> unavailableTags, [
+    Set<String> invalidatedTags = const <String>{},
+  ]) {
     int? result;
     for (final entry in latencies.entries) {
-      if (unavailableTags.contains(entry.key)) {
+      if (unavailableTags.contains(entry.key) ||
+          invalidatedTags.contains(entry.key)) {
         continue;
       }
       if (result == null || entry.value < result) {

@@ -424,6 +424,7 @@ object MeowDefaultNetworkMonitor {
                 null,
                 if (force) "default_interface_lost_forced" else "default_interface_lost",
             )
+            SingboxController.noteNetworkGeneration(notificationGeneration.get())
             runCatching { currentListener.updateDefaultInterface("", -1, false, false) }
                 .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
             if (!gateDecision.duplicate) {
@@ -451,6 +452,7 @@ object MeowDefaultNetworkMonitor {
                 null,
                 if (force) "default_interface_missing_forced" else "default_interface_missing",
             )
+            SingboxController.noteNetworkGeneration(notificationGeneration.get())
             runCatching { currentListener.updateDefaultInterface("", -1, false, false) }
                 .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
             if (!gateDecision.duplicate) {
@@ -498,6 +500,7 @@ object MeowDefaultNetworkMonitor {
                 "default_interface"
             },
         )
+        SingboxController.noteNetworkGeneration(notificationGeneration.get())
         runCatching { currentListener.updateDefaultInterface(interfaceName, index, false, false) }
             .onFailure { Log.e(TAG, "updateDefaultInterface failed", it) }
         if (!gateDecision.duplicate) {

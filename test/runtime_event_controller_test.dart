@@ -33,6 +33,35 @@ void main() {
     },
   );
 
+  test('pending snapshots keep the newest network generation', () {
+    final pending = PendingRuntimeGroups();
+    pending.remember(
+      const RuntimeGroupsEvent(
+        groups: ['cellular'],
+        runtimeGeneration: 7,
+        networkGeneration: 12,
+      ),
+    );
+    pending.remember(
+      const RuntimeGroupsEvent(
+        groups: ['wifi'],
+        runtimeGeneration: 7,
+        networkGeneration: 11,
+      ),
+    );
+
+    expect(pending.take(7, networkGeneration: 12)?.groups, ['cellular']);
+
+    pending.remember(
+      const RuntimeGroupsEvent(
+        groups: ['future'],
+        runtimeGeneration: 7,
+        networkGeneration: 13,
+      ),
+    );
+    expect(pending.take(7, networkGeneration: 12), isNull);
+  });
+
   tearDown(AppLogStore.clear);
 
   test('dispatch routes typed runtime events to callbacks', () {
@@ -55,6 +84,8 @@ void main() {
     controller.dispatch({'type': 'network', 'reason': 'default_interface'});
     controller.dispatch({
       'type': 'groups',
+      'runtimeGeneration': 4,
+      'networkGeneration': 9,
       'groups': [
         {'tag': 'select'},
       ],
@@ -67,7 +98,8 @@ void main() {
     expect(groups?.groups, [
       {'tag': 'select'},
     ]);
-    expect(groups?.runtimeGeneration, 0);
+    expect(groups?.runtimeGeneration, 4);
+    expect(groups?.networkGeneration, 9);
   });
 
   test('nativeLog normalizes warn and records through AppLogStore', () {

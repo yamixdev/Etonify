@@ -3,39 +3,42 @@ import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
-  test('network handover drops every ping and rejects cached snapshots', () {
-    final controller = ProxyRuntimeController();
-    controller.runtimeLatencies.addAll({'vless-1': 50, 'vless-2': 70});
-    controller.invalidateNetworkMeasurements([
-      'vless-1',
-      'vless-2',
-    ], invalidatedAtSeconds: 100);
-    expect(controller.runtimeLatencies, isEmpty);
-    expect(controller.isLatencyInvalidated('vless-2'), isTrue);
-    void update(int time, int delay) => controller.applyGroupUpdates(
-      _input(
-        rawGroups: [
-          {
-            'tag': 'select',
-            'items': [
-              {
-                'tag': 'vless-2',
-                'delay': delay,
-                'time': time,
-                'status': 'available',
-              },
-            ],
-          },
-        ],
-      ),
-    );
-    update(99, 70);
-    update(100, 70);
-    expect(controller.runtimeLatencies, isEmpty);
-    update(101, 180);
-    expect(controller.runtimeLatencies['vless-2'], 180);
-    expect(controller.isLatencyInvalidated('vless-2'), isFalse);
-  });
+  test(
+    'network handover keeps stale display and accepts same-second result',
+    () {
+      final controller = ProxyRuntimeController();
+      controller.runtimeLatencies.addAll({'vless-1': 50, 'vless-2': 70});
+      controller.runtimeLatencyTimes.addAll({'vless-1': 100, 'vless-2': 100});
+      controller.invalidateNetworkMeasurements(['vless-1', 'vless-2']);
+      expect(controller.runtimeLatencies, {'vless-1': 50, 'vless-2': 70});
+      expect(controller.runtimeLatencyTimes, isEmpty);
+      expect(controller.isLatencyInvalidated('vless-2'), isTrue);
+      void update(int time, int delay) => controller.applyGroupUpdates(
+        _input(
+          rawGroups: [
+            {
+              'tag': 'select',
+              'items': [
+                {
+                  'tag': 'vless-2',
+                  'delay': delay,
+                  'time': time,
+                  'status': 'available',
+                },
+              ],
+            },
+          ],
+        ),
+      );
+      // The old seconds-based cutoff rejected this valid result when handover
+      // and URLTest completed within the same wall-clock second.
+      update(100, 180);
+      expect(controller.runtimeLatencies['vless-2'], 180);
+      expect(controller.isLatencyInvalidated('vless-2'), isFalse);
+      expect(controller.isLatencyInvalidated('vless-1'), isTrue);
+      expect(controller.lowestLatency, 180);
+    },
+  );
   test('startup deadline marks only proxies without terminal telemetry', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);
@@ -207,7 +210,8 @@ void main() {
     ], preserveUnrelatedMeasurements: true);
 
     expect(changed, isTrue);
-    expect(controller.runtimeLatencies['vless-active'], isNull);
+    expect(controller.runtimeLatencies['vless-active'], 81);
+    expect(controller.runtimeLatencyTimes['vless-active'], isNull);
     expect(controller.isLatencyInvalidated('vless-active'), isTrue);
     expect(controller.runtimeLatencies['vless-other'], 44);
     expect(controller.isLatencyInvalidated('vless-other'), isFalse);
@@ -671,7 +675,7 @@ void main() {
     ]);
 
     expect(changed, isTrue);
-    expect(controller.runtimeLatencies, isEmpty);
+    expect(controller.runtimeLatencies, {'vless-1': 73});
     expect(controller.runtimeLatencyTimes, isEmpty);
     expect(controller.unavailableLatencyTags, isEmpty);
     expect(controller.latencyErrors, isEmpty);
@@ -691,7 +695,7 @@ void main() {
                 'tag': 'vless-1',
                 'status': 'available',
                 'delay': 91,
-                'time': 101,
+                'time': 100,
               },
             ],
           },

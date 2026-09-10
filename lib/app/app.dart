@@ -1384,7 +1384,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final targetSummary = _displaySummaryForOutbound(target);
     final detourName = _proxyDisplayNameForTag(chain.detourTag);
     final latencyInvalidated = _proxyRuntime.isLatencyInvalidated(tag);
-    final runtimeLatency = latencyInvalidated ? null : _runtimeLatencies[tag];
+    final runtimeLatency = _runtimeLatencies[tag];
     final latencyUnavailable =
         !latencyInvalidated && _unavailableLatencyTags.contains(tag);
     final latencyError = latencyInvalidated ? null : _latencyErrors[tag];
@@ -1402,16 +1402,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
       countryCode: targetCountry.isNotEmpty
           ? targetCountry
           : _normalizeCountryCode(chain.targetCountry),
-      latency: latencyInvalidated
-          ? null
-          : runtimeLatency ?? targetSummary.latency,
+      latency: runtimeLatency ?? targetSummary.latency,
       clearLatency:
-          latencyInvalidated ||
-          (runtimeLatency == null &&
-              targetSummary.latency == null &&
-              latencyUnavailable),
-      latencyFresh: runtimeLatency != null || targetSummary.latencyFresh,
-      latencyChecking: _latencyCoordinator.isChecking(tag),
+          runtimeLatency == null &&
+          targetSummary.latency == null &&
+          latencyUnavailable,
+      latencyFresh:
+          !latencyInvalidated &&
+          (runtimeLatency != null || targetSummary.latencyFresh),
+      latencyChecking:
+          latencyInvalidated || _latencyCoordinator.isChecking(tag),
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyError,
       clearLatencyError: latencyError == null,
@@ -1423,9 +1423,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final protocolLabel = _protocolLabel(outbound.config, outbound.type);
     final endpointLabel = _endpointLabel(outbound);
     final latencyInvalidated = _proxyRuntime.isLatencyInvalidated(outbound.tag);
-    final runtimeLatency = latencyInvalidated
-        ? null
-        : _runtimeLatencies[outbound.tag];
+    final runtimeLatency = _runtimeLatencies[outbound.tag];
     final latencyUnavailable =
         !latencyInvalidated && _unavailableLatencyTags.contains(outbound.tag);
     return AppProxySummary(
@@ -1437,11 +1435,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       port: outbound.port,
       detailText: '$protocolLabel · $endpointLabel',
       ip: outbound.info.externalIp?.trim() ?? '',
-      latency: latencyInvalidated
-          ? null
-          : runtimeLatency ?? outbound.info.latestPing,
-      latencyFresh: runtimeLatency != null,
-      latencyChecking: _latencyCoordinator.isChecking(outbound.tag),
+      latency: runtimeLatency ?? outbound.info.latestPing,
+      latencyFresh: !latencyInvalidated && runtimeLatency != null,
+      latencyChecking:
+          latencyInvalidated || _latencyCoordinator.isChecking(outbound.tag),
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyInvalidated ? null : _latencyErrors[outbound.tag],
       protocolLabel: protocolLabel,
@@ -1662,9 +1659,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   AppProxySummary _withDirectRuntimeProxyState(AppProxySummary proxy) {
     final latencyChecking = _latencyCoordinator.isChecking(proxy.tag);
     final latencyInvalidated = _proxyRuntime.isLatencyInvalidated(proxy.tag);
-    final runtimeLatency = latencyInvalidated
-        ? null
-        : _runtimeLatencies[proxy.tag];
+    final runtimeLatency = _runtimeLatencies[proxy.tag];
     final latencyUnavailable =
         ProxyRuntimeController.effectiveLatencyUnavailable(
           urlTestUnavailable:
@@ -1683,8 +1678,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final highlightedByLowest =
         isLowestProxyTag(_selectedProxyTag) &&
         _activeRuntimeLowestOutboundTag() == proxy.tag;
-    final shouldClearLatency =
-        runtimeLatency == null && (latencyUnavailable || latencyInvalidated);
+    final shouldClearLatency = runtimeLatency == null && latencyUnavailable;
     final activeIpMatches =
         _connected && _activeProxyIp.outboundTag == proxy.tag;
     final activeIpOverride = activeIpMatches && _activeProxyIp.hasKnownIp
@@ -1697,8 +1691,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ipChecking: activeIpChecking,
       latency: runtimeLatency,
       clearLatency: shouldClearLatency,
-      latencyFresh: runtimeLatency != null && latencyError == null,
-      latencyChecking: latencyChecking,
+      latencyFresh:
+          !latencyInvalidated && runtimeLatency != null && latencyError == null,
+      latencyChecking: latencyChecking || latencyInvalidated,
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyError,
       clearLatencyError: latencyError == null,
@@ -5872,7 +5867,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     };
     final measurementsChanged = _proxyRuntime.invalidateNetworkMeasurements(
       invalidatedTags,
-      invalidatedAtSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     _resetActiveProxyIpState(rebuild: false);
     _proxyLocationCoordinator.reset();
@@ -5880,6 +5874,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (measurementsChanged) {
       _publishProxyRuntimeVisualStates();
     }
+    _replayPendingRuntimeGroups();
     _scheduleVpnNotificationSync();
     if (!diagnosticsWereReady && _runtimeOperations.diagnosticsReady) {
       _onRuntimeDiagnosticsReady();
@@ -6429,6 +6424,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final event = _pendingRuntimeGroups.take(
       _runtimeOperations.nativeRuntimeGeneration,
+      networkGeneration: _networkInterfaceGeneration,
     );
     if (event != null) _applyGroupUpdates(event);
   }
@@ -6436,6 +6432,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _applyGroupUpdatesImpl(RuntimeGroupsEvent event) {
     final rawGroups = event.groups;
     _recordGroupsDiagnostics(rawGroups.length);
+    final eventNetworkGeneration = event.networkGeneration;
+    final currentNetworkGeneration = _networkInterfaceGeneration;
+    if (eventNetworkGeneration > 0 && currentNetworkGeneration > 0) {
+      if (eventNetworkGeneration > currentNetworkGeneration) {
+        // CommandGroup can publish synchronously from updateDefaultInterface,
+        // before the network event queued immediately after it reaches Dart.
+        _pendingRuntimeGroups.remember(event);
+        return;
+      }
+      if (eventNetworkGeneration < currentNetworkGeneration) {
+        AppLogStore.debug(
+          'proxy',
+          'discarded stale groups snapshot networkGeneration='
+              '$eventNetworkGeneration currentNetworkGeneration='
+              '$currentNetworkGeneration',
+        );
+        return;
+      }
+    }
     final activeSubscription = _activeSubscription;
     if (mounted &&
         rawGroups.isNotEmpty &&

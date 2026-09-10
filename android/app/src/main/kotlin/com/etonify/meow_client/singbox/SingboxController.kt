@@ -69,6 +69,7 @@ object SingboxController {
     private val groupsEventScheduled = AtomicBoolean(false)
     private val runtimeGeneration = AtomicLong(0)
     private val runtimeStartGeneration = AtomicLong(0)
+    private val networkGeneration = AtomicLong(0)
     private val lastNoInterfaceReassertUptimeMs = AtomicLong(0L)
     private val interfaceFailureLock = Any()
     private val interfaceDialFailureUptimes = ArrayDeque<Long>()
@@ -178,6 +179,9 @@ object SingboxController {
         override fun writeGroups(message: OutboundGroupIterator?) {
             if (message == null || !commandClientLifecycle.acceptsEvents(epoch)) return
             val now = SystemClock.uptimeMillis()
+            // Capture before iterating: large provider groups can take long
+            // enough for a handover to happen while this snapshot is encoded.
+            val eventNetworkGeneration = networkGeneration.get()
             val groups = mutableListOf<Map<String, Any?>>()
             val selectedGroups = mutableListOf<String>()
             var itemCount = 0
@@ -284,6 +288,7 @@ object SingboxController {
                     "type" to runtimeEventGroups,
                     "groups" to groups,
                     "runtimeGeneration" to activeRuntimeGeneration,
+                    "networkGeneration" to eventNetworkGeneration,
                 ),
             )
         }
@@ -1009,6 +1014,7 @@ object SingboxController {
         interfaceIndex: Int,
         networkGeneration: Long,
     ) {
+        noteNetworkGeneration(networkGeneration)
         emit(
             mapOf(
                 "type" to runtimeEventNetwork,
@@ -1020,6 +1026,12 @@ object SingboxController {
                 "uptimeMs" to SystemClock.uptimeMillis(),
             ),
         )
+    }
+
+    fun noteNetworkGeneration(networkGeneration: Long) {
+        this.networkGeneration.updateAndGet { current ->
+            maxOf(current, networkGeneration)
+        }
     }
 
     private fun emit(payload: Map<String, Any?>) {

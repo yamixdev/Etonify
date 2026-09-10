@@ -21,10 +21,12 @@ class RuntimeGroupsEvent {
   const RuntimeGroupsEvent({
     required this.groups,
     required this.runtimeGeneration,
+    this.networkGeneration = 0,
   });
 
   final List<dynamic> groups;
   final int runtimeGeneration;
+  final int networkGeneration;
 }
 
 typedef RuntimeStateHandler = void Function(RuntimeStateEvent event);
@@ -36,17 +38,28 @@ class PendingRuntimeGroups {
 
   void remember(RuntimeGroupsEvent event) {
     if (event.runtimeGeneration <= 0) return;
-    if (_latest != null &&
-        event.runtimeGeneration < _latest!.runtimeGeneration) {
-      return;
+    final latest = _latest;
+    if (latest != null) {
+      if (event.runtimeGeneration < latest.runtimeGeneration) return;
+      if (event.runtimeGeneration == latest.runtimeGeneration &&
+          event.networkGeneration > 0 &&
+          latest.networkGeneration > event.networkGeneration) {
+        return;
+      }
     }
     _latest = event;
   }
 
-  RuntimeGroupsEvent? take(int generation) {
+  RuntimeGroupsEvent? take(int generation, {int networkGeneration = 0}) {
     final latest = _latest;
     _latest = null;
-    return latest?.runtimeGeneration == generation ? latest : null;
+    if (latest?.runtimeGeneration != generation) return null;
+    if (networkGeneration > 0 &&
+        latest!.networkGeneration > 0 &&
+        latest.networkGeneration != networkGeneration) {
+      return null;
+    }
+    return latest;
   }
 
   void clear() => _latest = null;
@@ -126,6 +139,8 @@ class RuntimeEventController {
             groups: (event['groups'] as List?) ?? const [],
             runtimeGeneration:
                 (event['runtimeGeneration'] as num?)?.toInt() ?? 0,
+            networkGeneration:
+                (event['networkGeneration'] as num?)?.toInt() ?? 0,
           ),
         );
         break;
