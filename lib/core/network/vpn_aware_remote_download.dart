@@ -110,6 +110,8 @@ Future<T> runRemoteDownloadRouteAttemptsForTest<T>({
     throw StateError('No remote download routes are available');
   }
   Object? lastError;
+  Object? httpError;
+  StackTrace? httpStackTrace;
   StackTrace? lastStackTrace;
   for (var index = 0; index < routes.length; index++) {
     final route = routes[index];
@@ -119,10 +121,20 @@ Future<T> runRemoteDownloadRouteAttemptsForTest<T>({
     } catch (error, stackTrace) {
       lastError = error;
       lastStackTrace = stackTrace;
+      if (error is RemoteDownloadHttpException) {
+        httpError = error;
+        httpStackTrace = stackTrace;
+        // Retrying credentials, expired links or rate limits on another route
+        // cannot fix the HTTP response and can aggravate provider throttling.
+        if (error.statusCode >= 400 && error.statusCode < 500) rethrow;
+      }
       onFailure?.call(route, error);
     }
   }
-  Error.throwWithStackTrace(lastError!, lastStackTrace!);
+  Error.throwWithStackTrace(
+    httpError ?? lastError!,
+    httpStackTrace ?? lastStackTrace!,
+  );
 }
 
 @visibleForTesting
@@ -156,7 +168,7 @@ class VpnAwareRemoteDownloader {
 
   static final VpnAwareRemoteDownloader instance = VpnAwareRemoteDownloader._();
 
-  static const responseStartTimeout = Duration(seconds: 5);
+  static const responseStartTimeout = Duration(seconds: 15);
   static const _runtimeStatusTimeout = Duration(seconds: 1);
   static const _outboundFetchMaximumBytes = 3 * 1024 * 1024;
   static const _maxRedirects = 5;

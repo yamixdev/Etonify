@@ -16,6 +16,7 @@
     <!-- Used only when the optional runtime wake lock is enabled from diagnostics. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:label="Etonify"
         android:name=".MeowApplication"
@@ -145,6 +146,9 @@
             android:isolatedProcess="true"
             android:process=":happ_crypto5_isolated" />
         -->
+        <service android:name=".SubscriptionRefreshJob"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

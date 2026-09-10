@@ -9,6 +9,28 @@ import 'package:meow_client/l10n/generated/app_localizations_en.dart';
 import 'package:meow_client/l10n/generated/app_localizations_ru.dart';
 
 void main() {
+  test('native deadline and missing network have distinct causes', () {
+    expect(
+      classifySubscriptionFailure('HTTP response timed out after 15000ms').kind,
+      SubscriptionFailureKind.timeout,
+    );
+    expect(
+      classifySubscriptionFailure('network_unavailable').kind,
+      SubscriptionFailureKind.offline,
+    );
+    expect(
+      classifySubscriptionFailure('Socket closed').kind,
+      SubscriptionFailureKind.connection,
+    );
+    const stored = SubscriptionFailure(
+      SubscriptionFailureKind.httpStatus,
+      httpStatus: 502,
+    );
+    expect(
+      subscriptionErrorMessage(stored, AppLocalizationsRu()),
+      contains('502'),
+    );
+  });
   group('classifySubscriptionFailure', () {
     test('keeps the HTTP status for a provider response', () {
       final failure = classifySubscriptionFailure(

@@ -91,6 +91,9 @@ class SubscriptionRuntimeController {
 
   final Map<String, int> _autoRefreshBackoffUntil = <String, int>{};
   final Map<String, int> _autoRefreshFailures = <String, int>{};
+  void restoreAutoRefreshBackoff(Map<String, int> until) {
+    _autoRefreshBackoffUntil.addAll(until);
+  }
 
   void clearAutoRefreshFailure(String subscriptionId) {
     _autoRefreshFailures.remove(subscriptionId);

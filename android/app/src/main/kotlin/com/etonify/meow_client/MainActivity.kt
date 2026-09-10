@@ -652,6 +652,9 @@ class MainActivity : FlutterFragmentActivity() {
         responseStartTimeoutMs: Int,
         idleTimeoutMs: Int,
     ): Map<String, Any> {
+        if (getSystemService(android.net.ConnectivityManager::class.java).activeNetwork == null) {
+            throw java.io.IOException("network_unavailable")
+        }
         val network = MeowDefaultNetworkMonitor.requirePhysicalNetwork()
         val destination = requirePrivateDownloadTarget(destinationPath)
         val boundedResponseTimeout = responseStartTimeoutMs.coerceIn(1_000, 30_000)
@@ -663,7 +666,10 @@ class MainActivity : FlutterFragmentActivity() {
             while (true) {
                 validateSubscriptionRequest(url)
                 val connection = network.openConnection(url) as HttpURLConnection
-                val abortBeforeResponse = Runnable { connection.disconnect() }
+                val responseDeadline = ResponseStartDeadline(boundedResponseTimeout)
+                val abortBeforeResponse = Runnable {
+                    responseDeadline.expire { connection.disconnect() }
+                }
                 try {
                     connection.requestMethod = "GET"
                     connection.instanceFollowRedirects = false
@@ -738,6 +744,8 @@ class MainActivity : FlutterFragmentActivity() {
                         "finalUrl" to url.toString(),
                         "network" to MeowDefaultNetworkMonitor.describeNetwork(network),
                     )
+                } catch (error: Exception) {
+                    throw responseDeadline.failure(error)
                 } finally {
                     mainHandler.removeCallbacks(abortBeforeResponse)
                     connection.disconnect()
@@ -2134,9 +2142,20 @@ class MainActivity : FlutterFragmentActivity() {
         )
     }
 
+    override fun onStart() {
+        super.onStart()
+        SubscriptionRefreshJobs.foreground = true
+    }
+
+    override fun onStop() {
+        SubscriptionRefreshJobs.foreground = false
+        super.onStop()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         setupSingboxHostApi(flutterEngine.dartExecutor.binaryMessenger)
+        SubscriptionRefreshJobs.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

@@ -18,6 +18,7 @@ String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
     SubscriptionFailureKind.timeout => l10n.subscriptionOperationTimeout,
     SubscriptionFailureKind.dns => l10n.subscriptionErrorDns,
     SubscriptionFailureKind.connection => l10n.subscriptionErrorConnection,
+    SubscriptionFailureKind.offline => l10n.subscriptionErrorOffline,
     SubscriptionFailureKind.tls => l10n.subscriptionErrorTls,
     SubscriptionFailureKind.emptyResponse =>
       l10n.subscriptionErrorEmptyResponse,

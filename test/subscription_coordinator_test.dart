@@ -5,8 +5,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
 
 void main() {
+  test(
+    'partial automatic refresh keeps successes and classified HTTP errors',
+    () async {
+      final coordinator = SubscriptionCoordinator(
+        runtime: SubscriptionRuntimeController(),
+        payloadSnapshotFor: (_) => null,
+        refreshSubscription: (id) async {
+          if (id == 'failed') throw SubscriptionHttpStatusException(502);
+          return _subscription(id);
+        },
+      );
+      final result = await coordinator.refreshDue(
+        subscriptions: [_subscription('ok'), _subscription('failed')],
+        activeSubscription: null,
+        concurrency: 1,
+      );
+      expect(result.entries, hasLength(2));
+      expect(result.entries.first.succeeded, isTrue);
+      expect(result.entries.last.failure?.httpStatus, 502);
+      expect(
+        result.entries.last.failure?.kind,
+        SubscriptionFailureKind.httpStatus,
+      );
+    },
+  );
   test(
     'metadata and runtime fingerprints are loaded through one boundary',
     () async {

@@ -9,6 +9,42 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get subscriptionErrorOffline =>
+      'No network connection. Connect to Wi-Fi or mobile data and try again.';
+
+  @override
+  String get subscriptionBackgroundTitle =>
+      'Update subscriptions in the background';
+
+  @override
+  String get subscriptionBackgroundDescription =>
+      'Download profiles with auto-update enabled, when the network and battery allow. Downloads are checked and applied next time you open Etonify. Failed attempts are not retried continuously.';
+
+  @override
+  String get subscriptionReportTitle => 'Subscription updates';
+
+  @override
+  String get subscriptionReportEmpty => 'No automatic updates yet.';
+
+  @override
+  String get subscriptionReportDetails => 'Details';
+
+  @override
+  String get subscriptionReportSuccess => 'Updated';
+
+  @override
+  String get subscriptionReportBackground => 'Downloaded in the background';
+
+  @override
+  String subscriptionReportSummary(int success, int failed) {
+    return 'Profiles updated: $success. Errors: $failed.';
+  }
+
+  @override
+  String get subscriptionBackgroundSaveError =>
+      'Could not schedule background updates. Try again.';
+
+  @override
   String get coreSettingsNatIndependent => 'Independent of destination';
 
   @override

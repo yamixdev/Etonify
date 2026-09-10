@@ -42,6 +42,9 @@ import 'package:meow_client/app/runtime_session_coordinator.dart';
 import 'package:meow_client/app/singbox_config_coordinator.dart';
 import 'package:meow_client/app/startup_latency_deadline_controller.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
+import 'package:meow_client/data/subscription/subscription_background_updates.dart';
+import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
+import 'package:meow_client/features/subscriptions/subscription_refresh_report_page.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/app/subscription_profile_import_controller.dart';
 import 'package:meow_client/app/subscription_profile_flow_controller.dart';
@@ -131,6 +134,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Timer? _vpnNotificationSyncTimer;
   Timer? _resumeForegroundSyncTimer;
   bool _autoRefreshInFlight = false;
+  bool _backgroundSubscriptionSyncInFlight = false;
   bool _ownsStore = false;
   bool _ready = false;
   bool _onboardingCompleted = false;
@@ -3272,12 +3276,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _startSubscriptionAutoRefresh() {
     _subscriptionAutoRefreshTimer?.cancel();
     _subscriptionAutoRefreshTimer = null;
-    if (!mounted ||
-        !_foregroundLifecycleActive ||
-        !_ready ||
-        _subscriptions.isEmpty) {
+    if (!mounted || !_foregroundLifecycleActive || !_ready) {
       return;
     }
+    unawaited(_syncBackgroundSubscriptionUpdates());
+    if (_subscriptions.isEmpty) return;
     final delay = _subscriptionCoordinator.nextAutoRefreshDelay(_subscriptions);
     if (delay == null) {
       return;
@@ -3292,7 +3295,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runSubscriptionAutoRefresh() async {
-    if (_autoRefreshInFlight) {
+    if (_autoRefreshInFlight || _backgroundSubscriptionSyncInFlight) {
+      _startSubscriptionAutoRefresh();
       return;
     }
     if (!_ready || _subscriptions.isEmpty || !_foregroundLifecycleActive) {
@@ -3310,6 +3314,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       if (result.dueCount == 0) {
         return;
+      }
+      if (Platform.isAndroid) {
+        await SubscriptionRefreshReports.save(result.entries);
+        await _showSubscriptionRefreshReport();
       }
       final refreshedActiveSubscription = result.refreshedActiveSubscription;
       final activeRuntimeChanged = result.activeRuntimeChanged;
@@ -3331,6 +3339,78 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _autoRefreshInFlight = false;
       _startSubscriptionAutoRefresh();
     }
+  }
+
+  Future<void> _syncBackgroundSubscriptionUpdates() async {
+    if (!Platform.isAndroid ||
+        _backgroundSubscriptionSyncInFlight ||
+        _autoRefreshInFlight) {
+      return;
+    }
+    _backgroundSubscriptionSyncInFlight = true;
+    try {
+      final entries = await SubscriptionBackgroundUpdates.applyPending();
+      if (!mounted) return;
+      ref
+          .read(subscriptionRuntimeControllerProvider)
+          .restoreAutoRefreshBackoff(
+            await SubscriptionRefreshReports.backoffUntil(),
+          );
+      if (entries.any((e) => e.succeeded)) {
+        final activeChanged = entries.any(
+          (e) => e.succeeded && e.id == _activeSubscription?.id,
+        );
+        await _reloadSubscriptions(
+          applyRuntime: activeChanged,
+          resetRuntimeState: activeChanged,
+          restartRuntimeOnApply: _connected && activeChanged,
+          urlTestAfterApply: false,
+        );
+      }
+      if (!mounted) return;
+      await SubscriptionBackgroundUpdates.configure(
+        await SubscriptionStore.getAllMetadataInBackground(),
+      );
+      await _showSubscriptionRefreshReport();
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription refresh',
+        'Background synchronization failed: $error',
+      );
+    } finally {
+      _backgroundSubscriptionSyncInFlight = false;
+    }
+  }
+
+  Future<void> _showSubscriptionRefreshReport() async {
+    if (!mounted ||
+        !_foregroundLifecycleActive ||
+        !await SubscriptionRefreshReports.unread()) {
+      return;
+    }
+    final entries = await SubscriptionRefreshReports.latest();
+    final context = _navigatorKey.currentContext;
+    if (!mounted ||
+        !_foregroundLifecycleActive ||
+        context == null ||
+        !context.mounted ||
+        entries.isEmpty) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    final success = entries.where((e) => e.succeeded).length;
+    _showAppSnackBar(
+      l10n.subscriptionReportSummary(success, entries.length - success),
+      actionLabel: l10n.subscriptionReportDetails,
+      onAction: () {
+        _navigatorKey.currentState?.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const SubscriptionRefreshReportPage(),
+          ),
+        );
+      },
+    );
+    await SubscriptionRefreshReports.markRead();
   }
 
   String _outboundDebugSnapshot({required String reason}) {
@@ -4798,9 +4878,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
           currentSendHwidToProviders: _settings.sendHwidToProviders,
-          onSendHwidToProvidersChanged: (value) => _applySettingsChange(
-            () => _settings.setSendHwidToProviders(value),
-          ),
+          onSendHwidToProvidersChanged: (value) {
+            _applySettingsChange(() => _settings.setSendHwidToProviders(value));
+            unawaited(() async {
+              try {
+                await SubscriptionBackgroundUpdates.invalidatePlan();
+                await SubscriptionBackgroundUpdates.configure(
+                  await SubscriptionStore.getAllMetadataInBackground(),
+                );
+              } catch (error) {
+                AppLogStore.warning(
+                  'subscription refresh',
+                  'Failed to synchronize background privacy settings: $error',
+                );
+              }
+            }());
+          },
           onAccentColorChanged: _setAccentColor,
           onHapticChanged: _setHapticEnabled,
           onStatusNotificationChanged: _setStatusNotificationEnabled,

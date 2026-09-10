@@ -13,6 +13,7 @@ enum SubscriptionFailureKind {
   timeout,
   dns,
   connection,
+  offline,
   tls,
   emptyResponse,
   htmlResponse,
@@ -91,6 +92,7 @@ class SubscriptionHwidException implements Exception {
 }
 
 SubscriptionFailure classifySubscriptionFailure(Object error) {
+  if (error is SubscriptionFailure) return error;
   if (error is SubscriptionHwidException) {
     return const SubscriptionFailure(SubscriptionFailureKind.invalidHwid);
   }
@@ -157,6 +159,9 @@ SubscriptionFailure classifySubscriptionFailure(Object error) {
 }
 
 SubscriptionFailure _classifyMessage(String message) {
+  if (message.contains('network_unavailable')) {
+    return const SubscriptionFailure(SubscriptionFailureKind.offline);
+  }
   final httpStatus = _extractHttpStatus(message);
   if (httpStatus != null) {
     return SubscriptionFailure(

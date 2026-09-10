@@ -98,6 +98,66 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @subscriptionErrorOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No network connection. Connect to Wi-Fi or mobile data and try again.'**
+  String get subscriptionErrorOffline;
+
+  /// No description provided for @subscriptionBackgroundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update subscriptions in the background'**
+  String get subscriptionBackgroundTitle;
+
+  /// No description provided for @subscriptionBackgroundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Download profiles with auto-update enabled, when the network and battery allow. Downloads are checked and applied next time you open Etonify. Failed attempts are not retried continuously.'**
+  String get subscriptionBackgroundDescription;
+
+  /// No description provided for @subscriptionReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription updates'**
+  String get subscriptionReportTitle;
+
+  /// No description provided for @subscriptionReportEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No automatic updates yet.'**
+  String get subscriptionReportEmpty;
+
+  /// No description provided for @subscriptionReportDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get subscriptionReportDetails;
+
+  /// No description provided for @subscriptionReportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated'**
+  String get subscriptionReportSuccess;
+
+  /// No description provided for @subscriptionReportBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded in the background'**
+  String get subscriptionReportBackground;
+
+  /// No description provided for @subscriptionReportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Profiles updated: {success}. Errors: {failed}.'**
+  String subscriptionReportSummary(int success, int failed);
+
+  /// No description provided for @subscriptionBackgroundSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not schedule background updates. Try again.'**
+  String get subscriptionBackgroundSaveError;
+
   /// No description provided for @coreSettingsNatIndependent.
   ///
   /// In en, this message translates to:

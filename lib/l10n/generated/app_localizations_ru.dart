@@ -9,6 +9,41 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get subscriptionErrorOffline =>
+      'Нет подключения к сети. Подключитесь к Wi-Fi или мобильной сети и повторите попытку.';
+
+  @override
+  String get subscriptionBackgroundTitle => 'Обновлять подписки в фоне';
+
+  @override
+  String get subscriptionBackgroundDescription =>
+      'Скачивать профили с включённым автообновлением, когда позволяют сеть и заряд батареи. Проверка и применение загрузок выполняются при следующем открытии Etonify. Неудачные попытки не повторяются непрерывно.';
+
+  @override
+  String get subscriptionReportTitle => 'Обновления подписок';
+
+  @override
+  String get subscriptionReportEmpty => 'Автоматических обновлений пока нет.';
+
+  @override
+  String get subscriptionReportDetails => 'Подробнее';
+
+  @override
+  String get subscriptionReportSuccess => 'Обновлён';
+
+  @override
+  String get subscriptionReportBackground => 'Загружено в фоне';
+
+  @override
+  String subscriptionReportSummary(int success, int failed) {
+    return 'Обновлено профилей: $success. Ошибок: $failed.';
+  }
+
+  @override
+  String get subscriptionBackgroundSaveError =>
+      'Не удалось запланировать фоновые обновления. Повторите попытку.';
+
+  @override
   String get coreSettingsNatIndependent => 'Независимо от адресата';
 
   @override

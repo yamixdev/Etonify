@@ -220,6 +220,23 @@ class SubscriptionFetcher {
     }
   }
 
+  /// Uses exactly the same HWID and custom header policy as manual updates.
+  static Future<Map<String, String>> backgroundRequestHeaders(
+    SubscriptionInfo? info,
+  ) => _requestHeaders(info);
+
+  static Future<FetchResult> parseDownloadedResponse({
+    required String url,
+    required List<int> bytes,
+    required Map<String, String> headers,
+  }) => _buildResult(
+    url: url,
+    response: _buildFetchedResponse(
+      rawContent: decodeResponseUtf8ForTest(bytes),
+      headerValue: (name) => headers[name.toLowerCase()],
+    ),
+  );
+
   static Future<Map<String, String>> _requestHeaders(
     SubscriptionInfo? requestInfo,
   ) async {

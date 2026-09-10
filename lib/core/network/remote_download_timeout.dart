@@ -26,7 +26,7 @@ class RemoteDownloadTimeoutException extends TimeoutException {
     final seconds = timeout.inSeconds;
     return switch (phase) {
       RemoteDownloadTimeoutPhase.connecting =>
-        'Download failed: the server did not accept a connection within $seconds seconds.',
+        'Download timed out: connection setup did not finish within $seconds seconds.',
       RemoteDownloadTimeoutPhase.awaitingResponse =>
         'Download failed: the server did not send a response within $seconds seconds.',
       RemoteDownloadTimeoutPhase.receiving =>

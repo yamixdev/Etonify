@@ -36,6 +36,13 @@ void main() {
     await tester.pump();
     expect(tested, 1);
     expect(selected, 0);
+    final button = tester.widget<TextButton>(find.byType(TextButton));
+    expect(button.style!.backgroundColor!.resolve({}), Colors.transparent);
+    expect(button.style!.side!.resolve({}), BorderSide.none);
+    expect(
+      tester.getSize(find.byType(TextButton)).height,
+      greaterThanOrEqualTo(48),
+    );
     await tester.drag(find.text('140 ms'), const Offset(0, -160));
     await tester.pumpAndSettle();
     expect(tested, 1);

@@ -25,9 +25,8 @@ class ProxyLatencyButton extends StatelessWidget {
         style: TextButton.styleFrom(
           minimumSize: const Size(72, 48),
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          backgroundColor: Theme.of(
-            context,
-          ).colorScheme.surfaceContainerHighest.withValues(alpha: .45),
+          backgroundColor: Colors.transparent,
+          side: BorderSide.none,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: Semantics(label: label, child: child),

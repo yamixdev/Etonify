@@ -5,6 +5,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 
 void main() {
+  test('preserves HTTP 502 when fallback ends with a socket error', () async {
+    final error = RemoteDownloadHttpException(
+      502,
+      uri: Uri.parse('https://provider.test/secret'),
+    );
+    await expectLater(
+      runRemoteDownloadRouteAttemptsForTest<String>(
+        routes: const [RemoteDownloadRoute.app, RemoteDownloadRoute.underlying],
+        attempt: (route) async {
+          if (route == RemoteDownloadRoute.app) throw error;
+          throw const SocketException('Socket closed');
+        },
+      ),
+      throwsA(same(error)),
+    );
+  });
+
+  test('does not retry HTTP 429 on another route', () async {
+    var calls = 0;
+    await expectLater(
+      runRemoteDownloadRouteAttemptsForTest<String>(
+        routes: const [RemoteDownloadRoute.app, RemoteDownloadRoute.underlying],
+        attempt: (_) async {
+          calls++;
+          throw RemoteDownloadHttpException(
+            429,
+            uri: Uri.parse('https://provider.test'),
+          );
+        },
+      ),
+      throwsA(isA<RemoteDownloadHttpException>()),
+    );
+    expect(calls, 1);
+  });
   test(
     'underlying downloads stage bytes in the private temporary directory',
     () async {

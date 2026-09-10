@@ -4,6 +4,8 @@ import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
 
 typedef SubscriptionMetadataLoader = Future<List<Subscription>> Function();
 typedef SubscriptionLoader = Future<Subscription?> Function(String id);
@@ -16,11 +18,13 @@ class SubscriptionAutoRefreshResult {
     required this.dueCount,
     this.refreshedActiveSubscription,
     this.activeRuntimeChanged = false,
+    this.entries = const [],
   });
 
   final int dueCount;
   final Subscription? refreshedActiveSubscription;
   final bool activeRuntimeChanged;
+  final List<SubscriptionRefreshEntry> entries;
 }
 
 class SubscriptionCoordinator {
@@ -174,6 +178,7 @@ class SubscriptionCoordinator {
         ? null
         : runtimeFingerprint(activeSubscription);
     Subscription? refreshedActiveSubscription;
+    final entries = <SubscriptionRefreshEntry>[];
     final refreshLimit = max(1, min(concurrency, dueSubscriptions.length));
 
     for (
@@ -190,11 +195,26 @@ class SubscriptionCoordinator {
               'refreshing id=${subscription.id} name=${subscription.name}',
             );
             final updated = await _refreshSubscription(subscription.id);
+            entries.add(
+              SubscriptionRefreshEntry(
+                id: subscription.id,
+                name: subscription.name,
+                time: DateTime.now().millisecondsSinceEpoch,
+              ),
+            );
             _runtime.clearAutoRefreshFailure(subscription.id);
             if (updated.id == activeSubscription?.id) {
               refreshedActiveSubscription = updated;
             }
           } catch (error) {
+            entries.add(
+              SubscriptionRefreshEntry(
+                id: subscription.id,
+                name: subscription.name,
+                time: DateTime.now().millisecondsSinceEpoch,
+                failure: classifySubscriptionFailure(error),
+              ),
+            );
             final backoff = _runtime.recordAutoRefreshFailure(subscription.id);
             AppLogStore.warning(
               'subscription refresh',
@@ -210,6 +230,7 @@ class SubscriptionCoordinator {
     final refreshedActive = refreshedActiveSubscription;
     return SubscriptionAutoRefreshResult(
       dueCount: dueSubscriptions.length,
+      entries: entries,
       refreshedActiveSubscription: refreshedActive,
       activeRuntimeChanged:
           refreshedActive != null &&

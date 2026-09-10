@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
@@ -35,7 +36,7 @@ class SubscriptionImportResult {
 class SubscriptionStore {
   static const _lagomWhitelistDetourTag = 'whitelist';
   static const _lagomWhitelistProxySourceTag = 'proxy-whitelist';
-  static const _defaultRemoteOperationTimeout = Duration(seconds: 30);
+  static const _defaultRemoteOperationTimeout = Duration(seconds: 90);
 
   SubscriptionStore._();
 
@@ -880,6 +881,45 @@ class SubscriptionStore {
     }
   }
 
+  static String backgroundRevision(Subscription subscription) => sha256
+      .convert(
+        utf8.encode(
+          jsonEncode({
+            'url': subscription.url,
+            'sendHwid': SubscriptionFetcher.sendHwidToProviders,
+            'updated': subscription.lastUpdated,
+            'info': subscription.info?.toMap(),
+            'disabled': subscription.disableAutoUpdate,
+            'interval': subscription.autoRefreshMinutes,
+          }),
+        ),
+      )
+      .toString();
+
+  static Future<Subscription> applyBackgroundDownload(
+    String id, {
+    required String revision,
+    required List<int> bytes,
+    required Map<String, String> headers,
+  }) async {
+    await ensurePayloadReady();
+    final existing = get(id);
+    if (existing == null || backgroundRevision(existing) != revision) {
+      throw StateError('Subscription changed since background download');
+    }
+    final result = await SubscriptionFetcher.parseDownloadedResponse(
+      url: existing.url,
+      bytes: bytes,
+      headers: headers,
+    );
+    return _refresh(
+      id,
+      allowInsecureTls: false,
+      downloadedResult: result,
+      expectedRevision: revision,
+    );
+  }
+
   /// Refreshes an existing subscription (re-fetches from URL).
   ///
   /// Returns the updated [Subscription].
@@ -912,11 +952,17 @@ class SubscriptionStore {
     Duration? operationTimeout,
     required bool allowInsecureTls,
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
+    FetchResult? downloadedResult,
+    String? expectedRevision,
   }) async {
     await ensurePayloadReady();
     final existingBeforeFetch = get(id);
     if (existingBeforeFetch == null) {
       throw StateError('Subscription $id not found');
+    }
+    if (expectedRevision != null &&
+        backgroundRevision(existingBeforeFetch) != expectedRevision) {
+      throw StateError('Subscription changed since background download');
     }
     if (isLocalFileImportUrl(existingBeforeFetch.url)) {
       throw StateError('Manual imports cannot be refreshed');
@@ -924,13 +970,15 @@ class SubscriptionStore {
 
     final deadline = _operationDeadline(operationTimeout);
     final result = await _withDeadline(
-      SubscriptionFetcher.fetch(
-        existingBeforeFetch.url,
-        requestInfo: existingBeforeFetch.info,
-        operationTimeout: _remainingUntil(deadline),
-        allowInsecureTls: allowInsecureTls,
-        onRouteAttempt: onRouteAttempt,
-      ),
+      downloadedResult != null
+          ? Future.value(downloadedResult)
+          : SubscriptionFetcher.fetch(
+              existingBeforeFetch.url,
+              requestInfo: existingBeforeFetch.info,
+              operationTimeout: _remainingUntil(deadline),
+              allowInsecureTls: allowInsecureTls,
+              onRouteAttempt: onRouteAttempt,
+            ),
       deadline,
       'subscription refresh',
     );
@@ -959,6 +1007,10 @@ class SubscriptionStore {
       final existing = get(id);
       if (existing == null) {
         throw StateError('Subscription $id not found');
+      }
+      if (expectedRevision != null &&
+          backgroundRevision(existing) != expectedRevision) {
+        throw StateError('Subscription changed since background download');
       }
       final existingMovedUrl = existing.info?.newUrl;
       final nextMovedUrl = result.headerInfo.newUrl;
