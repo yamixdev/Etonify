@@ -264,4 +264,40 @@ void main() {
       false,
     );
   });
+
+  testWidgets('core settings render distinct icons based on setting names', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    final strategyTile = find.byKey(const ValueKey('core-networkStrategy'));
+    expect(strategyTile, findsOneWidget);
+    expect(
+      find.descendant(of: strategyTile, matching: find.byIcon(Icons.alt_route_rounded)),
+      findsOneWidget,
+    );
+
+    final timeoutTile = find.byKey(const ValueKey('core-connectTimeoutSeconds'));
+    expect(timeoutTile, findsOneWidget);
+    expect(
+      find.descendant(of: timeoutTile, matching: find.byIcon(Icons.timer_rounded)),
+      findsOneWidget,
+    );
+
+    final keepAliveTile = find.byKey(const ValueKey('core-keepAlive'));
+    expect(keepAliveTile, findsOneWidget);
+    expect(
+      find.descendant(of: keepAliveTile, matching: find.byIcon(Icons.monitor_heart_rounded)),
+      findsOneWidget,
+    );
+
+    await reveal(tester, 'core-udpFragment');
+    final udpFragmentTile = find.byKey(const ValueKey('core-udpFragment'));
+    expect(udpFragmentTile, findsOneWidget);
+    expect(
+      find.descendant(of: udpFragmentTile, matching: find.byIcon(Icons.splitscreen_rounded)),
+      findsOneWidget,
+    );
+  });
 }

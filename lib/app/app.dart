@@ -6441,15 +6441,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _pendingRuntimeGroups.remember(event);
         return;
       }
-      if (eventNetworkGeneration < currentNetworkGeneration) {
-        AppLogStore.debug(
-          'proxy',
-          'discarded stale groups snapshot networkGeneration='
-              '$eventNetworkGeneration currentNetworkGeneration='
-              '$currentNetworkGeneration',
-        );
-        return;
-      }
     }
     final activeSubscription = _activeSubscription;
     if (mounted &&

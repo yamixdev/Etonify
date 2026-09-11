@@ -60,6 +60,7 @@ void main() {
       ),
     );
     expect(pending.take(7, networkGeneration: 12), isNull);
+    expect(pending.take(7, networkGeneration: 13)?.groups, ['future']);
   });
 
   tearDown(AppLogStore.clear);

@@ -52,13 +52,17 @@ class PendingRuntimeGroups {
 
   RuntimeGroupsEvent? take(int generation, {int networkGeneration = 0}) {
     final latest = _latest;
-    _latest = null;
-    if (latest?.runtimeGeneration != generation) return null;
-    if (networkGeneration > 0 &&
-        latest!.networkGeneration > 0 &&
-        latest.networkGeneration != networkGeneration) {
+    if (latest == null) return null;
+    if (latest.runtimeGeneration != generation) {
+      _latest = null;
       return null;
     }
+    if (networkGeneration > 0 &&
+        latest.networkGeneration > 0 &&
+        latest.networkGeneration > networkGeneration) {
+      return null;
+    }
+    _latest = null;
     return latest;
   }
 

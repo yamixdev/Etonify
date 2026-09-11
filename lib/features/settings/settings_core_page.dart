@@ -157,17 +157,42 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     _error = null;
   });
 
+  static IconData _iconForKey(String key) => switch (key) {
+    'networkStrategy' => Icons.alt_route_rounded,
+    'networkType' => Icons.network_check_rounded,
+    'fallbackNetworkType' => Icons.sync_alt_rounded,
+    'fallbackDelayMs' => Icons.hourglass_top_rounded,
+    'connectTimeoutSeconds' => Icons.timer_rounded,
+    'keepAlive' => Icons.monitor_heart_rounded,
+    'keepAliveSeconds' => Icons.timelapse_rounded,
+    'keepAliveIntervalSeconds' => Icons.repeat_rounded,
+    'udpFragment' => Icons.splitscreen_rounded,
+    'udpMapping' => Icons.transform_rounded,
+    'udpFiltering' => Icons.filter_alt_rounded,
+    'udpNatMax' => Icons.table_rows_rounded,
+    'udpTimeoutSeconds' => Icons.more_time_rounded,
+    'mux-server' => Icons.dns_rounded,
+    'mux-mode' => Icons.layers_rounded,
+    'mux-protocol' => Icons.cable_rounded,
+    'mux-connections' => Icons.multiple_stop_rounded,
+    'mux-min-streams' => Icons.density_small_rounded,
+    'mux-streams' => Icons.stream_rounded,
+    'mux-padding' => Icons.space_bar_rounded,
+    'tlsHandshakeTimeoutSeconds' => Icons.lock_clock_rounded,
+    _ => Icons.tune_rounded,
+  };
+
   Widget _tile(
     String key,
     String title,
     String value,
     VoidCallback? onTap, {
-    IconData icon = Icons.tune_rounded,
+    IconData? icon,
   }) => ListTile(
     key: ValueKey('core-$key'),
     enabled: onTap != null && !_saving,
     leading: SettingsLeadingIcon(
-      icon: icon,
+      icon: icon ?? _iconForKey(key),
       color: Theme.of(context).colorScheme.primary,
     ),
     title: LayoutBuilder(
@@ -242,6 +267,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     String help,
     Map<String, String> choices, {
     bool enabled = true,
+    IconData? icon,
   }) {
     final current = _draft.toMap()[key] as String;
     return _tile(
@@ -254,6 +280,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
               final value = await _choose(title, help, choices, current);
               if (value != null && mounted) _set(key, value);
             },
+      icon: icon,
     );
   }
 
@@ -323,6 +350,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     int max, {
     int min = 0,
     bool enabled = true,
+    IconData? icon,
   }) {
     final current = _draft.toMap()[key] as int;
     return _tile(
@@ -337,6 +365,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
               final value = await _number(title, help, current, min, max);
               if (value != null && mounted) _set(key, value);
             },
+      icon: icon,
     );
   }
 
