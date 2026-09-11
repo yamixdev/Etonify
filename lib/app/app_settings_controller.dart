@@ -106,6 +106,14 @@ class AppSettingsController {
     return AppSettingsChange(changed: changed);
   }
 
+  bool hwidDefaultNoticeShown = false;
+
+  AppSettingsChange acknowledgeHwidDefaultNotice() {
+    final changed = !hwidDefaultNoticeShown;
+    hwidDefaultNoticeShown = true;
+    return AppSettingsChange(changed: changed);
+  }
+
   String localeCode = 'system';
   AppThemePreference themePreference = AppThemePreference.system;
   String accentColorHex = 'default';
@@ -122,7 +130,7 @@ class AppSettingsController {
       NotificationTrafficDisplayMode.speed;
   int notificationTrafficRefreshSeconds = 2;
   bool hideServerIp = false;
-  bool sendHwidToProviders = false;
+  bool sendHwidToProviders = true;
   String proxySort = 'source';
   bool progressiveBlurEnabled = false;
   bool vpnInboundEnabled = true;
@@ -205,6 +213,7 @@ class AppSettingsController {
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp,
       sendHwidToProviders: sendHwidToProviders,
+      hwidDefaultNoticeShown: hwidDefaultNoticeShown,
       progressiveBlurEnabled: progressiveBlurEnabled,
       progressiveBlurConfigured: true,
       memoryLimitEnabled: memoryLimitEnabled,
@@ -275,6 +284,7 @@ class AppSettingsController {
     notificationTrafficRefreshSeconds = state.notificationTrafficRefreshSeconds;
     hideServerIp = state.hideServerIp;
     sendHwidToProviders = state.sendHwidToProviders;
+    hwidDefaultNoticeShown = state.hwidDefaultNoticeShown;
     SubscriptionFetcher.configureHwidSharing(sendHwidToProviders);
     proxySort =
         const {'source', 'latency', 'name', 'country'}.contains(state.proxySort)

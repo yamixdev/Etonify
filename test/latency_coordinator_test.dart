@@ -46,9 +46,71 @@ void main() {
       );
       expect(coordinator.isChecking('c'), isFalse);
       await coordinator.runTarget(targetOutboundTag: 'c', reason: 'repeat');
-      expect(calls, hasLength(2));
+      expect(calls, hasLength(3));
+      expect(calls.last.targetOutboundTag, 'c');
       coordinator.handleGroupEvent(tag: 'b', timeSeconds: now, available: true);
       expect(await full, isTrue);
+    },
+  );
+
+  test(
+    'parallel targeted check executes concurrently during full session without blocking',
+    () async {
+      final calls = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => calls.add(request),
+        expectedTags: () => ['p-1', 'p-2', 'p-active'],
+        capabilities: LibboxCapabilities.parseOrLegacy('''{
+        "api_version": 2, "core_version": "1.14.0",
+        "supports_targeted_url_test": true,
+        "supports_url_test_queue_priority": true
+      }'''),
+      );
+      addTearDown(coordinator.dispose);
+
+      final fullFuture = coordinator.runFull(reason: 'test_all');
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.isRunning, isTrue);
+      expect(coordinator.isChecking('p-active'), isTrue);
+
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      coordinator.handleGroupEvent(
+        tag: 'p-active',
+        timeSeconds: now,
+        available: true,
+      );
+      expect(coordinator.isChecking('p-active'), isFalse);
+      expect(coordinator.isRunning, isTrue);
+
+      final targetOk = await coordinator.runTarget(
+        targetOutboundTag: 'p-active',
+        reason: 'manual_active',
+      );
+      expect(targetOk, isTrue);
+      expect(calls, hasLength(2));
+      expect(calls.last.targetOutboundTag, 'p-active');
+      expect(coordinator.isChecking('p-active'), isTrue);
+
+      coordinator.handleGroupEvent(
+        tag: 'p-active',
+        timeSeconds: now + 1,
+        available: true,
+      );
+      expect(coordinator.isChecking('p-active'), isFalse);
+      expect(coordinator.isRunning, isTrue);
+
+      coordinator.handleGroupEvent(
+        tag: 'p-1',
+        timeSeconds: now + 1,
+        available: true,
+      );
+      coordinator.handleGroupEvent(
+        tag: 'p-2',
+        timeSeconds: now + 1,
+        available: true,
+      );
+      expect(await fullFuture, isTrue);
+      expect(coordinator.isRunning, isFalse);
     },
   );
   testWidgets('missing expected results release the session before watchdog', (

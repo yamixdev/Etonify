@@ -43,7 +43,10 @@ void main() {
   );
   test('HWID sharing consent persists locally but cannot be imported', () {
     final store = _TestSettingsStore();
-    final off = store.mapState(const {});
+    final off = store.mapState(const {
+      'hwid_default_notice_shown': '1',
+      'send_hwid_to_providers': '0',
+    });
     expect(off.sendHwidToProviders, isFalse);
     final on = off.copyWith(sendHwidToProviders: true);
     expect(store.mapState(store.stateToMap(on)).sendHwidToProviders, isTrue);
@@ -63,6 +66,23 @@ void main() {
       }).sendHwidToProviders,
       isTrue,
     );
+  });
+  test('HWID sending defaults to true and migrates older disabled state', () {
+    final store = _TestSettingsStore();
+    final empty = store.mapState(const {});
+    expect(empty.sendHwidToProviders, isTrue);
+    expect(empty.hwidDefaultNoticeShown, isFalse);
+
+    final legacyOff = store.mapState(const {'send_hwid_to_providers': '0'});
+    expect(legacyOff.sendHwidToProviders, isTrue);
+    expect(legacyOff.hwidDefaultNoticeShown, isFalse);
+
+    final explicitlyDisabled = store.mapState(const {
+      'send_hwid_to_providers': '0',
+      'hwid_default_notice_shown': '1',
+    });
+    expect(explicitlyDisabled.sendHwidToProviders, isFalse);
+    expect(explicitlyDisabled.hwidDefaultNoticeShown, isTrue);
   });
   test('defaults to stable runtime values', () {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{});

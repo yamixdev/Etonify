@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gap/gap.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -188,41 +189,89 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     String value,
     VoidCallback? onTap, {
     IconData? icon,
-  }) => ListTile(
-    key: ValueKey('core-$key'),
-    enabled: onTap != null && !_saving,
-    leading: SettingsLeadingIcon(
-      icon: icon ?? _iconForKey(key),
-      color: Theme.of(context).colorScheme.primary,
-    ),
-    title: LayoutBuilder(
-      builder: (context, constraints) {
-        final valueText = Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium,
-        );
-        if (constraints.maxWidth < 200 ||
-            MediaQuery.textScalerOf(context).scale(14) > 20) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [Text(title), const SizedBox(height: 4), valueText],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(flex: 3, child: Text(title)),
-            const SizedBox(width: 12),
-            Flexible(
-              flex: 2,
-              child: Align(alignment: Alignment.centerRight, child: valueText),
+    String? subtitle,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final enabled = onTap != null && !_saving;
+
+    final trailing = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * .44,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Tooltip(
+              message: value,
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: enabled
+                      ? cs.onSurfaceVariant
+                      : cs.onSurfaceVariant.withValues(alpha: .5),
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+          if (onTap != null) ...[
+            const Gap(6),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: enabled
+                  ? cs.onSurfaceVariant
+                  : cs.onSurfaceVariant.withValues(alpha: .38),
             ),
           ],
-        );
-      },
-    ),
-    trailing: const Icon(Icons.chevron_right_rounded),
-    onTap: _saving ? null : onTap,
-  );
+        ],
+      ),
+    );
+
+    return ListTile(
+      key: ValueKey('core-$key'),
+      enabled: enabled,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      contentPadding: EdgeInsets.fromLTRB(
+        16,
+        subtitle == null ? 4 : 8,
+        16,
+        subtitle == null ? 4 : 8,
+      ),
+      leading: SettingsLeadingIcon(
+        icon: icon ?? _iconForKey(key),
+        color: enabled ? cs.primary : cs.primary.withValues(alpha: .5),
+        size: 36,
+        iconSize: 18,
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+      trailing: trailing,
+      onTap: _saving ? null : onTap,
+    );
+  }
 
   Future<String?> _choose(
     String title,
@@ -233,32 +282,55 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * .8,
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            Text(help),
-            const SizedBox(height: 12),
-            for (final entry in choices.entries)
-              ListTile(
-                title: Text(entry.value),
-                selected: current == entry.key,
-                trailing: current == entry.key
-                    ? const Icon(Icons.check_rounded)
-                    : null,
-                onTap: () => Navigator.pop(context, entry.key),
+    builder: (context) {
+      final theme = Theme.of(context);
+      final cs = theme.colorScheme;
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .8,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-          ],
+              const Gap(6),
+              Text(
+                help,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const Gap(12),
+              for (final entry in choices.entries)
+                ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(
+                    entry.value,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: entry.key == current
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
+                  ),
+                  selected: current == entry.key,
+                  trailing: current == entry.key
+                      ? const Icon(Icons.check_rounded, size: 20)
+                      : null,
+                  onTap: () => Navigator.pop(context, entry.key),
+                ),
+            ],
+          ),
         ),
-      ),
-    ),
+      );
+    },
   );
 
   Widget _choice(
@@ -375,15 +447,19 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, settingsSectionLabelGap),
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
-        SettingsTileGroup(children: children),
+        SettingsTileGroup(
+          dividerIndent: 64,
+          children: children,
+        ),
       ],
     ),
   );
@@ -415,8 +491,20 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
                   itemBuilder: (context, index) {
                     final server = servers[index];
                     return ListTile(
-                      title: Text(server.name),
-                      subtitle: Text(server.type.toUpperCase()),
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      title: Text(
+                        server.name,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        server.type.toUpperCase(),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       onTap: () => Navigator.pop(context, server),
                     );
                   },
@@ -443,10 +531,17 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
 
   List<Widget> _muxTiles() {
     final server = _muxServer;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return [
       Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(l.coreSettingsMuxHelp),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Text(
+          l.coreSettingsMuxHelp,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
       ),
       _tile(
         'mux-server',
@@ -724,8 +819,13 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
               _section(l.coreSettingsNat, [
                 if (!widget.vpnInboundEnabled)
                   Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(l.coreSettingsNatInactive),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Text(
+                      l.coreSettingsNatInactive,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 _choice(
                   'udpMapping',

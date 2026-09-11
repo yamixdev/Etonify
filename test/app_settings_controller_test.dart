@@ -10,13 +10,25 @@ void main() {
   test('HWID switch updates request policy without restarting the core', () {
     addTearDown(() => SubscriptionFetcher.configureHwidSharing(false));
     final controller = AppSettingsController();
-    final change = controller.setSendHwidToProviders(true);
-    expect(change.changed, isTrue);
-    expect(change.configReason, isNull);
-    expect(SubscriptionFetcher.shouldSendHwid(null), isTrue);
+    expect(controller.sendHwidToProviders, isTrue);
     expect(controller.setSendHwidToProviders(true).changed, isFalse);
-    controller.setSendHwidToProviders(false);
+
+    final changeFalse = controller.setSendHwidToProviders(false);
+    expect(changeFalse.changed, isTrue);
+    expect(changeFalse.configReason, isNull);
     expect(SubscriptionFetcher.shouldSendHwid(null), isFalse);
+
+    final changeTrue = controller.setSendHwidToProviders(true);
+    expect(changeTrue.changed, isTrue);
+    expect(changeTrue.configReason, isNull);
+    expect(SubscriptionFetcher.shouldSendHwid(null), isTrue);
+
+    expect(controller.hwidDefaultNoticeShown, isFalse);
+    final ackChange = controller.acknowledgeHwidDefaultNotice();
+    expect(ackChange.changed, isTrue);
+    expect(ackChange.configReason, isNull);
+    expect(controller.hwidDefaultNoticeShown, isTrue);
+    expect(controller.acknowledgeHwidDefaultNotice().changed, isFalse);
   });
   test('URLTest fallbacks use the stable runtime defaults', () {
     final controller = AppSettingsController();

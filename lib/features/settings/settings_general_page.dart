@@ -67,7 +67,7 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentNotificationTrafficDisplayMode,
     required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
-    this.currentSendHwidToProviders = false,
+    this.currentSendHwidToProviders = true,
     this.onSendHwidToProvidersChanged,
     required this.onLocaleChanged,
     required this.onThemePreferenceChanged,

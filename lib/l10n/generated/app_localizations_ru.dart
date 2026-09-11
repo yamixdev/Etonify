@@ -287,6 +287,16 @@ class AppLocalizationsRu extends AppLocalizations {
       'Передавать ID устройства, модель и версию ОС при загрузке всех подписок. Отдельные разрешения в подписках сохраняются.';
 
   @override
+  String get hwidDefaultEnabledNoticeTitle => 'Отправка HWID';
+
+  @override
+  String get hwidDefaultEnabledNoticeMessage =>
+      'Отправка HWID включена по умолчанию. Многим провайдерам нужен ID устройства для выдачи и работы подписки, иначе клиент не поддерживается.\n\nОтключить можно в любой момент: Настройки -> Общие.';
+
+  @override
+  String get hwidDefaultEnabledNoticeAction => 'Понятно';
+
+  @override
   String get profiles => 'Профили';
 
   @override

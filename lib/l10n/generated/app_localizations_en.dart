@@ -288,6 +288,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.';
 
   @override
+  String get hwidDefaultEnabledNoticeTitle => 'HWID sending';
+
+  @override
+  String get hwidDefaultEnabledNoticeMessage =>
+      'HWID sending is enabled by default. Many providers require a device ID to issue and run subscriptions.\n\nYou can disable it anytime: Settings -> General.';
+
+  @override
+  String get hwidDefaultEnabledNoticeAction => 'Got it';
+
+  @override
   String get profiles => 'Profiles';
 
   @override

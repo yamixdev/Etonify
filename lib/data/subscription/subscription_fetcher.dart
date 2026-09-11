@@ -59,7 +59,7 @@ class SubscriptionFetcher {
 
   static const fallbackAppVersion = '0.2.3';
   static String _appVersion = fallbackAppVersion;
-  static bool _sendHwidToProviders = false;
+  static bool _sendHwidToProviders = true;
   static bool get sendHwidToProviders => _sendHwidToProviders;
 
   static void configureHwidSharing(bool enabled) {

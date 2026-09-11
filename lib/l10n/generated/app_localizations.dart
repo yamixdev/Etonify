@@ -596,6 +596,24 @@ abstract class AppLocalizations {
   /// **'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.'**
   String get sendHwidToProvidersDescription;
 
+  /// No description provided for @hwidDefaultEnabledNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HWID sending'**
+  String get hwidDefaultEnabledNoticeTitle;
+
+  /// No description provided for @hwidDefaultEnabledNoticeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'HWID sending is enabled by default. Many providers require a device ID to issue and run subscriptions.\n\nYou can disable it anytime: Settings -> General.'**
+  String get hwidDefaultEnabledNoticeMessage;
+
+  /// No description provided for @hwidDefaultEnabledNoticeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get hwidDefaultEnabledNoticeAction;
+
   /// No description provided for @profiles.
   ///
   /// In en, this message translates to:

@@ -142,6 +142,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int? _acceptedLegalAtMillis;
   bool _runtimeErrorDialogVisible = false;
   bool _noValidOutboundsDialogVisible = false;
+  bool _hwidNoticeDialogShowing = false;
   bool _settingsBackupOperationInFlight = false;
   bool _proxyPanelInteractionActive = false;
   bool _proxyPanelOpen = false;
@@ -2784,6 +2785,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_deepLinkImportCoordinator.hasPendingImport && _onboardingCompleted) {
       unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_maybeShowHwidDefaultNotice());
+      }
+    });
 
     final inboundSettingsMigrated =
         (!state.vpnInboundEnabled && !state.proxyInboundEnabled) ||
@@ -3449,6 +3455,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_deepLinkImportCoordinator.hasPendingImport && _legalAccepted) {
       unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_maybeShowHwidDefaultNotice());
+      }
+    });
   }
 
   void _acceptLegalDocuments() {
@@ -3460,6 +3471,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_deepLinkImportCoordinator.hasPendingImport) {
       unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_maybeShowHwidDefaultNotice());
+      }
+    });
   }
 
   void _resetOnboarding() {
@@ -5409,6 +5425,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (haptic) {
       _haptic();
     }
+    _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
     if (!_latencyCoordinator.capabilities.supportsTargetedUrlTest) {
       await _latencyCoordinator.runFull(reason: 'manual_active_fallback');
       return;
@@ -5434,6 +5451,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (target == null) return;
     _haptic();
+    _proxyRuntime.runtimeLatencyTimes.remove(target);
     await _latencyCoordinator.runTarget(
       targetOutboundTag: target,
       reason: 'manual_row',
@@ -6399,6 +6417,51 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ),
     );
     _runtimeErrorDialogVisible = false;
+  }
+
+  Future<void> _maybeShowHwidDefaultNotice() async {
+    if (_hwidNoticeDialogShowing || !_ready || !mounted) {
+      return;
+    }
+    if (!(_onboardingCompleted && _legalAccepted)) {
+      return;
+    }
+    if (_settings.hwidDefaultNoticeShown) {
+      return;
+    }
+    final context = _navigatorKey.currentContext;
+    if (context == null || !mounted) {
+      return;
+    }
+    _hwidNoticeDialogShowing = true;
+    try {
+      final l10n = AppLocalizations.of(context);
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.hwidDefaultEnabledNoticeTitle),
+          content: Text(l10n.hwidDefaultEnabledNoticeMessage),
+          actions: [
+            FilledButton(
+              key: const ValueKey('hwid-default-notice-ok'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.hwidDefaultEnabledNoticeAction),
+            ),
+          ],
+        ),
+      );
+      if (mounted) {
+        _applySettingsChange(_settings.acknowledgeHwidDefaultNotice);
+        _lastAppliedSettingsState =
+            (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+              hwidDefaultNoticeShown: true,
+            );
+        await _persistState();
+      }
+    } finally {
+      _hwidNoticeDialogShowing = false;
+    }
   }
 
   void _applyGroupUpdates(RuntimeGroupsEvent event) {

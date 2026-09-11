@@ -56,6 +56,17 @@ typedef LatencyExpectedTagsReader = Iterable<String> Function();
 typedef LatencySessionChanged =
     void Function(bool running, LatencySessionKind? kind, String targetTag);
 
+class _ActiveTargetCheck {
+  _ActiveTargetCheck({
+    required this.startedAtSeconds,
+    required this.generation,
+  });
+
+  final int startedAtSeconds;
+  final int generation;
+  Timer? timeoutTimer;
+}
+
 class LatencyCoordinator {
   LatencyCoordinator({
     required LatencyTestRunner runTest,
@@ -91,7 +102,7 @@ class LatencyCoordinator {
   static const _defaultTimeoutMillis = 15000;
   static const _minimumTimeoutMillis = 500;
   static const _maximumTimeoutMillis = 30000;
-  static const _defaultConcurrency = 4;
+  static const _defaultConcurrency = 8;
   static const _maximumConcurrency = 16;
   static const _maximumDeadlineMillis = 120000;
 
@@ -131,6 +142,8 @@ class LatencyCoordinator {
   final Map<String, int> _acceptedEventTimes = <String, int>{};
   final Set<String> _successfulTags = <String>{};
   final Set<String> _priorityRequests = <String>{};
+  final Map<String, _ActiveTargetCheck> _activeTargetChecks =
+      <String, _ActiveTargetCheck>{};
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
 
@@ -152,7 +165,11 @@ class LatencyCoordinator {
 
   bool isChecking(String rawTag) {
     final tag = rawTag.trim();
-    if (!isRunning || tag.isEmpty) return false;
+    if (tag.isEmpty) return false;
+    if (_activeTargetChecks.containsKey(tag)) {
+      return true;
+    }
+    if (!isRunning) return false;
     if (_targetTag.isNotEmpty) {
       return _targetTag == tag && !_acceptedEventTimes.containsKey(tag);
     }
@@ -165,10 +182,16 @@ class LatencyCoordinator {
 
   bool shouldIgnoreGroupResult(String rawTag, int timeSeconds) {
     final tag = rawTag.trim();
-    if (!isRunning ||
-        tag.isEmpty ||
-        timeSeconds <= 0 ||
-        !_sessionExpectedTags.contains(tag)) {
+    if (tag.isEmpty || timeSeconds <= 0) {
+      return false;
+    }
+    final activeCheck = _activeTargetChecks[tag];
+    if (activeCheck != null) {
+      final baseline = _baselineEventTimes[tag] ?? 0;
+      return timeSeconds < _sessionStartedAtSeconds ||
+          (baseline > 0 && timeSeconds <= baseline);
+    }
+    if (!isRunning || !_sessionExpectedTags.contains(tag)) {
       return false;
     }
     final baseline = _baselineEventTimes[tag] ?? 0;
@@ -195,19 +218,13 @@ class LatencyCoordinator {
       return Future<bool>.value(false);
     }
     if (isRunning) {
-      if (_acceptedEventTimes.containsKey(targetTag)) {
-        return Future<bool>.value(_successfulTags.contains(targetTag));
-      }
       if (_kind != LatencySessionKind.full ||
-          !_capabilities.supportsUrlTestQueuePriority ||
-          !_sessionExpectedTags.contains(targetTag) ||
           !_isConnected() ||
           !_isForeground() ||
-          !_canRunDiagnostics() ||
-          !_priorityRequests.add(targetTag)) {
+          !_canRunDiagnostics()) {
         return Future<bool>.value(false);
       }
-      return _prioritizeTarget(targetTag);
+      return _runParallelTarget(targetTag: targetTag, reason: reason);
     }
     return _runSession(
       kind: LatencySessionKind.targeted,
@@ -228,9 +245,31 @@ class LatencyCoordinator {
     );
   }
 
-  /// Moves a queued leaf forward without replacing the full native session.
-  Future<bool> _prioritizeTarget(String targetTag) async {
+  Future<bool> _runParallelTarget({
+    required String targetTag,
+    required String reason,
+  }) async {
+    if (_activeTargetChecks.containsKey(targetTag)) {
+      return true;
+    }
     final generation = _generation;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final check = _ActiveTargetCheck(
+      startedAtSeconds: nowSeconds,
+      generation: generation,
+    );
+    check.timeoutTimer = Timer(
+      Duration(milliseconds: _targetDeadlineMillis),
+      () {
+        if (_activeTargetChecks[targetTag] == check) {
+          _activeTargetChecks.remove(targetTag);
+          _onSessionChanged(isRunning, _kind, _targetTag);
+        }
+      },
+    );
+    _activeTargetChecks[targetTag] = check;
+    _onSessionChanged(isRunning, _kind, _targetTag);
+
     try {
       await _runTest(
         LatencyTestRequest(
@@ -246,10 +285,13 @@ class LatencyCoordinator {
       ).timeout(uiPolicy.nativeCommandTimeout);
       return _isActiveGeneration(generation);
     } catch (error) {
-      AppLogStore.warning('latency', 'priority URLTest request failed: $error');
+      AppLogStore.warning('latency', 'parallel targeted URLTest failed: $error');
+      check.timeoutTimer?.cancel();
+      if (_activeTargetChecks[targetTag] == check) {
+        _activeTargetChecks.remove(targetTag);
+        _onSessionChanged(isRunning, _kind, _targetTag);
+      }
       return false;
-    } finally {
-      if (generation == _generation) _priorityRequests.remove(targetTag);
     }
   }
 
@@ -262,8 +304,22 @@ class LatencyCoordinator {
     required bool available,
   }) {
     final normalizedTag = tag.trim();
-    if (!isRunning || normalizedTag.isEmpty || timeSeconds <= 0) {
+    if (normalizedTag.isEmpty || timeSeconds <= 0) {
       return false;
+    }
+    final baseline = _baselineEventTimes[normalizedTag] ?? 0;
+    if (timeSeconds < _sessionStartedAtSeconds ||
+        (baseline > 0 && timeSeconds <= baseline)) {
+      return false;
+    }
+    final activeCheck = _activeTargetChecks[normalizedTag];
+    if (activeCheck != null) {
+      activeCheck.timeoutTimer?.cancel();
+      _activeTargetChecks.remove(normalizedTag);
+      _onSessionChanged(isRunning, _kind, _targetTag);
+    }
+    if (!isRunning) {
+      return activeCheck != null;
     }
     if (_operationGeneration() != _sessionOperationGeneration ||
         !_isConnected() ||
@@ -271,9 +327,7 @@ class LatencyCoordinator {
       _settleCurrent(success: false, reason: 'stale_runtime');
       return false;
     }
-    final baseline = _baselineEventTimes[normalizedTag] ?? 0;
-    if (timeSeconds < _sessionStartedAtSeconds ||
-        (baseline > 0 && timeSeconds <= baseline) ||
+    if (activeCheck == null &&
         timeSeconds <= (_acceptedEventTimes[normalizedTag] ?? 0)) {
       return false;
     }
@@ -313,6 +367,10 @@ class LatencyCoordinator {
   void cancel() {
     _generation++;
     _priorityRequests.clear();
+    for (final check in _activeTargetChecks.values) {
+      check.timeoutTimer?.cancel();
+    }
+    _activeTargetChecks.clear();
     final wasRunning = isRunning;
     final previousKind = _kind;
     final previousTarget = _targetTag;
