@@ -47,7 +47,7 @@ void main() {
       rawContent: 'test-raw-content',
     );
     await SubscriptionStore.save(sub);
-    expect(SubscriptionStore.get('sub-race-1'), isNotNull);
+    expect(await SubscriptionStore.get('sub-race-1'), isNotNull);
 
     // Launch concurrent delete and saveMetadata operations
     final deleteFuture = SubscriptionStore.delete('sub-race-1');
@@ -58,7 +58,7 @@ void main() {
     await Future.wait([deleteFuture, saveMetaFuture]);
 
     // Subscription must remain deleted (not resurrected by saveMetadata)
-    expect(SubscriptionStore.get('sub-race-1'), isNull);
+    expect(await SubscriptionStore.get('sub-race-1'), isNull);
     expect(
       SubscriptionStore.getAllMetadata().any((s) => s.id == 'sub-race-1'),
       isFalse,
@@ -87,7 +87,7 @@ void main() {
         rawContent: 'test-raw-content',
       );
       await SubscriptionStore.save(sub);
-      expect(SubscriptionStore.get('sub-race-2'), isNotNull);
+      expect(await SubscriptionStore.get('sub-race-2'), isNotNull);
 
       final deleteFuture = SubscriptionStore.delete('sub-race-2');
       final saveRuntimeFuture =
@@ -103,8 +103,8 @@ void main() {
 
       await Future.wait([deleteFuture, saveRuntimeFuture]);
 
-      expect(SubscriptionStore.get('sub-race-2'), isNull);
-      expect(SubscriptionStore.payloadSnapshotFor('sub-race-2'), isNull);
+      expect(await SubscriptionStore.get('sub-race-2'), isNull);
+      expect(await SubscriptionStore.payloadSnapshotFor('sub-race-2'), isNull);
     },
   );
 
@@ -131,8 +131,8 @@ void main() {
     expect(SubscriptionStore.getAllMetadata().length, 2);
 
     await SubscriptionStore.deleteMany(['sub-a']);
-    expect(SubscriptionStore.get('sub-a'), isNull);
-    expect(SubscriptionStore.get('sub-b'), isNotNull);
+    expect(await SubscriptionStore.get('sub-a'), isNull);
+    expect(await SubscriptionStore.get('sub-b'), isNotNull);
 
     await SubscriptionStore.clear();
     expect(SubscriptionStore.getAllMetadata(), isEmpty);

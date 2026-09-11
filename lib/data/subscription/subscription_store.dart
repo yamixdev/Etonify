@@ -49,7 +49,7 @@ class SubscriptionStore {
   static const _storageSchemaVersion = 2;
   static const _localFileImportScheme = 'meow-file';
   static Box<dynamic>? _metaBox;
-  static Box<dynamic>? _payloadBox;
+  static LazyBox<dynamic>? _payloadBox;
   static Future<void>? _payloadInitialization;
   static bool _payloadMigrationRequired = false;
   static final Map<String, Future<void>> _subscriptionWriteLocks =
@@ -137,6 +137,22 @@ class SubscriptionStore {
     return initialization;
   }
 
+  /// Closes subscription storage boxes and releases resources.
+  static Future<void> close() async {
+    _payloadInitialization = null;
+    if (_payloadBox != null && _payloadBox!.isOpen) {
+      await _payloadBox!.close();
+    }
+    _payloadBox = null;
+    if (_metaBox != null && _metaBox!.isOpen) {
+      await _metaBox!.close();
+    }
+    _metaBox = null;
+    _payloadMigrationRequired = false;
+    _subscriptionWriteLocks.clear();
+    _refreshesInFlight.clear();
+  }
+
   static Future<void> _openMetadataBox() async {
     final totalStopwatch = Stopwatch()..start();
     try {
@@ -196,7 +212,7 @@ class SubscriptionStore {
 
   static Future<void> _migratePlaintextBox(
     String legacyName,
-    Box<dynamic> secureBox,
+    BoxBase<dynamic> secureBox,
   ) async {
     if (!await Hive.boxExists(legacyName)) return;
 
@@ -231,7 +247,7 @@ class SubscriptionStore {
     return _metaBox!;
   }
 
-  static Box<dynamic> get _payloadStore {
+  static LazyBox<dynamic> get _payloadStore {
     if (_payloadBox == null) {
       throw StateError(
         'SubscriptionStore.ensurePayloadReady() must be awaited first',
@@ -292,13 +308,13 @@ class SubscriptionStore {
   // ─────────────────── CRUD ───────────────────
 
   /// Returns all stored subscriptions.
-  static List<Subscription> getAll() {
+  static Future<List<Subscription>> getAll() async {
     final indexedResults = <({int index, Subscription subscription})>[];
     var index = 0;
     for (final subscription in getAllMetadata()) {
       indexedResults.add((
         index: index,
-        subscription: _withPayload(subscription),
+        subscription: await withPayload(subscription),
       ));
       index++;
     }
@@ -320,10 +336,10 @@ class SubscriptionStore {
     if (metadataSnapshot.isEmpty) {
       return const <Subscription>[];
     }
-    final payloadSnapshot = <String, String>{};
+    final payloadSnapshot = <String, dynamic>{};
     for (final key in _payloadStore.keys) {
-      final raw = _payloadStore.get(key);
-      if (raw is String) {
+      final raw = await _payloadStore.get(key);
+      if (raw != null) {
         payloadSnapshot[key.toString()] = raw;
       }
     }
@@ -392,15 +408,22 @@ class SubscriptionStore {
         .toList(growable: false);
   }
 
-  /// Gets a single subscription by ID, or null.
-  static Subscription? get(String id) {
+  /// Gets a single subscription by ID with payload, or null.
+  static Future<Subscription?> get(String id) async {
+    await ensurePayloadReady();
+    final metadata = getMetadata(id);
+    if (metadata == null) return null;
+    return _withPayload(metadata);
+  }
+
+  /// Gets metadata only for a single subscription by ID synchronously.
+  static Subscription? getMetadata(String id) {
     final raw = _metaStore.get(id);
     if (raw is! String) return null;
     try {
-      final metadata = Subscription.fromMetadataMap(
+      return Subscription.fromMetadataMap(
         jsonDecode(raw) as Map<String, dynamic>,
       );
-      return _withPayload(metadata);
     } catch (_) {
       return null;
     }
@@ -414,13 +437,30 @@ class SubscriptionStore {
     if (metadataRaw is! String) {
       return null;
     }
-    final payloadRaw = _payloadStore.get(id);
+    final payloadRaw = await _payloadStore.get(id);
+    final isLargePayload = switch (payloadRaw) {
+      List<int> bytes => bytes.length >= 32 * 1024,
+      String str => str.length >= 32 * 1024,
+      _ => false,
+    };
+    if (!isLargePayload) {
+      try {
+        final metadata = Subscription.fromMetadataMap(
+          jsonDecode(metadataRaw) as Map<String, dynamic>,
+        );
+        return payloadRaw != null
+            ? _withPayloadFromRaw(metadata, payloadRaw)
+            : metadata;
+      } catch (_) {
+        return null;
+      }
+    }
     return Isolate.run(() {
       try {
         final metadata = Subscription.fromMetadataMap(
           jsonDecode(metadataRaw) as Map<String, dynamic>,
         );
-        return payloadRaw is String
+        return payloadRaw != null
             ? _withPayloadFromRaw(metadata, payloadRaw)
             : metadata;
       } catch (_) {
@@ -430,12 +470,12 @@ class SubscriptionStore {
   }
 
   /// Hydrates raw content/outbounds for a metadata-only subscription.
-  static Subscription withPayload(Subscription metadata) {
+  static Future<Subscription> withPayload(Subscription metadata) {
     return _withPayload(metadata);
   }
 
-  static String? payloadJsonFor(String id) {
-    final snapshot = payloadSnapshotFor(id);
+  static Future<String?> payloadJsonFor(String id) async {
+    final snapshot = await payloadSnapshotFor(id);
     if (snapshot == null) {
       return null;
     }
@@ -451,15 +491,14 @@ class SubscriptionStore {
   /// Pass this snapshot to a worker isolate and hydrate it there. Calling
   /// [payloadJsonFor] for a multi-megabyte profile on the UI isolate would
   /// undo the startup benefit of compressed storage.
-  static String? payloadSnapshotFor(String id) {
+  static Future<dynamic> payloadSnapshotFor(String id) async {
     if (_payloadBox == null) {
       return null;
     }
-    final raw = _payloadStore.get(id);
-    return raw is String ? raw : null;
+    return await _payloadStore.get(id);
   }
 
-  static Subscription hydratePayloadJson(Subscription metadata, String raw) {
+  static Subscription hydratePayloadJson(Subscription metadata, dynamic raw) {
     return _withPayloadFromRaw(metadata, raw);
   }
 
@@ -468,9 +507,17 @@ class SubscriptionStore {
     Subscription metadata,
   ) async {
     await ensurePayloadReady();
-    final raw = _payloadStore.get(metadata.id);
-    if (raw is! String) {
+    final raw = await _payloadStore.get(metadata.id);
+    if (raw == null) {
       return metadata;
+    }
+    final isLargePayload = switch (raw) {
+      List<int> bytes => bytes.length >= 32 * 1024,
+      String str => str.length >= 32 * 1024,
+      _ => false,
+    };
+    if (!isLargePayload) {
+      return hydratePayloadJson(metadata, raw);
     }
     final metadataMap = metadata.toMetadataMap();
     return Isolate.run(
@@ -486,12 +533,25 @@ class SubscriptionStore {
   }
 
   static Future<void> _saveUnlocked(Subscription sub) async {
-    final payload = await Isolate.run(
-      () => _encodeStoredPayload(jsonEncode(sub.toPayloadMap())),
+    final existingPayload = await _payloadStore.get(sub.id);
+    final isMetadataOnly = sub.outbounds.isEmpty &&
+        sub.rawContent.isEmpty &&
+        existingPayload != null;
+    if (isMetadataOnly) {
+      await _saveMetadataUnlocked(sub);
+      return;
+    }
+    final payloadResult = await Isolate.run(
+      () {
+        final payloadBytes = _encodeStoredPayload(jsonEncode(sub.toPayloadMap()));
+        final revision = sha256.convert(payloadBytes).toString();
+        return (payload: payloadBytes, revision: revision);
+      },
       debugName: 'meow-encode-subscription-payload',
     );
-    await _metaStore.put(sub.id, jsonEncode(sub.toMetadataMap()));
-    await _payloadStore.put(sub.id, payload);
+    final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
+    await _metaStore.put(updatedSub.id, jsonEncode(updatedSub.toMetadataMap()));
+    await _payloadStore.put(updatedSub.id, payloadResult.payload);
   }
 
   /// Saves only lightweight subscription metadata.
@@ -598,8 +658,8 @@ class SubscriptionStore {
     if (updates.isEmpty) {
       return false;
     }
-    final raw = _payloadStore.get(id);
-    if (raw is! String || raw.isEmpty) {
+    final raw = await _payloadStore.get(id);
+    if (raw == null) {
       return false;
     }
     final updatedRaw = await Isolate.run(
@@ -644,7 +704,7 @@ class SubscriptionStore {
       });
     }
     await _metaStore.clear();
-    await _payloadStore.clear();
+    await _payloadStore.deleteAll(_payloadStore.keys);
   }
 
   // ─────────────────── High-level operations ───────────────────
@@ -903,7 +963,7 @@ class SubscriptionStore {
     required Map<String, String> headers,
   }) async {
     await ensurePayloadReady();
-    final existing = get(id);
+    final existing = await get(id);
     if (existing == null || backgroundRevision(existing) != revision) {
       throw StateError('Subscription changed since background download');
     }
@@ -956,7 +1016,7 @@ class SubscriptionStore {
     String? expectedRevision,
   }) async {
     await ensurePayloadReady();
-    final existingBeforeFetch = get(id);
+    final existingBeforeFetch = await get(id);
     if (existingBeforeFetch == null) {
       throw StateError('Subscription $id not found');
     }
@@ -1004,7 +1064,7 @@ class SubscriptionStore {
     }
 
     return _withSubscriptionWriteLock(id, () async {
-      final existing = get(id);
+      final existing = await get(id);
       if (existing == null) {
         throw StateError('Subscription $id not found');
       }
@@ -1063,7 +1123,7 @@ class SubscriptionStore {
   /// already stored subscription payload.
   static Future<Subscription> reparseFromRaw(String id) async {
     await ensurePayloadReady();
-    final existingBeforeParse = get(id);
+    final existingBeforeParse = await get(id);
     if (existingBeforeParse == null) {
       throw StateError('Subscription $id not found');
     }
@@ -1098,7 +1158,7 @@ class SubscriptionStore {
     }
 
     return _withSubscriptionWriteLock(id, () async {
-      final existing = get(id);
+      final existing = await get(id);
       if (existing == null) {
         throw StateError('Subscription $id not found');
       }
@@ -1194,11 +1254,9 @@ class SubscriptionStore {
   static List<Outbound> _buildOutbounds(
     List<Map<String, dynamic>> parsedConfigs,
   ) {
-    final payload = _buildOutboundPayload(parsedConfigs);
+    final payload = _buildOutboundModels(parsedConfigs);
     _logBuildWarningEntries(payload.warnings);
-    return payload.outbounds
-        .map((entry) => Outbound.fromMap(entry))
-        .toList(growable: false);
+    return payload.outbounds;
   }
 
   static Future<({List<Outbound> outbounds, List<SubscriptionGroup> groups})>
@@ -1206,34 +1264,25 @@ class SubscriptionStore {
     ParseResult parseResult, {
     String? providerName,
   }) async {
-    final normalizedConfigs = parseResult.outbounds
-        .map((entry) => Map<String, dynamic>.from(entry))
-        .toList(growable: false);
-    final normalizedGroups = parseResult.groups
-        .map((entry) => entry.toMap())
-        .toList(growable: false);
-    final payload = Map<String, dynamic>.from(
-      await compute(_buildSubscriptionPayloadWorker, {
-        'outbounds': normalizedConfigs,
-        'groups': normalizedGroups,
-        'provider_name': ?providerName,
-      }),
-    );
-    _logBuildWarningEntries(payload['warnings'] as List? ?? const []);
-    final outbounds = (payload['outbounds'] as List? ?? const [])
-        .map(
-          (entry) => Outbound.fromMap(Map<String, dynamic>.from(entry as Map)),
-        )
-        .toList(growable: false);
-    final groups = (payload['groups'] as List? ?? const [])
-        .map(
-          (entry) => SubscriptionGroup.fromMap(
-            Map<String, dynamic>.from(entry as Map),
-          ),
-        )
-        .where((group) => group.outboundTags.isNotEmpty)
-        .toList(growable: false);
-    return (outbounds: outbounds, groups: groups);
+    final payload = await Isolate.run(() {
+      final normalizedGroups = parseResult.groups
+          .map((entry) => entry.toMap())
+          .toList(growable: false);
+      final built = _buildOutboundModels(
+        parseResult.outbounds,
+        normalizedGroups,
+        providerName,
+      );
+      return (
+        outbounds: built.outbounds,
+        groups: built.groups
+            .where((group) => group.outboundTags.isNotEmpty)
+            .toList(growable: false),
+        warnings: built.warnings,
+      );
+    }, debugName: 'meow-build-subscription-payload');
+    _logBuildWarningEntries(payload.warnings);
+    return (outbounds: payload.outbounds, groups: payload.groups);
   }
 
   static ({
@@ -1242,6 +1291,30 @@ class SubscriptionStore {
     List<String> warnings,
   })
   _buildOutboundPayload(
+    List<Map<String, dynamic>> parsedConfigs, [
+    List<Map<String, dynamic>> parsedGroups = const [],
+    String? providerName,
+  ]) {
+    final built = _buildOutboundModels(
+      parsedConfigs,
+      parsedGroups,
+      providerName,
+    );
+    return (
+      outbounds: built.outbounds
+          .map((entry) => entry.toMap())
+          .toList(growable: false),
+      groups: built.groups.map((entry) => entry.toMap()).toList(growable: false),
+      warnings: built.warnings,
+    );
+  }
+
+  static ({
+    List<Outbound> outbounds,
+    List<SubscriptionGroup> groups,
+    List<String> warnings,
+  })
+  _buildOutboundModels(
     List<Map<String, dynamic>> parsedConfigs, [
     List<Map<String, dynamic>> parsedGroups = const [],
     String? providerName,
@@ -1391,10 +1464,8 @@ class SubscriptionStore {
     }
 
     return (
-      outbounds: outbounds
-          .map((entry) => entry.toMap())
-          .toList(growable: false),
-      groups: groups.map((entry) => entry.toMap()).toList(growable: false),
+      outbounds: outbounds,
+      groups: groups,
       warnings: warnings,
     );
   }
@@ -1487,53 +1558,66 @@ class SubscriptionStore {
     List<Outbound> oldOutbounds,
     List<Outbound> newOutbounds,
   ) {
+    if (oldOutbounds.isEmpty || newOutbounds.isEmpty) {
+      return newOutbounds;
+    }
+
     final oldByTag = <String, Outbound>{};
+    final oldKeyByTag = <String, String>{};
     final oldByKey = <String, List<Outbound>>{};
     for (final ob in oldOutbounds) {
       oldByTag[ob.tag] = ob;
       final key = _outboundKey(ob.config);
+      oldKeyByTag[ob.tag] = key;
       oldByKey.putIfAbsent(key, () => <Outbound>[]).add(ob);
     }
 
+    final newKeys = List<String>.filled(newOutbounds.length, '');
     final newKeyCounts = <String, int>{};
-    for (final ob in newOutbounds) {
-      final key = _outboundKey(ob.config);
+    for (var i = 0; i < newOutbounds.length; i++) {
+      final ob = newOutbounds[i];
+      final exactOld = oldByTag[ob.tag];
+      final String key;
+      if (exactOld != null && identical(exactOld.config, ob.config)) {
+        key = oldKeyByTag[ob.tag]!;
+      } else {
+        key = _outboundKey(ob.config);
+      }
+      newKeys[i] = key;
       newKeyCounts[key] = (newKeyCounts[key] ?? 0) + 1;
     }
 
-    final merged = newOutbounds
-        .map((ob) {
-          final key = _outboundKey(ob.config);
-          final exactOldOutbound = oldByTag[ob.tag];
-          final oldMatches = oldByKey[key] ?? const <Outbound>[];
-          final exactOldKeyMatches =
-              exactOldOutbound != null &&
-              _outboundKey(exactOldOutbound.config) == key;
-          final oldOutbound =
-              (exactOldKeyMatches ? exactOldOutbound : null) ??
-              (oldMatches.length == 1 && newKeyCounts[key] == 1
-                  ? oldMatches.single
-                  : null);
-          final oldInfo = oldOutbound?.info;
-          if (oldInfo != null) {
-            final canCarryEndpointState =
-                oldMatches.length == 1 && newKeyCounts[key] == 1;
-            return ob.copyWith(
-              info: ob.info.copyWith(
-                checked: oldInfo.checked,
-                deleted: false,
-                externalIp: canCarryEndpointState ? oldInfo.externalIp : null,
-                country:
-                    ob.info.country ??
-                    (canCarryEndpointState ? oldInfo.country : null),
-                exitCountry: canCarryEndpointState ? oldInfo.exitCountry : null,
-                latestPing: canCarryEndpointState ? oldInfo.latestPing : null,
-              ),
-            );
-          }
-          return ob;
-        })
-        .toList(growable: false);
+    final merged = List<Outbound>.generate(newOutbounds.length, (i) {
+      final ob = newOutbounds[i];
+      final key = newKeys[i];
+      final exactOldOutbound = oldByTag[ob.tag];
+      final exactOldKeyMatches =
+          exactOldOutbound != null && oldKeyByTag[ob.tag] == key;
+      final oldMatches = oldByKey[key] ?? const <Outbound>[];
+      final oldOutbound =
+          (exactOldKeyMatches ? exactOldOutbound : null) ??
+          (oldMatches.length == 1 && newKeyCounts[key] == 1
+              ? oldMatches.single
+              : null);
+      final oldInfo = oldOutbound?.info;
+      if (oldInfo != null) {
+        final canCarryEndpointState =
+            oldMatches.length == 1 && newKeyCounts[key] == 1;
+        return ob.copyWith(
+          info: ob.info.copyWith(
+            checked: oldInfo.checked,
+            deleted: false,
+            externalIp: canCarryEndpointState ? oldInfo.externalIp : null,
+            country:
+                ob.info.country ??
+                (canCarryEndpointState ? oldInfo.country : null),
+            exitCountry: canCarryEndpointState ? oldInfo.exitCountry : null,
+            latestPing: canCarryEndpointState ? oldInfo.latestPing : null,
+          ),
+        );
+      }
+      return ob;
+    }, growable: false);
 
     return merged;
   }
@@ -1637,18 +1721,18 @@ class SubscriptionStore {
     }
   }
 
-  static Subscription _withPayload(Subscription metadata) {
+  static Future<Subscription> _withPayload(Subscription metadata) async {
     if (_payloadBox == null) {
       return metadata;
     }
-    final raw = _payloadStore.get(metadata.id);
-    if (raw is! String) {
+    final raw = await _payloadStore.get(metadata.id);
+    if (raw == null) {
       return metadata;
     }
     return _withPayloadFromRaw(metadata, raw);
   }
 
-  static Subscription _withPayloadFromRaw(Subscription metadata, String raw) {
+  static Subscription _withPayloadFromRaw(Subscription metadata, dynamic raw) {
     try {
       final map = jsonDecode(_decodeStoredPayload(raw)) as Map<String, dynamic>;
       return metadata.copyWith(
@@ -1725,33 +1809,35 @@ class SubscriptionStore {
     await Hive.deleteBoxFromDisk(_legacySummaryBoxName);
   }
 
+  static const List<String> _identityKeys = [
+    'flow',
+    'method',
+    'multiplex',
+    'network',
+    'obfs',
+    'obfs-password',
+    'packet_encoding',
+    'password',
+    'plugin',
+    'plugin_opts',
+    'security',
+    'server',
+    'server_port',
+    'tls',
+    'transport',
+    'type',
+    'username',
+    'uuid',
+  ];
+
   /// Creates a lookup key from outbound config for matching across refreshes.
   static String _outboundKey(Map<String, dynamic> config) {
     final identity = <String, dynamic>{
-      for (final key in const <String>[
-        'type',
-        'server',
-        'server_port',
-        'uuid',
-        'password',
-        'username',
-        'method',
-        'security',
-        'flow',
-        'network',
-        'packet_encoding',
-        'plugin',
-        'plugin_opts',
-        'obfs',
-        'obfs-password',
-        'tls',
-        'transport',
-        'multiplex',
-      ])
+      for (final key in _identityKeys)
         if (config.containsKey(key))
           key: _stableOutboundIdentityValue(config[key]),
     };
-    return jsonEncode(_stableOutboundIdentityValue(identity));
+    return jsonEncode(identity);
   }
 
   static dynamic _stableOutboundIdentityValue(dynamic value) {
@@ -2189,8 +2275,8 @@ class SubscriptionStore {
         ..sort((a, b) => b.key.length.compareTo(a.key.length));
 }
 
-String? _rewriteOutboundRuntimeInfoPayload(
-  String raw,
+dynamic _rewriteOutboundRuntimeInfoPayload(
+  dynamic raw,
   Map<String, Map<String, Object?>> updatesByTag,
 ) {
   try {
@@ -2267,38 +2353,27 @@ const _compressedPayloadPrefix = 'gzip-base64-v1:';
 bool _isCompressedPayload(String value) =>
     value.startsWith(_compressedPayloadPrefix);
 
-String _encodeStoredPayload(String json) {
-  final compressed = gzip.encode(utf8.encode(json));
-  final encoded = '$_compressedPayloadPrefix${base64Encode(compressed)}';
-  return encoded.length < json.length ? encoded : json;
+Uint8List _encodeStoredPayload(String json) {
+  return Uint8List.fromList(gzip.encode(utf8.encode(json)));
 }
 
-String _decodeStoredPayload(String value) {
-  if (!_isCompressedPayload(value)) {
+String _decodeStoredPayload(dynamic value) {
+  if (value is Uint8List) {
+    return utf8.decode(gzip.decode(value));
+  }
+  if (value is List<int>) {
+    return utf8.decode(gzip.decode(value));
+  }
+  if (value is String) {
+    if (_isCompressedPayload(value)) {
+      final encoded = value.substring(_compressedPayloadPrefix.length);
+      return utf8.decode(gzip.decode(base64Decode(encoded)));
+    }
     return value;
   }
-  final encoded = value.substring(_compressedPayloadPrefix.length);
-  return utf8.decode(gzip.decode(base64Decode(encoded)));
+  throw ArgumentError(
+    'Unsupported payload storage format: ${value.runtimeType}',
+  );
 }
 
-Map<String, dynamic> _buildSubscriptionPayloadWorker(
-  Map<String, dynamic> input,
-) {
-  final parsedConfigs = (input['outbounds'] as List? ?? const [])
-      .map((entry) => Map<String, dynamic>.from(entry as Map))
-      .toList(growable: false);
-  final parsedGroups = (input['groups'] as List? ?? const [])
-      .map((entry) => Map<String, dynamic>.from(entry as Map))
-      .toList(growable: false);
-  final providerName = input['provider_name']?.toString();
-  final payload = SubscriptionStore._buildOutboundPayload(
-    parsedConfigs,
-    parsedGroups,
-    providerName,
-  );
-  return {
-    'outbounds': payload.outbounds,
-    'groups': payload.groups,
-    'warnings': payload.warnings,
-  };
-}
+

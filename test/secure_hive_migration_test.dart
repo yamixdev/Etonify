@@ -54,11 +54,11 @@ void main() {
 
     await SubscriptionStore.init();
 
-    final migrated = SubscriptionStore.get(subscription.id);
+    final migrated = await SubscriptionStore.get(subscription.id);
     expect(migrated?.url, subscription.url);
     expect(migrated?.rawContent, subscription.rawContent);
     expect(migrated?.outbounds.single.config['uuid'], isNotEmpty);
-    final storedPayload = Hive.box<dynamic>(
+    final storedPayload = await Hive.lazyBox<dynamic>(
       'subscription_payloads_secure_v1',
     ).get(subscription.id);
     expect(storedPayload, isA<String>());
@@ -66,7 +66,7 @@ void main() {
     // raw/compressed reader keeps this entry usable until its next save.
     expect(storedPayload as String, isNot(startsWith('gzip-base64-v1:')));
     expect(
-      jsonDecode(SubscriptionStore.payloadJsonFor(subscription.id)!)
+      jsonDecode((await SubscriptionStore.payloadJsonFor(subscription.id))!)
           as Map<String, dynamic>,
       containsPair('raw_content', subscription.rawContent),
     );

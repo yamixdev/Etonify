@@ -39,7 +39,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _currentSubscription = SubscriptionStore.get(widget.subscriptionId);
+    _currentSubscription = SubscriptionStore.getMetadata(widget.subscriptionId);
     final initialSubscription = _subscription;
     final initialInfo = initialSubscription?.info;
     _nameController = TextEditingController(
@@ -72,7 +72,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   }
 
   void _reloadCurrentSubscription() {
-    _currentSubscription = SubscriptionStore.get(widget.subscriptionId);
+    _currentSubscription = SubscriptionStore.getMetadata(widget.subscriptionId);
   }
 
   bool _hasPendingName(Subscription subscription) {

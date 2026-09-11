@@ -34,10 +34,15 @@ Future<String> _configFingerprint(
         ? (await sha256.bind(file.openRead()).first).toString()
         : 'missing';
   }
+  final sub = input.activeSubscription;
   final identity = <String, Object?>{
     'schema': _configCacheSchema,
     'coreSettings': input.coreSettings.toMap(),
-    'activeSubscription': input.activeSubscription?.toMap(),
+    'activeSubscription': sub == null
+        ? null
+        : (sub.payloadRevision.isNotEmpty
+            ? {'id': sub.id, 'revision': sub.payloadRevision}
+            : sha256.convert(utf8.encode(jsonEncode(sub.toMap()))).toString()),
     'selectedProxyTag': selectedProxyTagOverride ?? input.selectedProxyTag,
     'excludedOutboundTags': (input.excludedOutboundTags.toList()..sort()),
     'vpnInboundEnabled': input.vpnInboundEnabled,

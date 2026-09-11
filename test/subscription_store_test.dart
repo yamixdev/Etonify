@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
@@ -58,7 +59,7 @@ void main() {
       expect(result.subscription.name, 'Saved Anyway');
       expect(result.subscription.outbounds, isEmpty);
 
-      final saved = SubscriptionStore.get(result.subscription.id);
+      final saved = await SubscriptionStore.get(result.subscription.id);
       expect(saved, isNotNull);
       expect(saved!.url, 'http://${server.address.host}:${server.port}/sub');
       expect(saved.info?.requireHwid, isTrue);
@@ -189,15 +190,17 @@ Endpoint = wg.example.com:51820
 
       await SubscriptionStore.save(subscription);
 
-      final stored = Hive.box<dynamic>(
+      final stored = await Hive.lazyBox<dynamic>(
         'subscription_payloads_secure_v1',
       ).get(subscription.id);
-      expect(stored, isA<String>());
-      expect(stored as String, startsWith('gzip-base64-v1:'));
-      expect(stored.length, lessThan(subscription.rawContent.length ~/ 10));
-      expect(SubscriptionStore.payloadSnapshotFor(subscription.id), stored);
+      expect(stored, isA<Uint8List>());
       expect(
-        jsonDecode(SubscriptionStore.payloadJsonFor(subscription.id)!)
+        (stored as Uint8List).length,
+        lessThan(subscription.rawContent.length ~/ 10),
+      );
+      expect(await SubscriptionStore.payloadSnapshotFor(subscription.id), stored);
+      expect(
+        jsonDecode((await SubscriptionStore.payloadJsonFor(subscription.id))!)
             as Map<String, dynamic>,
         containsPair('raw_content', subscription.rawContent),
       );
@@ -332,7 +335,7 @@ Endpoint = wg.example.com:51820
 
     await SubscriptionStore.save(subscription);
 
-    final saved = SubscriptionStore.get(subscription.id);
+    final saved = await SubscriptionStore.get(subscription.id);
     expect(saved, isNotNull);
     expect(saved!.outbounds.map((entry) => entry.tag), ['leaf-1', 'leaf-2']);
     expect(saved.groups, hasLength(1));
@@ -359,7 +362,7 @@ Endpoint = wg.example.com:51820
         ],
       );
       await SubscriptionStore.save(original);
-      final staleSelection = SubscriptionStore.get(original.id)!;
+      final staleSelection = (await SubscriptionStore.get(original.id))!;
 
       const refreshed = Subscription(
         id: 'selection-race-sub',
@@ -387,7 +390,7 @@ Endpoint = wg.example.com:51820
         staleSelection.copyWith(selectedProxyTag: 'leaf-2'),
       );
 
-      final saved = SubscriptionStore.get(original.id);
+      final saved = await SubscriptionStore.get(original.id);
       expect(saved, isNotNull);
       expect(saved!.selectedProxyTag, 'leaf-2');
       expect(saved.name, 'Refreshed name');
@@ -486,7 +489,7 @@ Endpoint = wg.example.com:51820
       latestPings: const {'leaf-1': 42},
     );
 
-    var saved = SubscriptionStore.get(subscription.id);
+    var saved = await SubscriptionStore.get(subscription.id);
     expect(saved, isNotNull);
     expect(saved!.outbounds.single.info.latestPing, isNull);
     expect(saved.outbounds.single.info.externalIp, '1.1.1.1');
@@ -504,7 +507,7 @@ Endpoint = wg.example.com:51820
       },
     );
 
-    saved = SubscriptionStore.get(subscription.id);
+    saved = await SubscriptionStore.get(subscription.id);
     expect(saved, isNotNull);
     expect(saved!.outbounds.single.info.latestPing, isNull);
     expect(saved.outbounds.single.info.externalIp, '2.2.2.2');

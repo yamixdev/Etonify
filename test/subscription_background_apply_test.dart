@@ -58,7 +58,7 @@ void main() {
       ),
       throwsStateError,
     );
-    expect(SubscriptionStore.get('p')!.lastUpdated, 2);
+    expect((await SubscriptionStore.get('p'))!.lastUpdated, 2);
   });
   test('HWID opt-out invalidates a staged download revision', () {
     SubscriptionFetcher.configureHwidSharing(true);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:meow_client/app/subscription_runtime_controller.dart';
@@ -10,7 +11,7 @@ import 'package:meow_client/data/subscription/subscription_failure.dart';
 typedef SubscriptionMetadataLoader = Future<List<Subscription>> Function();
 typedef SubscriptionLoader = Future<Subscription?> Function(String id);
 typedef SubscriptionRefresher = Future<Subscription> Function(String id);
-typedef SubscriptionPayloadSnapshotLoader = String? Function(String id);
+typedef SubscriptionPayloadSnapshotLoader = FutureOr<dynamic> Function(String id);
 typedef SubscriptionPayloadPreloader = Future<void> Function();
 
 class SubscriptionAutoRefreshResult {
@@ -128,7 +129,7 @@ class SubscriptionCoordinator {
       preferSelectedProxyTag: preferSelectedProxyTag,
       preserveRuntimeState: preserveRuntimeState,
       runtimeSnapshot: runtimeSnapshot,
-      payloadSnapshot: _payloadSnapshotFor(metadata.id),
+      payloadSnapshot: await _payloadSnapshotFor(metadata.id),
       buildFullProxyList: buildFullProxyList,
     );
   }

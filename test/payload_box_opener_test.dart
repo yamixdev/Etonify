@@ -51,22 +51,25 @@ void main() {
 
       cipher.decryptions = 0;
       watch.reset();
-      box = await openPayloadBox(name: 'payload', cipher: cipher);
+      final lazyBox = await openPayloadBox(name: 'payload', cipher: cipher);
       final optimizedMs = watch.elapsedMilliseconds;
       // Diagnostic only: machine speed must not make this regression test flaky.
       // ignore: avoid_print
-      print('payload open: eager=${eagerMs}ms compacted=${optimizedMs}ms');
+      print('payload open: eager=${eagerMs}ms lazy=${optimizedMs}ms');
       expect(eagerDecryptions, 10);
+      expect(cipher.decryptions, 0);
+      expect(await lazyBox.get('large'), '7:$content');
+      expect(cipher.decryptions, 1);
+      expect(await lazyBox.get('other'), 'other-profile');
       expect(cipher.decryptions, 2);
-      expect(box.get('large'), '7:$content');
-      expect(box.get('other'), 'other-profile');
-      expect(box.containsKey('removed'), isFalse);
+      expect(lazyBox.containsKey('removed'), isFalse);
+      await lazyBox.compact();
       expect(await file.length(), lessThan(originalSize ~/ 4));
       expect(
         String.fromCharCodes(await file.readAsBytes()),
         isNot(contains('private-proxy-credential')),
       );
-      expect(await openPayloadBox(name: 'payload', cipher: cipher), same(box));
+      expect(await openPayloadBox(name: 'payload', cipher: cipher), same(lazyBox));
     },
   );
 
@@ -80,8 +83,8 @@ void main() {
       }
       await box.close();
       final reopened = await openPayloadBox(name: 'fresh', cipher: cipher);
-      expect(reopened.get('a'), 'revision-7');
-      expect(reopened.get('b'), 'other-7');
+      expect(await reopened.get('a'), 'revision-7');
+      expect(await reopened.get('b'), 'other-7');
     },
   );
 }

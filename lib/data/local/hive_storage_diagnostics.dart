@@ -10,7 +10,7 @@ class HiveStorageDiagnostics {
 
   static Future<void> logBoxOnce({
     required String label,
-    required Box<dynamic> box,
+    required BoxBase<dynamic> box,
     required Duration openElapsed,
   }) async {
     if (!_loggedBoxes.add(label)) {

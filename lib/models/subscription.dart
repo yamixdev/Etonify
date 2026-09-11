@@ -508,6 +508,7 @@ class Subscription {
     this.autoRefreshMinutes = 360,
     this.cachedVisibleProxyCount = -1,
     this.hasRawPayload = false,
+    this.payloadRevision = '',
     this.rawContent = '',
     this.outbounds = const [],
     this.groups = const [],
@@ -527,6 +528,7 @@ class Subscription {
   final int autoRefreshMinutes; // 0 = disabled
   final int cachedVisibleProxyCount; // -1 = summary not cached yet
   final bool hasRawPayload;
+  final String payloadRevision;
   final String rawContent; // raw response body
   final List<Outbound> outbounds;
   final List<SubscriptionGroup> groups;
@@ -561,6 +563,7 @@ class Subscription {
       'auto_refresh_minutes': autoRefreshMinutes,
       if (visibleProxyCount >= 0) 'visible_proxy_count': visibleProxyCount,
       if (rawPayloadAvailable) 'has_raw_payload': true,
+      if (payloadRevision.isNotEmpty) 'payload_revision': payloadRevision,
       if (proxyChains.isNotEmpty)
         'proxy_chains': proxyChains.map((chain) => chain.toMap()).toList(),
       'urltest_config': urlTestConfig.toMap(),
@@ -605,6 +608,7 @@ class Subscription {
       autoRefreshMinutes: map['auto_refresh_minutes'] as int? ?? 360,
       cachedVisibleProxyCount: map['visible_proxy_count'] as int? ?? -1,
       hasRawPayload: map['has_raw_payload'] == true,
+      payloadRevision: map['payload_revision'] as String? ?? '',
       proxyChains:
           (map['proxy_chains'] as List?)
               ?.map(
@@ -669,6 +673,7 @@ class Subscription {
     int? autoRefreshMinutes,
     int? cachedVisibleProxyCount,
     bool? hasRawPayload,
+    String? payloadRevision,
     String? rawContent,
     List<Outbound>? outbounds,
     List<SubscriptionGroup>? groups,
@@ -689,6 +694,7 @@ class Subscription {
       cachedVisibleProxyCount:
           cachedVisibleProxyCount ?? this.cachedVisibleProxyCount,
       hasRawPayload: hasRawPayload ?? this.hasRawPayload,
+      payloadRevision: payloadRevision ?? this.payloadRevision,
       rawContent: rawContent ?? this.rawContent,
       outbounds: outbounds ?? this.outbounds,
       groups: groups ?? this.groups,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:math';
@@ -212,7 +213,7 @@ class SubscriptionRuntimeController {
     required String selectedProxyTag,
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
-    required String? Function(String subscriptionId) payloadSnapshotFor,
+    required FutureOr<dynamic> Function(String subscriptionId) payloadSnapshotFor,
     bool buildFullProxyList = true,
   }) async {
     if (metadataSubscriptions.isEmpty) {
@@ -241,7 +242,7 @@ class SubscriptionRuntimeController {
       preferSelectedProxyTag: selectedProxyTag.trim().isNotEmpty,
       preserveRuntimeState: preserveRuntimeState,
       runtimeSnapshot: runtimeSnapshot,
-      payloadSnapshot: payloadSnapshotFor(activeMetadata.id),
+      payloadSnapshot: await payloadSnapshotFor(activeMetadata.id),
       buildFullProxyList: buildFullProxyList,
     );
     final subscriptions = metadataSubscriptions
@@ -266,7 +267,7 @@ class SubscriptionRuntimeController {
     required bool preferSelectedProxyTag,
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
-    required String? payloadSnapshot,
+    required dynamic payloadSnapshot,
     bool buildFullProxyList = true,
   }) {
     final metadataMap = metadata.toMetadataMap();

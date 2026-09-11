@@ -25,6 +25,7 @@ void main() {
 
   tearDownAll(() async {
     await SubscriptionStore.clear();
+    await SubscriptionStore.close();
     await Hive.close();
     if (tempDir.existsSync()) {
       await tempDir.delete(recursive: true);
@@ -389,12 +390,12 @@ void main() {
       ),
     );
 
-    final subscription = SubscriptionStore.get(subscriptionId)!;
+    final subscription = (await SubscriptionStore.get(subscriptionId))!;
     await SubscriptionStore.saveMetadata(
       subscription.copyWith(url: 'https://example.com/working', lastUpdated: 0),
     );
 
-    final updated = SubscriptionStore.get(subscriptionId);
+    final updated = await SubscriptionStore.get(subscriptionId);
     expect(updated?.url, 'https://example.com/working');
     expect(updated?.lastUpdated, 0);
     expect(updated?.rawContent, 'vless://payload');
@@ -414,22 +415,20 @@ void main() {
               'https://example.com/source-one\n'
               'https://example.com/source-two',
           lastUpdated: 123,
+          cachedVisibleProxyCount: 0,
         ),
       ),
     );
-
     await _openSheet(tester, activeSubscriptionId: subscriptionId);
     await _pumpUntilFound(tester, find.text('Legacy profile'));
     await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
     await tester.pump();
     await tester.tap(find.text('Subscription'));
     await _pumpUi(tester);
-
     await tester.tap(
       find.byKey(const ValueKey('edit_subscription_url_button')),
     );
     await _pumpUi(tester, const Duration(milliseconds: 200));
-
     final editor = find.byKey(const ValueKey('subscription_url_editor'));
     expect(editor, findsOneWidget);
     await tester.tap(find.text('Save'));
