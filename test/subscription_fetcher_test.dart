@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
+import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/models/subscription.dart';
 
@@ -13,6 +14,7 @@ void main() {
   test(
     'global consent applies to ordinary subscriptions and remains reversible',
     () async {
+      addTearDown(() => SubscriptionFetcher.configureHwidSharing(true));
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
       final ids = <String?>[];
@@ -23,9 +25,11 @@ void main() {
       });
       const info = SubscriptionInfo(customHwid: '0123456789abcdef');
       final url = 'http://${server.address.host}:${server.port}/sub';
+      // HWID sharing is now enabled by default.
+      await SubscriptionFetcher.fetch(url, requestInfo: info);
+      SubscriptionFetcher.configureHwidSharing(false);
       await SubscriptionFetcher.fetch(url, requestInfo: info);
       SubscriptionFetcher.configureHwidSharing(true);
-      await SubscriptionFetcher.fetch(url, requestInfo: info);
       await SubscriptionFetcher.fetch(url, requestInfo: info);
       SubscriptionFetcher.configureHwidSharing(false);
       await SubscriptionFetcher.fetch(url, requestInfo: info);
@@ -34,8 +38,8 @@ void main() {
         requestInfo: info.copyWith(requireHwid: true),
       );
       expect(ids, [
-        null,
         '0123456789abcdef',
+        null,
         '0123456789abcdef',
         null,
         '0123456789abcdef',
@@ -86,7 +90,10 @@ void main() {
 
     test('derives user agent from the installed app version', () {
       SubscriptionFetcher.configureAppVersion('v0.3.7');
-      expect(SubscriptionFetcher.defaultUserAgent, 'Etonify/0.3.7');
+      expect(
+        SubscriptionFetcher.defaultUserAgent,
+        'Happ/3.24.1 Etonify/0.3.7',
+      );
     });
 
     test('keeps insecure TLS opt-in on the scoped app client', () async {
@@ -359,6 +366,34 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('parses an HTML landing page containing proxy links or DATA object', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.ok;
+        request.response.headers.contentType = ContentType.html;
+        request.response.write('''
+<!doctype html><html><body>
+<script>
+const DATA = {
+  "profileTitle": "PinkVPN",
+  "links": ["vless://00000000-0000-0000-0000-000000000001@fin.pinkmoon.pro:443?type=tcp&security=tls#Finland"]
+};
+</script>
+</body></html>''');
+        await request.response.close();
+      });
+
+      final result = await SubscriptionFetcher.fetch(
+        'http://${server.address.host}:${server.port}/sub',
+      );
+      expect(result.parseResult.format, SubscriptionFormat.htmlPage);
+      expect(result.parseResult.outbounds, hasLength(1));
+      expect(result.parseResult.outbounds.first['server'], 'fin.pinkmoon.pro');
+      expect(result.headerInfo.title, 'PinkVPN');
     });
 
     test('parses unicode domains in subscription urls', () {

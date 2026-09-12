@@ -68,7 +68,7 @@ class SubscriptionFetcher {
 
   static bool shouldSendHwid(SubscriptionInfo? requestInfo) =>
       _sendHwidToProviders || requestInfo?.requireHwid == true;
-  static String get defaultUserAgent => 'Etonify/$_appVersion';
+  static String get defaultUserAgent => 'Happ/3.24.1 Etonify/$_appVersion';
   static const _maxSubscriptionResponseBytes = 16 * 1024 * 1024;
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};
@@ -253,16 +253,24 @@ class SubscriptionFetcher {
           .where((entry) => entry.key.toLowerCase() == 'x-hwid')
           .firstOrNull
           ?.value;
-      final hwidHeaders = await _resolveHwidHeaders(
-        explicitHwid == null
-            ? requestInfo
-            : (requestInfo ?? const SubscriptionInfo()).copyWith(
-                customHwid: explicitHwid,
-              ),
-      );
-      for (final entry in hwidHeaders.entries) {
-        if (!_hasHeader(customHeaders, entry.key)) {
-          headers[entry.key] = entry.value;
+      try {
+        final hwidHeaders = await _resolveHwidHeaders(
+          explicitHwid == null
+              ? requestInfo
+              : (requestInfo ?? const SubscriptionInfo()).copyWith(
+                  customHwid: explicitHwid,
+                ),
+        );
+        for (final entry in hwidHeaders.entries) {
+          if (!_hasHeader(customHeaders, entry.key)) {
+            headers[entry.key] = entry.value;
+          }
+        }
+      } on SubscriptionHwidException {
+        if (requestInfo?.requireHwid == true ||
+            requestInfo?.customHwid?.trim().isNotEmpty == true ||
+            explicitHwid != null) {
+          rethrow;
         }
       }
     }
@@ -401,6 +409,9 @@ class SubscriptionFetcher {
         prefix.startsWith('<html') ||
         (prefix.contains('<html') && prefix.contains('<body'));
     if (looksLikeHtml) {
+      if (SubscriptionParser.canParseHtml(rawContent)) {
+        return;
+      }
       throw const SubscriptionContentException(
         SubscriptionContentFailureKind.htmlResponse,
       );

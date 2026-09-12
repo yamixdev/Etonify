@@ -7,6 +7,7 @@ import 'outbound_support.dart';
 import 'parsers/clash_parser.dart';
 import 'parsers/link_parser.dart';
 import 'parsers/singbox_config_parser.dart';
+import 'parsers/html_subscription_parser.dart';
 import 'parsers/sip008_parser.dart';
 import 'parsers/wireguard_config_parser.dart';
 import 'parsers/xray_config_parser.dart';
@@ -20,6 +21,7 @@ enum SubscriptionFormat {
   base64Links,
   rawLinks,
   wireguardConfig,
+  htmlPage,
   unknown,
 }
 
@@ -296,8 +298,24 @@ class SubscriptionParser {
       );
     }
 
+    // ── 6. HTML landing page with embedded DATA object or proxy links ──
+    if (HtmlSubscriptionParser.looksLikeHtml(content) &&
+        HtmlSubscriptionParser.canParse(content)) {
+      final htmlResult = HtmlSubscriptionParser.parse(content);
+      return _buildResult(
+        format: SubscriptionFormat.htmlPage,
+        parsedOutbounds: htmlResult.outbounds,
+        bodyMeta: htmlResult.bodyMeta,
+      );
+    }
+
     return const ParseResult(format: SubscriptionFormat.unknown, outbounds: []);
   }
+
+  /// Returns `true` if [content] is an HTML document containing extractable
+  /// proxy configurations or links.
+  static bool canParseHtml(String content) =>
+      HtmlSubscriptionParser.canParse(content);
 
   // ─────────────────── helpers ───────────────────
 

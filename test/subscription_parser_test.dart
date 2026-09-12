@@ -2013,5 +2013,80 @@ proxies:
       expect(tuicNode, isNotNull);
       expect(tuicNode!['server_port'], 443);
     });
+
+    test('parses HTML dashboard with embedded DATA object and proxy links', () {
+      const html = '''
+<!DOCTYPE html>
+<html>
+<head><title>My Proxy Dashboard</title></head>
+<body>
+<div id="app"></div>
+<script>
+const DATA = {
+  "profileTitle": "PinkVPN",
+  "userinfo": {"upload": 1024, "download": 2048, "total": 1048576, "expire": 1800000000},
+  "links": [
+    "vless://827a0eb0-21bf-4bce-96ef-0a7bac5d68f5@fin.pinkmoon.pro:443?type=tcp&security=reality&sni=fin.pinkmoon.pro&pbk=DS9mX6cMb5wvwFzga8yN2NLbs7soXM7038_P23yPKwk&sid=8ffa160e608bf539#Finland",
+    "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpGQ1BBaGhjOV9EQlY2alNKRUUyZm9YalBoNTc2QXB3cQ@pol3.pinkmoon.pro:1234#Poland"
+  ],
+  "configs": []
+};
+</script>
+</body>
+</html>
+''';
+
+      expect(SubscriptionParser.canParseHtml(html), isTrue);
+      final result = SubscriptionParser.parse(html);
+      expect(result.format, SubscriptionFormat.htmlPage);
+      expect(result.outbounds, hasLength(2));
+      expect(result.outbounds[0]['server'], 'fin.pinkmoon.pro');
+      expect(result.outbounds[0]['_name'], 'Finland');
+      expect(result.outbounds[1]['server'], 'pol3.pinkmoon.pro');
+      expect(result.outbounds[1]['_name'], 'Poland');
+      expect(result.bodyMeta['profile-title'], 'PinkVPN');
+      expect(
+        result.bodyMeta['subscription-userinfo'],
+        'upload=1024; download=2048; total=1048576; expire=1800000000',
+      );
+    });
+
+    test('parses HTML page with proxy links inside body and extracts title', () {
+      const html = '''
+<!DOCTYPE html>
+<html>
+<head><title>Free Proxies</title></head>
+<body>
+<p>Here is your proxy:</p>
+<a href="vless://00000000-0000-0000-0000-000000000001@example.com:443?type=tcp&security=tls#TestNode">Connect</a>
+</body>
+</html>
+''';
+
+      expect(SubscriptionParser.canParseHtml(html), isTrue);
+      final result = SubscriptionParser.parse(html);
+      expect(result.format, SubscriptionFormat.htmlPage);
+      expect(result.outbounds, hasLength(1));
+      expect(result.outbounds[0]['server'], 'example.com');
+      expect(result.bodyMeta['profile-title'], 'Free Proxies');
+    });
+
+    test('HTML parser rejects error or login pages without proxy links', () {
+      const errorHtml = '''
+<!DOCTYPE html>
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<h1>Page not found</h1>
+</body>
+</html>
+''';
+
+      expect(SubscriptionParser.canParseHtml(errorHtml), isFalse);
+      final result = SubscriptionParser.parse(errorHtml);
+      expect(result.format, SubscriptionFormat.unknown);
+      expect(result.outbounds, isEmpty);
+    });
   });
 }
+
