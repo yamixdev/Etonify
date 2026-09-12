@@ -2051,8 +2051,10 @@ const DATA = {
       );
     });
 
-    test('parses HTML page with proxy links inside body and extracts title', () {
-      const html = '''
+    test(
+      'parses HTML page with proxy links inside body and extracts title',
+      () {
+        const html = '''
 <!DOCTYPE html>
 <html>
 <head><title>Free Proxies</title></head>
@@ -2063,12 +2065,47 @@ const DATA = {
 </html>
 ''';
 
-      expect(SubscriptionParser.canParseHtml(html), isTrue);
+        expect(SubscriptionParser.canParseHtml(html), isTrue);
+        final result = SubscriptionParser.parse(html);
+        expect(result.format, SubscriptionFormat.htmlPage);
+        expect(result.outbounds, hasLength(1));
+        expect(result.outbounds[0]['server'], 'example.com');
+        expect(result.bodyMeta['profile-title'], 'Free Proxies');
+      },
+    );
+
+    test('keeps distinct HTML nodes sharing address, port, and name', () {
+      const html = '''
+<!DOCTYPE html><html><body>
+<a href="vless://00000000-0000-0000-0000-000000000001@example.com:443?security=tls#Same">First</a>
+<a href="vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls#Same">Second</a>
+</body></html>
+''';
+
+      final result = SubscriptionParser.parse(html);
+      expect(result.format, SubscriptionFormat.htmlPage);
+      expect(result.outbounds, hasLength(2));
+      expect(
+        result.outbounds.map((outbound) => outbound['uuid']),
+        containsAll(<String>[
+          '00000000-0000-0000-0000-000000000001',
+          '00000000-0000-0000-0000-000000000002',
+        ]),
+      );
+    });
+
+    test('decodes HTML entities inside embedded proxy links', () {
+      const html = '''
+<!DOCTYPE html><html><body>
+<a href="vless://00000000-0000-0000-0000-000000000001@example.com:443?security=tls&amp;type=ws&amp;path=%2Fsocket#Node">Connect</a>
+</body></html>
+''';
+
       final result = SubscriptionParser.parse(html);
       expect(result.format, SubscriptionFormat.htmlPage);
       expect(result.outbounds, hasLength(1));
-      expect(result.outbounds[0]['server'], 'example.com');
-      expect(result.bodyMeta['profile-title'], 'Free Proxies');
+      expect(result.outbounds.single['transport']['type'], 'ws');
+      expect(result.outbounds.single['transport']['path'], '/socket');
     });
 
     test('HTML parser rejects error or login pages without proxy links', () {
@@ -2089,4 +2126,3 @@ const DATA = {
     });
   });
 }
-

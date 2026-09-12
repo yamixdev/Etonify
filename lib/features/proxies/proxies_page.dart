@@ -448,6 +448,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
   bool _embeddedListActivated = false;
   bool? _visibleEntriesCanAddChainCache;
   bool Function(String tag)? _visibleEntriesChainPredicateCache;
+  String? _visibleEntriesSelectedTagCache;
 
   bool _isProxyChain(AppProxySummary proxy) =>
       widget.isProxyChainTag?.call(proxy.tag) ?? false;
@@ -479,6 +480,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _activateEmbeddedListIfNeeded();
     }
     if (oldWidget.proxies != widget.proxies ||
+        oldWidget.selectedTag != widget.selectedTag ||
         oldWidget.isProxyChainTag != widget.isProxyChainTag ||
         oldWidget.runtimeStates != widget.runtimeStates) {
       _rebuildVisibleItems();
@@ -617,26 +619,25 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _invalidateVisibleEntries();
       return false;
     }
-    final pinnedItems = <AppProxySummary>[];
     final visibleItems = <AppProxySummary>[];
     for (final proxy in widget.proxies) {
       final parentTag = proxy.parentGroupTag;
       if (parentTag != null && parentTag.isNotEmpty) {
         continue;
       }
-      if (_isPinnedHeaderProxy(proxy)) {
-        pinnedItems.add(proxy);
-      } else if (shouldShowProxyForSort(
-        proxy,
-        _sort,
-        runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
-      )) {
+      if (proxy.tag == widget.selectedTag ||
+          _isPinnedHeaderProxy(proxy) ||
+          shouldShowProxyForSort(
+            proxy,
+            _sort,
+            runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
+          )) {
         visibleItems.add(proxy);
       }
     }
 
     _sortItems(visibleItems);
-    final nextItems = [...pinnedItems, ...visibleItems];
+    final nextItems = visibleItems;
     // Individual rows already listen to their runtime state. Rebuilding the
     // list is only necessary when filtering or sorting changes its contents.
     if (listEquals(_visibleItems, nextItems)) {
@@ -669,15 +670,19 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (cached != null &&
         identical(_visibleEntriesItemsCache, _visibleItems) &&
         _visibleEntriesSortCache == _sort &&
+        _visibleEntriesSelectedTagCache == widget.selectedTag &&
         _visibleEntriesCanAddChainCache == (widget.onAddProxyChain != null) &&
         _visibleEntriesChainPredicateCache == widget.isProxyChainTag) {
       return cached;
     }
+    AppProxySummary? selected;
     final primary = <AppProxySummary>[];
     final chains = <AppProxySummary>[];
     final rest = <AppProxySummary>[];
     for (final proxy in _visibleItems) {
-      if (isLowestProxyTag(proxy.tag)) {
+      if (selected == null && proxy.tag == widget.selectedTag) {
+        selected = proxy;
+      } else if (isLowestProxyTag(proxy.tag)) {
         primary.add(proxy);
       } else if (_isProxyChain(proxy)) {
         chains.add(proxy);
@@ -689,10 +694,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
         pinnedProxyTagOrder(a.tag).compareTo(pinnedProxyTagOrder(b.tag));
     primary.sort(byPinnedOrder);
     final hasPinnedHeader =
+        (selected != null && _isPinnedHeaderProxy(selected)) ||
         primary.isNotEmpty ||
         chains.isNotEmpty ||
         widget.onAddProxyChain != null;
     final entries = <_ProxyListEntry>[
+      if (selected != null) _ProxyListEntry.tile(selected),
       for (final proxy in primary) _ProxyListEntry.tile(proxy),
       for (final proxy in chains) _ProxyListEntry.tile(proxy),
       if (widget.onAddProxyChain != null) const _ProxyListEntry.addChain(),
@@ -702,6 +709,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _visibleEntriesCache = entries;
     _visibleEntriesItemsCache = _visibleItems;
     _visibleEntriesSortCache = _sort;
+    _visibleEntriesSelectedTagCache = widget.selectedTag;
     _visibleEntriesCanAddChainCache = widget.onAddProxyChain != null;
     _visibleEntriesChainPredicateCache = widget.isProxyChainTag;
     return entries;
@@ -711,6 +719,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _visibleEntriesCache = null;
     _visibleEntriesItemsCache = null;
     _visibleEntriesSortCache = null;
+    _visibleEntriesSelectedTagCache = null;
     _visibleEntriesCanAddChainCache = null;
     _visibleEntriesChainPredicateCache = null;
   }
@@ -836,6 +845,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       items,
       _sort,
       keepPinnedFirst: keepLowestFirst,
+      prioritizedTag: widget.selectedTag,
       runtimeStateFor: widget.runtimeStates?.valueFor,
     );
   }

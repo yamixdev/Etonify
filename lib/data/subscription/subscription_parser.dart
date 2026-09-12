@@ -226,6 +226,24 @@ class SubscriptionParser {
       );
     }
 
+    // HTML dashboards can contain thousands of links. Parse them once here,
+    // before the generic raw-link scanners, instead of first probing the
+    // document and then repeating the same work.
+    if (HtmlSubscriptionParser.looksLikeHtml(content)) {
+      final htmlResult = HtmlSubscriptionParser.parse(content);
+      if (htmlResult.outbounds.isNotEmpty) {
+        return _buildResult(
+          format: SubscriptionFormat.htmlPage,
+          parsedOutbounds: htmlResult.outbounds,
+          bodyMeta: htmlResult.bodyMeta,
+        );
+      }
+      return const ParseResult(
+        format: SubscriptionFormat.unknown,
+        outbounds: [],
+      );
+    }
+
     // ── 1. Try JSON-based formats ──
     if (_looksLikeJson(content)) {
       // Sing-box config
@@ -298,19 +316,12 @@ class SubscriptionParser {
       );
     }
 
-    // ── 6. HTML landing page with embedded DATA object or proxy links ──
-    if (HtmlSubscriptionParser.looksLikeHtml(content) &&
-        HtmlSubscriptionParser.canParse(content)) {
-      final htmlResult = HtmlSubscriptionParser.parse(content);
-      return _buildResult(
-        format: SubscriptionFormat.htmlPage,
-        parsedOutbounds: htmlResult.outbounds,
-        bodyMeta: htmlResult.bodyMeta,
-      );
-    }
-
     return const ParseResult(format: SubscriptionFormat.unknown, outbounds: []);
   }
+
+  /// Performs only a cheap document-shape check and never extracts links.
+  static bool looksLikeHtml(String content) =>
+      HtmlSubscriptionParser.looksLikeHtml(content);
 
   /// Returns `true` if [content] is an HTML document containing extractable
   /// proxy configurations or links.

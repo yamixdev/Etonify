@@ -59,11 +59,11 @@ typedef LatencySessionChanged =
 class _ActiveTargetCheck {
   _ActiveTargetCheck({
     required this.startedAtSeconds,
-    required this.generation,
+    required this.baselineTimeSeconds,
   });
 
   final int startedAtSeconds;
-  final int generation;
+  final int baselineTimeSeconds;
   Timer? timeoutTimer;
 }
 
@@ -141,7 +141,6 @@ class LatencyCoordinator {
   Set<String> _sessionExpectedTags = const <String>{};
   final Map<String, int> _acceptedEventTimes = <String, int>{};
   final Set<String> _successfulTags = <String>{};
-  final Set<String> _priorityRequests = <String>{};
   final Map<String, _ActiveTargetCheck> _activeTargetChecks =
       <String, _ActiveTargetCheck>{};
   Completer<bool>? _sessionResult;
@@ -187,8 +186,8 @@ class LatencyCoordinator {
     }
     final activeCheck = _activeTargetChecks[tag];
     if (activeCheck != null) {
-      final baseline = _baselineEventTimes[tag] ?? 0;
-      return timeSeconds < _sessionStartedAtSeconds ||
+      final baseline = activeCheck.baselineTimeSeconds;
+      return timeSeconds < activeCheck.startedAtSeconds ||
           (baseline > 0 && timeSeconds <= baseline);
     }
     if (!isRunning || !_sessionExpectedTags.contains(tag)) {
@@ -256,7 +255,7 @@ class LatencyCoordinator {
     final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final check = _ActiveTargetCheck(
       startedAtSeconds: nowSeconds,
-      generation: generation,
+      baselineTimeSeconds: _eventBaselineTimes()[targetTag] ?? 0,
     );
     check.timeoutTimer = Timer(
       Duration(milliseconds: _targetDeadlineMillis),
@@ -285,7 +284,10 @@ class LatencyCoordinator {
       ).timeout(uiPolicy.nativeCommandTimeout);
       return _isActiveGeneration(generation);
     } catch (error) {
-      AppLogStore.warning('latency', 'parallel targeted URLTest failed: $error');
+      AppLogStore.warning(
+        'latency',
+        'parallel targeted URLTest failed: $error',
+      );
       check.timeoutTimer?.cancel();
       if (_activeTargetChecks[targetTag] == check) {
         _activeTargetChecks.remove(targetTag);
@@ -307,12 +309,20 @@ class LatencyCoordinator {
     if (normalizedTag.isEmpty || timeSeconds <= 0) {
       return false;
     }
-    final baseline = _baselineEventTimes[normalizedTag] ?? 0;
-    if (timeSeconds < _sessionStartedAtSeconds ||
-        (baseline > 0 && timeSeconds <= baseline)) {
+    final activeCheck = _activeTargetChecks[normalizedTag];
+    if (activeCheck == null &&
+        (!isRunning ||
+            (_sessionExpectedTags.isNotEmpty &&
+                !_sessionExpectedTags.contains(normalizedTag)))) {
       return false;
     }
-    final activeCheck = _activeTargetChecks[normalizedTag];
+    final baseline =
+        activeCheck?.baselineTimeSeconds ??
+        (_baselineEventTimes[normalizedTag] ?? 0);
+    final startedAt = activeCheck?.startedAtSeconds ?? _sessionStartedAtSeconds;
+    if (timeSeconds < startedAt || (baseline > 0 && timeSeconds <= baseline)) {
+      return false;
+    }
     if (activeCheck != null) {
       activeCheck.timeoutTimer?.cancel();
       _activeTargetChecks.remove(normalizedTag);
@@ -366,7 +376,6 @@ class LatencyCoordinator {
 
   void cancel() {
     _generation++;
-    _priorityRequests.clear();
     for (final check in _activeTargetChecks.values) {
       check.timeoutTimer?.cancel();
     }
@@ -486,7 +495,6 @@ class LatencyCoordinator {
     }
 
     final generation = ++_generation;
-    _priorityRequests.clear();
     _sessionOperationGeneration = _operationGeneration();
     _sessionStartedAtSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     _baselineEventTimes = Map<String, int>.from(_eventBaselineTimes());

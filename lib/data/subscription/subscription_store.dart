@@ -66,7 +66,8 @@ class SubscriptionStore {
   /// allowing the first screen to appear before encrypted multi-megabyte
   /// subscription payloads are mapped into Hive.
   static Future<void> init({bool openPayload = true}) async {
-    if (_metaBox == null) {
+    if (_metaBox?.isOpen != true) {
+      _metaBox = null;
       await _openMetadataBox();
     }
     if (openPayload || _payloadMigrationRequired) {
@@ -83,62 +84,87 @@ class SubscriptionStore {
   /// Multiple requests share one future, so a quick tap on Connect while the
   /// post-frame warm-up is running cannot race the Hive open operation.
   static Future<void> ensurePayloadReady() {
-    if (_payloadBox != null) {
-      return Future<void>.value();
-    }
     final pending = _payloadInitialization;
     if (pending != null) {
       return pending;
     }
+    if (_payloadBox?.isOpen == true) {
+      return Future<void>.value();
+    }
+    _payloadBox = null;
     late final Future<void> initialization;
-    initialization = () async {
-      try {
-        if (_metaBox == null) {
-          await _openMetadataBox();
-        }
-        if (_payloadBox != null) {
-          return;
-        }
-        final totalStopwatch = Stopwatch()..start();
-        final payloadStopwatch = Stopwatch()..start();
-        _payloadBox = await openPayloadBox(
-          name: _payloadBoxName,
-          cipher: SecureHiveStorage.cipher,
-        );
-        payloadStopwatch.stop();
-        await _runStorageMigrations();
-        _payloadMigrationRequired = false;
-        totalStopwatch.stop();
-        await HiveStorageDiagnostics.logBoxOnce(
-          label: _payloadBoxName,
-          box: _payloadBox!,
-          openElapsed: payloadStopwatch.elapsed,
-        );
-        AppLogStore.info(
-          'storage metrics',
-          'subscriptionPayloadStorageReadyMs='
-              '${totalStopwatch.elapsedMilliseconds}',
-        );
-      } catch (error, stackTrace) {
-        AppLogStore.error(
-          'subscription storage',
-          'Failed to initialize Hive subscription payloads: '
-              '$error\n$stackTrace',
-        );
-        rethrow;
-      } finally {
-        if (identical(_payloadInitialization, initialization) &&
-            _payloadBox == null) {
-          _payloadInitialization = null;
-        }
+    initialization = _initializePayload().whenComplete(() {
+      if (identical(_payloadInitialization, initialization)) {
+        _payloadInitialization = null;
       }
-    }();
+    });
     _payloadInitialization = initialization;
     return initialization;
   }
 
+  static Future<void> _initializePayload() async {
+    LazyBox<dynamic>? openedPayload;
+    try {
+      if (_metaBox?.isOpen != true) {
+        _metaBox = null;
+        await _openMetadataBox();
+      }
+      if (_payloadBox?.isOpen == true) {
+        return;
+      }
+      final totalStopwatch = Stopwatch()..start();
+      final payloadStopwatch = Stopwatch()..start();
+      openedPayload = await openPayloadBox(
+        name: _payloadBoxName,
+        cipher: SecureHiveStorage.cipher,
+      );
+      _payloadBox = openedPayload;
+      payloadStopwatch.stop();
+      await _runStorageMigrations();
+      _payloadMigrationRequired = false;
+      totalStopwatch.stop();
+      await HiveStorageDiagnostics.logBoxOnce(
+        label: _payloadBoxName,
+        box: openedPayload,
+        openElapsed: payloadStopwatch.elapsed,
+      );
+      AppLogStore.info(
+        'storage metrics',
+        'subscriptionPayloadStorageReadyMs='
+            '${totalStopwatch.elapsedMilliseconds}',
+      );
+    } catch (error, stackTrace) {
+      if (identical(_payloadBox, openedPayload)) {
+        _payloadBox = null;
+      }
+      if (openedPayload?.isOpen == true) {
+        try {
+          await openedPayload!.close();
+        } catch (_) {
+          // Preserve the initialization failure; the next attempt will ask
+          // Hive for a fresh box instance.
+        }
+      }
+      AppLogStore.error(
+        'subscription storage',
+        'Failed to initialize Hive subscription payloads: '
+            '$error\n$stackTrace',
+      );
+      rethrow;
+    }
+  }
+
   /// Closes subscription storage boxes and releases resources.
   static Future<void> close() async {
+    final pending = _payloadInitialization;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {
+        // Initialization already logged the original error. Closing remains
+        // best-effort and must still release whichever box was opened.
+      }
+    }
     _payloadInitialization = null;
     if (_payloadBox != null && _payloadBox!.isOpen) {
       await _payloadBox!.close();
@@ -243,12 +269,14 @@ class SubscriptionStore {
   }
 
   static Box<dynamic> get _metaStore {
-    assert(_metaBox != null, 'SubscriptionStore.init() must be called first');
+    if (_metaBox?.isOpen != true) {
+      throw StateError('SubscriptionStore.init() must be awaited first');
+    }
     return _metaBox!;
   }
 
   static LazyBox<dynamic> get _payloadStore {
-    if (_payloadBox == null) {
+    if (_payloadBox?.isOpen != true) {
       throw StateError(
         'SubscriptionStore.ensurePayloadReady() must be awaited first',
       );
@@ -492,7 +520,7 @@ class SubscriptionStore {
   /// [payloadJsonFor] for a multi-megabyte profile on the UI isolate would
   /// undo the startup benefit of compressed storage.
   static Future<dynamic> payloadSnapshotFor(String id) async {
-    if (_payloadBox == null) {
+    if (_payloadBox?.isOpen != true) {
       return null;
     }
     return await _payloadStore.get(id);
@@ -534,21 +562,19 @@ class SubscriptionStore {
 
   static Future<void> _saveUnlocked(Subscription sub) async {
     final existingPayload = await _payloadStore.get(sub.id);
-    final isMetadataOnly = sub.outbounds.isEmpty &&
+    final isMetadataOnly =
+        sub.outbounds.isEmpty &&
         sub.rawContent.isEmpty &&
         existingPayload != null;
     if (isMetadataOnly) {
       await _saveMetadataUnlocked(sub);
       return;
     }
-    final payloadResult = await Isolate.run(
-      () {
-        final payloadBytes = _encodeStoredPayload(jsonEncode(sub.toPayloadMap()));
-        final revision = sha256.convert(payloadBytes).toString();
-        return (payload: payloadBytes, revision: revision);
-      },
-      debugName: 'meow-encode-subscription-payload',
-    );
+    final payloadResult = await Isolate.run(() {
+      final payloadBytes = _encodeStoredPayload(jsonEncode(sub.toPayloadMap()));
+      final revision = sha256.convert(payloadBytes).toString();
+      return (payload: payloadBytes, revision: revision);
+    }, debugName: 'meow-encode-subscription-payload');
     final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
     await _metaStore.put(updatedSub.id, jsonEncode(updatedSub.toMetadataMap()));
     await _payloadStore.put(updatedSub.id, payloadResult.payload);
@@ -1304,7 +1330,9 @@ class SubscriptionStore {
       outbounds: built.outbounds
           .map((entry) => entry.toMap())
           .toList(growable: false),
-      groups: built.groups.map((entry) => entry.toMap()).toList(growable: false),
+      groups: built.groups
+          .map((entry) => entry.toMap())
+          .toList(growable: false),
       warnings: built.warnings,
     );
   }
@@ -1463,11 +1491,7 @@ class SubscriptionStore {
       );
     }
 
-    return (
-      outbounds: outbounds,
-      groups: groups,
-      warnings: warnings,
-    );
+    return (outbounds: outbounds, groups: groups, warnings: warnings);
   }
 
   static Map<String, List<String>> _mergeSourceTagScopes(
@@ -1722,7 +1746,7 @@ class SubscriptionStore {
   }
 
   static Future<Subscription> _withPayload(Subscription metadata) async {
-    if (_payloadBox == null) {
+    if (_payloadBox?.isOpen != true) {
       return metadata;
     }
     final raw = await _payloadStore.get(metadata.id);
@@ -2375,5 +2399,3 @@ String _decodeStoredPayload(dynamic value) {
     'Unsupported payload storage format: ${value.runtimeType}',
   );
 }
-
-

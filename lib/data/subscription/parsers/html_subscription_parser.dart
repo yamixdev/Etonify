@@ -132,10 +132,11 @@ class HtmlSubscriptionParser {
     final seenKeys = <String>{};
 
     for (final rawLink in candidateLinks) {
-      final parsed = LinkParser.tryParse(rawLink);
+      final normalizedLink = _normalizeEmbeddedLink(rawLink);
+      final parsed = LinkParser.tryParse(normalizedLink);
       if (parsed == null) continue;
 
-      final dedupKey = _dedupKey(parsed, rawLink);
+      final dedupKey = jsonEncode(parsed);
       if (seenKeys.add(dedupKey)) {
         outbounds.add(parsed);
       }
@@ -147,15 +148,18 @@ class HtmlSubscriptionParser {
     );
   }
 
-  static String _dedupKey(Map<String, dynamic> ob, String rawLink) {
-    final type = ob['type'] ?? '';
-    final server = ob['server'] ?? '';
-    final port = ob['server_port'] ?? '';
-    final name = ob['_name'] ?? '';
-    if (server.toString().isNotEmpty) {
-      return '$type:$server:$port:$name';
+  static String _normalizeEmbeddedLink(String rawLink) {
+    var normalized = _decodeHtmlEntities(rawLink.trim());
+    // The link scanner intentionally stops at literal quotes, while an HTML
+    // encoded quote can become a trailing delimiter after entity decoding.
+    if ((rawLink.endsWith('&quot;') || rawLink.endsWith('&#34;')) &&
+        normalized.endsWith('"')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    } else if ((rawLink.endsWith('&#39;') || rawLink.endsWith('&apos;')) &&
+        normalized.endsWith("'")) {
+      normalized = normalized.substring(0, normalized.length - 1);
     }
-    return rawLink;
+    return normalized;
   }
 
   static String? _extractJsonObjectAfter(String source, Pattern pattern) {
@@ -209,6 +213,8 @@ class HtmlSubscriptionParser {
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAll('&quot;', '"')
+        .replaceAll('&#34;', '"')
+        .replaceAll('&apos;', "'")
         .replaceAll('&#39;', "'")
         .replaceAll('&nbsp;', ' ');
   }

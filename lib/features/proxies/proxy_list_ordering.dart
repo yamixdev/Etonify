@@ -9,31 +9,54 @@ void sortProxySummaries(
   List<AppProxySummary> items,
   ProxySort sort, {
   bool keepPinnedFirst = true,
+  String prioritizedTag = '',
   ProxyRuntimeStateResolver? runtimeStateFor,
 }) {
-  if (sort == ProxySort.source || items.length < 2) {
+  if (items.length < 2) {
     return;
   }
 
-  // Resolve mutable runtime state and pinned ranks once per row. A comparator
-  // is invoked O(N log N) times, so doing these lookups from inside it makes a
-  // mass URLTest needlessly expensive for large subscriptions.
-  final prepared = List<_PreparedProxySort>.generate(
-    items.length,
-    (index) => _PreparedProxySort(
-      items[index],
-      sort: sort,
-      keepPinnedFirst: keepPinnedFirst,
-      runtimeState: sort == ProxySort.latency || sort == ProxySort.working
-          ? runtimeStateFor?.call(items[index].tag)
-          : null,
-    ),
-    growable: false,
-  );
-  prepared.sort((a, b) => a.compareTo(b, sort));
-  for (var index = 0; index < items.length; index++) {
-    items[index] = prepared[index].proxy;
+  if (sort != ProxySort.source) {
+    // Resolve mutable runtime state and pinned ranks once per row. A
+    // comparator is invoked O(N log N) times, so doing these lookups from
+    // inside it makes a mass URLTest needlessly expensive for large
+    // subscriptions.
+    final prepared = List<_PreparedProxySort>.generate(
+      items.length,
+      (index) => _PreparedProxySort(
+        items[index],
+        sort: sort,
+        keepPinnedFirst: keepPinnedFirst,
+        runtimeState: sort == ProxySort.latency || sort == ProxySort.working
+            ? runtimeStateFor?.call(items[index].tag)
+            : null,
+      ),
+      growable: false,
+    );
+    prepared.sort((a, b) => a.compareTo(b, sort));
+    for (var index = 0; index < items.length; index++) {
+      items[index] = prepared[index].proxy;
+    }
   }
+
+  _moveProxyToFront(items, prioritizedTag.trim());
+}
+
+void _moveProxyToFront(List<AppProxySummary> items, String tag) {
+  if (tag.isEmpty || items.first.tag == tag) {
+    return;
+  }
+  final selectedIndex = items.indexWhere((proxy) => proxy.tag == tag);
+  if (selectedIndex <= 0) {
+    return;
+  }
+  final selected = items[selectedIndex];
+  // The input is often fixed-length. Shift entries in place instead of using
+  // remove/insert, which would throw for those lists.
+  for (var index = selectedIndex; index > 0; index--) {
+    items[index] = items[index - 1];
+  }
+  items[0] = selected;
 }
 
 class _PreparedProxySort {

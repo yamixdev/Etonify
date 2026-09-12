@@ -63,6 +63,22 @@ void main() {
     expect(pending.take(7, networkGeneration: 13)?.groups, ['future']);
   });
 
+  test('pending snapshots discard a generation from the previous network', () {
+    final pending = PendingRuntimeGroups();
+    pending.remember(
+      const RuntimeGroupsEvent(
+        groups: ['stale-wifi'],
+        runtimeGeneration: 7,
+        networkGeneration: 11,
+      ),
+    );
+
+    expect(pending.take(7, networkGeneration: 12), isNull);
+    // A discarded Wi-Fi snapshot must not be replayed after the cellular
+    // generation has already become current.
+    expect(pending.take(7, networkGeneration: 11), isNull);
+  });
+
   tearDown(AppLogStore.clear);
 
   test('dispatch routes typed runtime events to callbacks', () {

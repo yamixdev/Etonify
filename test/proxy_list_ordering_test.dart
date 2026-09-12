@@ -13,6 +13,25 @@ void main() {
     expect(items.map((item) => item.tag), ['b', 'a']);
   });
 
+  test('selected proxy stays first regardless of the active sort', () {
+    for (final sort in ProxySort.values) {
+      final items = [
+        _proxy(lowestProxyTag, 'Automatic', latency: 1, fresh: true),
+        _proxy('fast', 'Fast', latency: 10, fresh: true),
+        _proxy('selected', 'Selected', latency: 900, fresh: true),
+      ];
+
+      sortProxySummaries(items, sort, prioritizedTag: 'selected');
+
+      expect(items.first.tag, 'selected', reason: sort.name);
+      expect(items.map((item) => item.tag).toSet(), {
+        lowestProxyTag,
+        'fast',
+        'selected',
+      });
+    }
+  });
+
   test('primary lowest stays pinned for every interactive sort', () {
     for (final sort in const [
       ProxySort.latency,

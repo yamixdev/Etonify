@@ -386,6 +386,13 @@ class SubscriptionFetcher {
     final parseResult = await SubscriptionParser.parseInBackground(
       response.rawContent,
     );
+    if (SubscriptionParser.looksLikeHtml(response.rawContent) &&
+        (parseResult.format != SubscriptionFormat.htmlPage ||
+            parseResult.outbounds.isEmpty)) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.htmlResponse,
+      );
+    }
     return FetchResult(
       rawContent: response.rawContent,
       headerInfo: _mergeBodyMeta(response.headerInfo, parseResult.bodyMeta),
@@ -399,21 +406,6 @@ class SubscriptionFetcher {
     if (trimmed.isEmpty) {
       throw const SubscriptionContentException(
         SubscriptionContentFailureKind.emptyResponse,
-      );
-    }
-    final prefix = trimmed
-        .substring(0, min(trimmed.length, 1024))
-        .toLowerCase();
-    final looksLikeHtml =
-        prefix.startsWith('<!doctype html') ||
-        prefix.startsWith('<html') ||
-        (prefix.contains('<html') && prefix.contains('<body'));
-    if (looksLikeHtml) {
-      if (SubscriptionParser.canParseHtml(rawContent)) {
-        return;
-      }
-      throw const SubscriptionContentException(
-        SubscriptionContentFailureKind.htmlResponse,
       );
     }
   }

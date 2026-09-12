@@ -5425,15 +5425,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (haptic) {
       _haptic();
     }
-    _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
     if (!_latencyCoordinator.capabilities.supportsTargetedUrlTest) {
+      _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
       await _latencyCoordinator.runFull(reason: 'manual_active_fallback');
       return;
     }
-    await _latencyCoordinator.runTarget(
+    final test = _latencyCoordinator.runTarget(
       targetOutboundTag: targetTag,
       reason: 'manual_active',
     );
+    _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
+    await test;
   }
 
   Future<void> _runProxyUrlTest(String tag) async {
@@ -5451,11 +5453,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (target == null) return;
     _haptic();
-    _proxyRuntime.runtimeLatencyTimes.remove(target);
-    await _latencyCoordinator.runTarget(
+    final test = _latencyCoordinator.runTarget(
       targetOutboundTag: target,
       reason: 'manual_row',
     );
+    _proxyRuntime.runtimeLatencyTimes.remove(target);
+    await test;
   }
 
   Future<void> _handleRuntimeLifecycleTimeout(
@@ -6502,6 +6505,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
         // CommandGroup can publish synchronously from updateDefaultInterface,
         // before the network event queued immediately after it reaches Dart.
         _pendingRuntimeGroups.remember(event);
+        return;
+      }
+      if (eventNetworkGeneration < currentNetworkGeneration) {
+        AppLogStore.debug(
+          'proxy',
+          'discarded stale network groups snapshot networkGeneration='
+              '$eventNetworkGeneration currentNetworkGeneration='
+              '$currentNetworkGeneration',
+        );
         return;
       }
     }

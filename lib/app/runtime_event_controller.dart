@@ -59,7 +59,15 @@ class PendingRuntimeGroups {
     }
     if (networkGeneration > 0 &&
         latest.networkGeneration > 0 &&
-        latest.networkGeneration > networkGeneration) {
+        latest.networkGeneration != networkGeneration) {
+      if (latest.networkGeneration > networkGeneration) {
+        // The native snapshot arrived before its matching network event.
+        // Retain it until Dart observes that generation.
+        return null;
+      }
+      // A snapshot from the previous interface must never restore stale
+      // latency or selection state after a Wi-Fi/cellular handover.
+      _latest = null;
       return null;
     }
     _latest = null;

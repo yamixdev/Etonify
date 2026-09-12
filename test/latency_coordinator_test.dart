@@ -113,6 +113,88 @@ void main() {
       expect(coordinator.isRunning, isFalse);
     },
   );
+
+  test('unrelated group events cannot complete a targeted session', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const ['target'],
+      capabilities: LibboxCapabilities.parseOrLegacy('''{
+        "api_version": 2, "core_version": "1.14.0",
+        "supports_targeted_url_test": true
+      }'''),
+    );
+    addTearDown(coordinator.dispose);
+
+    final result = coordinator.runTarget(
+      targetOutboundTag: 'target',
+      reason: 'test',
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      coordinator.handleGroupEvent(
+        tag: 'unrelated',
+        timeSeconds: now + 1,
+        available: true,
+      ),
+      isFalse,
+    );
+    expect(coordinator.isRunning, isTrue);
+
+    coordinator.handleGroupEvent(
+      tag: 'target',
+      timeSeconds: now + 1,
+      available: true,
+    );
+    expect(await result, isTrue);
+  });
+
+  test('parallel target captures its own latest event baseline', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var baseline = <String, int>{'target': now};
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const ['target', 'other'],
+      eventBaselineTimes: () => baseline,
+      capabilities: LibboxCapabilities.parseOrLegacy('''{
+        "api_version": 2, "core_version": "1.14.0",
+        "supports_targeted_url_test": true,
+        "supports_url_test_queue_priority": true
+      }'''),
+    );
+    addTearDown(coordinator.dispose);
+
+    unawaited(coordinator.runFull(reason: 'all'));
+    await Future<void>.delayed(Duration.zero);
+    baseline = <String, int>{'target': now + 5};
+    expect(
+      await coordinator.runTarget(
+        targetOutboundTag: 'target',
+        reason: 'manual',
+      ),
+      isTrue,
+    );
+
+    expect(
+      coordinator.handleGroupEvent(
+        tag: 'target',
+        timeSeconds: now + 1,
+        available: true,
+      ),
+      isFalse,
+    );
+    expect(coordinator.isChecking('target'), isTrue);
+    expect(
+      coordinator.handleGroupEvent(
+        tag: 'target',
+        timeSeconds: now + 6,
+        available: true,
+      ),
+      isTrue,
+    );
+    expect(coordinator.isChecking('target'), isFalse);
+  });
   testWidgets('missing expected results release the session before watchdog', (
     tester,
   ) async {

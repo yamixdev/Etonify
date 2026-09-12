@@ -99,12 +99,15 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       oldWidget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
       widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
     }
-    if (oldWidget.children != widget.children) {
+    if (oldWidget.children != widget.children ||
+        oldWidget.group.selectedChildTag != widget.group.selectedChildTag) {
       _sortedChildrenCache = null;
       _sortedChildrenSort = null;
     }
     if (oldWidget.selectedTag != widget.selectedTag) {
       _selectedTag = widget.selectedTag;
+      _sortedChildrenCache = null;
+      _sortedChildrenSort = null;
     }
   }
 
@@ -168,6 +171,9 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       children,
       _sort,
       keepPinnedFirst: false,
+      prioritizedTag: _selectedTag == widget.group.tag
+          ? (widget.group.selectedChildTag ?? '')
+          : _selectedTag,
       runtimeStateFor: widget.runtimeStates?.valueFor,
     );
     _sortedChildrenCache = children;
@@ -178,6 +184,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   void _select(String tag) {
     setState(() {
       _selectedTag = tag;
+      _sortedChildrenCache = null;
+      _sortedChildrenSort = null;
     });
     widget.onSelected(tag);
   }

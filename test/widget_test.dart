@@ -644,6 +644,54 @@ void main() {
     expect(find.text('proxy 79'), findsOneWidget);
   });
 
+  testWidgets('selected proxy stays at the top when latency sorting changes', (
+    tester,
+  ) async {
+    final proxies = <AppProxySummary>[
+      _proxy('fast', 'Fast server', latency: 10),
+      _proxy('medium', 'Medium server', latency: 80),
+      _proxy('slow', 'Selected slow server', latency: 900),
+    ];
+
+    Future<void> pumpWithSelection(String selectedTag) {
+      return tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: SizedBox(
+              height: 720,
+              child: ProxiesPage(
+                proxies: proxies,
+                selectedTag: selectedTag,
+                connected: false,
+                initialSort: ProxySort.latency,
+                progressiveBlurEnabled: false,
+                onSelected: (_) {},
+                onUrlTest: () async {},
+                embedded: true,
+                sheetAtMaxExtent: true,
+                sheetExtent: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpWithSelection('slow');
+    expect(
+      tester.getTopLeft(find.text('Selected slow server')).dy,
+      lessThan(tester.getTopLeft(find.text('Fast server')).dy),
+    );
+
+    await pumpWithSelection('medium');
+    expect(
+      tester.getTopLeft(find.text('Medium server')).dy,
+      lessThan(tester.getTopLeft(find.text('Fast server')).dy),
+    );
+  });
+
   testWidgets('collapsed proxy panel releases mounted runtime rows', (
     tester,
   ) async {
@@ -1016,7 +1064,7 @@ void main() {
               height: 720,
               child: ProxiesPage(
                 proxies: proxies,
-                selectedTag: 'healthy',
+                selectedTag: '',
                 connected: true,
                 initialSort: ProxySort.latency,
                 progressiveBlurEnabled: false,
