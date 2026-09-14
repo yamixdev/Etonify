@@ -137,7 +137,7 @@ class AppSettingsController {
   int vpnMtu = 1500;
   bool vpnStrictRoute = true;
   TunImplementationPreference vpnTunImplementation =
-      TunImplementationPreference.mixed;
+      TunImplementationPreference.native;
   bool proxyInboundEnabled = false;
   bool proxyAllowLan = false;
   String proxyMixedListen = '127.0.0.1';

@@ -29,7 +29,7 @@ void main() {
           currentVpnInboundEnabled: true,
           currentVpnMtu: 1500,
           currentVpnStrictRoute: true,
-          currentVpnTunImplementation: TunImplementationPreference.mixed,
+          currentVpnTunImplementation: TunImplementationPreference.native,
           currentProxyInboundEnabled: false,
           currentProxyAllowLan: false,
           currentProxyMixedListen: '127.0.0.1',
@@ -74,21 +74,30 @@ void main() {
 
     expect(changedMtu, 1460);
     expect(find.textContaining('1460'), findsOneWidget);
-    expect(find.textContaining('Смешанный (Mixed)'), findsOneWidget);
     expect(
-      find.textContaining('TCP обрабатывает системный стек Android'),
+      find.textContaining('Новый sing-tun (рекомендуется)'),
       findsOneWidget,
     );
+    expect(find.textContaining('Собственный стек sing-tun'), findsOneWidget);
 
-    final mixedDescription = find.textContaining('Смешанный (Mixed)');
-    final mixedTile = find.ancestor(
-      of: mixedDescription,
+    final nativeDescription = find.textContaining(
+      'Новый sing-tun (рекомендуется)',
+    );
+    final nativeTile = find.ancestor(
+      of: nativeDescription,
       matching: find.byType(ListTile),
     );
-    await tester.ensureVisible(mixedTile);
-    await tester.tap(mixedTile);
+    await tester.ensureVisible(nativeTile);
+    await tester.tap(nativeTile);
     await tester.pumpAndSettle();
+    expect(find.text('Смешанный (Mixed)'), findsOneWidget);
     expect(find.text('Системный (System)'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('gVisor'),
+      160,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('gVisor'), findsOneWidget);
     await tester.tap(find.text('Системный (System)'));
     await tester.pumpAndSettle();

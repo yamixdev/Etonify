@@ -27,7 +27,7 @@ void main() {
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'system', 'gvisor', 'mixed'},
+        tunStacks: const <String>{'native', 'system', 'gvisor', 'mixed'},
       ),
     );
 
@@ -38,12 +38,15 @@ void main() {
     );
     expect(
       result.steps.map((step) => '${step.fromVersion}->${step.toVersion}'),
-      ['0->1', '1->2', '2->3', '3->4'],
+      ['0->1', '1->2', '2->3', '3->4', '4->5'],
     );
     expect(result.state.activeProfileId, original.activeProfileId);
     expect(result.state.selectedProxyTag, original.selectedProxyTag);
     expect(result.state.proxySort, original.proxySort);
-    expect(result.state.vpnTunImplementation, original.vpnTunImplementation);
+    expect(
+      result.state.vpnTunImplementation,
+      TunImplementationPreference.native,
+    );
     expect(result.state.vpnMtu, original.vpnMtu);
     expect(result.state.dnsDirectResolver, original.dnsDirectResolver);
     expect(result.state.dnsProxyResolver, original.dnsProxyResolver);
@@ -68,6 +71,27 @@ void main() {
       TunImplementationPreference.gvisor,
     );
     expect(result.changes, <String>['vpn_tun_implementation:mixed->gvisor']);
+  });
+
+  test('schema 4 keeps an explicit compatibility stack', () {
+    final original = _loadVersion021Fixture(store).copyWith(
+      coreConfigSchemaVersion: 4,
+      vpnTunImplementation: TunImplementationPreference.gvisor,
+    );
+    final result = CoreConfigMigration.plan(
+      state: original,
+      capabilities: _versionedCapabilities(
+        tunStacks: const <String>{'native', 'system', 'gvisor', 'mixed'},
+      ),
+    );
+
+    expect(result.status, CoreConfigMigrationStatus.readyForValidation);
+    expect(result.state.coreConfigSchemaVersion, 5);
+    expect(
+      result.state.vpnTunImplementation,
+      TunImplementationPreference.gvisor,
+    );
+    expect(result.changes, isEmpty);
   });
 
   for (final legacyTag in const <String>[
@@ -162,7 +186,7 @@ AppSettingsState _loadVersion021Fixture(_TestSettingsStore store) {
 LibboxCapabilities _versionedCapabilities({required Set<String> tunStacks}) {
   return LibboxCapabilities(
     apiVersion: 2,
-    coreVersion: '1.14.0-rc.1-etonify.2',
+    coreVersion: '1.15.0-alpha.3-etonify.1',
     supportsTargetedUrlTest: false,
     supportsGroupUrlTestSessions: false,
     supportsStructuredProbeErrors: false,

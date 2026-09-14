@@ -13,7 +13,7 @@ import 'secure_hive_storage.dart';
 
 enum AppThemePreference { system, light, dark, amoled }
 
-enum TunImplementationPreference { mixed, system, gvisor }
+enum TunImplementationPreference { native, mixed, system, gvisor }
 
 enum InboundConnectionMode { vpn, proxy }
 
@@ -720,15 +720,10 @@ abstract class AppSettingsStore {
           },
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: boolValue(_hideServerIpKey, defaultValue: false),
-      sendHwidToProviders: !boolValue(
-        _hwidDefaultNoticeShownKey,
-        defaultValue: false,
-      )
+      sendHwidToProviders:
+          !boolValue(_hwidDefaultNoticeShownKey, defaultValue: false)
           ? true
-          : boolValue(
-              _sendHwidToProvidersKey,
-              defaultValue: true,
-            ),
+          : boolValue(_sendHwidToProvidersKey, defaultValue: true),
       hwidDefaultNoticeShown: boolValue(
         _hwidDefaultNoticeShownKey,
         defaultValue: false,
@@ -774,10 +769,11 @@ abstract class AppSettingsStore {
       vpnMtu: _vpnMtuValue(map[_vpnMtuKey]),
       vpnStrictRoute: boolValue(_vpnStrictRouteKey, defaultValue: true),
       vpnTunImplementation: switch (map[_vpnTunImplementationKey]) {
+        'native' => TunImplementationPreference.native,
         'system' => TunImplementationPreference.system,
         'gvisor' => TunImplementationPreference.gvisor,
         'mixed' => TunImplementationPreference.mixed,
-        _ => TunImplementationPreference.mixed,
+        _ => TunImplementationPreference.native,
       },
       proxyInboundEnabled: boolValue(
         _proxyInboundEnabledKey,
@@ -1158,7 +1154,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             vpnInboundEnabled: true,
             vpnMtu: 1500,
             vpnStrictRoute: true,
-            vpnTunImplementation: TunImplementationPreference.mixed,
+            vpnTunImplementation: TunImplementationPreference.native,
             proxyInboundEnabled: false,
             proxyAllowLan: false,
             proxyMixedListen: '127.0.0.1',

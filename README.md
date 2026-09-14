@@ -14,8 +14,8 @@ The application does not provide VPN servers. You need your own server or a subs
 
 | Component | Version or requirement |
 | --- | --- |
-| Client source | `0.3.5+25` |
-| Bundled core | `v1.14.0-etonify.3`, based on sing-box `1.14.0` |
+| Client source | `0.3.6+26` |
+| Bundled core | `v1.15.0-alpha.3-etonify.1`, based on sing-box `1.15.0-alpha.3` |
 | Android | 8.0 or later (API 26+) |
 | APK architectures | `arm64-v8a`, `armeabi-v7a` |
 | Interface languages | English and Russian |

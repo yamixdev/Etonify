@@ -102,13 +102,13 @@ void main() {
       );
     });
 
-    test('strict parser accepts the complete 1.14 API v2 contract', () {
+    test('strict parser accepts the complete 1.15 API v2 contract', () {
       final capabilities = LibboxCapabilities.parseStrict(_strictContract);
 
       expect(capabilities.isCompatible, isTrue);
       expect(capabilities.contractError, isEmpty);
       expect(capabilities.apiVersion, 2);
-      expect(capabilities.coreVersion, '1.14.0-rc.1-etonify.2');
+      expect(capabilities.coreVersion, '1.15.0-alpha.3-etonify.1');
       expect(capabilities.supportsUrlTestFailover, isTrue);
       expect(capabilities.xHttpProfile, 'etonify_client_v1');
       expect(capabilities.supportsXHttpMode('packet-up'), isTrue);
@@ -118,6 +118,7 @@ void main() {
       expect(capabilities.xHttpMaxPacketUploadBytes, 262144);
       expect(capabilities.vlessEncryptionModes, contains('mlkem768'));
       expect(capabilities.vlessEncryptionMaxRelays, 8);
+      expect(capabilities.supportsTunStack('native'), isTrue);
     });
 
     test('strict parser rejects an absent, old, or incomplete contract', () {
@@ -140,6 +141,15 @@ void main() {
         ).contractError,
         'core_xhttp_contract_incomplete',
       );
+      expect(
+        LibboxCapabilities.parseStrict(
+          _strictContract.replaceFirst(
+            '"tun_stacks": ["native", "system", "gvisor", "mixed"]',
+            '"tun_stacks": ["system", "gvisor", "mixed"]',
+          ),
+        ).contractError,
+        'core_native_tun_stack_missing',
+      );
     });
   });
 }
@@ -147,7 +157,7 @@ void main() {
 const _strictContract = '''
 {
   "api_version": 2,
-  "core_version": "1.14.0-rc.1-etonify.2",
+  "core_version": "1.15.0-alpha.3-etonify.1",
   "supports_targeted_url_test": true,
   "supports_group_url_test_sessions": true,
   "supports_structured_probe_errors": true,
@@ -179,6 +189,6 @@ const _strictContract = '''
   "vless_encryption_modes": ["1rtt", "0rtt", "native", "xorpub", "random", "x25519", "mlkem768"],
   "vless_encryption_max_relays": 8,
   "vless_encryption_handshake_timeout_ms": 12000,
-  "tun_stacks": ["system", "gvisor", "mixed"]
+  "tun_stacks": ["native", "system", "gvisor", "mixed"]
 }
 ''';

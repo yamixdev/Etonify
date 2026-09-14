@@ -1563,11 +1563,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'Определяет, как клиент обрабатывает TCP- и UDP-трафик внутри VPN';
 
   @override
+  String get tunImplementationNative => 'Новый sing-tun (рекомендуется)';
+
+  @override
+  String get tunImplementationNativeSubtitle =>
+      'Собственный стек sing-tun из sing-box 1.15. Обычно работает быстрее, экономнее расходует память и заряд. Если на устройстве возникнут проблемы, выберите режим совместимости ниже.';
+
+  @override
   String get tunImplementationMixed => 'Смешанный (Mixed)';
 
   @override
   String get tunImplementationMixedSubtitle =>
-      'TCP обрабатывает системный стек Android, а UDP — виртуальный стек gVisor. Это стандартный вариант sing-box.';
+      'Режим совместимости: TCP обрабатывает системный стек Android, а UDP — виртуальный стек gVisor.';
 
   @override
   String get tunImplementationSystem => 'Системный (System)';

@@ -263,7 +263,7 @@ class AppBootstrapController {
       vpnInboundEnabled: true,
       vpnMtu: 1500,
       vpnStrictRoute: true,
-      vpnTunImplementation: TunImplementationPreference.mixed,
+      vpnTunImplementation: TunImplementationPreference.native,
       proxyInboundEnabled: false,
       proxyAllowLan: false,
       proxyMixedListen: '127.0.0.1',

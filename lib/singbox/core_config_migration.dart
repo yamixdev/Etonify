@@ -3,7 +3,7 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
-const currentCoreConfigSchemaVersion = 4;
+const currentCoreConfigSchemaVersion = 5;
 
 enum CoreConfigMigrationStatus { notRequired, readyForValidation, blocked }
 
@@ -92,6 +92,7 @@ class CoreConfigMigration {
         1 => _migrateSchema1To2(candidate),
         2 => _migrateSchema2To3(candidate),
         3 => _migrateSchema3To4(candidate, capabilities),
+        4 => _migrateSchema4To5(candidate, capabilities),
         _ => null,
       };
       if (migration == null) {
@@ -319,6 +320,44 @@ class CoreConfigMigration {
     );
   }
 
+  static _StepResult _migrateSchema4To5(
+    AppSettingsState state,
+    LibboxCapabilities capabilities,
+  ) {
+    var tunImplementation = state.vpnTunImplementation;
+    final changes = <String>[];
+
+    // Mixed was Etonify's previous default. Move that default to sing-box
+    // 1.15's own stack, while preserving explicit system/gVisor choices made
+    // for device compatibility.
+    if (tunImplementation == TunImplementationPreference.mixed &&
+        capabilities.supportsTunStack(
+          TunImplementationPreference.native.name,
+        )) {
+      tunImplementation = TunImplementationPreference.native;
+    } else if (!capabilities.supportsTunStack(tunImplementation.name)) {
+      final fallback = _firstSupportedTunStack(capabilities);
+      if (fallback == null) {
+        throw StateError('no_compatible_tun_stack');
+      }
+      tunImplementation = fallback;
+    }
+
+    if (tunImplementation != state.vpnTunImplementation) {
+      changes.add(
+        'vpn_tun_implementation:${state.vpnTunImplementation.name}->${tunImplementation.name}',
+      );
+    }
+    return _step(
+      from: 4,
+      state: state.copyWith(
+        coreConfigSchemaVersion: 5,
+        vpnTunImplementation: tunImplementation,
+      ),
+      changes: changes,
+    );
+  }
+
   static String _normalizedDns(String value, {required String fallback}) {
     final normalized = normalizeDnsResolverInput(value);
     return normalized.isEmpty ? fallback : normalized;
@@ -354,6 +393,7 @@ class CoreConfigMigration {
     LibboxCapabilities capabilities,
   ) {
     for (final candidate in const <TunImplementationPreference>[
+      TunImplementationPreference.native,
       TunImplementationPreference.gvisor,
       TunImplementationPreference.system,
       TunImplementationPreference.mixed,

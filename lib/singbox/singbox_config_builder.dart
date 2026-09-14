@@ -426,7 +426,11 @@ class SingboxConfigBuilder {
               'mtu': max(vpnMtu, 1280),
               'auto_route': true,
               'strict_route': vpnStrictRoute,
-              'stack': vpnTunImplementation.name,
+              // sing-box 1.15 selects the new sing-tun stack when this
+              // deprecated field is absent. Keep explicit values only for
+              // user-selected compatibility modes.
+              if (vpnTunImplementation != TunImplementationPreference.native)
+                'stack': vpnTunImplementation.name,
               if (tunIncludePackages.isNotEmpty)
                 'include_package': tunIncludePackages,
               if (tunExcludePackages.isNotEmpty)

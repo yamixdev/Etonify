@@ -2867,6 +2867,18 @@ abstract class AppLocalizations {
   /// **'Controls how the client handles TCP and UDP traffic inside the VPN'**
   String get tunImplementationSubtitle;
 
+  /// No description provided for @tunImplementationNative.
+  ///
+  /// In en, this message translates to:
+  /// **'New sing-tun (recommended)'**
+  String get tunImplementationNative;
+
+  /// No description provided for @tunImplementationNativeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The sing-tun stack introduced in sing-box 1.15. It is normally faster and uses less memory and battery. Choose a compatibility mode below if it causes problems on this device.'**
+  String get tunImplementationNativeSubtitle;
+
   /// No description provided for @tunImplementationMixed.
   ///
   /// In en, this message translates to:
@@ -2876,7 +2888,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunImplementationMixedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Uses the Android system stack for TCP and gVisor for UDP. This is sing-box\'s default when gVisor is available.'**
+  /// **'Compatibility mode: uses the Android system stack for TCP and gVisor for UDP.'**
   String get tunImplementationMixedSubtitle;
 
   /// No description provided for @tunImplementationSystem.

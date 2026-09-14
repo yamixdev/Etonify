@@ -126,6 +126,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     TunImplementationPreference value,
   ) {
     return switch (value) {
+      TunImplementationPreference.native => l10n.tunImplementationNative,
       TunImplementationPreference.mixed => l10n.tunImplementationMixed,
       TunImplementationPreference.system => l10n.tunImplementationSystem,
       TunImplementationPreference.gvisor => l10n.tunImplementationGvisor,
@@ -137,6 +138,8 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     TunImplementationPreference value,
   ) {
     return switch (value) {
+      TunImplementationPreference.native =>
+        l10n.tunImplementationNativeSubtitle,
       TunImplementationPreference.mixed => l10n.tunImplementationMixedSubtitle,
       TunImplementationPreference.system =>
         l10n.tunImplementationSystemSubtitle,
@@ -215,6 +218,11 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
         title: l10n.tunImplementationTitle,
         current: widget.currentVpnTunImplementation,
         items: [
+          _RadioItem(
+            value: TunImplementationPreference.native,
+            label: l10n.tunImplementationNative,
+            subtitle: l10n.tunImplementationNativeSubtitle,
+          ),
           _RadioItem(
             value: TunImplementationPreference.mixed,
             label: l10n.tunImplementationMixed,

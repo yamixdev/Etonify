@@ -2708,6 +2708,37 @@ void main() {
     expect(tun['address'], contains('fdfe:dcba:9876::1/126'));
   });
 
+  test(
+    'native TUN omits deprecated stack while compatibility modes keep it',
+    () {
+      const subscription = Subscription(
+        id: 'tun-stack-migration',
+        name: 'TUN stack migration',
+        url: 'https://example.com/sub',
+        outbounds: [],
+      );
+      final nativeConfig = _defaultBuilder(
+        subscription,
+        vpnInboundEnabled: true,
+        vpnTunImplementation: TunImplementationPreference.native,
+      ).build();
+      final nativeTun = (nativeConfig['inbounds'] as List)
+          .cast<Map<dynamic, dynamic>>()
+          .firstWhere((inbound) => inbound['type'] == 'tun');
+      expect(nativeTun, isNot(contains('stack')));
+
+      final compatibilityConfig = _defaultBuilder(
+        subscription,
+        vpnInboundEnabled: true,
+        vpnTunImplementation: TunImplementationPreference.gvisor,
+      ).build();
+      final compatibilityTun = (compatibilityConfig['inbounds'] as List)
+          .cast<Map<dynamic, dynamic>>()
+          .firstWhere((inbound) => inbound['type'] == 'tun');
+      expect(compatibilityTun['stack'], 'gvisor');
+    },
+  );
+
   test('accepts valid IP proxy servers and filters malformed literals', () {
     const subscription = Subscription(
       id: 'ip-server-validation',
@@ -3287,6 +3318,8 @@ SingboxConfigBuilder _defaultBuilder(
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled,
   bool allowUntrustedProxyCertificates = false,
   bool vpnInboundEnabled = false,
+  TunImplementationPreference vpnTunImplementation =
+      TunImplementationPreference.mixed,
   bool proxyInboundEnabled = false,
   String proxyMixedListen = '127.0.0.1',
   String proxyUsername = defaultProxyUsername,
@@ -3311,7 +3344,7 @@ SingboxConfigBuilder _defaultBuilder(
     vpnInboundEnabled: vpnInboundEnabled,
     vpnMtu: 3400,
     vpnStrictRoute: true,
-    vpnTunImplementation: TunImplementationPreference.mixed,
+    vpnTunImplementation: vpnTunImplementation,
     proxyInboundEnabled: proxyInboundEnabled,
     proxyMixedListen: proxyMixedListen,
     proxyMixedPort: 1080,

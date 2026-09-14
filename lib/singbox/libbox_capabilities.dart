@@ -48,7 +48,7 @@ class LibboxCapabilities {
 
   static const minimumSupportedApiVersion = 2;
   static const maximumSupportedApiVersion = 2;
-  static const expectedCoreSeries = '1.14.';
+  static const expectedCoreSeries = '1.15.';
 
   static const bundledLegacy = LibboxCapabilities(
     contractStatus: LibboxContractStatus.legacy,
@@ -331,6 +331,9 @@ class LibboxCapabilities {
     }
     if (tunStacks.isEmpty) {
       return 'core_tun_capabilities_missing';
+    }
+    if (!supportsTunStack('native')) {
+      return 'core_native_tun_stack_missing';
     }
     if (supportsXHttp &&
         (!xHttpClientOnly ||
