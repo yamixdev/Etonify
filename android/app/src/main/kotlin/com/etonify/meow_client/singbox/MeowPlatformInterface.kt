@@ -16,6 +16,8 @@ import android.system.ErrnoException
 import android.system.OsConstants
 import androidx.annotation.RequiresApi
 import com.etonify.meow_client.MeowApplication
+import io.nekohasekai.libbox.AutoRedirectHandler
+import io.nekohasekai.libbox.AutoRedirectSession
 import io.nekohasekai.libbox.BridgeOptions
 import io.nekohasekai.libbox.BridgeSession
 import io.nekohasekai.libbox.ConnectionOwner
@@ -223,6 +225,17 @@ abstract class MeowBasePlatformInterface(
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
 
     override fun usePlatformBridge(): Boolean = false
+
+    override fun usePlatformAutoRedirect(): Boolean = false
+
+    override fun createAutoRedirect(
+        options: ByteArray,
+        handler: AutoRedirectHandler,
+    ): AutoRedirectSession {
+        throw UnsupportedOperationException(
+            "platform auto redirect is not used by Android VpnService",
+        )
+    }
 
     override fun usePlatformShell(): Boolean = false
 
