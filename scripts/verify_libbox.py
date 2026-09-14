@@ -178,3 +178,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as error:
+        print(f"libbox verification failed: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
