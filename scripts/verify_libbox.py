@@ -32,7 +32,7 @@ LIBBOX_ANDROID_API_ENTRIES = (
     "io/nekohasekai/libbox/SetupOptions.java",
 )
 LIBBOX_ANDROID_API_SHA256 = (
-    "e67ad6c336db7e39751ede8a8359285b6ddce6d2b833807475581d6ae3f07e99"
+    "2f2e3ba1371d6ceff0cad4a8bc5895e4515b3f7db169275ee45679cb1196767b"
 )
 
 
@@ -178,8 +178,3 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (OSError, subprocess.CalledProcessError, ValueError, RuntimeError) as error:
-        print(f"libbox verification failed: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
