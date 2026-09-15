@@ -105,6 +105,7 @@ class ProxyRuntimeController {
   final Map<String, String> runtimeLowestSelections = <String, String>{};
   final Map<String, int> runtimeLatencies = <String, int>{};
   final Map<String, int> runtimeLatencyTimes = <String, int>{};
+  final Map<String, int> runtimeLatencyRevisions = <String, int>{};
   final Set<String> unavailableLatencyTags = <String>{};
   final Set<String> invalidatedLatencyTags = <String>{};
   final Map<String, String> latencyErrors = <String, String>{};
@@ -143,6 +144,7 @@ class ProxyRuntimeController {
     _updatesFrozen = false;
     runtimeLatencies.clear();
     runtimeLatencyTimes.clear();
+    runtimeLatencyRevisions.clear();
     unavailableLatencyTags.clear();
     invalidatedLatencyTags.clear();
     latencyErrors.clear();
@@ -202,6 +204,7 @@ class ProxyRuntimeController {
       var changed = false;
       for (final tag in nextInvalidatedTags) {
         changed = runtimeLatencyTimes.remove(tag) != null || changed;
+        changed = runtimeLatencyRevisions.remove(tag) != null || changed;
         changed = unavailableLatencyTags.remove(tag) || changed;
         changed = latencyErrors.remove(tag) != null || changed;
         changed = latencyFailureCounts.remove(tag) != null || changed;
@@ -224,6 +227,7 @@ class ProxyRuntimeController {
       (tag, _) => !nextInvalidatedTags.contains(tag),
     );
     runtimeLatencyTimes.clear();
+    runtimeLatencyRevisions.clear();
     unavailableLatencyTags.clear();
     invalidatedLatencyTags
       ..clear()
@@ -236,6 +240,62 @@ class ProxyRuntimeController {
 
   bool isLatencyInvalidated(String tag) {
     return invalidatedLatencyTags.contains(tag.trim());
+  }
+
+  /// Applies one compact URLTest v3 result. Revisions are monotonic across the
+  /// native runtime, so a result is never rejected merely because two probes
+  /// completed during the same wall-clock second.
+  Set<String> applyUrlTestResult({
+    required String tag,
+    required int measuredAtMillis,
+    required int delay,
+    required String status,
+    required String error,
+    required int revision,
+  }) {
+    final normalizedTag = tag.trim();
+    if (_updatesFrozen || normalizedTag.isEmpty || revision <= 0) {
+      return const <String>{};
+    }
+    if (revision <= (runtimeLatencyRevisions[normalizedTag] ?? 0)) {
+      return const <String>{};
+    }
+    runtimeLatencyRevisions[normalizedTag] = revision;
+    if (measuredAtMillis > 0) {
+      runtimeLatencyTimes[normalizedTag] = measuredAtMillis ~/ 1000;
+    }
+    final normalizedStatus = status.trim().toLowerCase();
+    final normalizedError = error.trim();
+    final available = delay > 0 && normalizedStatus != urlTestStatusUnavailable;
+    final previousDelay = runtimeLatencies[normalizedTag];
+    invalidatedLatencyTags.remove(normalizedTag);
+    if (available) {
+      runtimeLatencies[normalizedTag] = delay;
+      unavailableLatencyTags.remove(normalizedTag);
+      latencyErrors.remove(normalizedTag);
+      latencyFailureCounts.remove(normalizedTag);
+    } else {
+      runtimeLatencies.remove(normalizedTag);
+      unavailableLatencyTags.add(normalizedTag);
+      latencyErrors[normalizedTag] = normalizedError.isEmpty
+          ? 'URL test failed'
+          : normalizedError;
+      latencyFailureCounts[normalizedTag] =
+          (latencyFailureCounts[normalizedTag] ?? 0) + 1;
+    }
+    final previousLowest = lowestLatency;
+    if (available && (previousLowest == null || delay < previousLowest)) {
+      lowestLatency = delay;
+    } else if (previousDelay != null &&
+        previousDelay == previousLowest &&
+        (!available || delay > previousDelay)) {
+      lowestLatency = _computeLowestLatency(
+        runtimeLatencies,
+        unavailableLatencyTags,
+        invalidatedLatencyTags,
+      );
+    }
+    return Set<String>.unmodifiable(<String>{normalizedTag});
   }
 
   String? runtimeLowestOutboundTagFor(String lowestTag) {

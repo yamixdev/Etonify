@@ -4,6 +4,51 @@ import 'package:meow_client/models/subscription.dart';
 
 void main() {
   test(
+    'compact URLTest results use revisions instead of second timestamps',
+    () {
+      final controller = ProxyRuntimeController();
+      addTearDown(controller.dispose);
+
+      expect(
+        controller.applyUrlTestResult(
+          tag: 'vless-1',
+          measuredAtMillis: 100100,
+          delay: 80,
+          status: 'available',
+          error: '',
+          revision: 1,
+        ),
+        {'vless-1'},
+      );
+      expect(
+        controller.applyUrlTestResult(
+          tag: 'vless-1',
+          measuredAtMillis: 100900,
+          delay: 55,
+          status: 'available',
+          error: '',
+          revision: 2,
+        ),
+        {'vless-1'},
+      );
+      expect(controller.runtimeLatencies['vless-1'], 55);
+      expect(controller.runtimeLatencyTimes['vless-1'], 100);
+      expect(
+        controller.applyUrlTestResult(
+          tag: 'vless-1',
+          measuredAtMillis: 100950,
+          delay: 99,
+          status: 'available',
+          error: '',
+          revision: 1,
+        ),
+        isEmpty,
+      );
+      expect(controller.runtimeLatencies['vless-1'], 55);
+    },
+  );
+
+  test(
     'network handover keeps stale display and accepts same-second result',
     () {
       final controller = ProxyRuntimeController();
@@ -39,6 +84,33 @@ void main() {
       expect(controller.lowestLatency, 180);
     },
   );
+
+  test('progressive URLTest keeps and repairs the running minimum', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+
+    void result(String tag, int delay, int revision, {bool failed = false}) {
+      controller.applyUrlTestResult(
+        tag: tag,
+        measuredAtMillis: revision * 1000,
+        delay: failed ? 0 : delay,
+        status: failed ? 'unavailable' : 'available',
+        error: failed ? 'timeout' : '',
+        revision: revision,
+      );
+    }
+
+    result('a', 80, 1);
+    result('b', 50, 2);
+    expect(controller.lowestLatency, 50);
+
+    result('b', 120, 3);
+    expect(controller.lowestLatency, 80);
+
+    result('a', 0, 4, failed: true);
+    expect(controller.lowestLatency, 120);
+  });
+
   test('startup deadline marks only proxies without terminal telemetry', () {
     final controller = ProxyRuntimeController();
     addTearDown(controller.dispose);

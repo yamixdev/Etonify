@@ -23,6 +23,7 @@ const val runtimeEventNativeLog: String = "nativeLog"
 const val runtimeEventNetwork: String = "network"
 const val runtimeEventState: String = "state"
 const val runtimeEventStatus: String = "status"
+const val runtimeEventUrlTest: String = "urlTest"
 const val notificationTrafficModeSpeed: String = "speed"
 const val notificationTrafficModeTotal: String = "total"
 const val notificationTrafficModeBoth: String = "both"
@@ -321,7 +322,8 @@ data class UrlTestRequestMessage (
   val timeoutMillis: Long,
   val concurrency: Long,
   val deadlineMillis: Long,
-  val force: Boolean
+  val force: Boolean,
+  val mode: String
 )
  {
   companion object {
@@ -335,7 +337,8 @@ data class UrlTestRequestMessage (
       val concurrency = pigeonVar_list[6] as Long
       val deadlineMillis = pigeonVar_list[7] as Long
       val force = pigeonVar_list[8] as Boolean
-      return UrlTestRequestMessage(groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, force)
+      val mode = pigeonVar_list[9] as String
+      return UrlTestRequestMessage(groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, force, mode)
     }
   }
   fun toList(): List<Any?> {
@@ -349,6 +352,7 @@ data class UrlTestRequestMessage (
       concurrency,
       deadlineMillis,
       force,
+      mode,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -359,7 +363,7 @@ data class UrlTestRequestMessage (
       return true
     }
     val other = other as UrlTestRequestMessage
-    return SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.force, other.force)
+    return SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.force, other.force) && SingboxApiPigeonUtils.deepEquals(this.mode, other.mode)
   }
 
   override fun hashCode(): Int {
@@ -373,10 +377,11 @@ data class UrlTestRequestMessage (
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.concurrency)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.deadlineMillis)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.force)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.mode)
     return result
   }
   override fun toString(): String {
-    return "UrlTestRequestMessage(groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, force=$force)"
+    return "UrlTestRequestMessage(groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, force=$force, mode=$mode)"
   }
 }
 
@@ -1056,6 +1061,7 @@ interface SingboxHostApi {
   fun stop(reason: String, callback: (Result<Unit>) -> Unit)
   fun selectOutbound(groupTag: String, outboundTag: String, callback: (Result<Unit>) -> Unit)
   fun urlTest(request: UrlTestRequestMessage, callback: (Result<Unit>) -> Unit)
+  fun cancelUrlTest(groupTag: String, targetOutboundTag: String, callback: (Result<Unit>) -> Unit)
   fun status(callback: (Result<Map<String?, Any?>>) -> Unit)
   fun lookupOutboundExternalInfo(outboundTag: String, callback: (Result<Map<String?, Any?>>) -> Unit)
   fun getNetworkInterfaceState(callback: (Result<NetworkInterfaceStateMessage>) -> Unit)
@@ -1386,6 +1392,26 @@ interface SingboxHostApi {
             val args = message as List<Any?>
             val requestArg = args[0] as UrlTestRequestMessage
             api.urlTest(requestArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUrlTest$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val groupTagArg = args[0] as String
+            val targetOutboundTagArg = args[1] as String
+            api.cancelUrlTest(groupTagArg, targetOutboundTagArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))

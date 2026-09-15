@@ -1767,11 +1767,23 @@ class MainActivity : FlutterFragmentActivity() {
                         concurrency = request.concurrency.toInt(),
                         deadlineMillis = request.deadlineMillis.toInt(),
                         force = request.force,
+                        mode = request.mode,
                     ) { urlTestResult ->
                         urlTestResult
                             .onSuccess { callback(Result.success(Unit)) }
                             .onFailure { callback(errorResult("urltest_failed", it.message)) }
                     }
+                }
+
+                override fun cancelUrlTest(
+                    groupTag: String,
+                    targetOutboundTag: String,
+                    callback: (Result<Unit>) -> Unit,
+                ) {
+                    SingboxController.cancelUrlTest(
+                        groupTag = groupTag.ifBlank { "select" },
+                        targetOutboundTag = targetOutboundTag,
+                    ) { result -> callback(result) }
                 }
 
                 override fun status(callback: (Result<Map<String?, Any?>>) -> Unit) {

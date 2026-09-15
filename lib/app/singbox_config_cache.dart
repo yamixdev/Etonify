@@ -41,8 +41,10 @@ Future<String> _configFingerprint(
     'activeSubscription': sub == null
         ? null
         : (sub.payloadRevision.isNotEmpty
-            ? {'id': sub.id, 'revision': sub.payloadRevision}
-            : sha256.convert(utf8.encode(jsonEncode(sub.toMap()))).toString()),
+              ? {'id': sub.id, 'revision': sub.payloadRevision}
+              : sha256
+                    .convert(utf8.encode(jsonEncode(sub.toMap())))
+                    .toString()),
     'selectedProxyTag': selectedProxyTagOverride ?? input.selectedProxyTag,
     'excludedOutboundTags': (input.excludedOutboundTags.toList()..sort()),
     'vpnInboundEnabled': input.vpnInboundEnabled,
@@ -117,6 +119,16 @@ Future<String> _configFingerprint(
       'supportsUrlTestFailover': input.capabilities.supportsUrlTestFailover,
       'supportsUrlTestQueuePriority':
           input.capabilities.supportsUrlTestQueuePriority,
+      'supportsUrlTestDeltaStream':
+          input.capabilities.supportsUrlTestDeltaStream,
+      'supportsUrlTestSessionStatus':
+          input.capabilities.supportsUrlTestSessionStatus,
+      'supportsUrlTestResultRevision':
+          input.capabilities.supportsUrlTestResultRevision,
+      'supportsUrlTestNetworkGeneration':
+          input.capabilities.supportsUrlTestNetworkGeneration,
+      'supportsUrlTestExhaustive': input.capabilities.supportsUrlTestExhaustive,
+      'supportsUrlTestCancel': input.capabilities.supportsUrlTestCancel,
       'supportsUrlTestUnavailableCheckInterval':
           input.capabilities.supportsUrlTestUnavailableCheckInterval,
       'supportsUrlTestMethod': input.capabilities.supportsUrlTestMethod,

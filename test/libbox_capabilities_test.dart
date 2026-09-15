@@ -151,6 +151,33 @@ void main() {
         'core_native_tun_stack_missing',
       );
     });
+
+    test('parses URLTest v3 session capabilities', () {
+      final capabilities = LibboxCapabilities.parseOrLegacy('''
+        {
+          "api_version": 3,
+          "url_test_completion_model": "session_events",
+          "supports_url_test_delta_stream": true,
+          "supports_url_test_session_status": true,
+          "supports_url_test_result_revision": true,
+          "supports_url_test_network_generation": true,
+          "supports_url_test_exhaustive": true,
+          "supports_url_test_cancel": true
+        }
+      ''');
+
+      expect(capabilities.apiVersion, 3);
+      expect(
+        capabilities.urlTestCompletionModel,
+        UrlTestCompletionModel.sessionEvents,
+      );
+      expect(capabilities.supportsUrlTestDeltaStream, isTrue);
+      expect(capabilities.supportsUrlTestSessionStatus, isTrue);
+      expect(capabilities.supportsUrlTestResultRevision, isTrue);
+      expect(capabilities.supportsUrlTestNetworkGeneration, isTrue);
+      expect(capabilities.supportsUrlTestExhaustive, isTrue);
+      expect(capabilities.supportsUrlTestCancel, isTrue);
+    });
   });
 }
 

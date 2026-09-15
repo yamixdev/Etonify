@@ -1236,6 +1236,36 @@ void main() {
     expect(tester.getSize(find.byType(CountryFlagBadge).first).height, 36);
   });
 
+  testWidgets('running full URLTest exposes a cancel action', (tester) async {
+    var actionCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: ProxiesPage(
+            proxies: [_proxy('proxy-1', 'proxy 1', latency: 42)],
+            selectedTag: 'proxy-1',
+            connected: true,
+            urlTestInFlight: true,
+            progressiveBlurEnabled: false,
+            onSelected: (_) {},
+            onUrlTest: () async => actionCount++,
+          ),
+        ),
+      ),
+    );
+
+    final cancelAction = find.byIcon(FluentIcons.dismiss_24_filled);
+    expect(cancelAction, findsOneWidget);
+    expect(find.byIcon(FluentIcons.flash_24_filled), findsNothing);
+
+    await tester.tap(cancelAction);
+    await tester.pump();
+
+    expect(actionCount, 1);
+  });
+
   testWidgets('shows no proxies empty state for an empty proxy list', (
     tester,
   ) async {

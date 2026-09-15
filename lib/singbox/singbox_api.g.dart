@@ -18,6 +18,7 @@ const String runtimeEventNativeLog = 'nativeLog';
 const String runtimeEventNetwork = 'network';
 const String runtimeEventState = 'state';
 const String runtimeEventStatus = 'status';
+const String runtimeEventUrlTest = 'urlTest';
 const String notificationTrafficModeSpeed = 'speed';
 const String notificationTrafficModeTotal = 'total';
 const String notificationTrafficModeBoth = 'both';
@@ -251,6 +252,7 @@ class UrlTestRequestMessage {
     required this.concurrency,
     required this.deadlineMillis,
     required this.force,
+    required this.mode,
   });
 
   String groupTag;
@@ -271,6 +273,8 @@ class UrlTestRequestMessage {
 
   bool force;
 
+  String mode;
+
   List<Object?> _toList() {
     return <Object?>[
       groupTag,
@@ -282,6 +286,7 @@ class UrlTestRequestMessage {
       concurrency,
       deadlineMillis,
       force,
+      mode,
     ];
   }
 
@@ -300,6 +305,7 @@ class UrlTestRequestMessage {
       concurrency: result[6]! as int,
       deadlineMillis: result[7]! as int,
       force: result[8]! as bool,
+      mode: result[9]! as String,
     );
   }
 
@@ -312,7 +318,7 @@ class UrlTestRequestMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force);
+    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode);
   }
 
   @override
@@ -321,7 +327,7 @@ class UrlTestRequestMessage {
 
   @override
   String toString() {
-    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force)';
+    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force, mode: $mode)';
   }
 }
 
@@ -1363,6 +1369,24 @@ class SingboxHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> cancelUrlTest(String groupTag, String targetOutboundTag) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUrlTest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[groupTag, targetOutboundTag]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

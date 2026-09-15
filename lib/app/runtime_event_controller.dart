@@ -29,6 +29,72 @@ class RuntimeGroupsEvent {
   final int networkGeneration;
 }
 
+class RuntimeUrlTestResult {
+  const RuntimeUrlTestResult({
+    required this.tag,
+    required this.measuredAtMillis,
+    required this.delay,
+    required this.status,
+    required this.error,
+    required this.errorCode,
+    required this.revision,
+    required this.networkGeneration,
+    required this.sessionId,
+  });
+
+  final String tag;
+  final int measuredAtMillis;
+  final int delay;
+  final String status;
+  final String error;
+  final String errorCode;
+  final int revision;
+  final int networkGeneration;
+  final int sessionId;
+}
+
+class RuntimeUrlTestSession {
+  const RuntimeUrlTestSession({
+    required this.sessionId,
+    required this.groupTag,
+    required this.targetTag,
+    required this.mode,
+    required this.state,
+    required this.terminalReason,
+    required this.total,
+    required this.completed,
+    required this.available,
+    required this.unavailable,
+    required this.networkGeneration,
+  });
+
+  final int sessionId;
+  final String groupTag;
+  final String targetTag;
+  final String mode;
+  final String state;
+  final String terminalReason;
+  final int total;
+  final int completed;
+  final int available;
+  final int unavailable;
+  final int networkGeneration;
+
+  bool get terminal => state == 'completed' || state == 'cancelled';
+}
+
+class RuntimeUrlTestEvent {
+  const RuntimeUrlTestEvent({
+    required this.runtimeGeneration,
+    this.result,
+    this.session,
+  });
+
+  final int runtimeGeneration;
+  final RuntimeUrlTestResult? result;
+  final RuntimeUrlTestSession? session;
+}
+
 typedef RuntimeStateHandler = void Function(RuntimeStateEvent event);
 
 /// A full snapshot replaces its predecessor; never queue thousands of rows
@@ -79,6 +145,7 @@ class PendingRuntimeGroups {
 
 typedef RuntimeRawEventHandler = void Function(Map<String, dynamic> event);
 typedef RuntimeGroupsHandler = void Function(RuntimeGroupsEvent event);
+typedef RuntimeUrlTestHandler = void Function(RuntimeUrlTestEvent event);
 typedef RuntimeLogFilter = bool Function(String level);
 typedef RuntimeLogIssueHandler = void Function(String reason, String message);
 
@@ -89,6 +156,7 @@ class RuntimeEventController {
     required RuntimeRawEventHandler onStatus,
     required RuntimeRawEventHandler onNetwork,
     required RuntimeGroupsHandler onGroups,
+    RuntimeUrlTestHandler? onUrlTest,
     required RuntimeLogFilter shouldRecordLog,
     RuntimeLogIssueHandler? onRuntimeLogIssue,
     DateTime Function()? now,
@@ -97,6 +165,7 @@ class RuntimeEventController {
        _onStatus = onStatus,
        _onNetwork = onNetwork,
        _onGroups = onGroups,
+       _onUrlTest = onUrlTest,
        _shouldRecordLog = shouldRecordLog,
        _onRuntimeLogIssue = onRuntimeLogIssue,
        _now = now ?? DateTime.now;
@@ -111,6 +180,7 @@ class RuntimeEventController {
   final RuntimeRawEventHandler _onStatus;
   final RuntimeRawEventHandler _onNetwork;
   final RuntimeGroupsHandler _onGroups;
+  final RuntimeUrlTestHandler? _onUrlTest;
   final RuntimeLogFilter _shouldRecordLog;
   final RuntimeLogIssueHandler? _onRuntimeLogIssue;
   final DateTime Function() _now;
@@ -156,6 +226,9 @@ class RuntimeEventController {
           ),
         );
         break;
+      case pigeon.runtimeEventUrlTest:
+        _dispatchUrlTest(event);
+        break;
       case pigeon.runtimeEventNativeLog:
         _recordNativeLog(event);
         break;
@@ -167,6 +240,51 @@ class RuntimeEventController {
       default:
         break;
     }
+  }
+
+  void _dispatchUrlTest(Map<String, dynamic> event) {
+    final resultMap = event['result'];
+    final sessionMap = event['session'];
+    RuntimeUrlTestResult? result;
+    RuntimeUrlTestSession? session;
+    if (resultMap is Map) {
+      result = RuntimeUrlTestResult(
+        tag: resultMap['tag']?.toString() ?? '',
+        measuredAtMillis: (resultMap['measuredAtMillis'] as num?)?.toInt() ?? 0,
+        delay: (resultMap['delay'] as num?)?.toInt() ?? 0,
+        status: resultMap['status']?.toString() ?? '',
+        error: resultMap['error']?.toString() ?? '',
+        errorCode: resultMap['errorCode']?.toString() ?? '',
+        revision: (resultMap['revision'] as num?)?.toInt() ?? 0,
+        networkGeneration:
+            (resultMap['networkGeneration'] as num?)?.toInt() ?? 0,
+        sessionId: (resultMap['sessionId'] as num?)?.toInt() ?? 0,
+      );
+    }
+    if (sessionMap is Map) {
+      session = RuntimeUrlTestSession(
+        sessionId: (sessionMap['sessionId'] as num?)?.toInt() ?? 0,
+        groupTag: sessionMap['groupTag']?.toString() ?? '',
+        targetTag: sessionMap['targetTag']?.toString() ?? '',
+        mode: sessionMap['mode']?.toString() ?? '',
+        state: sessionMap['state']?.toString() ?? '',
+        terminalReason: sessionMap['terminalReason']?.toString() ?? '',
+        total: (sessionMap['total'] as num?)?.toInt() ?? 0,
+        completed: (sessionMap['completed'] as num?)?.toInt() ?? 0,
+        available: (sessionMap['available'] as num?)?.toInt() ?? 0,
+        unavailable: (sessionMap['unavailable'] as num?)?.toInt() ?? 0,
+        networkGeneration:
+            (sessionMap['networkGeneration'] as num?)?.toInt() ?? 0,
+      );
+    }
+    if (result == null && session == null) return;
+    _onUrlTest?.call(
+      RuntimeUrlTestEvent(
+        runtimeGeneration: (event['runtimeGeneration'] as num?)?.toInt() ?? 0,
+        result: result,
+        session: session,
+      ),
+    );
   }
 
   void _recordNativeLog(Map<String, dynamic> event) {

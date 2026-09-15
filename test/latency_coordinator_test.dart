@@ -5,7 +5,7 @@ import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 const _testPolicy = LatencyUiPolicy(
-  nativeCommandTimeout: Duration(milliseconds: 80),
+  rpcAckTimeout: Duration(milliseconds: 80),
   initialEventTimeout: Duration(milliseconds: 60),
   eventInactivityTimeout: Duration(milliseconds: 25),
   hardWatchdog: Duration(milliseconds: 500),
@@ -644,7 +644,131 @@ void main() {
       expect(requests.single.groupTag, 'select');
     },
   );
+
+  test(
+    'URLTest v3 publishes progressive results and settles on status',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        expectedTags: () => const ['a', 'b'],
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final completed = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.mode, 'manual');
+      expect(requests.single.deadlineMillis, 0);
+      expect(coordinator.isChecking('a'), isTrue);
+
+      expect(
+        coordinator.handleCoreSession(
+          sessionId: 4,
+          groupTag: 'select',
+          targetTag: '',
+          mode: 'manual',
+          state: 'running',
+          terminalReason: '',
+          available: 0,
+        ),
+        isTrue,
+      );
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 3,
+          revision: 9,
+          available: true,
+        ),
+        isFalse,
+      );
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 4,
+          revision: 10,
+          available: true,
+        ),
+        isTrue,
+      );
+      expect(coordinator.isChecking('a'), isFalse);
+      expect(coordinator.isRunning, isTrue);
+      // A duplicate revision cannot revive or overwrite the row.
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 4,
+          revision: 10,
+          available: false,
+        ),
+        isFalse,
+      );
+      coordinator.handleCoreSession(
+        sessionId: 4,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 1,
+      );
+      expect(await completed, isTrue);
+    },
+  );
+
+  test('URLTest v3 background work is bounded and cancellable', () async {
+    final requests = <LatencyTestRequest>[];
+    final cancellations = <String>[];
+    final coordinator = LatencyCoordinator(
+      runTest: (request) async => requests.add(request),
+      cancelTest: (group, target) async => cancellations.add('$group|$target'),
+      isConnected: () => true,
+      isForeground: () => true,
+      activeOutboundTag: () => 'a',
+      testUrl: () => '',
+      outboundCount: () => 5000,
+      timeoutSeconds: () => 15,
+      concurrency: () => 10,
+      capabilities: _v3Capabilities,
+      onSessionChanged: (_, _, _) {},
+      uiPolicy: _testPolicy,
+    );
+    addTearDown(coordinator.dispose);
+
+    final completed = coordinator.runFull(reason: 'startup');
+    await Future<void>.delayed(Duration.zero);
+    expect(requests.single.mode, 'background');
+    expect(requests.single.concurrency, 4);
+    expect(requests.single.deadlineMillis, 120000);
+    coordinator.cancel();
+    await Future<void>.delayed(Duration.zero);
+    expect(cancellations, ['select|']);
+    expect(await completed, isFalse);
+  });
 }
+
+final _v3Capabilities = LibboxCapabilities.parseOrLegacy('''
+{
+  "api_version": 3,
+  "core_version": "1.15.0-alpha.3-etonify",
+  "supports_targeted_url_test": true,
+  "supports_group_url_test_sessions": true,
+  "supports_structured_probe_errors": true,
+  "supports_url_test_timeout": true,
+  "supports_url_test_concurrency": true,
+  "supports_url_test_deadline": true,
+  "supports_url_test_force": true,
+  "supports_url_test_failover": true,
+  "supports_url_test_delta_stream": true,
+  "supports_url_test_session_status": true,
+  "supports_url_test_result_revision": true,
+  "supports_url_test_network_generation": true,
+  "supports_url_test_exhaustive": true,
+  "supports_url_test_cancel": true,
+  "url_test_completion_model": "session_events"
+}
+''');
 
 LatencyCoordinator _coordinator({
   required LatencyTestRunner runTest,

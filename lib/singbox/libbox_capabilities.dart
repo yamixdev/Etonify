@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum UrlTestCompletionModel { rpcCompletion, groupEvents }
+enum UrlTestCompletionModel { rpcCompletion, groupEvents, sessionEvents }
 
 enum LibboxContractStatus { legacy, compatible, incompatible }
 
@@ -33,6 +33,12 @@ class LibboxCapabilities {
     this.supportsVlessEncryption = false,
     this.supportsUrlTestFailover = false,
     this.supportsUrlTestQueuePriority = false,
+    this.supportsUrlTestDeltaStream = false,
+    this.supportsUrlTestSessionStatus = false,
+    this.supportsUrlTestResultRevision = false,
+    this.supportsUrlTestNetworkGeneration = false,
+    this.supportsUrlTestExhaustive = false,
+    this.supportsUrlTestCancel = false,
     this.xHttpClientOnly = false,
     this.xHttpProfile = '',
     this.xHttpModes = const <String>{},
@@ -47,7 +53,7 @@ class LibboxCapabilities {
   });
 
   static const minimumSupportedApiVersion = 2;
-  static const maximumSupportedApiVersion = 2;
+  static const maximumSupportedApiVersion = 3;
   static const expectedCoreSeries = '1.15.';
 
   static const bundledLegacy = LibboxCapabilities(
@@ -160,6 +166,7 @@ class LibboxCapabilities {
       'url_test_completion_model',
     )) {
       'rpc_completion' => UrlTestCompletionModel.rpcCompletion,
+      'session_events' => UrlTestCompletionModel.sessionEvents,
       _ => UrlTestCompletionModel.groupEvents,
     };
     return LibboxCapabilities(
@@ -198,6 +205,27 @@ class LibboxCapabilities {
         json,
         'supports_url_test_queue_priority',
       ),
+      supportsUrlTestDeltaStream: _readBool(
+        json,
+        'supports_url_test_delta_stream',
+      ),
+      supportsUrlTestSessionStatus: _readBool(
+        json,
+        'supports_url_test_session_status',
+      ),
+      supportsUrlTestResultRevision: _readBool(
+        json,
+        'supports_url_test_result_revision',
+      ),
+      supportsUrlTestNetworkGeneration: _readBool(
+        json,
+        'supports_url_test_network_generation',
+      ),
+      supportsUrlTestExhaustive: _readBool(
+        json,
+        'supports_url_test_exhaustive',
+      ),
+      supportsUrlTestCancel: _readBool(json, 'supports_url_test_cancel'),
       supportsUrlTestUnavailableCheckInterval: _readBool(
         json,
         'supports_url_test_unavailable_check_interval',
@@ -277,6 +305,12 @@ class LibboxCapabilities {
   final bool supportsUrlTestForce;
   final bool supportsUrlTestFailover;
   final bool supportsUrlTestQueuePriority;
+  final bool supportsUrlTestDeltaStream;
+  final bool supportsUrlTestSessionStatus;
+  final bool supportsUrlTestResultRevision;
+  final bool supportsUrlTestNetworkGeneration;
+  final bool supportsUrlTestExhaustive;
+  final bool supportsUrlTestCancel;
   final bool supportsUrlTestUnavailableCheckInterval;
   final bool supportsUrlTestMethod;
   final bool supportsUrlTestInterruptDelayThreshold;
@@ -325,6 +359,16 @@ class LibboxCapabilities {
         !supportsUrlTestForce ||
         !supportsUrlTestFailover) {
       return 'core_urltest_contract_incomplete';
+    }
+    if (apiVersion >= 3 &&
+        (!supportsUrlTestDeltaStream ||
+            !supportsUrlTestSessionStatus ||
+            !supportsUrlTestResultRevision ||
+            !supportsUrlTestNetworkGeneration ||
+            !supportsUrlTestExhaustive ||
+            !supportsUrlTestCancel ||
+            urlTestCompletionModel != UrlTestCompletionModel.sessionEvents)) {
+      return 'core_urltest_v3_contract_incomplete';
     }
     if (!supportsOutboundExternalInfo || !supportsOutboundHttpFetch) {
       return 'core_network_contract_incomplete';
@@ -375,6 +419,12 @@ class LibboxCapabilities {
       supportsUrlTestForce: supportsUrlTestForce,
       supportsUrlTestFailover: supportsUrlTestFailover,
       supportsUrlTestQueuePriority: supportsUrlTestQueuePriority,
+      supportsUrlTestDeltaStream: supportsUrlTestDeltaStream,
+      supportsUrlTestSessionStatus: supportsUrlTestSessionStatus,
+      supportsUrlTestResultRevision: supportsUrlTestResultRevision,
+      supportsUrlTestNetworkGeneration: supportsUrlTestNetworkGeneration,
+      supportsUrlTestExhaustive: supportsUrlTestExhaustive,
+      supportsUrlTestCancel: supportsUrlTestCancel,
       supportsUrlTestUnavailableCheckInterval:
           supportsUrlTestUnavailableCheckInterval,
       supportsUrlTestMethod: supportsUrlTestMethod,

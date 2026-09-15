@@ -342,6 +342,7 @@ class SingboxRuntime {
     int concurrency = 0,
     int deadlineMillis = 10000,
     bool force = true,
+    String mode = 'background',
   }) {
     if (!Platform.isAndroid) {
       return Future<void>.value();
@@ -357,8 +358,19 @@ class SingboxRuntime {
         concurrency: concurrency,
         deadlineMillis: deadlineMillis,
         force: force,
+        mode: mode,
       ),
     );
+  }
+
+  Future<void> cancelUrlTest({
+    required String groupTag,
+    String targetOutboundTag = '',
+  }) {
+    if (!Platform.isAndroid) {
+      return Future<void>.value();
+    }
+    return _hostApi.cancelUrlTest(groupTag, targetOutboundTag);
   }
 
   Future<Map<String, dynamic>> status() async {

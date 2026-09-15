@@ -353,6 +353,7 @@ class ProxiesPage extends StatefulWidget {
     this.activeProxy,
     this.activeProxyHideIp = false,
     required this.connected,
+    this.urlTestInFlight = false,
     this.hapticEnabled = true,
     this.speedBytesPerSecond = 0,
     this.trafficBytes = 0,
@@ -393,6 +394,7 @@ class ProxiesPage extends StatefulWidget {
   final AppProxySummary? activeProxy;
   final bool activeProxyHideIp;
   final bool connected;
+  final bool urlTestInFlight;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -941,8 +943,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
                 bottom: footerHeight + 24,
                 child: FloatingActionButton.small(
                   onPressed: () => widget.onUrlTest(),
-                  tooltip: l10n.urlTestTitle,
-                  child: const Icon(FluentIcons.flash_24_filled),
+                  tooltip: widget.urlTestInFlight
+                      ? l10n.cancel
+                      : l10n.urlTestTitle,
+                  child: Icon(
+                    widget.urlTestInFlight
+                        ? FluentIcons.dismiss_24_filled
+                        : FluentIcons.flash_24_filled,
+                  ),
                 ),
               ),
           ],
@@ -1015,6 +1023,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     l10n: l10n,
                     sort: _sort,
                     connected: widget.connected,
+                    urlTestInFlight: widget.urlTestInFlight,
                     hapticEnabled: widget.hapticEnabled,
                     speedBytesPerSecond: widget.speedBytesPerSecond,
                     trafficBytes: widget.trafficBytes,

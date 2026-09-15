@@ -9,7 +9,7 @@ enum LatencySessionPhase { idle, startingRpc, collectingEvents, settled }
 
 class LatencyUiPolicy {
   const LatencyUiPolicy({
-    this.nativeCommandTimeout = const Duration(seconds: 5),
+    this.rpcAckTimeout = const Duration(seconds: 5),
     this.initialEventTimeout = const Duration(seconds: 12),
     this.eventInactivityTimeout = const Duration(seconds: 12),
     this.hardWatchdog = const Duration(seconds: 125),
@@ -17,7 +17,7 @@ class LatencyUiPolicy {
 
   /// These values bound UI state only. They never delay command dispatch or
   /// fresh native results.
-  final Duration nativeCommandTimeout;
+  final Duration rpcAckTimeout;
   final Duration initialEventTimeout;
   final Duration eventInactivityTimeout;
   final Duration hardWatchdog;
@@ -34,6 +34,7 @@ class LatencyTestRequest {
     this.concurrency = 0,
     this.deadlineMillis = 10000,
     this.force = true,
+    this.mode = 'background',
   });
 
   final String groupTag;
@@ -45,9 +46,12 @@ class LatencyTestRequest {
   final int concurrency;
   final int deadlineMillis;
   final bool force;
+  final String mode;
 }
 
 typedef LatencyTestRunner = Future<void> Function(LatencyTestRequest request);
+typedef LatencyCancelRunner =
+    Future<void> Function(String groupTag, String targetOutboundTag);
 typedef LatencyBoolReader = bool Function();
 typedef LatencyStringReader = String Function();
 typedef LatencyIntReader = int Function();
@@ -70,6 +74,7 @@ class _ActiveTargetCheck {
 class LatencyCoordinator {
   LatencyCoordinator({
     required LatencyTestRunner runTest,
+    LatencyCancelRunner? cancelTest,
     required LatencyBoolReader isConnected,
     required LatencyBoolReader isForeground,
     required LatencyStringReader activeOutboundTag,
@@ -85,6 +90,7 @@ class LatencyCoordinator {
     LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
     this.uiPolicy = const LatencyUiPolicy(),
   }) : _runTest = runTest,
+       _cancelTest = cancelTest,
        _isConnected = isConnected,
        _isForeground = isForeground,
        _activeOutboundTag = activeOutboundTag,
@@ -102,11 +108,12 @@ class LatencyCoordinator {
   static const _defaultTimeoutMillis = 15000;
   static const _minimumTimeoutMillis = 500;
   static const _maximumTimeoutMillis = 30000;
-  static const _defaultConcurrency = 8;
+  static const _defaultConcurrency = 10;
   static const _maximumConcurrency = 16;
   static const _maximumDeadlineMillis = 120000;
 
   final LatencyTestRunner _runTest;
+  final LatencyCancelRunner? _cancelTest;
   final LatencyBoolReader _isConnected;
   final LatencyBoolReader _isForeground;
   final LatencyStringReader _activeOutboundTag;
@@ -141,10 +148,19 @@ class LatencyCoordinator {
   Set<String> _sessionExpectedTags = const <String>{};
   final Map<String, int> _acceptedEventTimes = <String, int>{};
   final Set<String> _successfulTags = <String>{};
+  final Map<String, int> _acceptedResultRevisions = <String, int>{};
   final Map<String, _ActiveTargetCheck> _activeTargetChecks =
       <String, _ActiveTargetCheck>{};
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
+  int _nativeSessionId = 0;
+  String _sessionMode = '';
+
+  bool get _usesSessionEvents =>
+      _capabilities.urlTestCompletionModel ==
+          UrlTestCompletionModel.sessionEvents &&
+      _capabilities.supportsUrlTestDeltaStream &&
+      _capabilities.supportsUrlTestSessionStatus;
 
   bool get isRunning =>
       _phase == LatencySessionPhase.startingRpc ||
@@ -200,7 +216,12 @@ class LatencyCoordinator {
   }
 
   Future<bool> runFull({required String reason}) {
-    return _runGroupSession(kind: LatencySessionKind.full, reason: reason);
+    final mode = reason.startsWith('manual') ? 'manual' : 'background';
+    return _runGroupSession(
+      kind: LatencySessionKind.full,
+      reason: reason,
+      mode: mode,
+    );
   }
 
   Future<bool> runTarget({
@@ -240,6 +261,7 @@ class LatencyCoordinator {
         timeoutMillis: _configuredTimeoutMillis,
         concurrency: 1,
         deadlineMillis: _targetDeadlineMillis,
+        mode: 'targeted',
       ),
     );
   }
@@ -280,8 +302,9 @@ class LatencyCoordinator {
           concurrency: 1,
           deadlineMillis: _targetDeadlineMillis,
           force: false,
+          mode: 'targeted',
         ),
-      ).timeout(uiPolicy.nativeCommandTimeout);
+      ).timeout(uiPolicy.rpcAckTimeout);
       return _isActiveGeneration(generation);
     } catch (error) {
       AppLogStore.warning(
@@ -374,6 +397,88 @@ class LatencyCoordinator {
     return true;
   }
 
+  /// Accepts a URLTest v3 result by monotonic native revision. Unlike the
+  /// legacy group stream, this path never compares wall-clock seconds.
+  bool handleCoreResult({
+    required String tag,
+    required int sessionId,
+    required int revision,
+    required bool available,
+  }) {
+    final normalizedTag = tag.trim();
+    if (!_usesSessionEvents ||
+        normalizedTag.isEmpty ||
+        sessionId <= 0 ||
+        sessionId != _nativeSessionId ||
+        revision <= 0) {
+      return false;
+    }
+    if (revision <= (_acceptedResultRevisions[normalizedTag] ?? 0)) {
+      return false;
+    }
+    _acceptedResultRevisions[normalizedTag] = revision;
+    final activeCheck = _activeTargetChecks.remove(normalizedTag);
+    activeCheck?.timeoutTimer?.cancel();
+    if (activeCheck != null) {
+      _onSessionChanged(isRunning, _kind, _targetTag);
+    }
+    if (!isRunning ||
+        (_sessionExpectedTags.isNotEmpty &&
+            !_sessionExpectedTags.contains(normalizedTag))) {
+      return activeCheck != null;
+    }
+    _acceptedEventTimes[normalizedTag] = revision;
+    if (available) {
+      _successfulTags.add(normalizedTag);
+    } else {
+      _successfulTags.remove(normalizedTag);
+    }
+    _phase = LatencySessionPhase.collectingEvents;
+    return true;
+  }
+
+  bool handleCoreSession({
+    required int sessionId,
+    required String groupTag,
+    required String targetTag,
+    required String mode,
+    required String state,
+    required String terminalReason,
+    required int available,
+  }) {
+    if (!_usesSessionEvents || !isRunning || groupTag != 'select') {
+      return false;
+    }
+    if (_kind == LatencySessionKind.targeted &&
+        targetTag.trim() != _targetTag) {
+      return false;
+    }
+    if (_kind == LatencySessionKind.full && mode != _sessionMode) {
+      return false;
+    }
+    if (_nativeSessionId == 0) {
+      if (state != 'running' || sessionId <= 0) {
+        return false;
+      }
+      _nativeSessionId = sessionId;
+    }
+    if (sessionId <= 0 || sessionId != _nativeSessionId) {
+      return false;
+    }
+    if (state == 'running') {
+      _phase = LatencySessionPhase.collectingEvents;
+      return true;
+    }
+    if (state != 'completed' && state != 'cancelled') {
+      return false;
+    }
+    _settleCurrent(
+      success: available > 0 || _successfulTags.isNotEmpty,
+      reason: terminalReason.isEmpty ? state : terminalReason,
+    );
+    return true;
+  }
+
   void cancel() {
     _generation++;
     for (final check in _activeTargetChecks.values) {
@@ -391,6 +496,9 @@ class LatencyCoordinator {
     _sessionExpectedTags = const <String>{};
     _acceptedEventTimes.clear();
     _successfulTags.clear();
+    _acceptedResultRevisions.clear();
+    _nativeSessionId = 0;
+    _sessionMode = '';
     final result = _sessionResult;
     _sessionResult = null;
     if (result != null && !result.isCompleted) {
@@ -398,6 +506,12 @@ class LatencyCoordinator {
     }
     if (wasRunning) {
       _onSessionChanged(false, previousKind, previousTarget);
+      if (_usesSessionEvents && _capabilities.supportsUrlTestCancel) {
+        final cancelTest = _cancelTest;
+        if (cancelTest != null) {
+          unawaited(cancelTest('select', previousTarget));
+        }
+      }
     }
   }
 
@@ -452,25 +566,31 @@ class LatencyCoordinator {
         .toInt();
   }
 
-  LatencyTestRequest _groupRequest() {
+  LatencyTestRequest _groupRequest(String mode) {
+    final manual = mode == 'manual' && _capabilities.supportsUrlTestExhaustive;
+    final backgroundConcurrency = _usesSessionEvents && !manual;
     return LatencyTestRequest(
       groupTag: 'select',
       priorityOutboundTag: _activeOutboundTag().trim(),
       url: _testUrl(),
       timeoutMillis: _configuredTimeoutMillis,
-      concurrency: _configuredConcurrency,
-      deadlineMillis: _fullDeadlineMillis,
+      concurrency: backgroundConcurrency
+          ? _configuredConcurrency.clamp(1, 4)
+          : _configuredConcurrency,
+      deadlineMillis: manual ? 0 : _fullDeadlineMillis,
+      mode: manual ? 'manual' : 'background',
     );
   }
 
   Future<bool> _runGroupSession({
     required LatencySessionKind kind,
     required String reason,
+    required String mode,
   }) => _runSession(
     kind: kind,
     reason: reason,
     targetTag: '',
-    request: _groupRequest(),
+    request: _groupRequest(mode),
   );
 
   Future<bool> _runSession({
@@ -506,6 +626,9 @@ class LatencyCoordinator {
               .toSet();
     _acceptedEventTimes.clear();
     _successfulTags.clear();
+    _acceptedResultRevisions.clear();
+    _nativeSessionId = 0;
+    _sessionMode = request.mode;
     _phase = LatencySessionPhase.startingRpc;
     _kind = kind;
     _targetTag = targetTag;
@@ -522,21 +645,23 @@ class LatencyCoordinator {
     );
 
     // Allow the coalesced result stream to drain after the native deadline.
-    final nativeBudget =
-        Duration(milliseconds: request.deadlineMillis) +
-        const Duration(seconds: 5);
-    final sessionBudget =
-        capabilities.supportsUrlTestDeadline &&
-            nativeBudget < uiPolicy.hardWatchdog
-        ? nativeBudget
-        : uiPolicy.hardWatchdog;
-    _watchdogTimer = Timer(sessionBudget, () {
-      if (generation != _generation) return;
-      _settleCurrent(
-        success: _successfulTags.isNotEmpty,
-        reason: 'hard_watchdog',
-      );
-    });
+    if (!_usesSessionEvents || request.mode != 'manual') {
+      final nativeBudget =
+          Duration(milliseconds: request.deadlineMillis) +
+          const Duration(seconds: 5);
+      final sessionBudget =
+          capabilities.supportsUrlTestDeadline &&
+              nativeBudget < uiPolicy.hardWatchdog
+          ? nativeBudget
+          : uiPolicy.hardWatchdog;
+      _watchdogTimer = Timer(sessionBudget, () {
+        if (generation != _generation) return;
+        _settleCurrent(
+          success: _successfulTags.isNotEmpty,
+          reason: 'hard_watchdog',
+        );
+      });
+    }
     unawaited(
       _invokeNativeTest(
         generation: generation,
@@ -571,7 +696,7 @@ class LatencyCoordinator {
     );
 
     try {
-      await nativeCall.timeout(uiPolicy.nativeCommandTimeout);
+      await nativeCall.timeout(uiPolicy.rpcAckTimeout);
       if (!_isActiveGeneration(generation)) return;
       if (_sessionOperationGeneration != _operationGeneration() ||
           !_isConnected() ||
@@ -580,6 +705,9 @@ class LatencyCoordinator {
         return;
       }
       _phase = LatencySessionPhase.collectingEvents;
+      if (_usesSessionEvents) {
+        return;
+      }
       if (_acceptedEventTimes.isNotEmpty) {
         return;
       }
@@ -600,7 +728,7 @@ class LatencyCoordinator {
       AppLogStore.warning(
         'latency',
         'native URLTest command timed out kind=${kind.name} reason=$reason '
-            'uiTimeoutMs=${uiPolicy.nativeCommandTimeout.inMilliseconds}',
+            'rpcAckTimeoutMs=${uiPolicy.rpcAckTimeout.inMilliseconds}',
       );
       _settleCurrent(success: false, reason: 'native_command_timeout');
     } catch (error, stackTrace) {
@@ -645,6 +773,8 @@ class LatencyCoordinator {
     _sessionExpectedTags = const <String>{};
     _acceptedEventTimes.clear();
     _successfulTags.clear();
+    _nativeSessionId = 0;
+    _sessionMode = '';
     _sessionResult = null;
     _onSessionChanged(false, previousKind, previousTarget);
     if (result != null && !result.isCompleted) {

@@ -86,6 +86,7 @@ void main() {
     Map<String, dynamic>? status;
     Map<String, dynamic>? network;
     RuntimeGroupsEvent? groups;
+    RuntimeUrlTestEvent? urlTest;
 
     final controller = RuntimeEventController(
       events: const Stream.empty(),
@@ -93,6 +94,7 @@ void main() {
       onStatus: (event) => status = event,
       onNetwork: (event) => network = event,
       onGroups: (event) => groups = event,
+      onUrlTest: (event) => urlTest = event,
       shouldRecordLog: (_) => true,
     );
 
@@ -107,6 +109,19 @@ void main() {
         {'tag': 'select'},
       ],
     });
+    controller.dispatch({
+      'type': 'urlTest',
+      'runtimeGeneration': 4,
+      'result': {
+        'tag': 'vless-1',
+        'measuredAtMillis': 123456,
+        'delay': 91,
+        'status': 'available',
+        'revision': 8,
+        'networkGeneration': 9,
+        'sessionId': 3,
+      },
+    });
 
     expect(state?.running, isTrue);
     expect(state?.hasError, isFalse);
@@ -117,6 +132,10 @@ void main() {
     ]);
     expect(groups?.runtimeGeneration, 4);
     expect(groups?.networkGeneration, 9);
+    expect(urlTest?.runtimeGeneration, 4);
+    expect(urlTest?.result?.tag, 'vless-1');
+    expect(urlTest?.result?.revision, 8);
+    expect(urlTest?.result?.networkGeneration, 9);
   });
 
   test('nativeLog normalizes warn and records through AppLogStore', () {

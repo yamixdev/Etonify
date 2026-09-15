@@ -14,6 +14,7 @@ import com.etonify.meow_client.generated.runtimeEventNativeLog
 import com.etonify.meow_client.generated.runtimeEventNetwork
 import com.etonify.meow_client.generated.runtimeEventState
 import com.etonify.meow_client.generated.runtimeEventStatus
+import com.etonify.meow_client.generated.runtimeEventUrlTest
 import io.flutter.plugin.common.EventChannel
 import io.nekohasekai.libbox.CommandClient
 import io.nekohasekai.libbox.CommandClientHandler
@@ -25,6 +26,7 @@ import io.nekohasekai.libbox.OutboundGroupIterator
 import io.nekohasekai.libbox.OutboundGroupItemIterator
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
+import io.nekohasekai.libbox.URLTestUpdate
 import org.json.JSONObject
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
@@ -152,6 +154,7 @@ object SingboxController {
 
     private fun createCommandClientHandler(epoch: Long) = object : CommandClientHandler {
         private val groupResults = GroupResultCache()
+        private val urlTestSessionNetworkGenerations = HashMap<Long, Long>()
         override fun connected() {
             handleCommandClientConnected(epoch)
         }
@@ -291,6 +294,62 @@ object SingboxController {
                     "networkGeneration" to eventNetworkGeneration,
                 ),
             )
+        }
+
+        override fun writeURLTestUpdate(message: URLTestUpdate?) {
+            if (message == null || !commandClientLifecycle.acceptsEvents(epoch)) return
+            val payload = mutableMapOf<String, Any?>(
+                "type" to runtimeEventUrlTest,
+                "runtimeGeneration" to activeRuntimeGeneration,
+            )
+            message.result?.let { result ->
+                val eventNetworkGeneration =
+                    urlTestSessionNetworkGenerations[result.sessionID] ?: networkGeneration.get()
+                payload["result"] = mapOf(
+                    "tag" to result.tag,
+                    "measuredAtMillis" to result.measuredAtMillis,
+                    "delay" to result.delay,
+                    "status" to result.status,
+                    "error" to result.error,
+                    "errorCode" to result.errorCode,
+                    "revision" to result.revision,
+                    "networkGeneration" to eventNetworkGeneration,
+                    "coreNetworkGeneration" to result.networkGeneration,
+                    "sessionId" to result.sessionID,
+                )
+                MeowBoxService.publishNotificationUrlTestResult(
+                    tag = result.tag,
+                    delayMillis = result.delay.toLong(),
+                    timeSeconds = result.measuredAtMillis / 1_000L,
+                    status = result.status,
+                )
+            }
+            message.session?.let { session ->
+                val eventNetworkGeneration = when (session.state) {
+                    "running" -> urlTestSessionNetworkGenerations.getOrPut(session.sessionID) {
+                        networkGeneration.get()
+                    }
+                    else -> urlTestSessionNetworkGenerations[session.sessionID] ?: networkGeneration.get()
+                }
+                payload["session"] = mapOf(
+                    "sessionId" to session.sessionID,
+                    "groupTag" to session.outboundTag,
+                    "targetTag" to session.targetOutboundTag,
+                    "mode" to session.mode,
+                    "state" to session.state,
+                    "terminalReason" to session.terminalReason,
+                    "total" to session.total,
+                    "completed" to session.completed,
+                    "available" to session.available,
+                    "unavailable" to session.unavailable,
+                    "networkGeneration" to eventNetworkGeneration,
+                    "coreNetworkGeneration" to session.networkGeneration,
+                )
+                if (session.state == "completed" || session.state == "cancelled") {
+                    urlTestSessionNetworkGenerations.remove(session.sessionID)
+                }
+            }
+            if (payload.size > 2) emit(payload)
         }
 
         override fun writeOutbounds(message: OutboundGroupItemIterator?) {
@@ -776,6 +835,7 @@ object SingboxController {
                     addCommand(Libbox.CommandGroup)
                     addCommand(Libbox.CommandLog)
                     addCommand(Libbox.CommandStatus)
+                    addCommand(Libbox.CommandURLTest)
                     // CommandClientOptions carries a Go time.Duration, i.e.
                     // nanoseconds, not milliseconds. Passing 1_000 here used
                     // to sample status every microsecond, so the byte delta was
@@ -908,6 +968,7 @@ object SingboxController {
         concurrency: Int,
         deadlineMillis: Int,
         force: Boolean,
+        mode: String = "background",
         callback: (Result<Unit>) -> Unit,
     ) {
         interactiveUrlTestUntilMs = maxOf(interactiveUrlTestUntilMs,
@@ -924,7 +985,7 @@ object SingboxController {
                     "stale runtime before URL test"
                 }
                 withStandaloneCommandClient { client ->
-                    client.urlTestWithOptions(
+                    client.urlTestWithMode(
                         groupTag,
                         targetOutboundTag,
                         priorityOutboundTag,
@@ -934,6 +995,7 @@ object SingboxController {
                         concurrency,
                         deadlineMillis,
                         force,
+                        mode,
                     )
                 }
             }
@@ -946,6 +1008,25 @@ object SingboxController {
                     if (stale) "debug" else "error",
                     "libbox urlTest failed group=$groupTag stale=$stale error=${it.message}",
                 )
+            }
+            mainHandler.post { callback(result.map { Unit }) }
+        }
+    }
+
+    fun cancelUrlTest(
+        groupTag: String,
+        targetOutboundTag: String,
+        callback: (Result<Unit>) -> Unit,
+    ) {
+        val operationGeneration = activeRuntimeGeneration
+        commandExecutor.execute {
+            val result = runCatching {
+                check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
+                    "stale runtime before URL test cancellation"
+                }
+                withStandaloneCommandClient { client ->
+                    client.cancelURLTest(groupTag, targetOutboundTag)
+                }
             }
             mainHandler.post { callback(result.map { Unit }) }
         }

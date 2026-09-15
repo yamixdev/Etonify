@@ -12,6 +12,7 @@ const String runtimeEventNativeLog = 'nativeLog';
 const String runtimeEventNetwork = 'network';
 const String runtimeEventState = 'state';
 const String runtimeEventStatus = 'status';
+const String runtimeEventUrlTest = 'urlTest';
 
 // Wire values used by Flutter settings and the Android foreground service.
 const String notificationTrafficModeSpeed = 'speed';
@@ -70,6 +71,7 @@ class UrlTestRequestMessage {
     required this.concurrency,
     required this.deadlineMillis,
     required this.force,
+    required this.mode,
   });
 
   String groupTag;
@@ -81,6 +83,7 @@ class UrlTestRequestMessage {
   int concurrency;
   int deadlineMillis;
   bool force;
+  String mode;
 }
 
 class VpnNotificationPresentationMessage {
@@ -305,6 +308,9 @@ abstract class SingboxHostApi {
 
   @async
   void urlTest(UrlTestRequestMessage request);
+
+  @async
+  void cancelUrlTest(String groupTag, String targetOutboundTag);
 
   @async
   Map<String?, Object?> status();

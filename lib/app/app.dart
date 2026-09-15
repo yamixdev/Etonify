@@ -2046,7 +2046,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         concurrency: request.concurrency,
         deadlineMillis: request.deadlineMillis,
         force: request.force,
+        mode: request.mode,
       ),
+      cancelTest: (groupTag, targetOutboundTag) =>
+          _singboxRuntime.cancelUrlTest(
+            groupTag: groupTag,
+            targetOutboundTag: targetOutboundTag,
+          ),
       isConnected: () => _connected,
       isForeground: () => _foregroundLifecycleActive,
       activeOutboundTag: () => _currentResolvedActiveOutboundTag() ?? '',
@@ -2068,6 +2074,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
+        if (!running && _connected && _foregroundLifecycleActive) {
+          _schedulePeriodicGroupUrlTest();
+        }
       },
     );
     _configCoordinator = SingboxConfigCoordinator(
@@ -2105,6 +2114,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       onStatus: _appTrafficMonitor.handleTrafficStatusEvent,
       onNetwork: _handleRuntimeNetworkEvent,
       onGroups: _applyGroupUpdates,
+      onUrlTest: _handleRuntimeUrlTestEvent,
       shouldRecordLog: _shouldRecordSingBoxLog,
       onRuntimeLogIssue: _handleRuntimeLogIssue,
     );
@@ -3972,6 +3982,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  void _schedulePeriodicGroupUrlTest() {
+    if (!_latencyCoordinator.capabilities.supportsUrlTestSessionStatus) {
+      return;
+    }
+    _scheduleGroupUrlTest(
+      reason: 'periodic',
+      delay: Duration(seconds: max(15, _urlTestIntervalSeconds)),
+    );
+  }
+
   Future<void> _addProxyChain(String detourTag, String targetRef) async {
     final subscription = _activeSubscription;
     if (subscription == null) {
@@ -5398,10 +5418,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     if (_urlTestInFlight) {
-      AppLogStore.debug(
-        'latency',
-        'full URLTest skipped: native session is still producing results',
-      );
+      if (haptic) {
+        _haptic();
+      }
+      AppLogStore.debug('latency', 'active URLTest cancelled by user');
+      _latencyCoordinator.cancel();
       return;
     }
     if (haptic) {
@@ -5916,9 +5937,60 @@ class _MeowClientState extends ConsumerState<MeowClient>
         reason: 'default_interface_changed',
         networkGeneration: networkGeneration,
       );
+      _scheduleGroupUrlTest(
+        reason: 'network_changed',
+        delay: const Duration(milliseconds: 2500),
+      );
       return;
     }
     _networkRecovery.cancelDecision();
+  }
+
+  void _handleRuntimeUrlTestEvent(RuntimeUrlTestEvent event) {
+    if (!mounted || !_connected || _runtimeTransitionInProgress) return;
+    final currentRuntimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
+    if (event.runtimeGeneration <= 0 ||
+        event.runtimeGeneration != currentRuntimeGeneration) {
+      return;
+    }
+    final result = event.result;
+    if (result != null &&
+        result.networkGeneration == _networkInterfaceGeneration) {
+      final affectedTags = _proxyRuntime.applyUrlTestResult(
+        tag: result.tag,
+        measuredAtMillis: result.measuredAtMillis,
+        delay: result.delay,
+        status: result.status,
+        error: result.error,
+        revision: result.revision,
+      );
+      if (affectedTags.isNotEmpty) {
+        _latencyCoordinator.handleCoreResult(
+          tag: result.tag,
+          sessionId: result.sessionId,
+          revision: result.revision,
+          available:
+              result.delay > 0 &&
+              result.status.toLowerCase() !=
+                  ProxyRuntimeController.urlTestStatusUnavailable,
+        );
+        _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
+        unawaited(_syncQuickSettingsTileLabel());
+      }
+    }
+    final session = event.session;
+    if (session != null &&
+        session.networkGeneration == _networkInterfaceGeneration) {
+      _latencyCoordinator.handleCoreSession(
+        sessionId: session.sessionId,
+        groupTag: session.groupTag,
+        targetTag: session.targetTag,
+        mode: session.mode,
+        state: session.state,
+        terminalReason: session.terminalReason,
+        available: session.available,
+      );
+    }
   }
 
   Future<void> _syncRuntimeState() async {
@@ -6641,6 +6713,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // Diagnostics are not a startup requirement. Let real application traffic
     // use the newly established TUN before opening probe/provider connections.
     _scheduleActiveOutboundIpRefresh(delay: const Duration(seconds: 5));
+    _scheduleGroupUrlTest(
+      reason: 'runtime_diagnostics_ready',
+      delay: const Duration(milliseconds: 1200),
+    );
     final configuredTimeoutSeconds =
         _activeSubscription?.urlTestConfig.timeoutSeconds ??
         _urlTestTimeoutSeconds;
@@ -6665,6 +6741,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       AppLogStore.debug(
         'latency',
         'startup URLTest deadline skipped because runtime is not ready',
+      );
+      return;
+    }
+    if (_latencyCoordinator.capabilities.urlTestCompletionModel ==
+        UrlTestCompletionModel.sessionEvents) {
+      AppLogStore.debug(
+        'latency',
+        'startup URLTest deadline left untested servers pending',
       );
       return;
     }
@@ -7113,6 +7197,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         activeProxy: _displayProxy,
         hideActiveProxyIp: _hideServerIp,
         connected: _connected,
+        urlTestInFlight: _urlTestInFlight,
         hapticEnabled: _hapticEnabled,
         trafficAvailable: _appTrafficMonitor.trafficAvailable,
         downlinkBytesPerSecond: _appTrafficMonitor.downlinkBytesPerSecond,

@@ -101,6 +101,7 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.l10n,
     required this.sort,
     required this.connected,
+    required this.urlTestInFlight,
     required this.hapticEnabled,
     required this.speedBytesPerSecond,
     required this.trafficBytes,
@@ -120,6 +121,7 @@ class _ProxySheetHeader extends StatelessWidget {
   final AppLocalizations l10n;
   final ProxySort sort;
   final bool connected;
+  final bool urlTestInFlight;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -261,8 +263,14 @@ class _ProxySheetHeader extends StatelessWidget {
                         if (connected)
                           IconButton(
                             onPressed: () => onUrlTest(),
-                            tooltip: l10n.urlTestTitle,
-                            icon: const Icon(FluentIcons.flash_24_filled),
+                            tooltip: urlTestInFlight
+                                ? l10n.cancel
+                                : l10n.urlTestTitle,
+                            icon: Icon(
+                              urlTestInFlight
+                                  ? FluentIcons.dismiss_24_filled
+                                  : FluentIcons.flash_24_filled,
+                            ),
                           ),
                         IconButton(
                           tooltip: l10n.sort,

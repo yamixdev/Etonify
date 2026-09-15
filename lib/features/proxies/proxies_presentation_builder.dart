@@ -15,6 +15,7 @@ class ProxiesPresentationData {
     required this.activeProxy,
     required this.hideActiveProxyIp,
     required this.connected,
+    this.urlTestInFlight = false,
     required this.hapticEnabled,
     required this.trafficAvailable,
     required this.downlinkBytesPerSecond,
@@ -33,6 +34,7 @@ class ProxiesPresentationData {
   final AppProxySummary? activeProxy;
   final bool hideActiveProxyIp;
   final bool connected;
+  final bool urlTestInFlight;
   final bool hapticEnabled;
   final bool trafficAvailable;
   final int downlinkBytesPerSecond;
@@ -111,6 +113,7 @@ class ProxiesPresentationBuilder {
       activeProxy: data.activeProxy,
       activeProxyHideIp: data.hideActiveProxyIp,
       connected: data.connected,
+      urlTestInFlight: data.urlTestInFlight,
       hapticEnabled: data.hapticEnabled,
       speedBytesPerSecond: data.speedBytesPerSecond,
       trafficBytes: data.trafficBytes,
