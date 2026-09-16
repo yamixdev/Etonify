@@ -189,7 +189,7 @@ class LatencyCoordinator {
       return _targetTag == tag && !_acceptedEventTimes.containsKey(tag);
     }
     if (_sessionExpectedTags.isEmpty) {
-      return true;
+      return !_acceptedEventTimes.containsKey(tag);
     }
     return _sessionExpectedTags.contains(tag) &&
         !_acceptedEventTimes.containsKey(tag);

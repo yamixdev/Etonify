@@ -625,7 +625,7 @@ void main() {
       markAllServersRussia: false,
     ).buildPlan();
 
-    expect(plan.config['global'], {'urltest_concurrency_limit': 8});
+    expect(plan.config['global'], {'urltest_concurrency_limit': 9});
     final outbounds = (plan.config['outbounds'] as List)
         .cast<Map<String, dynamic>>();
     final selector = outbounds.firstWhere((entry) => entry['tag'] == 'select');
@@ -639,7 +639,7 @@ void main() {
     expect(lowest['outbounds'], ['group-auto', 'standalone']);
     expect(lowest['timeout'], '8s');
     expect(lowest['idle_timeout'], '77s');
-    expect(lowest['concurrency'], 8);
+    expect(lowest['concurrency'], 9);
     expect(lowest['tolerance'], 1);
     expect(lowest['interrupt_exist_connections'], isFalse);
     expect(lowest['interrupt_delay_threshold'], 300);
@@ -657,7 +657,7 @@ void main() {
     expect(groupUrltest['interval'], '77s');
     expect(groupUrltest['idle_timeout'], '77s');
     expect(groupUrltest['timeout'], '8s');
-    expect(groupUrltest['concurrency'], 8);
+    expect(groupUrltest['concurrency'], 9);
     expect(groupUrltest['unavailable_check_interval'], '120s');
     expect(groupUrltest['tolerance'], 1);
     expect(groupUrltest['interrupt_exist_connections'], isFalse);
@@ -859,7 +859,7 @@ void main() {
     expect(groupUrltest['interval'], '3600s');
     expect(groupUrltest['idle_timeout'], '3600s');
     expect(groupUrltest['timeout'], '16s');
-    expect(groupUrltest['concurrency'], 8);
+    expect(groupUrltest['concurrency'], 10);
     expect(groupUrltest['unavailable_check_interval'], '120s');
     expect(groupUrltest['tolerance'], 1);
     expect(plan.urlTestOutboundTags, ['leaf-1', 'leaf-2']);

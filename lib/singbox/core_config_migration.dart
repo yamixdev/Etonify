@@ -189,7 +189,7 @@ class CoreConfigMigration {
     final timeout = state.urlTestTimeoutSeconds <= 0
         ? 15
         : state.urlTestTimeoutSeconds;
-    final concurrency = state.urlTestConcurrency.clamp(1, 8).toInt();
+    final concurrency = state.urlTestConcurrency.clamp(1, 10).toInt();
     final unavailable = state.urlTestUnavailableCheckIntervalSeconds
         .clamp(120, 3600)
         .toInt();

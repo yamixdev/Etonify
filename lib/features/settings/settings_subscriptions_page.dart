@@ -68,7 +68,8 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
     _timeoutSeconds = (widget.currentConfig.timeoutSeconds ?? 15)
         .clamp(1, 60)
         .toInt();
-    _concurrency = (widget.currentConfig.concurrency ?? 8).clamp(1, 8).toInt();
+    _concurrency =
+        (widget.currentConfig.concurrency ?? 10).clamp(1, 10).toInt();
     _unavailableCheckIntervalSeconds =
         (widget.currentConfig.unavailableCheckIntervalSeconds ?? 120)
             .clamp(120, 3600)
@@ -294,8 +295,8 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
                     description: l10n.urlTestConcurrencySubtitle,
                     currentValue: _concurrency,
                     min: 1,
-                    max: 8,
-                    divisions: 7,
+                    max: 10,
+                    divisions: 9,
                     valueLabel: (value) => '$value',
                     onSelected: (value) {
                       setState(() => _concurrency = value);

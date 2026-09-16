@@ -71,7 +71,7 @@ class _SettingsUrlTestPageState extends State<SettingsUrlTestPage> {
         url: url.isEmpty ? null : url,
         intervalSeconds: interval,
         timeoutSeconds: timeout,
-        concurrency: concurrency?.clamp(1, 8),
+        concurrency: concurrency?.clamp(1, 10),
         unavailableCheckIntervalSeconds: unavailableCheckInterval?.clamp(
           120,
           3600,
@@ -196,7 +196,7 @@ class _SettingsUrlTestPageState extends State<SettingsUrlTestPage> {
                     decoration: InputDecoration(
                       labelText: l10n.urlTestConcurrencyTitle,
                       helperText: l10n.urlTestConcurrencySubtitle,
-                      hintText: '8',
+                      hintText: '10',
                     ),
                   ),
                 ],

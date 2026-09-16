@@ -54,6 +54,41 @@ void main() {
   );
 
   test(
+    'unknown expected tags stop checking each proxy as its result arrives',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const <String>[],
+      );
+      addTearDown(coordinator.dispose);
+
+      final result = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(coordinator.isChecking('proxy-a'), isTrue);
+      expect(coordinator.isChecking('proxy-b'), isTrue);
+
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      expect(
+        coordinator.handleGroupEvent(
+          tag: 'proxy-a',
+          timeSeconds: now,
+          available: true,
+        ),
+        isTrue,
+      );
+
+      expect(coordinator.isChecking('proxy-a'), isFalse);
+      expect(coordinator.isChecking('proxy-b'), isTrue);
+      expect(coordinator.isRunning, isTrue);
+
+      coordinator.cancel();
+      expect(await result, isFalse);
+    },
+  );
+
+  test(
     'parallel targeted check executes concurrently during full session without blocking',
     () async {
       final calls = <LatencyTestRequest>[];

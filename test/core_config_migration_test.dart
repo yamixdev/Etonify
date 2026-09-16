@@ -159,7 +159,7 @@ void main() {
       'https://dns.cloudflare.com/dns-query',
     );
     expect(result.state.urlTestUrl, defaultUrlTestUrl);
-    expect(result.state.urlTestConcurrency, 8);
+    expect(result.state.urlTestConcurrency, 10);
     expect(result.state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(result.state.experimentalFakeIpEnabled, isFalse);
     expect(result.state.splitRoutingPackages, ['org.example.app']);

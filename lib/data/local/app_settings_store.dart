@@ -658,7 +658,7 @@ abstract class AppSettingsStore {
             .clamp(1, 10)
             .toInt();
     const defaultUrlTestConcurrency = 4;
-    const maximumUrlTestConcurrency = 8;
+    const maximumUrlTestConcurrency = 10;
     final normalizedUrlTestConcurrency =
         ((legacyEconomy && urlTestConcurrency == 4)
                 ? defaultUrlTestConcurrency

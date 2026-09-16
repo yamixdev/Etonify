@@ -788,7 +788,7 @@ class AppSettingsController {
 
   AppSettingsChange setUrlTestConcurrency(int value) {
     const fallback = appSettingsStandardUrlTestConcurrency;
-    final normalized = (value <= 0 ? fallback : value).clamp(1, 8);
+    final normalized = (value <= 0 ? fallback : value).clamp(1, 10);
     if (urlTestConcurrency == normalized) {
       return const AppSettingsChange.none();
     }
