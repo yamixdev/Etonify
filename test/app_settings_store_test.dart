@@ -89,7 +89,7 @@ void main() {
 
     expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
-    expect(state.urlTestConcurrency, 4);
+    expect(state.urlTestConcurrency, 10);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(state.urlTestUrl, defaultUrlTestUrl);
     expect(state.locationLookupLimit, 1);
@@ -225,7 +225,7 @@ void main() {
 
     expect(state.urlTestIntervalSeconds, 1800);
     expect(state.urlTestTimeoutSeconds, 15);
-    expect(state.urlTestConcurrency, 4);
+    expect(state.urlTestConcurrency, 10);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(state.locationLookupLimit, 1);
     expect(state.locationLookupTimeoutSeconds, 3);
@@ -245,7 +245,7 @@ void main() {
     });
     expect(standard.urlTestIntervalSeconds, 1800);
     expect(standard.urlTestTimeoutSeconds, 15);
-    expect(standard.urlTestConcurrency, 4);
+    expect(standard.urlTestConcurrency, 10);
     expect(standard.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(standard.locationLookupConcurrency, 1);
 
@@ -268,7 +268,7 @@ void main() {
     });
     expect(economy.urlTestIntervalSeconds, 1800);
     expect(economy.urlTestTimeoutSeconds, 15);
-    expect(economy.urlTestConcurrency, 4);
+    expect(economy.urlTestConcurrency, 10);
     expect(economy.urlTestUnavailableCheckIntervalSeconds, 120);
   });
 

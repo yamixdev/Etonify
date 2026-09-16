@@ -1091,7 +1091,7 @@ class SingboxConfigBuilder {
   }
 
   int _urltestConcurrency(int? value) {
-    return (value == null || value <= 0 ? 8 : value).clamp(1, 10);
+    return (value == null || value <= 0 ? 10 : value).clamp(1, 10);
   }
 
   String _urltestUnavailableInterval(int? seconds) {

@@ -8,7 +8,7 @@ import 'package:meow_client/data/update/app_update_channel.dart';
 const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
 const int appSettingsStandardUrlTestIntervalSeconds = 1800;
-const int appSettingsStandardUrlTestConcurrency = 4;
+const int appSettingsStandardUrlTestConcurrency = 10;
 const int appSettingsStandardUrlTestUnavailableCheckIntervalSeconds = 120;
 const int appSettingsStandardLocationLookupLimit = 1;
 const int appSettingsStandardLocationLookupConcurrency = 1;

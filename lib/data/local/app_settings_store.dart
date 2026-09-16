@@ -657,7 +657,7 @@ abstract class AppSettingsStore {
                 2)
             .clamp(1, 10)
             .toInt();
-    const defaultUrlTestConcurrency = 4;
+    const defaultUrlTestConcurrency = 10;
     const maximumUrlTestConcurrency = 10;
     final normalizedUrlTestConcurrency =
         ((legacyEconomy && urlTestConcurrency == 4)
@@ -1168,7 +1168,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             urlTestUrl: defaultUrlTestUrl,
             urlTestIntervalSeconds: 1800,
             urlTestTimeoutSeconds: 15,
-            urlTestConcurrency: 4,
+            urlTestConcurrency: 10,
             urlTestUnavailableCheckIntervalSeconds: 120,
             locationLookupLimit: 2,
             locationLookupTimeoutSeconds: 3,
