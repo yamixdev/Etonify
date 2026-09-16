@@ -301,7 +301,7 @@ class LatencyCoordinator {
           timeoutMillis: _configuredTimeoutMillis,
           concurrency: 1,
           deadlineMillis: _targetDeadlineMillis,
-          force: false,
+          force: true,
           mode: 'targeted',
         ),
       ).timeout(uiPolicy.rpcAckTimeout);
@@ -409,31 +409,33 @@ class LatencyCoordinator {
     if (!_usesSessionEvents ||
         normalizedTag.isEmpty ||
         sessionId <= 0 ||
-        sessionId != _nativeSessionId ||
         revision <= 0) {
+      return false;
+    }
+    final activeCheck = _activeTargetChecks[normalizedTag];
+    final belongsToMainSession = isRunning && sessionId == _nativeSessionId;
+
+    if (!belongsToMainSession && activeCheck == null) {
       return false;
     }
     if (revision <= (_acceptedResultRevisions[normalizedTag] ?? 0)) {
       return false;
     }
     _acceptedResultRevisions[normalizedTag] = revision;
-    final activeCheck = _activeTargetChecks.remove(normalizedTag);
-    activeCheck?.timeoutTimer?.cancel();
     if (activeCheck != null) {
+      activeCheck.timeoutTimer?.cancel();
+      _activeTargetChecks.remove(normalizedTag);
       _onSessionChanged(isRunning, _kind, _targetTag);
     }
-    if (!isRunning ||
-        (_sessionExpectedTags.isNotEmpty &&
-            !_sessionExpectedTags.contains(normalizedTag))) {
-      return activeCheck != null;
+    if (isRunning) {
+      _acceptedEventTimes[normalizedTag] = revision;
+      if (available) {
+        _successfulTags.add(normalizedTag);
+      } else {
+        _successfulTags.remove(normalizedTag);
+      }
+      _phase = LatencySessionPhase.collectingEvents;
     }
-    _acceptedEventTimes[normalizedTag] = revision;
-    if (available) {
-      _successfulTags.add(normalizedTag);
-    } else {
-      _successfulTags.remove(normalizedTag);
-    }
-    _phase = LatencySessionPhase.collectingEvents;
     return true;
   }
 
@@ -556,9 +558,8 @@ class LatencyCoordinator {
       .clamp(_configuredTimeoutMillis, _maximumDeadlineMillis)
       .toInt();
 
-  int get _fullDeadlineMillis {
+  int _fullDeadlineMillisForConcurrency(int concurrency) {
     final timeoutMillis = _configuredTimeoutMillis;
-    final concurrency = _configuredConcurrency;
     final outboundCount = _outboundCount().clamp(1, 100000).toInt();
     final batchCount = (outboundCount + concurrency - 1) ~/ concurrency;
     return (batchCount * timeoutMillis + 5000)
@@ -568,16 +569,16 @@ class LatencyCoordinator {
 
   LatencyTestRequest _groupRequest(String mode) {
     final manual = mode == 'manual' && _capabilities.supportsUrlTestExhaustive;
-    final backgroundConcurrency = _usesSessionEvents && !manual;
+    final effectiveConcurrency = _configuredConcurrency;
     return LatencyTestRequest(
       groupTag: 'select',
       priorityOutboundTag: _activeOutboundTag().trim(),
       url: _testUrl(),
       timeoutMillis: _configuredTimeoutMillis,
-      concurrency: backgroundConcurrency
-          ? _configuredConcurrency.clamp(1, 4)
-          : _configuredConcurrency,
-      deadlineMillis: manual ? 0 : _fullDeadlineMillis,
+      concurrency: effectiveConcurrency,
+      deadlineMillis: manual
+          ? 0
+          : _fullDeadlineMillisForConcurrency(effectiveConcurrency),
       mode: manual ? 'manual' : 'background',
     );
   }

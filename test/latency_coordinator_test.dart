@@ -13,7 +13,7 @@ const _testPolicy = LatencyUiPolicy(
 
 void main() {
   test(
-    'full session accepts partial results and promotes a queued target without force',
+    'full session accepts partial results and executes targeted probe with force',
     () async {
       final calls = <LatencyTestRequest>[];
       final coordinator = _coordinator(
@@ -38,7 +38,7 @@ void main() {
       await coordinator.runTarget(targetOutboundTag: 'c', reason: 'tap');
       expect(calls, hasLength(2));
       expect(calls.last.targetOutboundTag, 'c');
-      expect(calls.last.force, isFalse);
+      expect(calls.last.force, isTrue);
       coordinator.handleGroupEvent(
         tag: 'c',
         timeSeconds: now,
@@ -774,13 +774,94 @@ void main() {
     final completed = coordinator.runFull(reason: 'startup');
     await Future<void>.delayed(Duration.zero);
     expect(requests.single.mode, 'background');
-    expect(requests.single.concurrency, 4);
+    expect(requests.single.concurrency, 10);
     expect(requests.single.deadlineMillis, 120000);
     coordinator.cancel();
     await Future<void>.delayed(Duration.zero);
     expect(cancellations, ['select|']);
     expect(await completed, isFalse);
   });
+
+  test(
+    'full session continues while forced target completes independently with a distinct sessionId',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        expectedTags: () => const ['server-1', 'server-2'],
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final fullCompleted = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.first.mode, 'manual');
+      expect(coordinator.isChecking('server-1'), isTrue);
+      expect(coordinator.isChecking('server-2'), isTrue);
+
+      expect(
+        coordinator.handleCoreSession(
+          sessionId: 15,
+          groupTag: 'select',
+          targetTag: '',
+          mode: 'manual',
+          state: 'running',
+          terminalReason: '',
+          available: 0,
+        ),
+        isTrue,
+      );
+
+      final targetResult = coordinator.runTarget(
+        targetOutboundTag: 'server-1',
+        reason: 'manual_tap',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(requests, hasLength(2));
+      expect(requests.last.mode, 'targeted');
+      expect(requests.last.targetOutboundTag, 'server-1');
+      expect(requests.last.force, isTrue);
+      expect(coordinator.isChecking('server-1'), isTrue);
+
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'server-1',
+          sessionId: 16,
+          revision: 101,
+          available: true,
+        ),
+        isTrue,
+      );
+
+      expect(coordinator.isChecking('server-1'), isFalse);
+      expect(coordinator.isChecking('server-2'), isTrue);
+      expect(coordinator.isRunning, isTrue);
+      expect(await targetResult, isTrue);
+
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'server-2',
+          sessionId: 15,
+          revision: 102,
+          available: true,
+        ),
+        isTrue,
+      );
+      expect(coordinator.isChecking('server-2'), isFalse);
+
+      coordinator.handleCoreSession(
+        sessionId: 15,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 2,
+      );
+      expect(await fullCompleted, isTrue);
+      expect(coordinator.isRunning, isFalse);
+    },
+  );
 }
 
 final _v3Capabilities = LibboxCapabilities.parseOrLegacy('''
