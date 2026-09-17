@@ -6834,7 +6834,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _scheduleActiveOutboundIpRefresh({
-    Duration delay = const Duration(milliseconds: 120),
+    Duration delay = const Duration(milliseconds: 600),
     bool forceRefresh = false,
   }) {
     final externalLookupReady = _runtimeOperations.diagnosticsReady;
