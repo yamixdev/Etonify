@@ -1,4 +1,5 @@
 import 'package:yaml/yaml.dart';
+import 'cert_pin_utils.dart';
 
 /// Parses Clash / Clash Meta YAML configs into sing-box outbound JSON maps.
 class ClashParser {
@@ -283,6 +284,21 @@ class ClashParser {
       tls['utls'] = {'enabled': true, 'fingerprint': fp};
     }
 
+    final rawCertPin = p['pinned-peer-cert-sha256'] ??
+        p['pinnedPeerCertSha256'] ??
+        p['certificate-sha256'] ??
+        p['certificate_sha256'];
+    var pins = normalizeCertPins(rawCertPin);
+    if (pins.isEmpty) {
+      final fpVal = _s(p['fingerprint']).trim();
+      if (fpVal.isNotEmpty) {
+        pins = normalizeCertPins(fpVal);
+      }
+    }
+    if (pins.isNotEmpty) {
+      tls['certificate_sha256'] = pins;
+    }
+
     // Reality
     final realityOpts = p['reality-opts'];
     if (realityOpts is YamlMap) {
@@ -342,7 +358,10 @@ class ClashParser {
             : null;
         final t = <String, dynamic>{'type': 'grpc'};
         if (opts != null) {
-          final sn = _s(opts['grpc-service-name']);
+          final sn = _s(opts['grpc-service-name'] ??
+              opts['grpcServiceName'] ??
+              opts['service-name'] ??
+              opts['serviceName']);
           if (sn.isNotEmpty) t['service_name'] = sn;
         }
         r['transport'] = t;

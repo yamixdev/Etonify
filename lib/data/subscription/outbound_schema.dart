@@ -113,6 +113,7 @@ class ParsedOutboundSchema {
     'certificate',
     'certificate_path',
     'certificate_public_key_sha256',
+    'certificate_sha256',
     'client_certificate',
     'client_certificate_path',
     'client_key',

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'cert_pin_utils.dart';
 
 /// Extracts outbounds from an Xray / V2Ray JSON configuration and
 /// converts them to sing-box outbound format.
@@ -585,12 +586,26 @@ class XrayConfigParser {
       final ts = _map(stream['tlsSettings']);
       final sni = _s(ts['serverName']);
       if (sni.isNotEmpty) tls['server_name'] = sni;
-      if (ts['allowInsecure'] == true) tls['insecure'] = true;
+      final allowInsecure = ts['allowInsecure'] ?? ts['allow_insecure'];
+      if (allowInsecure == true ||
+          allowInsecure == 'true' ||
+          allowInsecure == 1 ||
+          allowInsecure == '1') {
+        tls['insecure'] = true;
+      }
       final alpn = ts['alpn'];
       if (alpn is List) tls['alpn'] = alpn.map((e) => e.toString()).toList();
       final fp = _s(ts['fingerprint']);
       if (fp.isNotEmpty) {
         tls['utls'] = {'enabled': true, 'fingerprint': fp};
+      }
+      final rawPins = ts['pinnedPeerCertSha256'] ??
+          ts['pinnedPeerCertificateSha256'] ??
+          ts['pinSHA256'] ??
+          ts['certificate_sha256'];
+      final pins = normalizeCertPins(rawPins);
+      if (pins.isNotEmpty) {
+        tls['certificate_sha256'] = pins;
       }
     }
 
@@ -620,7 +635,7 @@ class XrayConfigParser {
       case 'grpc':
         final gs = _map(stream['grpcSettings']);
         final t = <String, dynamic>{'type': 'grpc'};
-        final sn = _s(gs['serviceName']);
+        final sn = _s(gs['serviceName'] ?? gs['service_name'] ?? gs['service-name']);
         if (sn.isNotEmpty) t['service_name'] = sn;
         r['transport'] = t;
 

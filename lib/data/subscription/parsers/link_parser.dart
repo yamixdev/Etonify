@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'cert_pin_utils.dart';
 
 /// Parses individual proxy URI links and converts to sing-box outbound format.
 ///
@@ -584,7 +585,8 @@ class LinkParser {
     // TLS
     final tls = <String, dynamic>{'enabled': true};
     _putIfPresent(tls, 'server_name', p['sni']);
-    if ((p['allow_insecure'] ?? p['allowInsecure'] ?? '0') == '1') {
+    final tuicInsecure = (p['allow_insecure'] ?? p['allowInsecure'] ?? p['insecure'] ?? '0').toLowerCase();
+    if (tuicInsecure == '1' || tuicInsecure == 'true') {
       tls['insecure'] = true;
     }
     final alpn = p['alpn'] ?? '';
@@ -614,7 +616,8 @@ class LinkParser {
     // TLS (always on)
     final tls = <String, dynamic>{'enabled': true};
     _putIfPresent(tls, 'server_name', p['sni'] ?? p['peer']);
-    if ((p['insecure'] ?? p['allowInsecure'] ?? '0') == '1') {
+    final anytlsInsecure = (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '0').toLowerCase();
+    if (anytlsInsecure == '1' || anytlsInsecure == 'true') {
       tls['insecure'] = true;
     }
     final alpn = p['alpn'] ?? '';
@@ -647,8 +650,21 @@ class LinkParser {
 
     _putIfPresent(tls, 'server_name', p['sni'] ?? p['peer']);
 
-    if ((p['insecure'] ?? p['allowInsecure'] ?? '') == '1') {
+    final insecureVal = (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '').toLowerCase();
+    if (insecureVal == '1' || insecureVal == 'true') {
       tls['insecure'] = true;
+    }
+
+    final rawPins = p['pinnedPeerCertSha256'] ??
+        p['pinnedPeerCertificateSha256'] ??
+        p['pinSHA256'] ??
+        p['pin_sha256'] ??
+        p['certificate_sha256'];
+    if (rawPins != null && rawPins.isNotEmpty) {
+      final pins = normalizeCertPins(rawPins);
+      if (pins.isNotEmpty) {
+        tls['certificate_sha256'] = pins;
+      }
     }
 
     final alpn = p['alpn'] ?? '';
@@ -677,7 +693,7 @@ class LinkParser {
     final type = (p['type'] ?? p['net'] ?? 'tcp').toLowerCase();
     final host = p['host'] ?? '';
     final path = p['path'] ?? '';
-    final serviceName = p['serviceName'] ?? '';
+    final serviceName = p['serviceName'] ?? p['service_name'] ?? p['service-name'] ?? '';
     final headerType = p['headerType'] ?? '';
 
     switch (type) {
