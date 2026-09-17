@@ -205,6 +205,28 @@ void main() {
       isNull,
     );
   });
+
+  test('smart routing progress tracks isRetryingWithoutVpn and copyWith', () {
+    const initial = RussiaRouteUpdateProgress(
+      stage: RussiaRouteUpdateStage.downloadingPackage,
+      completedBytes: 10,
+      totalBytes: 50,
+    );
+    expect(initial.isRetryingWithoutVpn, isFalse);
+
+    final retrying = initial.copyWith(isRetryingWithoutVpn: true);
+    expect(retrying.isRetryingWithoutVpn, isTrue);
+    expect(retrying.stage, RussiaRouteUpdateStage.downloadingPackage);
+    expect(retrying.completedBytes, 10);
+    expect(retrying.totalBytes, 50);
+
+    final extracting = retrying.copyWith(
+      stage: RussiaRouteUpdateStage.extractingPackage,
+      isRetryingWithoutVpn: false,
+    );
+    expect(extracting.stage, RussiaRouteUpdateStage.extractingPackage);
+    expect(extracting.isRetryingWithoutVpn, isFalse);
+  });
 }
 
 Future<T> _withIsolatedRouteStorage<T>(Future<T> Function() action) async {

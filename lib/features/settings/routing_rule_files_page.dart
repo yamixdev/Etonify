@@ -143,20 +143,34 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
   String _progressText(AppLocalizations l10n) {
     final progress = _progress;
     if (progress == null) return l10n.russiaRoutesPreparingHint;
+    final isRetrying = progress.isRetryingWithoutVpn;
     if (progress.totalBytes > 0) {
-      return l10n.russiaRoutesDownloadProgress(
+      final text = l10n.russiaRoutesDownloadProgress(
         _formatBytes(progress.completedBytes),
         _formatBytes(progress.totalBytes),
       );
+      return isRetrying
+          ? '${l10n.remoteDownloadRetryWithoutVpn} • $text'
+          : text;
     }
     if (progress.totalItems > 0) {
-      return l10n.russiaRoutesItemsProgress(
+      final text = l10n.russiaRoutesItemsProgress(
         progress.completedItems,
         progress.totalItems,
       );
+      return isRetrying
+          ? '${l10n.remoteDownloadRetryWithoutVpn} • $text'
+          : text;
     }
     if (progress.completedItems > 0) {
-      return l10n.russiaRoutesItemsProcessed(progress.completedItems);
+      final text = l10n.russiaRoutesItemsProcessed(progress.completedItems);
+      return isRetrying
+          ? '${l10n.remoteDownloadRetryWithoutVpn} • $text'
+          : text;
+    }
+    if (isRetrying ||
+        progress.stage == RussiaRouteUpdateStage.retryingWithoutVpn) {
+      return l10n.remoteDownloadRetryWithoutVpnHint;
     }
     return l10n.russiaRoutesPreparingHint;
   }

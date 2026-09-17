@@ -230,6 +230,7 @@ class RussiaRouteUpdateProgress {
     this.totalBytes = 0,
     this.completedItems = 0,
     this.totalItems = 0,
+    this.isRetryingWithoutVpn = false,
   });
 
   final RussiaRouteUpdateStage stage;
@@ -237,6 +238,7 @@ class RussiaRouteUpdateProgress {
   final int totalBytes;
   final int completedItems;
   final int totalItems;
+  final bool isRetryingWithoutVpn;
 
   double? get fraction {
     if (totalBytes > 0) {
@@ -246,6 +248,24 @@ class RussiaRouteUpdateProgress {
       return (completedItems / totalItems).clamp(0, 1).toDouble();
     }
     return null;
+  }
+
+  RussiaRouteUpdateProgress copyWith({
+    RussiaRouteUpdateStage? stage,
+    int? completedBytes,
+    int? totalBytes,
+    int? completedItems,
+    int? totalItems,
+    bool? isRetryingWithoutVpn,
+  }) {
+    return RussiaRouteUpdateProgress(
+      stage: stage ?? this.stage,
+      completedBytes: completedBytes ?? this.completedBytes,
+      totalBytes: totalBytes ?? this.totalBytes,
+      completedItems: completedItems ?? this.completedItems,
+      totalItems: totalItems ?? this.totalItems,
+      isRetryingWithoutVpn: isRetryingWithoutVpn ?? this.isRetryingWithoutVpn,
+    );
   }
 }
 
@@ -329,13 +349,21 @@ class RussiaRouteDataService {
     int totalBytes = 0,
     int completedItems = 0,
     int totalItems = 0,
+    bool? isRetryingWithoutVpn,
   }) {
+    final isDownloading = stage == RussiaRouteUpdateStage.downloadingPackage ||
+        stage == RussiaRouteUpdateStage.downloadingCategories ||
+        stage == RussiaRouteUpdateStage.checking;
+    final retrying = isRetryingWithoutVpn ??
+        (isDownloading ? (progress.value?.isRetryingWithoutVpn ?? false) : false);
+
     progress.value = RussiaRouteUpdateProgress(
       stage: stage,
       completedBytes: completedBytes,
       totalBytes: totalBytes,
       completedItems: completedItems,
       totalItems: totalItems,
+      isRetryingWithoutVpn: retrying,
     );
   }
 
@@ -622,8 +650,35 @@ class RussiaRouteDataService {
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     var packageInfo = _InstalledRoutePackageInfo.fromStatus(current);
     var livePackageCheckSucceeded = false;
+    Uint8List? livePackageBytes;
+    _RunetFreedomReleaseAsset? releaseAsset;
+
+    // 1. Download rule package if forced, missing, or new release tag available.
     try {
-      packageInfo = await _installLiveRoutePackage(paths, current: current);
+      final release = await _fetchLatestRunetFreedomRelease();
+      releaseAsset = release;
+      final needsPackageDownload =
+          force ||
+          !current.available ||
+          current.sourceKind != sourceKindLive ||
+          current.releaseTag != release.tagName;
+
+      if (needsPackageDownload) {
+        livePackageBytes = await _downloadBytes(
+          release.assetUrl,
+          maxBytes: _maxSingboxZipBytes,
+          expectedBytes: release.assetSizeBytes,
+          onProgress: (completed, total) => _emitProgress(
+            RussiaRouteUpdateStage.downloadingPackage,
+            completedBytes: completed,
+            totalBytes: total,
+          ),
+        );
+      } else {
+        packageInfo = _InstalledRoutePackageInfo.fromStatus(current).copyWith(
+          lastUpdateCheckAtMillis: nowMillis,
+        );
+      }
       livePackageCheckSucceeded = true;
     } catch (_) {
       if (force && current.available) {
@@ -638,28 +693,64 @@ class RussiaRouteDataService {
         );
       }
     }
+
     final successfulCheckAtMillis = livePackageCheckSucceeded
         ? nowMillis
         : current.lastUpdateCheckAtMillis ?? 0;
+
+    // 2. Download domain-list-community service categories.
+    _DownloadedDomainListCommunity? downloaded;
     try {
-      final downloaded = await _downloadDomainListCommunityCategories(
+      downloaded = await _downloadDomainListCommunityCategories(
         sourceDirectoryPath: paths.domainListCommunitySourceDirectoryPath,
         previousMetadata: current.domainListCommunityMetadata,
         force: force,
       );
+    } catch (_) {
+      // The domain-list enrichment is optional. The six verified runetfreedom
+      // rule sets already provide the complete smart-routing fallback, so a
+      // raw GitHub outage must not make a fresh/offline installation unusable.
+    }
+
+    // 3. Extract downloaded package archive (all network operations are now complete).
+    if (livePackageBytes != null && releaseAsset != null) {
+      _emitProgress(RussiaRouteUpdateStage.extractingPackage);
+      final prepared = await _prepareRoutePackageArchiveInBackground(
+        livePackageBytes,
+      );
+      await _writeRoutePackage(paths, prepared.files);
+      packageInfo = _InstalledRoutePackageInfo(
+        sourceKind: sourceKindLive,
+        versionTag: releaseAsset.tagName,
+        releaseTag: releaseAsset.tagName,
+        packageSha256: prepared.sha256,
+        assetSizeBytes: releaseAsset.assetSizeBytes ?? livePackageBytes.length,
+        verifiedAtMillis: nowMillis,
+        lastUpdateCheckAtMillis: nowMillis,
+        verifiedFiles: prepared.files.keys.toList()..sort(),
+      );
+    }
+
+    // 4. Compile domain lists into local .srs rule sets.
+    var downloadedCategoryCount = current.domainListCommunityCategoryCount;
+    var compiledDomainCount = current.domainListCommunityDomainCount;
+    var domainListCommunityUpdatedAtMillis =
+        current.domainListCommunityUpdatedAtMillis;
+    var categoryMetadata = current.domainListCommunityMetadata;
+
+    if (downloaded != null) {
       final compiledFilesAvailable =
           File(paths.curatedDirectServicesPath).existsSync() &&
           File(paths.aiServicesPath).existsSync() &&
           File(paths.socialServicesPath).existsSync();
-      final shouldRebuildDomainLists = shouldRebuildRussiaRouteDomainLists(
-        currentDataAvailable: current.available,
-        downloadedContentChanged: downloaded.changed,
-        compiledFilesAvailable: compiledFilesAvailable,
-      );
-      var downloadedCategoryCount = current.domainListCommunityCategoryCount;
-      var compiledDomainCount = current.domainListCommunityDomainCount;
-      var domainListCommunityUpdatedAtMillis =
-          current.domainListCommunityUpdatedAtMillis;
+      final shouldRebuildDomainLists =
+          force ||
+          shouldRebuildRussiaRouteDomainLists(
+            currentDataAvailable: current.available,
+            downloadedContentChanged: downloaded.changed,
+            compiledFilesAvailable: compiledFilesAvailable,
+          );
+
       if (shouldRebuildDomainLists) {
         _emitProgress(RussiaRouteUpdateStage.compiling);
         final categoryFiles = downloaded.categoryFiles;
@@ -695,77 +786,59 @@ class RussiaRouteDataService {
             compiledCuratedDirectServices.domainCount +
             compiledAiServices.domainCount +
             compiledSocialServices.domainCount;
-        domainListCommunityUpdatedAtMillis =
-            DateTime.now().millisecondsSinceEpoch;
+        domainListCommunityUpdatedAtMillis = nowMillis;
       }
-      final installedAtMillis = current.installedAtMillis ?? nowMillis;
-      _emitProgress(RussiaRouteUpdateStage.activating);
-      await _writeMetadata(
-        paths,
-        packageInfo: packageInfo.copyWith(
-          installedAtMillis: installedAtMillis,
-          lastUpdateCheckAtMillis: successfulCheckAtMillis,
-        ),
-        installedAtMillis: installedAtMillis,
-        lastUpdateCheckAtMillis: successfulCheckAtMillis,
-        domainListCommunityUpdatedAtMillis:
-            domainListCommunityUpdatedAtMillis ?? nowMillis,
-        domainListCommunityCategoryCount: downloadedCategoryCount,
-        domainListCommunityDomainCount: compiledDomainCount,
-        domainListCommunityMetadata: downloaded.metadata,
-      );
-      final status = RussiaRouteDataStatus(
-        available: true,
-        sourceName: sourceName,
-        versionTag: packageInfo.versionTag,
-        sourceKind: packageInfo.sourceKind,
-        releaseTag: packageInfo.releaseTag,
-        packageSha256: packageInfo.packageSha256,
-        assetSizeBytes: packageInfo.assetSizeBytes,
-        verifiedAtMillis: packageInfo.verifiedAtMillis,
-        verifiedFiles: packageInfo.verifiedFiles,
-        geositeRuBlockedPath: paths.geositeRuBlockedPath,
-        geositeRuAvailableOnlyInsidePath:
-            paths.geositeRuAvailableOnlyInsidePath,
-        geositeCategoryRuPath: paths.geositeCategoryRuPath,
-        geoipRuBlockedPath: paths.geoipRuBlockedPath,
-        geoipRuWhitelistPath: paths.geoipRuWhitelistPath,
-        geoipRuPath: paths.geoipRuPath,
-        curatedDirectServicesPath: paths.curatedDirectServicesPath,
-        aiServicesPath: paths.aiServicesPath,
-        socialServicesPath: paths.socialServicesPath,
-        installedAtMillis: installedAtMillis,
-        lastUpdateCheckAtMillis: successfulCheckAtMillis,
-        domainListCommunityUpdatedAtMillis:
-            domainListCommunityUpdatedAtMillis ?? nowMillis,
-        domainListCommunityCategoryCount: downloadedCategoryCount,
-        domainListCommunityDomainCount: compiledDomainCount,
-        domainListCommunityMetadata: downloaded.metadata,
-      );
-      _emitProgress(RussiaRouteUpdateStage.complete);
-      return status;
-    } catch (_) {
-      // The domain-list enrichment is optional. The six verified runetfreedom
-      // rule sets already provide the complete smart-routing fallback, so a
-      // raw GitHub outage must not make a fresh/offline installation unusable.
-      final installedAtMillis = current.installedAtMillis ?? nowMillis;
-      await _writeMetadata(
-        paths,
-        packageInfo: packageInfo.copyWith(
-          installedAtMillis: installedAtMillis,
-          lastUpdateCheckAtMillis: successfulCheckAtMillis,
-        ),
-        installedAtMillis: installedAtMillis,
-        lastUpdateCheckAtMillis: successfulCheckAtMillis,
-        domainListCommunityUpdatedAtMillis:
-            current.domainListCommunityUpdatedAtMillis ?? nowMillis,
-        domainListCommunityCategoryCount:
-            current.domainListCommunityCategoryCount,
-        domainListCommunityDomainCount: current.domainListCommunityDomainCount,
-        domainListCommunityMetadata: current.domainListCommunityMetadata,
-      );
-      return loadStatus();
+      categoryMetadata = downloaded.metadata;
     }
+
+    // 5. Safely replace rules and persist metadata.
+    final installedAtMillis = current.installedAtMillis ?? nowMillis;
+    _emitProgress(RussiaRouteUpdateStage.activating);
+    await _writeMetadata(
+      paths,
+      packageInfo: packageInfo.copyWith(
+        installedAtMillis: installedAtMillis,
+        lastUpdateCheckAtMillis: successfulCheckAtMillis,
+      ),
+      installedAtMillis: installedAtMillis,
+      lastUpdateCheckAtMillis: successfulCheckAtMillis,
+      domainListCommunityUpdatedAtMillis:
+          domainListCommunityUpdatedAtMillis ?? nowMillis,
+      domainListCommunityCategoryCount: downloadedCategoryCount,
+      domainListCommunityDomainCount: compiledDomainCount,
+      domainListCommunityMetadata: categoryMetadata,
+    );
+
+    final status = RussiaRouteDataStatus(
+      available: true,
+      sourceName: sourceName,
+      versionTag: packageInfo.versionTag,
+      sourceKind: packageInfo.sourceKind,
+      releaseTag: packageInfo.releaseTag,
+      packageSha256: packageInfo.packageSha256,
+      assetSizeBytes: packageInfo.assetSizeBytes,
+      verifiedAtMillis: packageInfo.verifiedAtMillis,
+      verifiedFiles: packageInfo.verifiedFiles,
+      geositeRuBlockedPath: paths.geositeRuBlockedPath,
+      geositeRuAvailableOnlyInsidePath:
+          paths.geositeRuAvailableOnlyInsidePath,
+      geositeCategoryRuPath: paths.geositeCategoryRuPath,
+      geoipRuBlockedPath: paths.geoipRuBlockedPath,
+      geoipRuWhitelistPath: paths.geoipRuWhitelistPath,
+      geoipRuPath: paths.geoipRuPath,
+      curatedDirectServicesPath: paths.curatedDirectServicesPath,
+      aiServicesPath: paths.aiServicesPath,
+      socialServicesPath: paths.socialServicesPath,
+      installedAtMillis: installedAtMillis,
+      lastUpdateCheckAtMillis: successfulCheckAtMillis,
+      domainListCommunityUpdatedAtMillis:
+          domainListCommunityUpdatedAtMillis ?? nowMillis,
+      domainListCommunityCategoryCount: downloadedCategoryCount,
+      domainListCommunityDomainCount: compiledDomainCount,
+      domainListCommunityMetadata: categoryMetadata,
+    );
+    _emitProgress(RussiaRouteUpdateStage.complete);
+    return status;
   }
 
   Future<void> _writeMetadata(
@@ -807,46 +880,6 @@ class RussiaRouteDataService {
           },
         }),
       ),
-    );
-  }
-
-  Future<_InstalledRoutePackageInfo> _installLiveRoutePackage(
-    _RussiaRouteStoragePaths paths, {
-    required RussiaRouteDataStatus current,
-  }) async {
-    _emitProgress(RussiaRouteUpdateStage.checking);
-    final release = await _fetchLatestRunetFreedomRelease();
-    if (current.available &&
-        current.sourceKind == sourceKindLive &&
-        current.releaseTag == release.tagName) {
-      return _InstalledRoutePackageInfo.fromStatus(current).copyWith(
-        lastUpdateCheckAtMillis: DateTime.now().millisecondsSinceEpoch,
-      );
-    }
-    final bytes = await _downloadBytes(
-      release.assetUrl,
-      maxBytes: _maxSingboxZipBytes,
-      expectedBytes: release.assetSizeBytes,
-      onProgress: (completed, total) => _emitProgress(
-        RussiaRouteUpdateStage.downloadingPackage,
-        completedBytes: completed,
-        totalBytes: total,
-      ),
-    );
-    _emitProgress(RussiaRouteUpdateStage.verifyingPackage);
-    _emitProgress(RussiaRouteUpdateStage.extractingPackage);
-    final prepared = await _prepareRoutePackageArchiveInBackground(bytes);
-    await _writeRoutePackage(paths, prepared.files);
-    final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    return _InstalledRoutePackageInfo(
-      sourceKind: sourceKindLive,
-      versionTag: release.tagName,
-      releaseTag: release.tagName,
-      packageSha256: prepared.sha256,
-      assetSizeBytes: release.assetSizeBytes ?? bytes.length,
-      verifiedAtMillis: nowMillis,
-      lastUpdateCheckAtMillis: nowMillis,
-      verifiedFiles: prepared.files.keys.toList()..sort(),
     );
   }
 
@@ -934,7 +967,15 @@ class RussiaRouteDataService {
       },
       onRouteAttempt: (route, isFallback) {
         if (isFallback && route == RemoteDownloadRoute.underlying) {
-          _emitProgress(RussiaRouteUpdateStage.retryingWithoutVpn);
+          final current = progress.value;
+          if (current != null) {
+            progress.value = current.copyWith(isRetryingWithoutVpn: true);
+          } else {
+            _emitProgress(
+              RussiaRouteUpdateStage.downloadingPackage,
+              isRetryingWithoutVpn: true,
+            );
+          }
         }
       },
       onProgress: (completed, total) {
@@ -1182,7 +1223,15 @@ class RussiaRouteDataService {
       acceptedStatusCodes: const <int>{HttpStatus.ok, HttpStatus.notModified},
       onRouteAttempt: (route, isFallback) {
         if (isFallback && route == RemoteDownloadRoute.underlying) {
-          _emitProgress(RussiaRouteUpdateStage.retryingWithoutVpn);
+          final current = progress.value;
+          if (current != null) {
+            progress.value = current.copyWith(isRetryingWithoutVpn: true);
+          } else {
+            _emitProgress(
+              RussiaRouteUpdateStage.downloadingCategories,
+              isRetryingWithoutVpn: true,
+            );
+          }
         }
       },
     );
