@@ -14,5 +14,5 @@
     "armeabi-v7a",
     "arm64-v8a"
   ],
-  "build_tags": "with_gvisor,with_quic,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0"
+  "build_tags": "with_quic,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0"
 }

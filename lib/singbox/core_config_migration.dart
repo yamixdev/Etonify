@@ -327,15 +327,7 @@ class CoreConfigMigration {
     var tunImplementation = state.vpnTunImplementation;
     final changes = <String>[];
 
-    // Mixed was Etonify's previous default. Move that default to sing-box
-    // 1.15's own stack, while preserving explicit system/gVisor choices made
-    // for device compatibility.
-    if (tunImplementation == TunImplementationPreference.mixed &&
-        capabilities.supportsTunStack(
-          TunImplementationPreference.native.name,
-        )) {
-      tunImplementation = TunImplementationPreference.native;
-    } else if (!capabilities.supportsTunStack(tunImplementation.name)) {
+    if (!capabilities.supportsTunStack(tunImplementation.name)) {
       final fallback = _firstSupportedTunStack(capabilities);
       if (fallback == null) {
         throw StateError('no_compatible_tun_stack');
@@ -394,9 +386,7 @@ class CoreConfigMigration {
   ) {
     for (final candidate in const <TunImplementationPreference>[
       TunImplementationPreference.native,
-      TunImplementationPreference.gvisor,
       TunImplementationPreference.system,
-      TunImplementationPreference.mixed,
     ]) {
       if (capabilities.supportsTunStack(candidate.name)) {
         return candidate;

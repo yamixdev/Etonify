@@ -12,6 +12,7 @@ void main() {
     InboundConnectionMode? selectedMode;
     int? changedMtu;
     String? changedUsername;
+    bool? changedIpv6;
 
     await tester.binding.setSurfaceSize(const Size(420, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -29,6 +30,7 @@ void main() {
           currentVpnInboundEnabled: true,
           currentVpnMtu: 1500,
           currentVpnStrictRoute: true,
+          currentVpnEnableIpv6: false,
           currentVpnTunImplementation: TunImplementationPreference.native,
           currentProxyInboundEnabled: false,
           currentProxyAllowLan: false,
@@ -39,6 +41,7 @@ void main() {
           onConnectionModeChanged: (mode) => selectedMode = mode,
           onVpnMtuChanged: (value) => changedMtu = value,
           onVpnStrictRouteChanged: (_) {},
+          onVpnEnableIpv6Changed: (value) => changedIpv6 = value,
           onVpnTunImplementationChanged: (_) {},
           onProxyInboundEnabledChanged: (_) {},
           onProxyAllowLanChanged: (_) {},
@@ -74,14 +77,21 @@ void main() {
 
     expect(changedMtu, 1460);
     expect(find.textContaining('1460'), findsOneWidget);
+
+    final ipv6Tile = find.widgetWithText(SwitchListTile, 'Поддержка IPv6');
+    expect(ipv6Tile, findsOneWidget);
+    await tester.tap(ipv6Tile);
+    await tester.pumpAndSettle();
+    expect(changedIpv6, isTrue);
+
     expect(
-      find.textContaining('Новый sing-tun (рекомендуется)'),
+      find.textContaining('sing-tun (рекомендуется)'),
       findsOneWidget,
     );
     expect(find.textContaining('Собственный стек sing-tun'), findsOneWidget);
 
     final nativeDescription = find.textContaining(
-      'Новый sing-tun (рекомендуется)',
+      'sing-tun (рекомендуется)',
     );
     final nativeTile = find.ancestor(
       of: nativeDescription,
@@ -90,19 +100,17 @@ void main() {
     await tester.ensureVisible(nativeTile);
     await tester.tap(nativeTile);
     await tester.pumpAndSettle();
-    expect(find.text('Смешанный (Mixed)'), findsOneWidget);
     expect(find.text('Системный (System)'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('gVisor'),
-      160,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('gVisor'), findsOneWidget);
+    expect(find.text('Смешанный (Mixed)'), findsNothing);
+    expect(find.text('gVisor'), findsNothing);
     await tester.tap(find.text('Системный (System)'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Прокси').first);
+    await tester.drag(find.byType(ListView).first, const Offset(0, 500));
+    await tester.pumpAndSettle();
+
+    final proxySegment = find.text('Прокси').first;
+    await tester.tap(proxySegment);
     await tester.pumpAndSettle();
 
     expect(selectedMode, InboundConnectionMode.proxy);

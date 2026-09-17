@@ -61,6 +61,7 @@ class SingboxConfigCoordinatorSnapshot {
     required this.vpnInboundEnabled,
     required this.vpnMtu,
     required this.vpnStrictRoute,
+    this.vpnEnableIpv6 = false,
     required this.vpnTunImplementation,
     required this.proxyInboundEnabled,
     required this.proxyMixedListen,
@@ -69,7 +70,6 @@ class SingboxConfigCoordinatorSnapshot {
     this.proxyPassword = '',
     required this.dnsDirectResolver,
     required this.dnsProxyResolver,
-    required this.dnsPreferIpv6,
     this.dnsSecureOnly = false,
     this.dnsDirectThroughProxy = false,
     required this.russiaDnsDirectResolver,
@@ -120,6 +120,7 @@ class SingboxConfigCoordinatorSnapshot {
   final bool vpnInboundEnabled;
   final int vpnMtu;
   final bool vpnStrictRoute;
+  final bool vpnEnableIpv6;
   final TunImplementationPreference vpnTunImplementation;
   final bool proxyInboundEnabled;
   final String proxyMixedListen;
@@ -128,7 +129,6 @@ class SingboxConfigCoordinatorSnapshot {
   final String proxyPassword;
   final String dnsDirectResolver;
   final String dnsProxyResolver;
-  final bool dnsPreferIpv6;
   final bool dnsSecureOnly;
   final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
@@ -912,6 +912,7 @@ class SingboxConfigCoordinator {
       vpnInboundEnabled: snapshot.vpnInboundEnabled,
       vpnMtu: snapshot.vpnMtu,
       vpnStrictRoute: snapshot.vpnStrictRoute,
+      vpnEnableIpv6: snapshot.vpnEnableIpv6,
       vpnTunImplementation: snapshot.vpnTunImplementation,
       proxyInboundEnabled: snapshot.proxyInboundEnabled,
       proxyMixedListen: snapshot.proxyMixedListen,
@@ -920,7 +921,6 @@ class SingboxConfigCoordinator {
       proxyPassword: snapshot.proxyPassword,
       dnsDirectResolver: snapshot.dnsDirectResolver,
       dnsProxyResolver: snapshot.dnsProxyResolver,
-      dnsPreferIpv6: snapshot.dnsPreferIpv6,
       dnsSecureOnly: snapshot.dnsSecureOnly,
       dnsDirectThroughProxy: snapshot.dnsDirectThroughProxy,
       russiaDnsDirectResolver: snapshot.russiaDnsDirectResolver,

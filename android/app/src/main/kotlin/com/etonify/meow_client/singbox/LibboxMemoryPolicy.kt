@@ -16,7 +16,7 @@ internal data class LibboxMemoryPolicy(
         ): LibboxMemoryPolicy =
             LibboxMemoryPolicy(
                 // This is a soft budget for Go-managed memory only. Keep
-                // enough headroom for gVisor, DNS and large rule sets: a limit
+                // enough headroom for sing-tun, DNS and large rule sets: a limit
                 // below the live Go runtime footprint makes GC run almost
                 // continuously and trades a little RAM for excessive CPU and
                 // battery use. It must never be reused as an RSS threshold for

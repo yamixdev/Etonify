@@ -43,14 +43,6 @@ object SingboxController {
     private const val GROUPS_EVENT_THROTTLE_TEST_MS = 250L
     @Volatile private var interactiveUrlTestUntilMs = 0L
     private const val GROUPS_DIAGNOSTIC_LOG_THROTTLE_MS = 2_000L
-    private const val NO_INTERFACE_REASSERT_THROTTLE_MS = 2_000L
-    private const val INTERFACE_DIAL_FAILURE_WINDOW_MS = 8_000L
-    private const val INTERFACE_DIAL_FAILURE_THRESHOLD = 4
-    private val INTERFACE_DIAL_FAILURE_REGEX =
-        Regex(
-            """\bdial\s+(?:ccmni|wlan|rmnet|swlan|eth|usb|ap)\w*\s*\(\d+\).*?\b(?:network is unreachable|no route to host)\b""",
-            RegexOption.IGNORE_CASE,
-        )
     private val mainHandler = Handler(Looper.getMainLooper())
     // Standalone clients still control one daemon/runtime. Keep command RPCs
     // on one lane: concurrent URLTest and selector clients can otherwise see
@@ -62,8 +54,9 @@ object SingboxController {
         4,
         30L,
         TimeUnit.SECONDS,
-        LinkedBlockingQueue(),
+        java.util.concurrent.ArrayBlockingQueue(64),
         { runnable -> Thread(runnable, "MeowLookup").apply { isDaemon = true } },
+        ThreadPoolExecutor.DiscardOldestPolicy(),
     ).apply {
         allowCoreThreadTimeOut(true)
     }
@@ -72,9 +65,6 @@ object SingboxController {
     private val runtimeGeneration = AtomicLong(0)
     private val runtimeStartGeneration = AtomicLong(0)
     private val networkGeneration = AtomicLong(0)
-    private val lastNoInterfaceReassertUptimeMs = AtomicLong(0L)
-    private val interfaceFailureLock = Any()
-    private val interfaceDialFailureUptimes = ArrayDeque<Long>()
     private val stopWaiterLock = Any()
     private val stopWaiters = mutableListOf<(Boolean) -> Unit>()
 
@@ -375,7 +365,6 @@ object SingboxController {
             while (messageList.hasNext()) {
                 val entry: LogEntry = messageList.next()
                 val message = entry.message ?: ""
-                maybeReassertDefaultInterfaceFromCoreLog(message)
                 logs += mapOf(
                     "level" to entry.level,
                     "message" to message,
@@ -558,6 +547,7 @@ object SingboxController {
             return
         }
         activeRuntimeGeneration = 0
+        cleanupStandaloneClient()
         setRunning(false)
         MeowDiagnostics.log(TAG, "markServiceStopped generation=$generation reason=$reason")
         notifyStopWaiters(true)
@@ -566,6 +556,7 @@ object SingboxController {
     fun forceMarkServiceStopped(reason: String) {
         val previousGeneration = activeRuntimeGeneration
         activeRuntimeGeneration = 0
+        cleanupStandaloneClient()
         setRunning(false)
         MeowDiagnostics.log(
             TAG,
@@ -621,69 +612,6 @@ object SingboxController {
         }
         MeowDiagnostics.log(TAG, "nativeLog level=$level message=$message")
         emit(mapOf("type" to runtimeEventNativeLog, "level" to level, "message" to message))
-    }
-
-    private fun maybeReassertDefaultInterfaceFromCoreLog(message: String) {
-        if (!running) return
-        val reason = classifyCoreInterfaceFailure(message) ?: return
-        val now = SystemClock.uptimeMillis()
-        val failureCount = if (reason == "dial_interface_failure") {
-            recordInterfaceDialFailure(now)
-        } else {
-            clearInterfaceDialFailures()
-            1
-        }
-        if (reason == "dial_interface_failure" && failureCount < INTERFACE_DIAL_FAILURE_THRESHOLD) {
-            return
-        }
-        val last = lastNoInterfaceReassertUptimeMs.get()
-        if (now - last < NO_INTERFACE_REASSERT_THROTTLE_MS) return
-        if (!lastNoInterfaceReassertUptimeMs.compareAndSet(last, now)) return
-        val state = MeowDefaultNetworkMonitor.currentInterfaceState("core_$reason")
-        val shortMessage = message.take(180)
-        log(
-            "warning",
-            "core_interface_reassert reason=$reason interface=${state.interfaceName} " +
-                "index=${state.interfaceIndex} generation=${state.generation} " +
-                "failures=$failureCount message=$shortMessage",
-        )
-        MeowDefaultNetworkMonitor.reassertDefaultInterface("core_$reason")
-    }
-
-    private fun classifyCoreInterfaceFailure(message: String): String? {
-        val lower = message.lowercase()
-        if (lower.contains("no available network interface")) {
-            return "no_available_interface"
-        }
-        if (lower.contains("no usable network interface") || lower.contains("error=no_interface")) {
-            return "no_usable_interface"
-        }
-        if (INTERFACE_DIAL_FAILURE_REGEX.containsMatchIn(message)) {
-            return "dial_interface_failure"
-        }
-        return null
-    }
-
-    private fun recordInterfaceDialFailure(now: Long): Int {
-        synchronized(interfaceFailureLock) {
-            interfaceDialFailureUptimes.addLast(now)
-            while (interfaceDialFailureUptimes.isNotEmpty() &&
-                now - interfaceDialFailureUptimes.first > INTERFACE_DIAL_FAILURE_WINDOW_MS
-            ) {
-                interfaceDialFailureUptimes.removeFirst()
-            }
-            val count = interfaceDialFailureUptimes.size
-            if (count >= INTERFACE_DIAL_FAILURE_THRESHOLD) {
-                interfaceDialFailureUptimes.clear()
-            }
-            return count
-        }
-    }
-
-    private fun clearInterfaceDialFailures() {
-        synchronized(interfaceFailureLock) {
-            interfaceDialFailureUptimes.clear()
-        }
     }
 
     // CommandStatus is consumed by the native foreground-service notification,
@@ -924,14 +852,29 @@ object SingboxController {
         }
     }
 
+    private val standaloneClientLock = Any()
+    @Volatile
+    private var sharedStandaloneClient: CommandClient? = null
+
+    private fun cleanupStandaloneClient() {
+        synchronized(standaloneClientLock) {
+            runCatching { sharedStandaloneClient?.disconnect() }
+            sharedStandaloneClient = null
+        }
+    }
+
     private fun <T> withStandaloneCommandClient(block: (CommandClient) -> T): T {
         MeowApplication.ensureLibboxSetup()
-        val client = Libbox.newStandaloneCommandClient()
-        try {
-            return block(client)
-        } finally {
-            runCatching { client.disconnect() }.onFailure {
-                MeowDiagnostics.log(TAG, "standalone command client disconnect failed", it)
+        synchronized(standaloneClientLock) {
+            val client = sharedStandaloneClient ?: Libbox.newStandaloneCommandClient().also {
+                sharedStandaloneClient = it
+            }
+            return try {
+                block(client)
+            } catch (error: Throwable) {
+                runCatching { client.disconnect() }
+                sharedStandaloneClient = null
+                throw error
             }
         }
     }

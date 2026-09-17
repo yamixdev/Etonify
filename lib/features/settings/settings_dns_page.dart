@@ -260,7 +260,6 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
     final currentDirectResolver = settings.dnsDirectResolver;
     final currentProxyPreset = settings.dnsProxyPreset;
     final currentProxyResolver = settings.dnsProxyResolver;
-    final currentPreferIpv6 = settings.dnsPreferIpv6;
     final currentSecureOnly = settings.dnsSecureOnly;
     final currentDirectThroughProxy = settings.dnsDirectThroughProxy;
 
@@ -440,26 +439,6 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                   onChanged: _commands.setDnsDirectThroughProxy,
                 ),
               ],
-            ),
-          ),
-          const Gap(settingsSectionGap),
-          _SectionLabel(label: l10n.dnsIpPreferenceTitle),
-          const Gap(settingsSectionLabelGap),
-          Card(
-            margin: EdgeInsets.zero,
-            child: SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              secondary: SettingsLeadingIcon(
-                icon: Icons.swap_horiz_rounded,
-                color: cs.primary,
-              ),
-              title: Text(l10n.dnsPreferIpv6Title),
-              subtitle: Text(l10n.dnsPreferIpv6Subtitle),
-              value: currentPreferIpv6,
-              onChanged: _commands.setDnsPreferIpv6,
             ),
           ),
         ],

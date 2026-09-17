@@ -104,7 +104,6 @@ void main() {
       var directResolver = '';
       var proxyPreset = '';
       var proxyResolver = '';
-      var preferIpv6 = false;
       var secureOnly = false;
       var directThroughProxy = false;
 
@@ -113,7 +112,6 @@ void main() {
         setDnsDirectResolver: (v) => directResolver = v,
         setDnsProxyPreset: (v) => proxyPreset = v,
         setDnsProxyResolver: (v) => proxyResolver = v,
-        setDnsPreferIpv6: (v) => preferIpv6 = v,
         setDnsSecureOnly: (v) => secureOnly = v,
         setDnsDirectThroughProxy: (v) => directThroughProxy = v,
       );
@@ -131,9 +129,6 @@ void main() {
 
       commands.setDnsProxyResolver('device://network');
       expect(proxyResolver, 'device://network');
-
-      commands.setDnsPreferIpv6(true);
-      expect(preferIpv6, isTrue);
 
       commands.setDnsSecureOnly(true);
       expect(secureOnly, isTrue);

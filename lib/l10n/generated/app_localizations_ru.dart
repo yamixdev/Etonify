@@ -500,9 +500,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dnsProxyTitle => 'Через прокси';
 
   @override
-  String get dnsIpPreferenceTitle => 'Версия IP';
-
-  @override
   String get aboutSectionTitle => 'О приложении';
 
   @override
@@ -618,7 +615,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get documentationRoutingBody =>
-      'Раздельная маршрутизация работает в режиме VPN TUN. «Через VPN» направляет в туннель выбранные приложения. «Вне VPN» оставляет их на прямом подключении.\n\nMixed использует Android для TCP и gVisor для UDP. System использует Android для TCP и UDP. gVisor обрабатывает оба протокола внутри клиента. Оставьте Mixed, если нет проблем совместимости.';
+      'Раздельная маршрутизация работает в режиме VPN TUN. «Через VPN» направляет в туннель выбранные приложения. «Вне VPN» оставляет их на прямом подключении.\n\nsing-tun использует собственный сетевой стек ядра, обеспечивая стабильную скорость и низкое потребление ресурсов. System использует сетевой стек Android. Рекомендуется использовать sing-tun, а на System переключаться только при проблемах совместимости на устройстве.';
 
   @override
   String get documentationTrafficRulesTitle => 'Правила трафика';
@@ -1563,32 +1560,25 @@ class AppLocalizationsRu extends AppLocalizations {
       'Определяет, как клиент обрабатывает TCP- и UDP-трафик внутри VPN';
 
   @override
-  String get tunImplementationNative => 'Новый sing-tun (рекомендуется)';
+  String get tunImplementationNative => 'sing-tun (рекомендуется)';
 
   @override
   String get tunImplementationNativeSubtitle =>
-      'Собственный стек sing-tun из sing-box 1.15. Обычно работает быстрее, экономнее расходует память и заряд. Если на устройстве возникнут проблемы, выберите режим совместимости ниже.';
-
-  @override
-  String get tunImplementationMixed => 'Смешанный (Mixed)';
-
-  @override
-  String get tunImplementationMixedSubtitle =>
-      'Режим совместимости: TCP обрабатывает системный стек Android, а UDP — виртуальный стек gVisor.';
+      'Собственный стек sing-tun. Работает быстрее, экономнее расходует память и заряд аккумулятора. Если на устройстве возникнут проблемы, переключитесь на системный стек.';
 
   @override
   String get tunImplementationSystem => 'Системный (System)';
 
   @override
   String get tunImplementationSystemSubtitle =>
-      'TCP и UDP обрабатывает сетевой стек Android. Совместимость зависит от устройства и его прошивки.';
+      'TCP и UDP обрабатывает сетевой стек Android. Совместимость зависит от устройства и прошивки.';
 
   @override
-  String get tunImplementationGvisor => 'gVisor';
+  String get vpnEnableIpv6Title => 'Поддержка IPv6';
 
   @override
-  String get tunImplementationGvisorSubtitle =>
-      'TCP и UDP обрабатывает виртуальный сетевой стек gVisor в пространстве пользователя. Может помочь, если системный стек работает нестабильно.';
+  String get vpnEnableIpv6Subtitle =>
+      'Маршрутизировать IPv6 через TUN. Отключите, если у провайдера или прокси не работает IPv6.';
 
   @override
   String get proxyInDescription =>
@@ -1761,13 +1751,6 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get dnsDirectThroughProxySubtitle =>
       'DNS прямых маршрутов идёт через прокси, а сайты подключаются напрямую.';
-
-  @override
-  String get dnsPreferIpv6Title => 'Предпочитать IPv6';
-
-  @override
-  String get dnsPreferIpv6Subtitle =>
-      'Приоритет IPv6, если доступны обе версии адреса';
 
   @override
   String get urlTestUrlTitle => 'Адрес проверки';

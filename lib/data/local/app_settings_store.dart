@@ -13,7 +13,7 @@ import 'secure_hive_storage.dart';
 
 enum AppThemePreference { system, light, dark, amoled }
 
-enum TunImplementationPreference { native, mixed, system, gvisor }
+enum TunImplementationPreference { native, system }
 
 enum InboundConnectionMode { vpn, proxy }
 
@@ -175,6 +175,7 @@ class AppSettingsState {
     required this.vpnMtu,
     required this.vpnStrictRoute,
     required this.vpnTunImplementation,
+    this.vpnEnableIpv6 = false,
     required this.proxyInboundEnabled,
     required this.proxyAllowLan,
     required this.proxyMixedListen,
@@ -185,7 +186,6 @@ class AppSettingsState {
     required this.dnsDirectResolver,
     required this.dnsProxyPreset,
     required this.dnsProxyResolver,
-    required this.dnsPreferIpv6,
     this.dnsSecureOnly = false,
     this.dnsDirectThroughProxy = false,
     this.russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
@@ -244,6 +244,7 @@ class AppSettingsState {
   final int vpnMtu;
   final bool vpnStrictRoute;
   final TunImplementationPreference vpnTunImplementation;
+  final bool vpnEnableIpv6;
   final bool proxyInboundEnabled;
   final bool proxyAllowLan;
   final String proxyMixedListen;
@@ -254,7 +255,6 @@ class AppSettingsState {
   final String dnsDirectResolver;
   final String dnsProxyPreset;
   final String dnsProxyResolver;
-  final bool dnsPreferIpv6;
   final bool dnsSecureOnly;
   final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
@@ -313,6 +313,7 @@ class AppSettingsState {
     int? vpnMtu,
     bool? vpnStrictRoute,
     TunImplementationPreference? vpnTunImplementation,
+    bool? vpnEnableIpv6,
     bool? proxyInboundEnabled,
     bool? proxyAllowLan,
     String? proxyMixedListen,
@@ -323,7 +324,6 @@ class AppSettingsState {
     String? dnsDirectResolver,
     String? dnsProxyPreset,
     String? dnsProxyResolver,
-    bool? dnsPreferIpv6,
     bool? dnsSecureOnly,
     bool? dnsDirectThroughProxy,
     String? russiaDnsDirectResolver,
@@ -397,6 +397,7 @@ class AppSettingsState {
       vpnMtu: vpnMtu ?? this.vpnMtu,
       vpnStrictRoute: vpnStrictRoute ?? this.vpnStrictRoute,
       vpnTunImplementation: vpnTunImplementation ?? this.vpnTunImplementation,
+      vpnEnableIpv6: vpnEnableIpv6 ?? this.vpnEnableIpv6,
       proxyInboundEnabled: proxyInboundEnabled ?? this.proxyInboundEnabled,
       proxyAllowLan: proxyAllowLan ?? this.proxyAllowLan,
       proxyMixedListen: proxyMixedListen ?? this.proxyMixedListen,
@@ -407,7 +408,6 @@ class AppSettingsState {
       dnsDirectResolver: dnsDirectResolver ?? this.dnsDirectResolver,
       dnsProxyPreset: dnsProxyPreset ?? this.dnsProxyPreset,
       dnsProxyResolver: dnsProxyResolver ?? this.dnsProxyResolver,
-      dnsPreferIpv6: dnsPreferIpv6 ?? this.dnsPreferIpv6,
       dnsSecureOnly: dnsSecureOnly ?? this.dnsSecureOnly,
       dnsDirectThroughProxy:
           dnsDirectThroughProxy ?? this.dnsDirectThroughProxy,
@@ -497,6 +497,7 @@ abstract class AppSettingsStore {
   static const _vpnMtuKey = 'vpn_mtu';
   static const _vpnStrictRouteKey = 'vpn_strict_route';
   static const _vpnTunImplementationKey = 'vpn_tun_implementation';
+  static const _vpnEnableIpv6Key = 'vpn_enable_ipv6';
   static const _proxyInboundEnabledKey = 'proxy_inbound_enabled';
   static const _proxyAllowLanKey = 'proxy_allow_lan';
   static const _proxyMixedListenKey = 'proxy_mixed_listen';
@@ -563,6 +564,7 @@ abstract class AppSettingsStore {
     _vpnMtuKey,
     _vpnStrictRouteKey,
     _vpnTunImplementationKey,
+    _vpnEnableIpv6Key,
     _proxyInboundEnabledKey,
     _proxyAllowLanKey,
     _proxyMixedListenKey,
@@ -572,7 +574,6 @@ abstract class AppSettingsStore {
     _dnsDirectResolverKey,
     _dnsProxyPresetKey,
     _dnsProxyResolverKey,
-    _dnsPreferIpv6Key,
     _dnsSecureOnlyKey,
     _dnsDirectThroughProxyKey,
     _russiaDnsDirectResolverKey,
@@ -769,12 +770,13 @@ abstract class AppSettingsStore {
       vpnMtu: _vpnMtuValue(map[_vpnMtuKey]),
       vpnStrictRoute: boolValue(_vpnStrictRouteKey, defaultValue: true),
       vpnTunImplementation: switch (map[_vpnTunImplementationKey]) {
-        'native' => TunImplementationPreference.native,
         'system' => TunImplementationPreference.system,
-        'gvisor' => TunImplementationPreference.gvisor,
-        'mixed' => TunImplementationPreference.mixed,
         _ => TunImplementationPreference.native,
       },
+      vpnEnableIpv6: boolValue(
+        _vpnEnableIpv6Key,
+        defaultValue: boolValue(_dnsPreferIpv6Key, defaultValue: false),
+      ),
       proxyInboundEnabled: boolValue(
         _proxyInboundEnabledKey,
         defaultValue: false,
@@ -805,7 +807,6 @@ abstract class AppSettingsStore {
             'https://dns.cloudflare.com/dns-query',
           ) ??
           'https://dns.cloudflare.com/dns-query',
-      dnsPreferIpv6: map[_dnsPreferIpv6Key] == '1',
       dnsSecureOnly: boolValue(_dnsSecureOnlyKey, defaultValue: false),
       dnsDirectThroughProxy: boolValue(
         _dnsDirectThroughProxyKey,
@@ -955,6 +956,7 @@ abstract class AppSettingsStore {
       _vpnMtuKey: state.vpnMtu.toString(),
       _vpnStrictRouteKey: state.vpnStrictRoute ? '1' : '0',
       _vpnTunImplementationKey: state.vpnTunImplementation.name,
+      _vpnEnableIpv6Key: state.vpnEnableIpv6 ? '1' : '0',
       _proxyInboundEnabledKey: state.proxyInboundEnabled ? '1' : '0',
       _proxyAllowLanKey: state.proxyAllowLan ? '1' : '0',
       _proxyMixedListenKey: state.proxyMixedListen,
@@ -965,7 +967,6 @@ abstract class AppSettingsStore {
       _dnsDirectResolverKey: state.dnsDirectResolver,
       _dnsProxyPresetKey: state.dnsProxyPreset,
       _dnsProxyResolverKey: state.dnsProxyResolver,
-      _dnsPreferIpv6Key: state.dnsPreferIpv6 ? '1' : '0',
       _dnsSecureOnlyKey: state.dnsSecureOnly ? '1' : '0',
       _dnsDirectThroughProxyKey: state.dnsDirectThroughProxy ? '1' : '0',
       _russiaDnsDirectResolverKey: state.russiaDnsDirectResolver,
@@ -1155,6 +1156,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             vpnMtu: 1500,
             vpnStrictRoute: true,
             vpnTunImplementation: TunImplementationPreference.native,
+            vpnEnableIpv6: false,
             proxyInboundEnabled: false,
             proxyAllowLan: false,
             proxyMixedListen: '127.0.0.1',
@@ -1163,7 +1165,6 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             dnsDirectResolver: 'udp://1.1.1.1',
             dnsProxyPreset: 'cloudflare',
             dnsProxyResolver: 'https://dns.cloudflare.com/dns-query',
-            dnsPreferIpv6: false,
             russiaDnsDirectResolver: defaultRussiaDnsDirectResolver,
             urlTestUrl: defaultUrlTestUrl,
             urlTestIntervalSeconds: 1800,

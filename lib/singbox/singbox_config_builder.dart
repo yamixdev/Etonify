@@ -34,6 +34,7 @@ class SingboxConfigBuilder {
     required this.vpnInboundEnabled,
     required this.vpnMtu,
     required this.vpnStrictRoute,
+    this.vpnEnableIpv6 = false,
     required this.vpnTunImplementation,
     required this.proxyInboundEnabled,
     required this.proxyMixedListen,
@@ -42,7 +43,6 @@ class SingboxConfigBuilder {
     this.proxyPassword = '',
     required this.dnsDirectResolver,
     required this.dnsProxyResolver,
-    required this.dnsPreferIpv6,
     this.dnsSecureOnly = false,
     this.dnsDirectThroughProxy = false,
     this.russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
@@ -88,6 +88,7 @@ class SingboxConfigBuilder {
   final bool vpnInboundEnabled;
   final int vpnMtu;
   final bool vpnStrictRoute;
+  final bool vpnEnableIpv6;
   final TunImplementationPreference vpnTunImplementation;
   final bool proxyInboundEnabled;
   final String proxyMixedListen;
@@ -96,7 +97,6 @@ class SingboxConfigBuilder {
   final String proxyPassword;
   final String dnsDirectResolver;
   final String dnsProxyResolver;
-  final bool dnsPreferIpv6;
   final bool dnsSecureOnly;
   final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
@@ -332,11 +332,11 @@ class SingboxConfigBuilder {
                 detour: dnsDirectDetour,
               ),
             if (fakeIpActive)
-              const <String, Object>{
+              <String, Object>{
                 'type': 'fakeip',
                 'tag': 'dns-fakeip',
                 'inet4_range': '198.18.0.0/15',
-                'inet6_range': 'fc00::/18',
+                if (vpnEnableIpv6) 'inet6_range': 'fc00::/18',
               },
             const <String, Object>{'type': 'local', 'tag': 'dns-local'},
           ],
@@ -408,21 +408,27 @@ class SingboxConfigBuilder {
               // resolves proxy endpoints and bootstrap hostnames.
               if (fakeIpActive)
                 {
-                  'query_type': ['A', 'AAAA'],
+                  'query_type': [
+                    'A',
+                    if (vpnEnableIpv6) 'AAAA',
+                  ],
                   'action': 'route',
                   'server': 'dns-fakeip',
                 },
             ],
           'final': dnsFinal,
           'cache_capacity': 4096,
-          if (dnsPreferIpv6) 'strategy': 'prefer_ipv6',
+          'strategy': vpnEnableIpv6 ? 'prefer_ipv4' : 'ipv4_only',
         },
         'inbounds': [
           if (vpnInboundEnabled)
             {
               'type': 'tun',
               'tag': 'tun-in',
-              'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
+              'address': [
+                '172.19.0.1/30',
+                if (vpnEnableIpv6) 'fdfe:dcba:9876::1/126',
+              ],
               'mtu': max(vpnMtu, 1280),
               'auto_route': true,
               'strict_route': vpnStrictRoute,

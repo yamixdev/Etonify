@@ -83,7 +83,7 @@ class LibboxCapabilities {
     supportsXHttp: true,
     supportsSplitHttpAlias: true,
     supportsVlessEncryption: true,
-    tunStacks: <String>{'system', 'gvisor', 'mixed'},
+    tunStacks: <String>{'native', 'system'},
   );
 
   static const incompatible = LibboxCapabilities(

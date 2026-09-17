@@ -14,6 +14,7 @@ class SettingsInboundPage extends StatefulWidget {
     required this.currentVpnInboundEnabled,
     required this.currentVpnMtu,
     required this.currentVpnStrictRoute,
+    required this.currentVpnEnableIpv6,
     required this.currentVpnTunImplementation,
     required this.currentProxyInboundEnabled,
     required this.currentProxyAllowLan,
@@ -24,6 +25,7 @@ class SettingsInboundPage extends StatefulWidget {
     required this.onConnectionModeChanged,
     required this.onVpnMtuChanged,
     required this.onVpnStrictRouteChanged,
+    required this.onVpnEnableIpv6Changed,
     required this.onVpnTunImplementationChanged,
     required this.onProxyInboundEnabledChanged,
     required this.onProxyAllowLanChanged,
@@ -35,6 +37,7 @@ class SettingsInboundPage extends StatefulWidget {
   final bool currentVpnInboundEnabled;
   final int currentVpnMtu;
   final bool currentVpnStrictRoute;
+  final bool currentVpnEnableIpv6;
   final TunImplementationPreference currentVpnTunImplementation;
   final bool currentProxyInboundEnabled;
   final bool currentProxyAllowLan;
@@ -45,6 +48,7 @@ class SettingsInboundPage extends StatefulWidget {
   final ValueChanged<InboundConnectionMode> onConnectionModeChanged;
   final ValueChanged<int> onVpnMtuChanged;
   final ValueChanged<bool> onVpnStrictRouteChanged;
+  final ValueChanged<bool> onVpnEnableIpv6Changed;
   final ValueChanged<TunImplementationPreference> onVpnTunImplementationChanged;
   final ValueChanged<bool> onProxyInboundEnabledChanged;
   final ValueChanged<bool> onProxyAllowLanChanged;
@@ -127,9 +131,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
   ) {
     return switch (value) {
       TunImplementationPreference.native => l10n.tunImplementationNative,
-      TunImplementationPreference.mixed => l10n.tunImplementationMixed,
       TunImplementationPreference.system => l10n.tunImplementationSystem,
-      TunImplementationPreference.gvisor => l10n.tunImplementationGvisor,
     };
   }
 
@@ -140,11 +142,8 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     return switch (value) {
       TunImplementationPreference.native =>
         l10n.tunImplementationNativeSubtitle,
-      TunImplementationPreference.mixed => l10n.tunImplementationMixedSubtitle,
       TunImplementationPreference.system =>
         l10n.tunImplementationSystemSubtitle,
-      TunImplementationPreference.gvisor =>
-        l10n.tunImplementationGvisorSubtitle,
     };
   }
 
@@ -224,19 +223,9 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
             subtitle: l10n.tunImplementationNativeSubtitle,
           ),
           _RadioItem(
-            value: TunImplementationPreference.mixed,
-            label: l10n.tunImplementationMixed,
-            subtitle: l10n.tunImplementationMixedSubtitle,
-          ),
-          _RadioItem(
             value: TunImplementationPreference.system,
             label: l10n.tunImplementationSystem,
             subtitle: l10n.tunImplementationSystemSubtitle,
-          ),
-          _RadioItem(
-            value: TunImplementationPreference.gvisor,
-            label: l10n.tunImplementationGvisor,
-            subtitle: l10n.tunImplementationGvisorSubtitle,
           ),
         ],
       ),
@@ -436,6 +425,16 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
             subtitle: Text(l10n.strictRouteSubtitle),
             value: widget.currentVpnStrictRoute,
             onChanged: widget.onVpnStrictRouteChanged,
+          ),
+          SwitchListTile(
+            secondary: SettingsLeadingIcon(
+              icon: Icons.language_rounded,
+              color: colors.primary,
+            ),
+            title: Text(l10n.vpnEnableIpv6Title),
+            subtitle: Text(l10n.vpnEnableIpv6Subtitle),
+            value: widget.currentVpnEnableIpv6,
+            onChanged: widget.onVpnEnableIpv6Changed,
           ),
           ListTile(
             leading: SettingsLeadingIcon(

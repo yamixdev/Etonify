@@ -598,13 +598,13 @@ void main() {
       vpnInboundEnabled: false,
       vpnMtu: 3400,
       vpnStrictRoute: true,
-      vpnTunImplementation: TunImplementationPreference.mixed,
+      vpnEnableIpv6: false,
+      vpnTunImplementation: TunImplementationPreference.native,
       proxyInboundEnabled: false,
       proxyMixedListen: '127.0.0.1',
       proxyMixedPort: 1080,
       dnsDirectResolver: 'udp://1.1.1.1',
       dnsProxyResolver: 'https://dns.cloudflare.com/dns-query',
-      dnsPreferIpv6: false,
       urlTestUrl: 'https://www.gstatic.com/generate_204',
       urlTestIntervalSeconds: 180,
       urlTestTimeoutSeconds: 15,
@@ -672,7 +672,7 @@ void main() {
         '"supports_url_test_deadline":true,'
         '"supports_url_test_force":true,'
         '"supports_config_check":true,'
-        '"tun_stacks":["system","gvisor","mixed"]}',
+        '"tun_stacks":["native","system"]}',
       ),
     ).build();
     expect(stableConfig, isNot(contains('global')));
@@ -1131,7 +1131,7 @@ void main() {
     final fakeIpRule = fullTunRules.firstWhere(
       (rule) => rule['server'] == 'dns-fakeip',
     );
-    expect(fakeIpRule['query_type'], ['A', 'AAAA']);
+    expect(fakeIpRule['query_type'], ['A']);
     expect(fullTunDns['final'], 'dns-remote');
 
     final splitTunConfig = _defaultBuilder(
@@ -2445,7 +2445,7 @@ void main() {
       'com.etonify.meow_client',
     ]);
     expect(tunInbound.containsKey('exclude_package'), isFalse);
-    expect(tunInbound['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
+    expect(tunInbound['address'], ['172.19.0.1/30']);
 
     final route = (config['route'] as Map).cast<String, dynamic>();
     final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
@@ -2699,6 +2699,7 @@ void main() {
     final config = _defaultBuilder(
       subscription,
       vpnInboundEnabled: true,
+      vpnEnableIpv6: true,
     ).build();
     final tun = (config['inbounds'] as List)
         .cast<Map<dynamic, dynamic>>()
@@ -2730,12 +2731,12 @@ void main() {
       final compatibilityConfig = _defaultBuilder(
         subscription,
         vpnInboundEnabled: true,
-        vpnTunImplementation: TunImplementationPreference.gvisor,
+        vpnTunImplementation: TunImplementationPreference.system,
       ).build();
       final compatibilityTun = (compatibilityConfig['inbounds'] as List)
           .cast<Map<dynamic, dynamic>>()
           .firstWhere((inbound) => inbound['type'] == 'tun');
-      expect(compatibilityTun['stack'], 'gvisor');
+      expect(compatibilityTun['stack'], 'system');
     },
   );
 
@@ -2893,13 +2894,13 @@ void main() {
       vpnInboundEnabled: true,
       vpnMtu: 1500,
       vpnStrictRoute: true,
-      vpnTunImplementation: TunImplementationPreference.mixed,
+      vpnEnableIpv6: false,
+      vpnTunImplementation: TunImplementationPreference.native,
       proxyInboundEnabled: false,
       proxyMixedListen: '127.0.0.1',
       proxyMixedPort: 1080,
       dnsDirectResolver: 'udp://1.1.1.1',
       dnsProxyResolver: 'https://dns.cloudflare.com/dns-query',
-      dnsPreferIpv6: false,
       urlTestUrl: 'https://www.gstatic.com/generate_204',
       urlTestIntervalSeconds: 900,
       urlTestTimeoutSeconds: 15,
@@ -3300,6 +3301,66 @@ void main() {
       expect(cache.displayProxy?.tag, 'node-777');
     },
   );
+
+  test('vpnEnableIpv6: false restricts TUN to IPv4 and sets DNS strategy to ipv4_only', () {
+    final builder = _defaultBuilder(
+      const Subscription(
+        id: 'sub-1',
+        name: 'Sub',
+        url: 'https://example.com/sub',
+        selectedProxyTag: '',
+        groups: <SubscriptionGroup>[],
+      ),
+      vpnInboundEnabled: true,
+      vpnEnableIpv6: false,
+      experimentalFakeIpEnabled: true,
+    );
+    final config = builder.build();
+    final inbounds = config['inbounds'] as List<dynamic>;
+    final tunIn = inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in') as Map<String, dynamic>;
+    expect(tunIn['address'], ['172.19.0.1/30']);
+
+    final dns = config['dns'] as Map<String, dynamic>;
+    expect(dns['strategy'], 'ipv4_only');
+
+    final servers = dns['servers'] as List<dynamic>;
+    final fakeIpServer = servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip') as Map<String, dynamic>;
+    expect(fakeIpServer.containsKey('inet6_range'), isFalse);
+
+    final rules = dns['rules'] as List<dynamic>;
+    final fakeIpRule = rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip') as Map<String, dynamic>;
+    expect(fakeIpRule['query_type'], ['A']);
+  });
+
+  test('vpnEnableIpv6: true includes IPv6 in TUN, sets DNS strategy to prefer_ipv4, and enables AAAA in fakeip', () {
+    final builder = _defaultBuilder(
+      const Subscription(
+        id: 'sub-1',
+        name: 'Sub',
+        url: 'https://example.com/sub',
+        selectedProxyTag: '',
+        groups: <SubscriptionGroup>[],
+      ),
+      vpnInboundEnabled: true,
+      vpnEnableIpv6: true,
+      experimentalFakeIpEnabled: true,
+    );
+    final config = builder.build();
+    final inbounds = config['inbounds'] as List<dynamic>;
+    final tunIn = inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in') as Map<String, dynamic>;
+    expect(tunIn['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
+
+    final dns = config['dns'] as Map<String, dynamic>;
+    expect(dns['strategy'], 'prefer_ipv4');
+
+    final servers = dns['servers'] as List<dynamic>;
+    final fakeIpServer = servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip') as Map<String, dynamic>;
+    expect(fakeIpServer['inet6_range'], 'fc00::/18');
+
+    final rules = dns['rules'] as List<dynamic>;
+    final fakeIpRule = rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip') as Map<String, dynamic>;
+    expect(fakeIpRule['query_type'], ['A', 'AAAA']);
+  });
 }
 
 SingboxConfigBuilder _defaultBuilder(
@@ -3318,8 +3379,9 @@ SingboxConfigBuilder _defaultBuilder(
   TlsFragmentationMode tlsFragmentationMode = TlsFragmentationMode.disabled,
   bool allowUntrustedProxyCertificates = false,
   bool vpnInboundEnabled = false,
+  bool vpnEnableIpv6 = false,
   TunImplementationPreference vpnTunImplementation =
-      TunImplementationPreference.mixed,
+      TunImplementationPreference.native,
   bool proxyInboundEnabled = false,
   String proxyMixedListen = '127.0.0.1',
   String proxyUsername = defaultProxyUsername,
@@ -3344,6 +3406,7 @@ SingboxConfigBuilder _defaultBuilder(
     vpnInboundEnabled: vpnInboundEnabled,
     vpnMtu: 3400,
     vpnStrictRoute: true,
+    vpnEnableIpv6: vpnEnableIpv6,
     vpnTunImplementation: vpnTunImplementation,
     proxyInboundEnabled: proxyInboundEnabled,
     proxyMixedListen: proxyMixedListen,
@@ -3352,7 +3415,6 @@ SingboxConfigBuilder _defaultBuilder(
     proxyPassword: proxyPassword,
     dnsDirectResolver: dnsDirectResolver,
     dnsProxyResolver: dnsProxyResolver,
-    dnsPreferIpv6: false,
     dnsSecureOnly: dnsSecureOnly,
     dnsDirectThroughProxy: dnsDirectThroughProxy,
     russiaDnsDirectResolver: russiaDnsDirectResolver,

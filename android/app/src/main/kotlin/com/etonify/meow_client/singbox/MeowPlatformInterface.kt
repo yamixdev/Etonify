@@ -49,6 +49,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 abstract class MeowBasePlatformInterface(
     protected val context: Context,
 ) : PlatformInterface {
+    companion object {
+        const val DNS_LOOKUP_TIMEOUT_SECONDS = 4L
+
+        fun cancelPendingDnsQueries(reason: String): Int {
+            val cancelled = MeowLocalResolver.cancelPendingQueries()
+            if (cancelled > 0) {
+                MeowDiagnostics.log(
+                    "MeowPlatform",
+                    "pending DNS queries cancelled reason=$reason count=$cancelled",
+                )
+            }
+            return cancelled
+        }
+    }
     override fun autoDetectInterfaceControl(fd: Int) = Unit
 
     override fun cancelNotification(identifier: String, typeID: Int) {
@@ -675,7 +689,7 @@ private object MeowLocalResolver : LocalDNSTransport {
                 signal,
                 callback,
             )
-            if (!latch.await(15, TimeUnit.SECONDS)) {
+            if (!latch.await(MeowBasePlatformInterface.DNS_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 MeowDiagnostics.log(
                     "MeowLocalResolver",
                     "exchange raw timeout active=${MeowDefaultNetworkMonitor.describeNetwork(network)}",
@@ -785,7 +799,7 @@ private object MeowLocalResolver : LocalDNSTransport {
                     callback,
                 )
             }
-            if (!latch.await(15, TimeUnit.SECONDS)) {
+            if (!latch.await(MeowBasePlatformInterface.DNS_LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 MeowDiagnostics.log(
                     "MeowLocalResolver",
                     "lookup timeout host=$host active=${MeowDefaultNetworkMonitor.describeNetwork(active)}",

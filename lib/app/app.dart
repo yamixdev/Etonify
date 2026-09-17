@@ -310,6 +310,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool get _vpnInboundEnabled => _settings.vpnInboundEnabled;
   int get _vpnMtu => _settings.vpnMtu;
   bool get _vpnStrictRoute => _settings.vpnStrictRoute;
+  bool get _vpnEnableIpv6 => _settings.vpnEnableIpv6;
   TunImplementationPreference get _vpnTunImplementation =>
       _settings.vpnTunImplementation;
   bool get _proxyInboundEnabled => _settings.proxyInboundEnabled;
@@ -320,7 +321,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   String get _proxyPassword => _settings.proxyPassword;
   String get _dnsDirectResolver => _settings.dnsDirectResolver;
   String get _dnsProxyResolver => _settings.dnsProxyResolver;
-  bool get _dnsPreferIpv6 => _settings.dnsPreferIpv6;
   bool get _dnsSecureOnly => _settings.dnsSecureOnly;
   bool get _dnsDirectThroughProxy => _settings.dnsDirectThroughProxy;
   String get _russiaDnsDirectResolver => _settings.russiaDnsDirectResolver;
@@ -1995,7 +1995,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setDnsDirectResolver: _setDnsDirectResolver,
       setDnsProxyPreset: _setDnsProxyPreset,
       setDnsProxyResolver: _setDnsProxyResolver,
-      setDnsPreferIpv6: _setDnsPreferIpv6,
       setDnsSecureOnly: _setDnsSecureOnly,
       setDnsDirectThroughProxy: _setDnsDirectThroughProxy,
     );
@@ -4320,6 +4319,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setVpnStrictRoute(value));
   }
 
+  void _setVpnEnableIpv6(bool value) {
+    _applySettingsChange(() => _settings.setVpnEnableIpv6(value));
+  }
+
   void _setVpnTunImplementation(TunImplementationPreference value) {
     _applySettingsChange(() => _settings.setVpnTunImplementation(value));
   }
@@ -4362,10 +4365,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _setDnsProxyResolver(String value) {
     _applySettingsChange(() => _settings.setDnsProxyResolver(value));
-  }
-
-  void _setDnsPreferIpv6(bool value) {
-    _applySettingsChange(() => _settings.setDnsPreferIpv6(value));
   }
 
   void _setDnsSecureOnly(bool value) {
@@ -4947,6 +4946,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentVpnInboundEnabled: _vpnInboundEnabled,
           currentVpnMtu: _vpnMtu,
           currentVpnStrictRoute: _vpnStrictRoute,
+          currentVpnEnableIpv6: _vpnEnableIpv6,
           currentVpnTunImplementation: _vpnTunImplementation,
           currentProxyInboundEnabled: _proxyInboundEnabled,
           currentProxyAllowLan: _proxyAllowLan,
@@ -4956,6 +4956,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentProxyPassword: _proxyPassword,
           onVpnMtuChanged: _setVpnMtu,
           onVpnStrictRouteChanged: _setVpnStrictRoute,
+          onVpnEnableIpv6Changed: _setVpnEnableIpv6,
           onVpnTunImplementationChanged: _setVpnTunImplementation,
           onProxyInboundEnabledChanged: _setProxyInboundEnabled,
           onProxyAllowLanChanged: _setProxyAllowLan,
@@ -5714,6 +5715,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       vpnInboundEnabled: _vpnInboundEnabled,
       vpnMtu: _vpnMtu,
       vpnStrictRoute: _vpnStrictRoute,
+      vpnEnableIpv6: _vpnEnableIpv6,
       vpnTunImplementation: _vpnTunImplementation,
       proxyInboundEnabled: _proxyInboundEnabled,
       proxyMixedListen: _proxyMixedListen,
@@ -5722,7 +5724,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       proxyPassword: _proxyPassword,
       dnsDirectResolver: _dnsDirectResolver,
       dnsProxyResolver: _dnsProxyResolver,
-      dnsPreferIpv6: _dnsPreferIpv6,
       dnsSecureOnly: _dnsSecureOnly,
       dnsDirectThroughProxy: _dnsDirectThroughProxy,
       russiaDnsDirectResolver: _russiaDnsDirectResolver,

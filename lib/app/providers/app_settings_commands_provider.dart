@@ -22,7 +22,6 @@ typedef SetDnsDirectPresetCommand = void Function(String value);
 typedef SetDnsDirectResolverCommand = void Function(String value);
 typedef SetDnsProxyPresetCommand = void Function(String value);
 typedef SetDnsProxyResolverCommand = void Function(String value);
-typedef SetDnsPreferIpv6Command = void Function(bool value);
 typedef SetDnsSecureOnlyCommand = void Function(bool value);
 typedef SetDnsDirectThroughProxyCommand = void Function(bool value);
 typedef SetExperimentalTcpFastOpenCommand = void Function(bool value);
@@ -60,7 +59,6 @@ class AppSettingsCommands {
   SetDnsDirectResolverCommand? _setDnsDirectResolver;
   SetDnsProxyPresetCommand? _setDnsProxyPreset;
   SetDnsProxyResolverCommand? _setDnsProxyResolver;
-  SetDnsPreferIpv6Command? _setDnsPreferIpv6;
   SetDnsSecureOnlyCommand? _setDnsSecureOnly;
   SetDnsDirectThroughProxyCommand? _setDnsDirectThroughProxy;
   SetExperimentalTcpFastOpenCommand? _setExperimentalTcpFastOpen;
@@ -83,7 +81,6 @@ class AppSettingsCommands {
       _setDnsDirectResolver != null &&
       _setDnsProxyPreset != null &&
       _setDnsProxyResolver != null &&
-      _setDnsPreferIpv6 != null &&
       _setDnsSecureOnly != null &&
       _setDnsDirectThroughProxy != null;
 
@@ -92,7 +89,6 @@ class AppSettingsCommands {
     required SetDnsDirectResolverCommand setDnsDirectResolver,
     required SetDnsProxyPresetCommand setDnsProxyPreset,
     required SetDnsProxyResolverCommand setDnsProxyResolver,
-    required SetDnsPreferIpv6Command setDnsPreferIpv6,
     required SetDnsSecureOnlyCommand setDnsSecureOnly,
     required SetDnsDirectThroughProxyCommand setDnsDirectThroughProxy,
   }) {
@@ -100,7 +96,6 @@ class AppSettingsCommands {
     _setDnsDirectResolver = setDnsDirectResolver;
     _setDnsProxyPreset = setDnsProxyPreset;
     _setDnsProxyResolver = setDnsProxyResolver;
-    _setDnsPreferIpv6 = setDnsPreferIpv6;
     _setDnsSecureOnly = setDnsSecureOnly;
     _setDnsDirectThroughProxy = setDnsDirectThroughProxy;
   }
@@ -110,7 +105,6 @@ class AppSettingsCommands {
     _setDnsDirectResolver = null;
     _setDnsProxyPreset = null;
     _setDnsProxyResolver = null;
-    _setDnsPreferIpv6 = null;
     _setDnsSecureOnly = null;
     _setDnsDirectThroughProxy = null;
   }
@@ -312,8 +306,6 @@ class AppSettingsCommands {
   void setDnsProxyPreset(String value) => _setDnsProxyPreset?.call(value);
 
   void setDnsProxyResolver(String value) => _setDnsProxyResolver?.call(value);
-
-  void setDnsPreferIpv6(bool value) => _setDnsPreferIpv6?.call(value);
 
   void setDnsSecureOnly(bool value) => _setDnsSecureOnly?.call(value);
 

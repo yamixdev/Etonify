@@ -27,7 +27,7 @@ void main() {
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'native', 'system', 'gvisor', 'mixed'},
+        tunStacks: const <String>{'native', 'system'},
       ),
     );
 
@@ -61,27 +61,27 @@ void main() {
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'system', 'gvisor'},
+        tunStacks: const <String>{'system'},
       ),
     );
 
     expect(result.status, CoreConfigMigrationStatus.readyForValidation);
     expect(
       result.state.vpnTunImplementation,
-      TunImplementationPreference.gvisor,
+      TunImplementationPreference.system,
     );
-    expect(result.changes, <String>['vpn_tun_implementation:mixed->gvisor']);
+    expect(result.changes, <String>['vpn_tun_implementation:native->system']);
   });
 
   test('schema 4 keeps an explicit compatibility stack', () {
     final original = _loadVersion021Fixture(store).copyWith(
       coreConfigSchemaVersion: 4,
-      vpnTunImplementation: TunImplementationPreference.gvisor,
+      vpnTunImplementation: TunImplementationPreference.system,
     );
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'native', 'system', 'gvisor', 'mixed'},
+        tunStacks: const <String>{'native', 'system'},
       ),
     );
 
@@ -89,7 +89,7 @@ void main() {
     expect(result.state.coreConfigSchemaVersion, 5);
     expect(
       result.state.vpnTunImplementation,
-      TunImplementationPreference.gvisor,
+      TunImplementationPreference.system,
     );
     expect(result.changes, isEmpty);
   });
@@ -106,7 +106,7 @@ void main() {
       final result = CoreConfigMigration.plan(
         state: original,
         capabilities: _versionedCapabilities(
-          tunStacks: const <String>{'system', 'gvisor', 'mixed'},
+          tunStacks: const <String>{'native', 'system'},
         ),
       );
 
@@ -148,7 +148,7 @@ void main() {
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'system', 'gvisor', 'mixed'},
+        tunStacks: const <String>{'native', 'system'},
       ),
     );
 

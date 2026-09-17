@@ -498,9 +498,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dnsProxyTitle => 'Via proxy';
 
   @override
-  String get dnsIpPreferenceTitle => 'IP version';
-
-  @override
   String get aboutSectionTitle => 'About';
 
   @override
@@ -617,7 +614,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get documentationRoutingBody =>
-      'Split tunneling works in VPN TUN mode. Via VPN sends selected apps into the tunnel. Outside VPN leaves them on a direct connection.\n\nMixed uses Android for TCP and gVisor for UDP. System uses Android for TCP and UDP. gVisor handles both inside the client. Keep Mixed unless you have a compatibility problem.';
+      'Split tunneling works in VPN TUN mode. Via VPN sends selected apps into the tunnel. Outside VPN leaves them on a direct connection.\n\nsing-tun uses its own core network stack for higher speed and lower resource usage. System uses the Android network stack. Keep sing-tun unless you experience compatibility issues on your device.';
 
   @override
   String get documentationTrafficRulesTitle => 'Traffic rules';
@@ -1565,18 +1562,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Controls how the client handles TCP and UDP traffic inside the VPN';
 
   @override
-  String get tunImplementationNative => 'New sing-tun (recommended)';
+  String get tunImplementationNative => 'sing-tun (recommended)';
 
   @override
   String get tunImplementationNativeSubtitle =>
-      'The sing-tun stack introduced in sing-box 1.15. It is normally faster and uses less memory and battery. Choose a compatibility mode below if it causes problems on this device.';
-
-  @override
-  String get tunImplementationMixed => 'Mixed (system TCP + gVisor UDP)';
-
-  @override
-  String get tunImplementationMixedSubtitle =>
-      'Compatibility mode: uses the Android system stack for TCP and gVisor for UDP.';
+      'sing-tun\'s own network stack. Runs faster with lower memory and battery usage. Switch to the system stack if device issues occur.';
 
   @override
   String get tunImplementationSystem => 'System (Android)';
@@ -1586,11 +1576,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Uses the Android system network stack for TCP and UDP. Compatibility depends on the device and its firmware.';
 
   @override
-  String get tunImplementationGvisor => 'gVisor';
+  String get vpnEnableIpv6Title => 'IPv6 support';
 
   @override
-  String get tunImplementationGvisorSubtitle =>
-      'Uses the gVisor userspace network stack for TCP and UDP. It can help when the system stack is unstable.';
+  String get vpnEnableIpv6Subtitle =>
+      'Route IPv6 through TUN. Disable if your provider or proxy does not support IPv6.';
 
   @override
   String get proxyInDescription =>
@@ -1762,13 +1752,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dnsDirectThroughProxySubtitle =>
       'Protect DNS for direct routes while website traffic stays direct.';
-
-  @override
-  String get dnsPreferIpv6Title => 'Prefer IPv6';
-
-  @override
-  String get dnsPreferIpv6Subtitle =>
-      'Prefer IPv6 when both address versions are available';
 
   @override
   String get urlTestUrlTitle => 'Test URL';

@@ -33,7 +33,7 @@ config generation, precedence and detours. The Go Android corpus test passes
 the same expected outbounds to CheckConfig with QUIC and uTLS enabled:
 
 ```sh
-go test -tags with_gvisor,with_quic,with_utls -run TestEtonifyAndroidConfigCorpus ./experimental/libbox
+go test -tags with_quic,with_utls -run TestEtonifyAndroidConfigCorpus ./experimental/libbox
 ```
 
 References:

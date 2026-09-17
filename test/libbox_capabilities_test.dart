@@ -144,8 +144,8 @@ void main() {
       expect(
         LibboxCapabilities.parseStrict(
           _strictContract.replaceFirst(
-            '"tun_stacks": ["native", "system", "gvisor", "mixed"]',
-            '"tun_stacks": ["system", "gvisor", "mixed"]',
+            '"tun_stacks": ["native", "system"]',
+            '"tun_stacks": ["system"]',
           ),
         ).contractError,
         'core_native_tun_stack_missing',
@@ -216,6 +216,6 @@ const _strictContract = '''
   "vless_encryption_modes": ["1rtt", "0rtt", "native", "xorpub", "random", "x25519", "mlkem768"],
   "vless_encryption_max_relays": 8,
   "vless_encryption_handshake_timeout_ms": 12000,
-  "tun_stacks": ["native", "system", "gvisor", "mixed"]
+  "tun_stacks": ["native", "system"]
 }
 ''';

@@ -992,12 +992,6 @@ abstract class AppLocalizations {
   /// **'Via proxy'**
   String get dnsProxyTitle;
 
-  /// No description provided for @dnsIpPreferenceTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'IP version'**
-  String get dnsIpPreferenceTitle;
-
   /// No description provided for @aboutSectionTitle.
   ///
   /// In en, this message translates to:
@@ -1205,7 +1199,7 @@ abstract class AppLocalizations {
   /// No description provided for @documentationRoutingBody.
   ///
   /// In en, this message translates to:
-  /// **'Split tunneling works in VPN TUN mode. Via VPN sends selected apps into the tunnel. Outside VPN leaves them on a direct connection.\n\nMixed uses Android for TCP and gVisor for UDP. System uses Android for TCP and UDP. gVisor handles both inside the client. Keep Mixed unless you have a compatibility problem.'**
+  /// **'Split tunneling works in VPN TUN mode. Via VPN sends selected apps into the tunnel. Outside VPN leaves them on a direct connection.\n\nsing-tun uses its own core network stack for higher speed and lower resource usage. System uses the Android network stack. Keep sing-tun unless you experience compatibility issues on your device.'**
   String get documentationRoutingBody;
 
   /// No description provided for @documentationTrafficRulesTitle.
@@ -2870,26 +2864,14 @@ abstract class AppLocalizations {
   /// No description provided for @tunImplementationNative.
   ///
   /// In en, this message translates to:
-  /// **'New sing-tun (recommended)'**
+  /// **'sing-tun (recommended)'**
   String get tunImplementationNative;
 
   /// No description provided for @tunImplementationNativeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'The sing-tun stack introduced in sing-box 1.15. It is normally faster and uses less memory and battery. Choose a compatibility mode below if it causes problems on this device.'**
+  /// **'sing-tun\'s own network stack. Runs faster with lower memory and battery usage. Switch to the system stack if device issues occur.'**
   String get tunImplementationNativeSubtitle;
-
-  /// No description provided for @tunImplementationMixed.
-  ///
-  /// In en, this message translates to:
-  /// **'Mixed (system TCP + gVisor UDP)'**
-  String get tunImplementationMixed;
-
-  /// No description provided for @tunImplementationMixedSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Compatibility mode: uses the Android system stack for TCP and gVisor for UDP.'**
-  String get tunImplementationMixedSubtitle;
 
   /// No description provided for @tunImplementationSystem.
   ///
@@ -2903,17 +2885,17 @@ abstract class AppLocalizations {
   /// **'Uses the Android system network stack for TCP and UDP. Compatibility depends on the device and its firmware.'**
   String get tunImplementationSystemSubtitle;
 
-  /// No description provided for @tunImplementationGvisor.
+  /// No description provided for @vpnEnableIpv6Title.
   ///
   /// In en, this message translates to:
-  /// **'gVisor'**
-  String get tunImplementationGvisor;
+  /// **'IPv6 support'**
+  String get vpnEnableIpv6Title;
 
-  /// No description provided for @tunImplementationGvisorSubtitle.
+  /// No description provided for @vpnEnableIpv6Subtitle.
   ///
   /// In en, this message translates to:
-  /// **'Uses the gVisor userspace network stack for TCP and UDP. It can help when the system stack is unstable.'**
-  String get tunImplementationGvisorSubtitle;
+  /// **'Route IPv6 through TUN. Disable if your provider or proxy does not support IPv6.'**
+  String get vpnEnableIpv6Subtitle;
 
   /// No description provided for @proxyInDescription.
   ///
@@ -3214,18 +3196,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Protect DNS for direct routes while website traffic stays direct.'**
   String get dnsDirectThroughProxySubtitle;
-
-  /// No description provided for @dnsPreferIpv6Title.
-  ///
-  /// In en, this message translates to:
-  /// **'Prefer IPv6'**
-  String get dnsPreferIpv6Title;
-
-  /// No description provided for @dnsPreferIpv6Subtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Prefer IPv6 when both address versions are available'**
-  String get dnsPreferIpv6Subtitle;
 
   /// No description provided for @urlTestUrlTitle.
   ///

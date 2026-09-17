@@ -19,6 +19,7 @@ import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.SystemProxyStatus
 import com.etonify.meow_client.MeowApplication
 import com.etonify.meow_client.MeowQuickSettingsTileService
+import java.security.MessageDigest
 import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
@@ -91,6 +92,14 @@ class MeowBoxService(
         fun hasActiveRuntimeOwner(mode: String? = null): Boolean {
             return activeServices.any { service ->
                 service.ownsActiveRuntime(mode)
+            }
+        }
+
+        fun onDefaultNetworkChanged(available: Boolean) {
+            for (boxService in activeServices) {
+                if (SingboxController.running && boxService.ownsActiveRuntime()) {
+                    boxService.showForeground(if (available) "Connected" else "Waiting for network")
+                }
             }
         }
 
@@ -196,7 +205,7 @@ class MeowBoxService(
     private var destroyed = false
 
     @Volatile
-    private var runningConfigHash: Int? = null
+    private var runningConfigHash: String? = null
 
     init {
         activeServices += this
@@ -345,9 +354,6 @@ class MeowBoxService(
         // owned by the foreground service and therefore does not depend on a
         // Flutter Activity or command-event subscription being attached.
         MeowDefaultNetworkMonitor.start()
-        MeowDefaultNetworkMonitor.reassertDefaultInterface(
-            "runtime_recovery_before_wake:$source",
-        )
 
         try {
             recoveryExecutor.execute {
@@ -421,8 +427,14 @@ class MeowBoxService(
                 (generation != 0L && generation == SingboxController.activeRuntimeGeneration))
     }
 
-    private fun currentConfigHash(): Int? =
-        runCatching { MeowApplication.configFile.readText().hashCode() }.getOrNull()
+    private fun sha256(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val bytes = digest.digest(text.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun currentConfigHash(): String? =
+        runCatching { sha256(MeowApplication.configFile.readText()) }.getOrNull()
 
     private fun shouldRestoreStickyStart(mode: String): Boolean =
         MeowApplication.isRuntimeIntentFresh(mode) &&
@@ -656,40 +668,20 @@ class MeowBoxService(
         }
         registerRuntimeReceiver()
         MeowDefaultNetworkMonitor.start()
-        if (!MeowDefaultNetworkMonitor.awaitUsableDefaultInterface(NETWORK_WAIT_TIMEOUT_MS)) {
+        val hasUsableInterface = MeowDefaultNetworkMonitor.awaitUsableDefaultInterface(NETWORK_WAIT_TIMEOUT_MS)
+        if (!hasUsableInterface) {
             SingboxController.log(
                 "warning",
-                "network_interface_wait_timeout attempt=$networkWaitAttempt token=$token " +
+                "network_interface_starting_without_active_transport attempt=$networkWaitAttempt token=$token " +
                     "current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
             )
-            if (networkWaitAttempt < NETWORK_WAIT_MAX_RETRIES) {
-                showForeground("Waiting for network")
-                cancelPendingStartRetry("replace_network_wait_retry")
-                pendingStartRetry = scheduleRetry(
-                    "network_wait",
-                    {
-                        if (startTokenCurrent(token)) {
-                            submitServiceTask("network_wait_retry") {
-                                startOrReloadInternal(token, networkWaitAttempt + 1)
-                            }
-                        }
-                    },
-                    NETWORK_WAIT_RETRY_DELAY_MS,
-                )
-                SingboxController.log(
-                    "info",
-                    "service_start_retry_scheduled attempt=${networkWaitAttempt + 1} " +
-                        "token=$token service=${service.javaClass.simpleName}",
-                )
-                return
-            }
-            fail("No usable network interface")
-            return
+            showForeground("Waiting for network")
+        } else {
+            SingboxController.log(
+                "info",
+                "network_interface_ready token=$token current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
+            )
         }
-        SingboxController.log(
-            "info",
-            "network_interface_ready token=$token current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
-        )
         if (!startTokenCurrent(token)) {
             MeowDiagnostics.log(TAG, "start cancelled after network wait token=$token")
             return
@@ -704,7 +696,7 @@ class MeowBoxService(
             fail("Generated config is empty")
             return
         }
-        val configHash = config.hashCode()
+        val configHash = sha256(config)
         val preparedRuntimeConfig = prepareRuntimeConfig(config)
         if (!startTokenCurrent(token)) {
             MeowDiagnostics.log(TAG, "start cancelled before command server token=$token")
@@ -743,18 +735,11 @@ class MeowBoxService(
                     "startElapsedMs=$elapsedMs",
             )
             MeowDefaultNetworkMonitor.reassertDefaultInterface("after_start_or_reload_service")
-            scheduleRetry(
-                "post_start_interface_reassert",
-                {
-                    if (startTokenCurrent(token) && commandServer != null) {
-                        MeowDefaultNetworkMonitor.reassertDefaultInterface(
-                            "after_start_or_reload_service_delayed",
-                        )
-                    }
-                },
-                POST_START_INTERFACE_REASSERT_DELAY_MS,
-            )
-            showForeground("Connected")
+            if (hasUsableInterface) {
+                showForeground("Connected")
+            } else {
+                showForeground("Waiting for network")
+            }
             MeowApplication.writeServiceState(mode)
             Log.i(TAG, "libbox service started mode=$mode")
             MeowDiagnostics.log(

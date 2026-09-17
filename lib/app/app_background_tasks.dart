@@ -247,6 +247,7 @@ class SingboxConfigBuildInput {
     required this.vpnInboundEnabled,
     required this.vpnMtu,
     required this.vpnStrictRoute,
+    this.vpnEnableIpv6 = false,
     required this.vpnTunImplementation,
     required this.proxyInboundEnabled,
     required this.proxyMixedListen,
@@ -255,7 +256,6 @@ class SingboxConfigBuildInput {
     this.proxyPassword = '',
     required this.dnsDirectResolver,
     required this.dnsProxyResolver,
-    required this.dnsPreferIpv6,
     this.dnsSecureOnly = false,
     this.dnsDirectThroughProxy = false,
     this.russiaDnsDirectResolver = defaultRussiaDnsDirectResolver,
@@ -303,6 +303,7 @@ class SingboxConfigBuildInput {
   final bool vpnInboundEnabled;
   final int vpnMtu;
   final bool vpnStrictRoute;
+  final bool vpnEnableIpv6;
   final TunImplementationPreference vpnTunImplementation;
   final bool proxyInboundEnabled;
   final String proxyMixedListen;
@@ -311,7 +312,6 @@ class SingboxConfigBuildInput {
   final String proxyPassword;
   final String dnsDirectResolver;
   final String dnsProxyResolver;
-  final bool dnsPreferIpv6;
   final bool dnsSecureOnly;
   final bool dnsDirectThroughProxy;
   final String russiaDnsDirectResolver;
@@ -827,6 +827,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     vpnInboundEnabled: input.vpnInboundEnabled,
     vpnMtu: input.vpnMtu,
     vpnStrictRoute: input.vpnStrictRoute,
+    vpnEnableIpv6: input.vpnEnableIpv6,
     vpnTunImplementation: input.vpnTunImplementation,
     proxyInboundEnabled: input.proxyInboundEnabled,
     proxyMixedListen: input.proxyMixedListen,
@@ -835,7 +836,6 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     proxyPassword: input.proxyPassword,
     dnsDirectResolver: input.dnsDirectResolver,
     dnsProxyResolver: input.dnsProxyResolver,
-    dnsPreferIpv6: input.dnsPreferIpv6,
     dnsSecureOnly: input.dnsSecureOnly,
     dnsDirectThroughProxy: input.dnsDirectThroughProxy,
     russiaDnsDirectResolver: input.russiaDnsDirectResolver,

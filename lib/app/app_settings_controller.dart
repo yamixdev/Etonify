@@ -138,6 +138,7 @@ class AppSettingsController {
   bool vpnStrictRoute = true;
   TunImplementationPreference vpnTunImplementation =
       TunImplementationPreference.native;
+  bool vpnEnableIpv6 = false;
   bool proxyInboundEnabled = false;
   bool proxyAllowLan = false;
   String proxyMixedListen = '127.0.0.1';
@@ -148,7 +149,6 @@ class AppSettingsController {
   String dnsDirectResolver = 'udp://1.1.1.1';
   String dnsProxyPreset = 'cloudflare';
   String dnsProxyResolver = 'https://dns.cloudflare.com/dns-query';
-  bool dnsPreferIpv6 = false;
   bool dnsSecureOnly = false;
   bool dnsDirectThroughProxy = false;
   String russiaDnsDirectResolver = defaultRussiaDnsDirectResolver;
@@ -228,6 +228,7 @@ class AppSettingsController {
       vpnMtu: vpnMtu,
       vpnStrictRoute: vpnStrictRoute,
       vpnTunImplementation: vpnTunImplementation,
+      vpnEnableIpv6: vpnEnableIpv6,
       proxyInboundEnabled: proxyInboundEnabled,
       proxyAllowLan: proxyAllowLan,
       proxyMixedListen: proxyMixedListen,
@@ -238,7 +239,6 @@ class AppSettingsController {
       dnsDirectResolver: dnsDirectResolver,
       dnsProxyPreset: dnsProxyPreset,
       dnsProxyResolver: dnsProxyResolver,
-      dnsPreferIpv6: dnsPreferIpv6,
       dnsSecureOnly: dnsSecureOnly,
       dnsDirectThroughProxy: dnsDirectThroughProxy,
       russiaDnsDirectResolver: russiaDnsDirectResolver,
@@ -303,6 +303,7 @@ class AppSettingsController {
     vpnMtu = state.vpnMtu;
     vpnStrictRoute = state.vpnStrictRoute;
     vpnTunImplementation = state.vpnTunImplementation;
+    vpnEnableIpv6 = state.vpnEnableIpv6;
     proxyInboundEnabled = state.proxyInboundEnabled;
     if (!vpnInboundEnabled && !proxyInboundEnabled) {
       vpnInboundEnabled = true;
@@ -319,7 +320,6 @@ class AppSettingsController {
     dnsDirectResolver = state.dnsDirectResolver;
     dnsProxyPreset = state.dnsProxyPreset;
     dnsProxyResolver = state.dnsProxyResolver;
-    dnsPreferIpv6 = state.dnsPreferIpv6;
     dnsSecureOnly = state.dnsSecureOnly;
     dnsDirectThroughProxy = state.dnsDirectThroughProxy;
     russiaDnsDirectResolver = normalizedRussiaDnsDirectResolver(
@@ -700,14 +700,14 @@ class AppSettingsController {
     );
   }
 
-  AppSettingsChange setDnsPreferIpv6(bool value) {
-    if (dnsPreferIpv6 == value) {
+  AppSettingsChange setVpnEnableIpv6(bool value) {
+    if (vpnEnableIpv6 == value) {
       return const AppSettingsChange.none();
     }
-    dnsPreferIpv6 = value;
+    vpnEnableIpv6 = value;
     return const AppSettingsChange(
       changed: true,
-      configReason: 'dns ip preference changed',
+      configReason: 'vpn ipv6 support changed',
     );
   }
 

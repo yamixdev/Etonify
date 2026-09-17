@@ -93,11 +93,6 @@ void main() {
               .read(appSettingsProvider.notifier)
               .mutate((c) => c.setDnsProxyResolver(value));
         },
-        setDnsPreferIpv6: (value) {
-          container
-              .read(appSettingsProvider.notifier)
-              .mutate((c) => c.setDnsPreferIpv6(value));
-        },
         setDnsSecureOnly: (value) {
           container
               .read(appSettingsProvider.notifier)
@@ -183,11 +178,6 @@ void main() {
         container
             .read(appSettingsProvider.notifier)
             .mutate((c) => c.setDnsProxyResolver(value));
-      },
-      setDnsPreferIpv6: (value) {
-        container
-            .read(appSettingsProvider.notifier)
-            .mutate((c) => c.setDnsPreferIpv6(value));
       },
       setDnsSecureOnly: (value) {
         container
