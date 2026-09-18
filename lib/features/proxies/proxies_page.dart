@@ -354,6 +354,7 @@ class ProxiesPage extends StatefulWidget {
     this.activeProxyHideIp = false,
     required this.connected,
     this.urlTestInFlight = false,
+    this.urlTestInFlightListenable,
     this.hapticEnabled = true,
     this.speedBytesPerSecond = 0,
     this.trafficBytes = 0,
@@ -395,6 +396,7 @@ class ProxiesPage extends StatefulWidget {
   final bool activeProxyHideIp;
   final bool connected;
   final bool urlTestInFlight;
+  final ValueListenable<bool>? urlTestInFlightListenable;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -941,20 +943,28 @@ class _ProxiesPageState extends State<ProxiesPage> {
               Positioned(
                 right: 24,
                 bottom: footerHeight + 24,
-                child: FloatingActionButton.small(
-                  onPressed: () => widget.onUrlTest(),
-                  tooltip: widget.urlTestInFlight
-                      ? l10n.cancel
-                      : l10n.urlTestTitle,
-                  child: Icon(
-                    widget.urlTestInFlight
-                        ? FluentIcons.dismiss_24_filled
-                        : FluentIcons.flash_24_filled,
-                  ),
-                ),
+                child: widget.urlTestInFlightListenable != null
+                    ? ValueListenableBuilder<bool>(
+                        valueListenable: widget.urlTestInFlightListenable!,
+                        builder: (context, inFlight, _) =>
+                            _buildUrlTestFab(l10n, inFlight),
+                      )
+                    : _buildUrlTestFab(l10n, widget.urlTestInFlight),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildUrlTestFab(AppLocalizations l10n, bool inFlight) {
+    return FloatingActionButton.small(
+      onPressed: () => widget.onUrlTest(),
+      tooltip: inFlight ? l10n.cancel : l10n.urlTestTitle,
+      child: Icon(
+        inFlight
+            ? FluentIcons.dismiss_24_filled
+            : FluentIcons.flash_24_filled,
       ),
     );
   }
@@ -1024,6 +1034,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     sort: _sort,
                     connected: widget.connected,
                     urlTestInFlight: widget.urlTestInFlight,
+                    urlTestInFlightListenable: widget.urlTestInFlightListenable,
                     hapticEnabled: widget.hapticEnabled,
                     speedBytesPerSecond: widget.speedBytesPerSecond,
                     trafficBytes: widget.trafficBytes,

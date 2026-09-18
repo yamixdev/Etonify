@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
@@ -12,7 +13,7 @@ class LatencyUiPolicy {
     this.rpcAckTimeout = const Duration(seconds: 5),
     this.initialEventTimeout = const Duration(seconds: 12),
     this.eventInactivityTimeout = const Duration(seconds: 12),
-    this.hardWatchdog = const Duration(seconds: 125),
+    this.hardWatchdog = const Duration(minutes: 30),
   });
 
   /// These values bound UI state only. They never delay command dispatch or
@@ -110,7 +111,7 @@ class LatencyCoordinator {
   static const _maximumTimeoutMillis = 30000;
   static const _defaultConcurrency = 10;
   static const _maximumConcurrency = 16;
-  static const _maximumDeadlineMillis = 120000;
+  static const _maximumDeadlineMillis = 1800000;
 
   final LatencyTestRunner _runTest;
   final LatencyCancelRunner? _cancelTest;
@@ -562,7 +563,8 @@ class LatencyCoordinator {
     final timeoutMillis = _configuredTimeoutMillis;
     final outboundCount = _outboundCount().clamp(1, 100000).toInt();
     final batchCount = (outboundCount + concurrency - 1) ~/ concurrency;
-    return (batchCount * timeoutMillis + 5000)
+    final headroomMillis = max(10000, batchCount * 1000);
+    return (batchCount * timeoutMillis + headroomMillis)
         .clamp(timeoutMillis, _maximumDeadlineMillis)
         .toInt();
   }
@@ -651,10 +653,11 @@ class LatencyCoordinator {
           Duration(milliseconds: request.deadlineMillis) +
           const Duration(seconds: 5);
       final sessionBudget =
-          capabilities.supportsUrlTestDeadline &&
-              nativeBudget < uiPolicy.hardWatchdog
-          ? nativeBudget
-          : uiPolicy.hardWatchdog;
+          capabilities.supportsUrlTestDeadline && request.deadlineMillis > 0
+              ? (nativeBudget > uiPolicy.hardWatchdog
+                  ? nativeBudget
+                  : uiPolicy.hardWatchdog)
+              : uiPolicy.hardWatchdog;
       _watchdogTimer = Timer(sessionBudget, () {
         if (generation != _generation) return;
         _settleCurrent(

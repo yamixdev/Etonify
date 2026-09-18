@@ -372,7 +372,8 @@ void main() {
       expect(requests, hasLength(1));
       expect(requests.single.timeoutMillis, 7000);
       expect(requests.single.concurrency, 3);
-      expect(requests.single.deadlineMillis, 33000);
+      // 4 batches * 7000ms + 10000ms headroom = 38000ms
+      expect(requests.single.deadlineMillis, 38000);
       coordinator.cancel();
       expect(await result, isFalse);
 
@@ -390,7 +391,7 @@ void main() {
 
       expect(boundedRequests.single.timeoutMillis, 30000);
       expect(boundedRequests.single.concurrency, 16);
-      expect(boundedRequests.single.deadlineMillis, 120000);
+      expect(boundedRequests.single.deadlineMillis, 1800000);
       boundedCoordinator.cancel();
       expect(await boundedResult, isFalse);
     },
@@ -775,11 +776,38 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(requests.single.mode, 'background');
     expect(requests.single.concurrency, 10);
-    expect(requests.single.deadlineMillis, 120000);
+    expect(requests.single.deadlineMillis, 1800000);
     coordinator.cancel();
     await Future<void>.delayed(Duration.zero);
     expect(cancellations, ['select|']);
     expect(await completed, isFalse);
+  });
+
+  test('background deadline dynamically scales for large subscription', () async {
+    final requests = <LatencyTestRequest>[];
+    final coordinator = LatencyCoordinator(
+      runTest: (request) async => requests.add(request),
+      isConnected: () => true,
+      isForeground: () => true,
+      activeOutboundTag: () => 'a',
+      testUrl: () => '',
+      outboundCount: () => 215,
+      timeoutSeconds: () => 6,
+      concurrency: () => 10,
+      capabilities: _v3Capabilities,
+      onSessionChanged: (_, _, _) {},
+      uiPolicy: _testPolicy,
+    );
+    addTearDown(coordinator.dispose);
+
+    final completed = coordinator.runFull(reason: 'startup');
+    await Future<void>.delayed(Duration.zero);
+    expect(requests.single.mode, 'background');
+    expect(requests.single.concurrency, 10);
+    // 22 batches * 6000ms + 22000ms headroom = 154000ms (> 120s old cap)
+    expect(requests.single.deadlineMillis, 154000);
+    coordinator.cancel();
+    await completed;
   });
 
   test(

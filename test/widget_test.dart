@@ -1266,6 +1266,101 @@ void main() {
     expect(actionCount, 1);
   });
 
+  testWidgets(
+    'proxy sheet header preserves cancel action across sheet collapse and re-expand via urlTestInFlightListenable',
+    (tester) async {
+      final inFlightNotifier = ValueNotifier<bool>(true);
+      addTearDown(inFlightNotifier.dispose);
+      final metricsNotifier = ValueNotifier<ProxyPanelMetrics>(
+        const ProxyPanelMetrics(
+          bottomInset: 0,
+          panelHeight: 700,
+          maxPanelHeight: 700,
+          viewportHeight: 700,
+          viewportLimit: 700,
+          progress: 1.0,
+          backdropProgress: 1.0,
+          atMaxExtent: true,
+          canFillScreen: true,
+          collapseOnAnyDownwardDrag: false,
+          dragging: false,
+          animating: false,
+        ),
+      );
+      addTearDown(metricsNotifier.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: SizedBox(
+              height: 720,
+              child: ProxiesPage(
+                proxies: [_proxy('proxy-1', 'proxy 1', latency: 42)],
+                selectedTag: 'proxy-1',
+                connected: true,
+                urlTestInFlight: false,
+                urlTestInFlightListenable: inFlightNotifier,
+                progressiveBlurEnabled: false,
+                onSelected: (_) {},
+                onUrlTest: () async {},
+                embedded: true,
+                sheetMetricsListenable: metricsNotifier,
+                sheetAtMaxExtent: true,
+                sheetExtent: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byIcon(FluentIcons.dismiss_24_filled), findsOneWidget);
+      expect(find.byIcon(FluentIcons.flash_24_filled), findsNothing);
+
+      metricsNotifier.value = const ProxyPanelMetrics(
+        bottomInset: 0,
+        panelHeight: 80,
+        maxPanelHeight: 700,
+        viewportHeight: 700,
+        viewportLimit: 700,
+        progress: 0.0,
+        backdropProgress: 0.0,
+        atMaxExtent: false,
+        canFillScreen: true,
+        collapseOnAnyDownwardDrag: false,
+        dragging: false,
+        animating: false,
+      );
+      await tester.pump();
+
+      metricsNotifier.value = const ProxyPanelMetrics(
+        bottomInset: 0,
+        panelHeight: 700,
+        maxPanelHeight: 700,
+        viewportHeight: 700,
+        viewportLimit: 700,
+        progress: 1.0,
+        backdropProgress: 1.0,
+        atMaxExtent: true,
+        canFillScreen: true,
+        collapseOnAnyDownwardDrag: false,
+        dragging: false,
+        animating: false,
+      );
+      await tester.pump();
+
+      expect(find.byIcon(FluentIcons.dismiss_24_filled), findsOneWidget);
+      expect(find.byIcon(FluentIcons.flash_24_filled), findsNothing);
+
+      inFlightNotifier.value = false;
+      await tester.pump();
+
+      expect(find.byIcon(FluentIcons.flash_24_filled), findsOneWidget);
+      expect(find.byIcon(FluentIcons.dismiss_24_filled), findsNothing);
+    },
+  );
+
   testWidgets('shows no proxies empty state for an empty proxy list', (
     tester,
   ) async {

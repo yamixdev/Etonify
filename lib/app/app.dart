@@ -204,6 +204,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
   final StartupLatencyDeadlineController _startupLatencyDeadline =
       StartupLatencyDeadlineController();
+  final ValueNotifier<bool> _urlTestInFlightNotifier =
+      ValueNotifier<bool>(false);
+  int _startupGroupUrlTestNativeGeneration = 0;
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
@@ -355,7 +358,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _settings.experimentalUrlTestStrictTolerance;
   bool get _experimentalFakeIpEnabled => _settings.experimentalFakeIpEnabled;
 
-  bool get _urlTestInFlight => ref.read(proxyLatencySessionProvider).running;
+  bool get _urlTestInFlight =>
+      _urlTestInFlightNotifier.value ||
+      ref.read(proxyLatencySessionProvider).running;
 
   int? get _lowestLatency => _proxyRuntime.lowestLatency;
   set _lowestLatency(int? value) => _proxyRuntime.lowestLatency = value;
@@ -2067,6 +2072,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
       onSessionChanged: (running, kind, targetTag) {
+        _urlTestInFlightNotifier.value =
+            running && (kind == null || kind == LatencySessionKind.full);
         ref
             .read(proxyLatencySessionProvider.notifier)
             .update(running: running, kind: kind, targetTag: targetTag);
@@ -2210,6 +2217,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
+    _urlTestInFlightNotifier.dispose();
     unawaited(_runtimeEvents.dispose());
     _deepLinkImportCoordinator.dispose();
     final store = _store;
@@ -3096,6 +3104,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     if (transition.becameDisconnected) {
       _startupLatencyDeadline.resetForNextService();
+      _startupGroupUrlTestNativeGeneration = 0;
+      _urlTestInFlightNotifier.value = false;
     }
     if (!_connected &&
         (phase == AppConnectionPhase.idle ||
@@ -3835,6 +3845,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
           );
           _clearRuntimeProxySelectionGuard(generation: selectionGeneration);
           _scheduleActiveOutboundIpRefresh();
+          if (_connected && !_runtimeTransitionInProgress) {
+            unawaited(
+              _latencyCoordinator.runTarget(
+                targetOutboundTag: tag,
+                reason: 'selection',
+              ),
+            );
+          }
         } catch (error) {
           if (!mounted ||
               !_proxySelection.isCurrentGeneration(selectionGeneration)) {
@@ -5423,6 +5441,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _haptic();
       }
       AppLogStore.debug('latency', 'active URLTest cancelled by user');
+      _urlTestInFlightNotifier.value = false;
       _latencyCoordinator.cancel();
       return;
     }
@@ -6714,10 +6733,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // Diagnostics are not a startup requirement. Let real application traffic
     // use the newly established TUN before opening probe/provider connections.
     _scheduleActiveOutboundIpRefresh(delay: const Duration(seconds: 5));
-    _scheduleGroupUrlTest(
-      reason: 'runtime_diagnostics_ready',
-      delay: const Duration(milliseconds: 1200),
-    );
+    final nativeGeneration = _runtimeOperations.nativeRuntimeGeneration;
+    if (nativeGeneration > 0 &&
+        _startupGroupUrlTestNativeGeneration != nativeGeneration) {
+      _startupGroupUrlTestNativeGeneration = nativeGeneration;
+      _scheduleGroupUrlTest(
+        reason: 'runtime_diagnostics_ready',
+        delay: const Duration(milliseconds: 1200),
+      );
+    }
     final configuredTimeoutSeconds =
         _activeSubscription?.urlTestConfig.timeoutSeconds ??
         _urlTestTimeoutSeconds;
@@ -7199,6 +7223,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         hideActiveProxyIp: _hideServerIp,
         connected: _connected,
         urlTestInFlight: _urlTestInFlight,
+        urlTestInFlightListenable: _urlTestInFlightNotifier,
         hapticEnabled: _hapticEnabled,
         trafficAvailable: _appTrafficMonitor.trafficAvailable,
         downlinkBytesPerSecond: _appTrafficMonitor.downlinkBytesPerSecond,

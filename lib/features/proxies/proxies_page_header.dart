@@ -102,6 +102,7 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.sort,
     required this.connected,
     required this.urlTestInFlight,
+    this.urlTestInFlightListenable,
     required this.hapticEnabled,
     required this.speedBytesPerSecond,
     required this.trafficBytes,
@@ -122,6 +123,7 @@ class _ProxySheetHeader extends StatelessWidget {
   final ProxySort sort;
   final bool connected;
   final bool urlTestInFlight;
+  final ValueListenable<bool>? urlTestInFlightListenable;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -261,17 +263,19 @@ class _ProxySheetHeader extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (connected)
-                          IconButton(
-                            onPressed: () => onUrlTest(),
-                            tooltip: urlTestInFlight
-                                ? l10n.cancel
-                                : l10n.urlTestTitle,
-                            icon: Icon(
-                              urlTestInFlight
-                                  ? FluentIcons.dismiss_24_filled
-                                  : FluentIcons.flash_24_filled,
-                            ),
-                          ),
+                          urlTestInFlightListenable != null
+                              ? ValueListenableBuilder<bool>(
+                                  valueListenable: urlTestInFlightListenable!,
+                                  builder: (context, inFlight, _) =>
+                                      _buildUrlTestButton(
+                                    l10n: l10n,
+                                    inFlight: inFlight,
+                                  ),
+                                )
+                              : _buildUrlTestButton(
+                                  l10n: l10n,
+                                  inFlight: urlTestInFlight,
+                                ),
                         IconButton(
                           tooltip: l10n.sort,
                           onPressed: () => _showProxySortPicker(
@@ -290,6 +294,21 @@ class _ProxySheetHeader extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildUrlTestButton({
+    required AppLocalizations l10n,
+    required bool inFlight,
+  }) {
+    return IconButton(
+      onPressed: () => onUrlTest(),
+      tooltip: inFlight ? l10n.cancel : l10n.urlTestTitle,
+      icon: Icon(
+        inFlight
+            ? FluentIcons.dismiss_24_filled
+            : FluentIcons.flash_24_filled,
       ),
     );
   }
