@@ -658,11 +658,13 @@ void main() {
     final wait = coordinator.cancelAndWait().then((_) => waitFinished = true);
     await Future<void>.delayed(Duration.zero);
     expect(waitFinished, isFalse);
+    expect(coordinator.canStartSession, isFalse);
 
     blocker.complete();
     await wait;
     expect(await active, isFalse);
     expect(waitFinished, isTrue);
+    expect(coordinator.canStartSession, isTrue);
   });
 
   test(

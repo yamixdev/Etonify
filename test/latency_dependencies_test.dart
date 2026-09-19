@@ -38,4 +38,21 @@ void main() {
       {'leaf', 'a', 'b'},
     );
   });
+
+  test('URLTest budget includes hidden runtime outbound targets', () {
+    expect(
+      latencySessionOutboundCount(
+        visibleOutboundCount: 3,
+        runtimeOutboundTags: ['visible', 'cand-01', 'cand-02', 'cand-03'],
+      ),
+      4,
+    );
+    expect(
+      latencySessionOutboundCount(
+        visibleOutboundCount: 7,
+        runtimeOutboundTags: const <String>[],
+      ),
+      7,
+    );
+  });
 }

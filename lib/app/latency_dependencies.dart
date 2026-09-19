@@ -20,6 +20,23 @@ Set<String> latencyAffectedTags(
   return affected;
 }
 
+/// Uses the actual runtime probe set when it is larger than the visible list.
+/// Provider candidates may be hidden in the UI but still occupy URLTest queue
+/// slots and therefore must be included in the background session deadline.
+int latencySessionOutboundCount({
+  required int visibleOutboundCount,
+  required Iterable<String> runtimeOutboundTags,
+}) {
+  final runtimeCount = runtimeOutboundTags
+      .map((tag) => tag.trim())
+      .where((tag) => tag.isNotEmpty)
+      .toSet()
+      .length;
+  return runtimeCount > visibleOutboundCount
+      ? runtimeCount
+      : visibleOutboundCount;
+}
+
 /// Resolves nested auto groups without confusing the visible group tag with
 /// the concrete tag used by the native test queue.
 String? latencyTargetTag(String tag, Map<String, String> selections) {

@@ -2063,7 +2063,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       testUrl: () => _urlTestUrl,
       outboundCount: () {
         _ensureActiveLookupCaches();
-        return _activeVisibleOutboundsLookup.length;
+        return latencySessionOutboundCount(
+          visibleOutboundCount: _activeVisibleOutboundsLookup.length,
+          runtimeOutboundTags: _runtimeRecovery.lastStartedUrlTestOutboundTags,
+        );
       },
       timeoutSeconds: () => _urlTestTimeoutSeconds,
       concurrency: () => _urlTestConcurrency,
@@ -2080,7 +2083,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
-        if (!running && _connected && _foregroundLifecycleActive) {
+        if (!running &&
+            _connected &&
+            _foregroundLifecycleActive &&
+            !_runtimeIntent.explicitStopInProgress &&
+            !_runtimeTransitionInProgress &&
+            !_groupUrlTestScheduler.hasPendingWork) {
           _schedulePeriodicGroupUrlTest();
         }
       },
@@ -3962,6 +3970,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _scheduleGroupUrlTest({
     required String reason,
     Duration delay = const Duration(milliseconds: 2500),
+    int maxRunAttempts = 2,
   }) {
     if (!mounted || !_foregroundLifecycleActive) {
       return;
@@ -3974,20 +3983,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _groupUrlTestScheduler.schedule(
       delay: delay,
       canRun: () {
-        final ready =
-            mounted &&
+        return mounted &&
             _connected &&
             _foregroundLifecycleActive &&
             !_runtimeTransitionInProgress &&
             _runtimeOperations.diagnosticsReady &&
-            !_urlTestInFlight;
-        if (!ready) {
-          AppLogStore.debug(
-            'latency',
-            'automatic group URLTest discarded reason=$reason',
-          );
-        }
-        return ready;
+            !_urlTestInFlight &&
+            _latencyCoordinator.canStartSession;
       },
       run: () {
         AppLogStore.info(
@@ -3995,6 +3997,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'automatic group URLTest start reason=$reason',
         );
         return _latencyCoordinator.runFull(reason: reason);
+      },
+      maxRunAttempts: maxRunAttempts,
+      onSettled: (success) {
+        if (!success) {
+          AppLogStore.warning(
+            'latency',
+            'automatic group URLTest completed without available results '
+                'reason=$reason attempts=$maxRunAttempts',
+          );
+        }
+        if (mounted && _connected && _foregroundLifecycleActive) {
+          _schedulePeriodicGroupUrlTest();
+        }
       },
     );
   }
@@ -4006,6 +4021,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _scheduleGroupUrlTest(
       reason: 'periodic',
       delay: Duration(seconds: max(15, _urlTestIntervalSeconds)),
+      maxRunAttempts: 1,
     );
   }
 
@@ -5441,6 +5457,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _haptic();
       }
       AppLogStore.debug('latency', 'active URLTest cancelled by user');
+      _groupUrlTestScheduler.cancel();
       _urlTestInFlightNotifier.value = false;
       _latencyCoordinator.cancel();
       return;
@@ -5448,6 +5465,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (haptic) {
       _haptic();
     }
+    _groupUrlTestScheduler.cancel();
     await _latencyCoordinator.runFull(reason: 'manual');
   }
 
@@ -5466,6 +5484,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (haptic) {
       _haptic();
     }
+    _groupUrlTestScheduler.cancel();
     if (!_latencyCoordinator.capabilities.supportsTargetedUrlTest) {
       _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
       await _latencyCoordinator.runFull(reason: 'manual_active_fallback');
@@ -5494,6 +5513,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (target == null) return;
     _haptic();
+    _groupUrlTestScheduler.cancel();
     final test = _latencyCoordinator.runTarget(
       targetOutboundTag: target,
       reason: 'manual_row',

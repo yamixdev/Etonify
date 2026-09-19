@@ -166,6 +166,8 @@ class LatencyCoordinator {
   bool get isRunning =>
       _phase == LatencySessionPhase.startingRpc ||
       _phase == LatencySessionPhase.collectingEvents;
+  bool get canStartSession =>
+      !_disposed && !isRunning && _nativeSessionFinished == null;
   LatencySessionKind? get kind => isRunning ? _kind : null;
   LatencySessionPhase get phase => _phase;
   int get sessionStartedAtSeconds => _sessionStartedAtSeconds;
