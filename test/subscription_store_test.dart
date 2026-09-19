@@ -717,6 +717,126 @@ Endpoint = wg.example.com:51820
       'interval': 300,
     });
   });
+
+  test('shouldCompactMetadataBox triggers when threshold is reached', () {
+    expect(shouldCompactMetadataBox(10, 9), isFalse);
+    expect(shouldCompactMetadataBox(20, 10), isFalse);
+    expect(shouldCompactMetadataBox(10, 10), isTrue);
+    expect(shouldCompactMetadataBox(5, 10), isTrue);
+  });
+
+  test(
+    'saving with unchanged payload content updates metadata and avoids redundant write',
+    () async {
+      final sub = Subscription(
+        id: 'sub-test-id',
+        name: 'Test Profile',
+        url: 'https://example.com/sub',
+        outbounds: [
+          _outbound(tag: 'node-1', name: 'Node 1', server: '1.2.3.4'),
+        ],
+        lastUpdated: 1000,
+      );
+
+      await SubscriptionStore.save(sub);
+      final saved1 = await SubscriptionStore.get('sub-test-id');
+      expect(saved1, isNotNull);
+      expect(saved1!.payloadRevision, isNotEmpty);
+      final revision = saved1.payloadRevision;
+
+      // Simulate refresh with identical outbounds but updated timestamp
+      final updated = saved1.copyWith(
+        lastUpdated: 2000,
+        name: 'Test Profile Updated',
+      );
+
+      final payloadBox = Hive.lazyBox<dynamic>(
+        'subscription_payloads_secure_v1',
+      );
+      final payloadEvents = <BoxEvent>[];
+      final payloadEventsSubscription = payloadBox
+          .watch(key: sub.id)
+          .listen(payloadEvents.add);
+      addTearDown(payloadEventsSubscription.cancel);
+
+      await SubscriptionStore.save(updated);
+      await Future<void>.delayed(Duration.zero);
+
+      final saved2 = await SubscriptionStore.get('sub-test-id');
+      expect(saved2, isNotNull);
+      expect(saved2!.name, 'Test Profile Updated');
+      expect(saved2.lastUpdated, 2000);
+      expect(saved2.payloadRevision, revision);
+      expect(saved2.outbounds.length, 1);
+      expect(saved2.outbounds.first.tag, 'node-1');
+      expect(payloadEvents, isEmpty);
+    },
+  );
+
+  test('stale payload revision cannot skip a required payload write', () async {
+    final original = Subscription(
+      id: 'stale-revision-test',
+      name: 'Original',
+      url: 'https://example.com/sub',
+      outbounds: [_outbound(tag: 'node-1', name: 'Node 1', server: '1.1.1.1')],
+    );
+    await SubscriptionStore.save(original);
+    final staleSnapshot = await SubscriptionStore.get(original.id);
+    expect(staleSnapshot, isNotNull);
+
+    await SubscriptionStore.save(
+      staleSnapshot!.copyWith(
+        name: 'New payload',
+        outbounds: [
+          _outbound(tag: 'node-1', name: 'Node 1', server: '2.2.2.2'),
+        ],
+      ),
+    );
+
+    await SubscriptionStore.save(staleSnapshot.copyWith(name: 'Restored'));
+
+    final restored = await SubscriptionStore.get(original.id);
+    expect(restored, isNotNull);
+    expect(restored!.name, 'Restored');
+    expect(restored.outbounds.single.server, '1.1.1.1');
+    expect(restored.payloadRevision, staleSnapshot.payloadRevision);
+  });
+
+  test('payload comparison repairs mismatched metadata revision', () async {
+    final original = Subscription(
+      id: 'mismatched-revision-test',
+      name: 'Original',
+      url: 'https://example.com/sub',
+      outbounds: [_outbound(tag: 'node-1', name: 'Node 1', server: '1.1.1.1')],
+    );
+    await SubscriptionStore.save(original);
+    final originalSnapshot = await SubscriptionStore.get(original.id);
+    expect(originalSnapshot, isNotNull);
+
+    await SubscriptionStore.save(
+      originalSnapshot!.copyWith(
+        name: 'New payload',
+        outbounds: [
+          _outbound(tag: 'node-1', name: 'Node 1', server: '2.2.2.2'),
+        ],
+      ),
+    );
+
+    // Simulate a previous interrupted save: metadata still describes the old
+    // payload while the payload box already contains the newer bytes.
+    await Hive.box<dynamic>('subscriptions_secure_v1').put(
+      original.id,
+      jsonEncode(originalSnapshot.toMetadataMap()),
+    );
+
+    await SubscriptionStore.save(originalSnapshot.copyWith(name: 'Restored'));
+
+    final restored = await SubscriptionStore.get(original.id);
+    expect(restored, isNotNull);
+    expect(restored!.name, 'Restored');
+    expect(restored.outbounds.single.server, '1.1.1.1');
+    expect(restored.payloadRevision, originalSnapshot.payloadRevision);
+  });
 }
 
 class _PassthroughHttpOverrides extends HttpOverrides {

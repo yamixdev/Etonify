@@ -444,6 +444,14 @@ void main() {
     expect(store.stateToSafeExportMap(state)['dns_secure_only'], '1');
     expect(store.stateToSafeExportMap(state)['dns_direct_through_proxy'], '1');
   });
+
+  test('shouldCompactAppSettingsBox triggers when threshold is reached', () {
+    expect(shouldCompactAppSettingsBox(50, 24), isFalse);
+    expect(shouldCompactAppSettingsBox(50, 25), isFalse);
+    expect(shouldCompactAppSettingsBox(25, 25), isTrue);
+    expect(shouldCompactAppSettingsBox(20, 25), isTrue);
+    expect(shouldCompactAppSettingsBox(50, 50), isTrue);
+  });
 }
 
 final class _TestSettingsStore extends AppSettingsStore {

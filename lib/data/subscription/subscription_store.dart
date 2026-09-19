@@ -189,6 +189,7 @@ class SubscriptionStore {
           : await Hive.openBox(
               _metaBoxName,
               encryptionCipher: SecureHiveStorage.cipher,
+              compactionStrategy: shouldCompactMetadataBox,
             );
       metaStopwatch.stop();
       totalStopwatch.stop();
@@ -577,7 +578,12 @@ class SubscriptionStore {
     }, debugName: 'meow-encode-subscription-payload');
     final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
     await _metaStore.put(updatedSub.id, jsonEncode(updatedSub.toMetadataMap()));
-    await _payloadStore.put(updatedSub.id, payloadResult.payload);
+    final payloadUnchanged =
+        existingPayload is List<int> &&
+        listEquals(existingPayload, payloadResult.payload);
+    if (!payloadUnchanged) {
+      await _payloadStore.put(updatedSub.id, payloadResult.payload);
+    }
   }
 
   /// Saves only lightweight subscription metadata.
@@ -2399,3 +2405,8 @@ String _decodeStoredPayload(dynamic value) {
     'Unsupported payload storage format: ${value.runtimeType}',
   );
 }
+
+/// Compacts subscription metadata box when at least 10 obsolete entries have
+/// accumulated and deleted entries match or exceed active entries.
+bool shouldCompactMetadataBox(int entries, int deletedEntries) =>
+    deletedEntries >= 10 && deletedEntries >= entries;

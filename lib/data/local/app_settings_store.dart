@@ -1047,6 +1047,7 @@ class HiveAppSettingsStore extends AppSettingsStore {
       final box = await Hive.openBox<dynamic>(
         AppSettingsStore.boxName,
         encryptionCipher: SecureHiveStorage.cipher,
+        compactionStrategy: shouldCompactAppSettingsBox,
       );
       await _migrateLegacyBox(box);
       stopwatch.stop();
@@ -1125,14 +1126,35 @@ class HiveAppSettingsStore extends AppSettingsStore {
   @override
   Future<void> saveState(AppSettingsState state) async {
     final map = stateToMap(state);
-    await _box.delete(AppSettingsStore._performanceModeKey);
-    await _box.putAll(map);
-    await _box.flush();
+    final toPut = <String, dynamic>{};
+    for (final entry in map.entries) {
+      final current = _box.get(entry.key);
+      if (current != entry.value) {
+        toPut[entry.key] = entry.value;
+      }
+    }
+    final shouldDeletePerfMode = _box.containsKey(
+      AppSettingsStore._performanceModeKey,
+    );
+    if (shouldDeletePerfMode) {
+      await _box.delete(AppSettingsStore._performanceModeKey);
+    }
+    if (toPut.isNotEmpty) {
+      await _box.putAll(toPut);
+    }
+    if (toPut.isNotEmpty || shouldDeletePerfMode) {
+      await _box.flush();
+    }
   }
 
   @override
   Future<void> close() => _box.close();
 }
+
+/// Compacts settings box when at least 25 obsolete entries have accumulated
+/// and deleted entries match or exceed active entries.
+bool shouldCompactAppSettingsBox(int entries, int deletedEntries) =>
+    deletedEntries >= 25 && deletedEntries >= entries;
 
 class MemoryAppSettingsStore extends AppSettingsStore {
   MemoryAppSettingsStore([AppSettingsState? initialState])

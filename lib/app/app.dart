@@ -14,6 +14,7 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_root_shell.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
+import 'package:meow_client/app/async_write_queue.dart';
 import 'package:meow_client/app/coordinators/proxy_location_coordinator.dart';
 import 'package:meow_client/app/coordinators/app_traffic_monitor.dart';
 import 'package:meow_client/app/coordinators/deep_link_import_coordinator.dart';
@@ -133,6 +134,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Timer? _proxyListCacheReleaseTimer;
   Timer? _vpnNotificationSyncTimer;
   Timer? _resumeForegroundSyncTimer;
+  Timer? _saveStateDebounceTimer;
+  late final AsyncWriteQueue<AppSettingsState> _stateSaveQueue;
   bool _autoRefreshInFlight = false;
   bool _backgroundSubscriptionSyncInFlight = false;
   bool _ownsStore = false;
@@ -1975,6 +1978,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   void initState() {
     super.initState();
+    _stateSaveQueue = AsyncWriteQueue<AppSettingsState>((state) async {
+      final store = _store;
+      if (store != null) {
+        await store.saveState(state);
+      }
+    });
     ref.read(appSettingsProvider);
     _singboxRuntime = ref.read(singboxRuntimeProvider);
     _appUpdateService = ref.read(appUpdateServiceProvider);
@@ -2225,12 +2234,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
+    final pendingStateSave = _saveStateDebounceTimer?.isActive ?? false;
+    _saveStateDebounceTimer?.cancel();
+    _saveStateDebounceTimer = null;
+    final stateWrites = pendingStateSave
+        ? _stateSaveQueue.add(_currentSettingsState())
+        : _stateSaveQueue.idle;
     _urlTestInFlightNotifier.dispose();
     unawaited(_runtimeEvents.dispose());
     _deepLinkImportCoordinator.dispose();
     final store = _store;
     if (_ownsStore && store != null) {
-      unawaited(store.close());
+      unawaited(stateWrites.whenComplete(store.close));
     }
     _proxyRuntime.dispose();
     _appTrafficMonitor.dispose();
@@ -2246,6 +2261,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_foregroundLifecycleActive) {
       _resumeForegroundWork();
     } else {
+      if (_saveStateDebounceTimer?.isActive ?? false) {
+        unawaited(_persistState());
+      }
       _suspendForegroundWork();
     }
   }
@@ -2798,15 +2816,24 @@ class _MeowClientState extends ConsumerState<MeowClient>
         unawaited(_checkForClientUpdatesIfDue());
       }
     }
-    bootstrapStopwatch.stop();
+    final readyMs = bootstrapStopwatch.elapsedMilliseconds;
     AppLogStore.info(
       'bootstrap performance',
-      'readyMs=${bootstrapStopwatch.elapsedMilliseconds} '
+      'readyMs=$readyMs '
           'criticalBootstrapMs=$criticalBootstrapMs '
           'metadataResolveMs=$metadataResolveMs '
           'metadataSubscriptions=${subscriptions.length} '
           'activePayloadDeferred=${!useInMemoryBootstrap && subscriptions.isNotEmpty}',
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final readyFrameMs = bootstrapStopwatch.elapsedMilliseconds;
+        bootstrapStopwatch.stop();
+        AppLogStore.info('bootstrap performance', 'readyFrameMs=$readyFrameMs');
+      } else {
+        bootstrapStopwatch.stop();
+      }
+    });
     if (_deepLinkImportCoordinator.hasPendingImport && _onboardingCompleted) {
       unawaited(_deepLinkImportCoordinator.drainPendingImports());
     }
@@ -2880,7 +2907,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _persistState() async {
     final store = _store;
     if (store == null) return;
-    await store.saveState(_currentSettingsState());
+    _saveStateDebounceTimer?.cancel();
+    _saveStateDebounceTimer = null;
+    await _stateSaveQueue.add(_currentSettingsState());
   }
 
   Future<void> _applyImportedSettingsState(AppSettingsState state) async {
@@ -2937,7 +2966,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _saveStateSoon() {
-    unawaited(_persistState());
+    _saveStateDebounceTimer?.cancel();
+    _saveStateDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+      _saveStateDebounceTimer = null;
+      if (mounted) {
+        unawaited(_persistState());
+      }
+    });
   }
 
   void _applySettingsChange(AppSettingsChange Function() mutate) {
@@ -4707,6 +4742,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (activeSubscription == null || activeSubscription.outbounds.isNotEmpty) {
       return true;
     }
+    final hydrateStopwatch = Stopwatch()..start();
     final hydrated = await _subscriptionCoordinator.hydrateActiveSubscription(
       metadata: activeSubscription,
       selectedProxyTag: _selectedProxyTag,
@@ -4716,6 +4752,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         preserveRuntimeState: true,
       ),
       buildFullProxyList: _fullProxyListCacheRequested,
+    );
+    hydrateStopwatch.stop();
+    AppLogStore.info(
+      'subscription metrics',
+      'activePayloadHydratedMs=${hydrateStopwatch.elapsedMilliseconds} '
+          'subId=${activeSubscription.id} '
+          'proxyCount=${hydrated.subscription.outbounds.length}',
     );
     if (!mounted || !_subscriptionCoordinator.isHydrationCurrent(generation)) {
       return false;
