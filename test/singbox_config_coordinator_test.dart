@@ -471,6 +471,9 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
     required bool restartCore,
   }) async {
     await _trackConfigApply(config);
+    if (restartCore) {
+      _confirmCoreRestart(useVpn: useVpn);
+    }
   }
 
   Future<void> _trackConfigApply(String config) async {
@@ -493,7 +496,19 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
-  }) async {}
+  }) async {
+    if (restartCore) {
+      _confirmCoreRestart(useVpn: useVpn);
+    }
+  }
+
+  void _confirmCoreRestart({required bool useVpn}) {
+    running = true;
+    mode = useVpn ? 'vpn' : 'proxy';
+    recordedServiceAlive = true;
+    activeRuntimeOwner = true;
+    runtimeGeneration++;
+  }
 
   @override
   Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async {

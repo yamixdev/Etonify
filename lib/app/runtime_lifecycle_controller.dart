@@ -441,6 +441,34 @@ class RuntimeLifecycleController {
       );
     }
 
+    final previousRuntimeGeneration = await _readActiveRuntimeGeneration(
+      useVpn: useVpn,
+    );
+    if (previousRuntimeGeneration == null) {
+      AppLogStore.warning(
+        'runtime',
+        'safe core restart skipped because the active runtime generation '
+            'could not be confirmed',
+      );
+      final recovered = await fullServiceRestart(
+        build: build,
+        useVpn: useVpn,
+        reason: 'safe_core_restart_precondition_failed',
+        promotePreparedConfig: promotePreparedConfigOnce,
+        cacheStartedBuild: cacheStartedBuild,
+        logCall: logCall,
+        trimMemory: trimMemory,
+        onWatchdogTimeout: onWatchdogTimeout,
+      );
+      if (!recovered.success) {
+        return recovered;
+      }
+      return const RuntimeLifecycleResult.success(
+        policy: RuntimeApplyPolicy.safeCoreRestart,
+        recovered: true,
+      );
+    }
+
     try {
       await _applyBuild(
         build: build,
@@ -450,7 +478,10 @@ class RuntimeLifecycleController {
         cacheStartedBuild: cacheStartedBuild,
         logCall: logCall,
       );
-      final healthy = await _waitForHealthyRuntime();
+      final healthy = await _waitForHealthyRuntime(
+        useVpn: useVpn,
+        newerThanRuntimeGeneration: previousRuntimeGeneration,
+      );
       if (healthy) {
         return const RuntimeLifecycleResult.success(
           policy: RuntimeApplyPolicy.safeCoreRestart,
@@ -484,7 +515,9 @@ class RuntimeLifecycleController {
             '$error\n$stackTrace',
       );
       if (policy == RuntimeApplyPolicy.safeCoreRestart) {
-        final runtimeStillHealthy = await _waitForHealthyRuntime();
+        final runtimeStillHealthy = await _waitForHealthyRuntime(
+          useVpn: useVpn,
+        );
         if (!runtimeStillHealthy) {
           AppLogStore.warning(
             'runtime',
@@ -866,7 +899,24 @@ class RuntimeLifecycleController {
     );
   }
 
-  Future<bool> _waitForHealthyRuntime() async {
+  Future<int?> _readActiveRuntimeGeneration({required bool useVpn}) async {
+    final status = await _runtime
+        .status()
+        .timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => const <String, dynamic>{},
+        )
+        .catchError((_) => const <String, dynamic>{});
+    if (!_isStartedRuntimeStatus(status, useVpn: useVpn)) {
+      return null;
+    }
+    return (status['runtimeGeneration'] as num?)?.toInt();
+  }
+
+  Future<bool> _waitForHealthyRuntime({
+    required bool useVpn,
+    int? newerThanRuntimeGeneration,
+  }) async {
     final deadline = DateTime.now().add(healthCheckTimeout);
     var lastStatus = const <String, dynamic>{};
     var lastInterface = NetworkInterfaceSnapshot.unavailable;
@@ -886,23 +936,35 @@ class RuntimeLifecycleController {
           )
           .catchError((_) => NetworkInterfaceSnapshot.unavailable);
       final running = lastStatus['running'] == true;
+      final runtimeGeneration =
+          (lastStatus['runtimeGeneration'] as num?)?.toInt() ?? 0;
+      final runtimeReady = _isStartedRuntimeStatus(lastStatus, useVpn: useVpn);
+      final generationAdvanced =
+          newerThanRuntimeGeneration == null ||
+          runtimeGeneration > newerThanRuntimeGeneration;
       AppLogStore.info(
         'runtime',
         'runtime health check running=$running '
+            'runtimeReady=$runtimeReady generation=$runtimeGeneration '
+            'requiredGeneration>${newerThanRuntimeGeneration ?? 0} '
             'interfaceUsable=${lastInterface.usable} '
             'interface=${lastInterface.interfaceName} '
             'index=${lastInterface.interfaceIndex} '
             'reason=${lastInterface.reason}',
       );
-      if (running && lastInterface.usable) {
+      if (runtimeReady && generationAdvanced && lastInterface.usable) {
         return true;
       }
       await Future<void>.delayed(const Duration(milliseconds: 350));
     }
     final running = lastStatus['running'] == true;
+    final runtimeGeneration =
+        (lastStatus['runtimeGeneration'] as num?)?.toInt() ?? 0;
     AppLogStore.warning(
       'runtime',
       'runtime health check failed running=$running '
+          'generation=$runtimeGeneration '
+          'requiredGeneration>${newerThanRuntimeGeneration ?? 0} '
           'interfaceUsable=${lastInterface.usable} '
           'interface=${lastInterface.interfaceName} '
           'index=${lastInterface.interfaceIndex} '

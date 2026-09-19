@@ -34,6 +34,46 @@ void main() {
   });
 
   test(
+    'safe core restart waits for a newer native runtime generation',
+    () async {
+      final runtime = _FakeRuntime(confirmApplyImmediately: false);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        healthCheckTimeout: const Duration(milliseconds: 500),
+      );
+      addTearDown(controller.dispose);
+
+      var completed = false;
+      final resultFuture = controller
+          .applyRuntimeBuild(
+            build: _build(),
+            useVpn: true,
+            policy: RuntimeApplyPolicy.safeCoreRestart,
+            promotePreparedConfig: (_) {},
+            cacheStartedBuild: (_) {},
+            logCall: (_, _) {},
+            trimMemory: (_) {},
+            onWatchdogTimeout: (_) {},
+          )
+          .then((result) {
+            completed = true;
+            return result;
+          });
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(completed, isFalse);
+
+      runtime.confirmStarted(useVpn: true);
+      final result = await resultFuture;
+
+      expect(result.success, isTrue);
+      expect(result.recovered, isFalse);
+      expect(runtime.stopCalls, 0);
+      expect(runtime.runtimeGeneration, 2);
+    },
+  );
+
+  test(
     'unusable interface after safe restart runs one full recovery restart',
     () async {
       final runtime = _FakeRuntime(interfaceUsable: false);
@@ -579,6 +619,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     this.failApplyAndStopRuntime = false,
     this.ignoreStop = false,
     this.confirmStartImmediately = true,
+    this.confirmApplyImmediately = true,
   }) : recordedServiceAlive = running,
        activeRuntimeOwner = running,
        runtimeGeneration = running ? 1 : 0;
@@ -590,6 +631,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   bool failApplyAndStopRuntime;
   bool ignoreStop;
   bool confirmStartImmediately;
+  bool confirmApplyImmediately;
   bool recordedServiceAlive;
   bool activeRuntimeOwner;
   int runtimeGeneration;
@@ -622,6 +664,9 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     lastRestartCore = restartCore;
     running = true;
     mode = useVpn ? 'vpn' : 'proxy';
+    if (restartCore && confirmApplyImmediately) {
+      confirmStarted(useVpn: useVpn);
+    }
   }
 
   @override
@@ -638,6 +683,9 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     }
     running = true;
     mode = useVpn ? 'vpn' : 'proxy';
+    if (restartCore && confirmApplyImmediately) {
+      confirmStarted(useVpn: useVpn);
+    }
   }
 
   @override
