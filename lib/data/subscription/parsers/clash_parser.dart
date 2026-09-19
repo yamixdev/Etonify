@@ -54,6 +54,8 @@ class ClashParser {
         return _wireguard(proxy);
       case 'anytls':
         return _anytls(proxy);
+      case 'naive':
+        return _naive(proxy);
       default:
         return null;
     }
@@ -240,7 +242,68 @@ class ClashParser {
   static Map<String, dynamic> _anytls(YamlMap p) {
     final r = _base(p, 'anytls');
     r['password'] = _s(p['password']);
+
+    final idleCheck =
+        p['idle-session-check-interval'] ?? p['idle_session_check_interval'];
+    if (idleCheck != null) {
+      if (idleCheck is int && idleCheck > 0) {
+        r['idle_session_check_interval'] = '${idleCheck}s';
+      } else if (idleCheck is String && idleCheck.trim().isNotEmpty) {
+        final s = idleCheck.trim();
+        r['idle_session_check_interval'] = s.endsWith('s') ? s : '${s}s';
+      }
+    }
+
+    final idleTimeout =
+        p['idle-session-timeout'] ?? p['idle_session_timeout'];
+    if (idleTimeout != null) {
+      if (idleTimeout is int && idleTimeout > 0) {
+        r['idle_session_timeout'] = '${idleTimeout}s';
+      } else if (idleTimeout is String && idleTimeout.trim().isNotEmpty) {
+        final s = idleTimeout.trim();
+        r['idle_session_timeout'] = s.endsWith('s') ? s : '${s}s';
+      }
+    }
+
+    final minIdle = p['min-idle-session'] ?? p['min_idle_session'];
+    if (minIdle is int && minIdle >= 0) {
+      r['min_idle_session'] = minIdle;
+    } else if (minIdle is String) {
+      final parsed = int.tryParse(minIdle.trim());
+      if (parsed != null && parsed >= 0) {
+        r['min_idle_session'] = parsed;
+      }
+    }
+
+    final clientMetadata = p['client-metadata'] ?? p['client_metadata'];
+    if (clientMetadata != null) {
+      final metaStr = clientMetadata.toString().trim();
+      if (metaStr.isNotEmpty) {
+        r['client_metadata'] = metaStr;
+      }
+    }
+
     _addTls(r, p, defaultEnabled: true);
+    return r;
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━ NaiveProxy ━━━━━━━━━━━━━━━━━
+
+  static Map<String, dynamic> _naive(YamlMap p) {
+    final r = _base(p, 'naive');
+    final username = _s(p['username'] ?? p['user']);
+    if (username.isNotEmpty) r['username'] = username;
+    final password = _s(p['password'] ?? p['pass']);
+    if (password.isNotEmpty) r['password'] = password;
+    if (p['quic'] == true) {
+      r['quic'] = true;
+    }
+    final sni = _s(p['sni'] ?? p['servername']);
+    final tls = <String, dynamic>{'enabled': true};
+    if (sni.isNotEmpty) {
+      tls['server_name'] = sni;
+    }
+    r['tls'] = tls;
     return r;
   }
 

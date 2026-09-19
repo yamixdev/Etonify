@@ -127,6 +127,8 @@ class SingboxConfigParser {
         return _hasString(ob, 'server') &&
             _hasPort(ob) &&
             _hasString(ob, 'password');
+      case 'naive':
+        return _hasString(ob, 'server') && _hasPort(ob);
       case 'socks':
       case 'http':
         return _hasString(ob, 'server') && _hasPort(ob);

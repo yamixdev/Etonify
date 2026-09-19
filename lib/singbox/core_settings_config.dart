@@ -1,3 +1,4 @@
+import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/models/core_settings.dart';
 
 /// Mutates only the freshly built config, never the stored subscription.
@@ -54,18 +55,19 @@ void applyCoreSettings(
     'naive',
     'shadowtls',
   };
-  const quicTypes = {'hysteria', 'hysteria2', 'tuic'};
   for (final outbound in (config['outbounds'] as List? ?? const [])) {
     if (outbound is! Map<String, dynamic> ||
         !dialTypes.contains(outbound['type'])) {
       continue;
     }
+    final isQuic = ParsedOutboundSchema.isQuicOutbound(outbound);
+    final isNaive = outbound['type'] == 'naive';
     // A detour owns the socket; dial overrides on this hop would be misleading.
     if (outbound['detour'] == null || outbound['detour'] == '') {
       if (settings.connectTimeoutSeconds > 0) {
         outbound['connect_timeout'] = '${settings.connectTimeoutSeconds}s';
       }
-      if (!quicTypes.contains(outbound['type'])) {
+      if (!isQuic && !isNaive) {
         if (settings.keepAlive != CoreKeepAlive.defaults) {
           outbound['disable_tcp_keep_alive'] =
               settings.keepAlive == CoreKeepAlive.disabled;
@@ -85,7 +87,8 @@ void applyCoreSettings(
     }
     final tls = outbound['tls'];
     if (settings.tlsHandshakeTimeoutSeconds > 0 &&
-        !quicTypes.contains(outbound['type']) &&
+        !isQuic &&
+        !isNaive &&
         tls is Map &&
         tls['enabled'] == true) {
       outbound['tls'] = {

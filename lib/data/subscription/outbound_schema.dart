@@ -128,6 +128,14 @@ class ParsedOutboundSchema {
     'reality',
   };
 
+  static const Set<String> _tlsNaiveKeys = {
+    'enabled',
+    'server_name',
+    'certificate',
+    'certificate_path',
+    'ech',
+  };
+
   static const Set<String> _tlsEchKeys = {
     'enabled',
     'config',
@@ -388,6 +396,7 @@ class ParsedOutboundSchema {
     'idle_session_check_interval',
     'idle_session_timeout',
     'min_idle_session',
+    'client_metadata',
   };
 
   static const Set<String> _typeSpecificKeysWireguard = {
@@ -534,6 +543,31 @@ class ParsedOutboundSchema {
       final tls = config['tls'];
       if (tls is! Map || tls['enabled'] != true) {
         return 'missing naive tls';
+      }
+      if (tls['insecure'] == true) {
+        return 'insecure is not supported on naive outbound';
+      }
+      if (tls['disable_sni'] == true) {
+        return 'disable_sni is not supported on naive outbound';
+      }
+      if (tls['alpn'] != null) {
+        return 'alpn is not supported on naive outbound';
+      }
+      if (tls['utls'] != null) {
+        return 'utls is not supported on naive outbound';
+      }
+      if (tls['reality'] != null) {
+        return 'reality is not supported on naive outbound';
+      }
+    }
+
+    if (type == 'anytls') {
+      final tls = config['tls'];
+      if (tls is! Map || tls['enabled'] != true) {
+        return 'missing anytls tls';
+      }
+      if (config['tcp_fast_open'] == true) {
+        return 'tcp_fast_open is not supported with anytls outbound';
       }
     }
 
@@ -959,7 +993,7 @@ class ParsedOutboundSchema {
       }
     }
 
-    final tls = _sanitizeTls(sanitized['tls']);
+    final tls = _sanitizeTls(sanitized['tls'], isNaive: type == 'naive');
     if (tls == null) {
       sanitized.remove('tls');
     } else {
@@ -1033,6 +1067,36 @@ class ParsedOutboundSchema {
   }
 
   static void _applyKnownFixups(Map<String, dynamic> outbound) {
+    final type = _normalizedType(outbound['type']);
+    if (type == 'naive') {
+      final tls = outbound['tls'];
+      if (tls is Map) {
+        tls.remove('insecure');
+        tls.remove('alpn');
+        tls.remove('utls');
+        tls.remove('reality');
+        tls.remove('disable_sni');
+        tls.remove('handshake_timeout');
+        tls.remove('fragment');
+        tls.remove('record_fragment');
+        tls.remove('fragment_fallback_delay');
+        tls.remove('kernel_tx');
+        tls.remove('kernel_rx');
+        tls.remove('client_certificate');
+        tls.remove('client_certificate_path');
+        tls.remove('client_key');
+        tls.remove('client_key_path');
+        tls.remove('cipher_suites');
+        tls.remove('curve_preferences');
+        tls.remove('min_version');
+        tls.remove('max_version');
+      }
+    }
+
+    if (type == 'anytls') {
+      outbound.remove('tcp_fast_open');
+    }
+
     final transport = outbound['transport'];
     if (transport is Map) {
       final transportType = _normalizedType(transport['type']);
@@ -1087,15 +1151,23 @@ class ParsedOutboundSchema {
     reality['short_id'] = normalized;
   }
 
-  static Map<String, dynamic>? _sanitizeTls(dynamic value) {
+  static Map<String, dynamic>? _sanitizeTls(
+    dynamic value, {
+    bool isNaive = false,
+  }) {
     if (value is! Map) {
       return null;
     }
-    final tls = _retainAllowedKeys(Map<String, dynamic>.from(value), _tlsKeys);
-    final alpn = _sanitizeAlpn(tls['alpn']);
+    final allowedKeys = isNaive ? _tlsNaiveKeys : _tlsKeys;
+    final tls = _retainAllowedKeys(
+      Map<String, dynamic>.from(value),
+      allowedKeys,
+    );
+    final alpn = isNaive ? null : _sanitizeAlpn(tls['alpn']);
     final ech = _sanitizeNestedMap(tls['ech'], _tlsEchKeys);
-    final utls = _sanitizeNestedMap(tls['utls'], _tlsUtlsKeys);
-    final reality = _sanitizeNestedMap(tls['reality'], _tlsRealityKeys);
+    final utls = isNaive ? null : _sanitizeNestedMap(tls['utls'], _tlsUtlsKeys);
+    final reality =
+        isNaive ? null : _sanitizeNestedMap(tls['reality'], _tlsRealityKeys);
 
     if (ech == null) {
       tls.remove('ech');
@@ -1142,6 +1214,10 @@ class ParsedOutboundSchema {
       }
     }
     return result.isEmpty ? null : result;
+  }
+
+  static bool isQuicOutbound(Map<String, dynamic> outbound) {
+    return _usesQuicTransport(outbound);
   }
 
   static bool _usesQuicTransport(Map<String, dynamic> outbound) {

@@ -628,6 +628,29 @@ class LinkParser {
     }
     result['tls'] = tls;
 
+    final clientMetadata = p['client_metadata'] ?? p['client-metadata'];
+    if (clientMetadata != null && clientMetadata.trim().isNotEmpty) {
+      result['client_metadata'] = clientMetadata.trim();
+    }
+    final idleCheck =
+        p['idle_session_check_interval'] ?? p['idle-session-check-interval'];
+    if (idleCheck != null && idleCheck.trim().isNotEmpty) {
+      final s = idleCheck.trim();
+      result['idle_session_check_interval'] = s.endsWith('s') ? s : '${s}s';
+    }
+    final idleTimeout =
+        p['idle_session_timeout'] ?? p['idle-session-timeout'];
+    if (idleTimeout != null && idleTimeout.trim().isNotEmpty) {
+      final s = idleTimeout.trim();
+      result['idle_session_timeout'] = s.endsWith('s') ? s : '${s}s';
+    }
+    final minIdle = int.tryParse(
+      p['min_idle_session'] ?? p['min-idle-session'] ?? '',
+    );
+    if (minIdle != null && minIdle >= 0) {
+      result['min_idle_session'] = minIdle;
+    }
+
     result['_name'] = name.isNotEmpty ? name : '${uri.host}:$port';
     return result;
   }

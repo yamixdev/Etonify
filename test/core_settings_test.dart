@@ -236,4 +236,73 @@ void main() {
       expect(jsonEncode(value), before);
     },
   );
+  test(
+    'NaiveProxy and QUIC outbounds do not receive TLS handshake_timeout or TCP keepalive',
+    () {
+      final value = {
+        'outbounds': [
+          {
+            'type': 'naive',
+            'tag': 'naive-https',
+            'server': 'naive.example.com',
+            'server_port': 443,
+            'tls': {'enabled': true, 'server_name': 'naive.example.com'},
+          },
+          {
+            'type': 'naive',
+            'tag': 'naive-quic',
+            'server': 'naive-quic.example.com',
+            'server_port': 443,
+            'quic': true,
+            'tls': {'enabled': true, 'server_name': 'naive-quic.example.com'},
+          },
+          {
+            'type': 'vless',
+            'tag': 'vless-quic',
+            'server': 'vless.example.com',
+            'server_port': 443,
+            'transport': {'type': 'quic'},
+            'tls': {'enabled': true, 'server_name': 'vless.example.com'},
+          },
+          {
+            'type': 'anytls',
+            'tag': 'anytls-node',
+            'server': 'anytls.example.com',
+            'server_port': 443,
+            'tls': {'enabled': true, 'server_name': 'anytls.example.com'},
+          },
+        ],
+      };
+
+      applyCoreSettings(
+        value,
+        const CoreSettings(
+          tlsHandshakeTimeoutSeconds: 12,
+          keepAlive: CoreKeepAlive.manual,
+          keepAliveSeconds: 45,
+          keepAliveIntervalSeconds: 10,
+        ),
+        profileId: 'p',
+      );
+
+      final outbounds =
+          (value['outbounds'] as List).cast<Map<String, dynamic>>();
+      final naiveHttps = outbounds.firstWhere((o) => o['tag'] == 'naive-https');
+      final naiveQuic = outbounds.firstWhere((o) => o['tag'] == 'naive-quic');
+      final vlessQuic = outbounds.firstWhere((o) => o['tag'] == 'vless-quic');
+      final anytls = outbounds.firstWhere((o) => o['tag'] == 'anytls-node');
+
+      expect(naiveHttps['tls'].containsKey('handshake_timeout'), isFalse);
+      expect(naiveQuic['tls'].containsKey('handshake_timeout'), isFalse);
+
+      expect(vlessQuic['tls'].containsKey('handshake_timeout'), isFalse);
+      expect(vlessQuic.containsKey('tcp_keep_alive'), isFalse);
+      expect(naiveQuic.containsKey('tcp_keep_alive'), isFalse);
+      expect(naiveHttps.containsKey('tcp_keep_alive'), isFalse);
+
+      expect(anytls['tls']['handshake_timeout'], '12s');
+      expect(anytls['tcp_keep_alive'], '45s');
+      expect(anytls['tcp_keep_alive_interval'], '10s');
+    },
+  );
 }

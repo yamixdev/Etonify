@@ -1,28 +1,47 @@
+<div align="center">
+
 # Etonify
 
-[English](README.md) / [Русский](README_ru.md) / [Українська](README_uk.md) / [简体中文](README_cn.md) / [فارسی](README_fa.md)
+**VPN-клиент с открытым исходным кодом для Android на базе Flutter и ядра sing-box.**
 
-Etonify — VPN-клиент с открытым исходным кодом для Android. Приложение написано на Flutter и использует [etonify-core](https://github.com/yamixdev/etonify-core), поддерживаемый форк sing-box. В клиенте можно управлять подписками, выбирать серверы, настраивать DNS и маршрутизацию трафика.
+[English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
+  <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Версия-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="Версия"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Лицензия-GPL%20v3-blue.svg" alt="Лицензия"></a>
+  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
+</p>
+
+[Скачать APK](https://github.com/yamixdev/Etonify/releases) • [История изменений](CHANGELOG.md) • [Сообщить об ошибке](https://github.com/yamixdev/Etonify/issues/new/choose) • [Telegram-канал](https://t.me/etonify)
+
+<br/>
+
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="Интерфейс Etonify" width="720">
+
+</div>
+
+Etonify: VPN-клиент с открытым исходным кодом для Android. Приложение написано на Flutter и использует [etonify-core](https://github.com/yamixdev/etonify-core), поддерживаемый форк sing-box. В клиенте можно управлять подписками, выбирать серверы, настраивать DNS и маршрутизацию трафика.
 
 Приложение не предоставляет VPN-серверы. Для подключения нужен собственный сервер или подписка провайдера.
-
-[Скачать APK](https://github.com/yamixdev/Etonify/releases) · [История изменений](CHANGELOG.md) · [Сообщить об ошибке](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
-
-![Интерфейс Etonify](https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde)
 
 ## Версии и требования
 
 | Компонент | Версия или требование |
-| --- | --- |
+| :--- | :--- |
 | Версия клиента в исходниках | `0.3.6+26` |
-| Встроенное ядро | `v1.15.0-alpha.3-etonify.1` на базе sing-box `1.15.0-alpha.3` |
+| Встроенное ядро | `v1.15.0-alpha.3-etonify.5` на базе sing-box `1.15.0-alpha.3` |
+| Flutter SDK | `3.47.2` (Dart 3.13) |
 | Android | 8.0 и новее (API 26+) |
 | Архитектуры APK | `arm64-v8a`, `armeabi-v7a` |
 | Языки интерфейса | Русский и английский |
 
-Версия клиента указана в [pubspec.yaml](pubspec.yaml), версия встроенного ядра — в [libbox.provenance.json](android/app/libs/libbox.provenance.json). В исходниках могут быть ещё не выпущенные изменения. Доступные APK и описание каждого выпуска находятся в [Releases](https://github.com/yamixdev/Etonify/releases).
+Версия клиента указана в [pubspec.yaml](pubspec.yaml), версия встроенного ядра: в [libbox.provenance.json](android/app/libs/libbox.provenance.json). В исходниках могут быть еще не выпущенные изменения. Доступные APK и описание каждого выпуска находятся в [Releases](https://github.com/yamixdev/Etonify/releases).
 
-Поддерживаемая платформа выпуска — Android. Наличие каталогов других платформ Flutter не означает, что для них доступны рабочие сборки.
+Поддерживаемая платформа выпуска: Android. Наличие каталогов других платформ Flutter не означает, что для них доступны рабочие сборки.
 
 ## Как начать
 

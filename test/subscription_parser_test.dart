@@ -578,7 +578,11 @@ void main() {
         );
         expect(tls!['server_name'], startsWith('front.'));
         expect(tls.containsKey('utls'), isFalse);
-        expect(tls['alpn'], isNotEmpty);
+        if (outbound['type'] == 'naive') {
+          expect(tls.containsKey('alpn'), isFalse);
+        } else {
+          expect(tls['alpn'], isNotEmpty);
+        }
       }
 
       final hy2 = ParsedOutboundSchema.sanitize(quicOutbounds.first)!;
@@ -1686,6 +1690,196 @@ proxies:
       expect(ss['type'], 'shadowsocks');
       expect(ss['method'], 'aes-256-gcm');
       expect(ss['password'], 'sspass123');
+    });
+
+    test('parses Clash YAML AnyTLS with intervals and metadata', () {
+      const content = '''
+proxies:
+  - name: "AnyTLS Node"
+    type: anytls
+    server: anytls.server.com
+    port: 443
+    password: "anytlspassword"
+    idle-session-check-interval: 30
+    idle-session-timeout: 60
+    min-idle-session: 2
+    client-metadata: "my-client-meta"
+    sni: sni.anytls.com
+''';
+      final results = ClashParser.parse(content);
+      expect(results.length, 1);
+      final anytls = results.first;
+      expect(anytls['type'], 'anytls');
+      expect(anytls['server'], 'anytls.server.com');
+      expect(anytls['server_port'], 443);
+      expect(anytls['password'], 'anytlspassword');
+      expect(anytls['idle_session_check_interval'], '30s');
+      expect(anytls['idle_session_timeout'], '60s');
+      expect(anytls['min_idle_session'], 2);
+      expect(anytls['client_metadata'], 'my-client-meta');
+      expect(anytls['tls']['enabled'], true);
+      expect(anytls['tls']['server_name'], 'sni.anytls.com');
+    });
+
+    test('parses Clash YAML AnyTLS without default client_metadata', () {
+      const content = '''
+proxies:
+  - name: "AnyTLS Default"
+    type: anytls
+    server: anytls.server.com
+    port: 443
+    password: "anytlspassword"
+''';
+      final results = ClashParser.parse(content);
+      expect(results.length, 1);
+      final anytls = results.first;
+      expect(anytls.containsKey('client_metadata'), isFalse);
+    });
+
+    test('parses Clash YAML NaiveProxy HTTPS and QUIC', () {
+      const content = '''
+proxies:
+  - name: "Naive HTTPS"
+    type: naive
+    server: naive.server.com
+    port: 443
+    username: naiveuser
+    password: naivepass
+    sni: front.naive.com
+
+  - name: "Naive QUIC"
+    type: naive
+    server: naive-quic.server.com
+    port: 443
+    username: quicuser
+    password: quicpass
+    quic: true
+    sni: quic.naive.com
+''';
+      final results = ClashParser.parse(content);
+      expect(results.length, 2);
+
+      final httpsNode = results[0];
+      expect(httpsNode['type'], 'naive');
+      expect(httpsNode['server'], 'naive.server.com');
+      expect(httpsNode['server_port'], 443);
+      expect(httpsNode['username'], 'naiveuser');
+      expect(httpsNode['password'], 'naivepass');
+      expect(httpsNode['tls']['enabled'], true);
+      expect(httpsNode['tls']['server_name'], 'front.naive.com');
+      expect(httpsNode.containsKey('quic'), isFalse);
+
+      final quicNode = results[1];
+      expect(quicNode['type'], 'naive');
+      expect(quicNode['server'], 'naive-quic.server.com');
+      expect(quicNode['server_port'], 443);
+      expect(quicNode['username'], 'quicuser');
+      expect(quicNode['password'], 'quicpass');
+      expect(quicNode['quic'], true);
+      expect(quicNode['tls']['enabled'], true);
+      expect(quicNode['tls']['server_name'], 'quic.naive.com');
+    });
+
+    test('sanitizes NaiveProxy TLS strictly stripping incompatible fields', () {
+      final config = {
+        'type': 'naive',
+        'server': 'naive.server.com',
+        'server_port': 443,
+        'username': 'user',
+        'password': 'pass',
+        'tls': {
+          'enabled': true,
+          'server_name': 'sni.example.com',
+          'insecure': true,
+          'disable_sni': true,
+          'alpn': ['h2', 'http/1.1'],
+          'min_version': '1.2',
+          'max_version': '1.3',
+          'cipher_suites': ['TLS_AES_128_GCM_SHA256'],
+          'curve_preferences': ['P-256'],
+          'client_certificate': ['cert-data'],
+          'client_key': ['key-data'],
+          'fragment': true,
+          'record_fragment': true,
+          'kernel_tx': true,
+          'kernel_rx': true,
+          'handshake_timeout': '10s',
+          'utls': {'enabled': true, 'fingerprint': 'chrome'},
+          'reality': {'enabled': true, 'public_key': 'abc'},
+          'certificate': ['ca-cert'],
+          'ech': {'enabled': true, 'config': ['ech-config']},
+        },
+      };
+
+      final sanitized = ParsedOutboundSchema.sanitize(config);
+      expect(sanitized, isNotNull);
+      final tls = sanitized!['tls'] as Map<String, dynamic>;
+
+      // Strictly kept fields
+      expect(tls['enabled'], true);
+      expect(tls['server_name'], 'sni.example.com');
+      expect(tls['certificate'], ['ca-cert']);
+      expect(tls['ech'], {'enabled': true, 'config': ['ech-config']});
+
+      // Stripped fields that sing-box Naive rejects
+      expect(tls.containsKey('insecure'), isFalse);
+      expect(tls.containsKey('disable_sni'), isFalse);
+      expect(tls.containsKey('alpn'), isFalse);
+      expect(tls.containsKey('min_version'), isFalse);
+      expect(tls.containsKey('max_version'), isFalse);
+      expect(tls.containsKey('cipher_suites'), isFalse);
+      expect(tls.containsKey('curve_preferences'), isFalse);
+      expect(tls.containsKey('client_certificate'), isFalse);
+      expect(tls.containsKey('client_key'), isFalse);
+      expect(tls.containsKey('fragment'), isFalse);
+      expect(tls.containsKey('record_fragment'), isFalse);
+      expect(tls.containsKey('kernel_tx'), isFalse);
+      expect(tls.containsKey('kernel_rx'), isFalse);
+      expect(tls.containsKey('handshake_timeout'), isFalse);
+      expect(tls.containsKey('utls'), isFalse);
+      expect(tls.containsKey('reality'), isFalse);
+    });
+
+    test('sanitizes AnyTLS preserving client_metadata and stripping tcp_fast_open', () {
+      final config = {
+        'type': 'anytls',
+        'server': 'anytls.server.com',
+        'server_port': 443,
+        'password': 'pass',
+        'client_metadata': 'custom_meta_payload',
+        'idle_session_check_interval': '20s',
+        'idle_session_timeout': '45s',
+        'min_idle_session': 3,
+        'tcp_fast_open': true,
+        'tls': {'enabled': true, 'server_name': 'anytls.server.com'},
+      };
+
+      final sanitized = ParsedOutboundSchema.sanitize(config);
+      expect(sanitized, isNotNull);
+      expect(sanitized!['client_metadata'], 'custom_meta_payload');
+      expect(sanitized['idle_session_check_interval'], '20s');
+      expect(sanitized['idle_session_timeout'], '45s');
+      expect(sanitized['min_idle_session'], 3);
+      expect(sanitized.containsKey('tcp_fast_open'), isFalse);
+    });
+
+    test('parses AnyTLS link with metadata and session options', () {
+      const link =
+          'anytls://mypass@anytls.server.com:8443'
+          '?sni=sni.anytls.com&client-metadata=app-v1&idle-session-check-interval=25'
+          '&idle-session-timeout=50&min-idle-session=1#AnyTLS%20Custom';
+
+      final r = LinkParser.tryParse(link)!;
+      expect(r['type'], 'anytls');
+      expect(r['server'], 'anytls.server.com');
+      expect(r['server_port'], 8443);
+      expect(r['password'], 'mypass');
+      expect(r['client_metadata'], 'app-v1');
+      expect(r['idle_session_check_interval'], '25s');
+      expect(r['idle_session_timeout'], '50s');
+      expect(r['min_idle_session'], 1);
+      expect(r['tls']['server_name'], 'sni.anytls.com');
+      expect(r['_name'], 'AnyTLS Custom');
     });
   });
 

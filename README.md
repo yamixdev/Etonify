@@ -1,21 +1,40 @@
+<div align="center">
+
 # Etonify
 
-[English](README.md) / [Русский](README_ru.md) / [Українська](README_uk.md) / [简体中文](README_cn.md) / [فارسی](README_fa.md)
+**Android-first open-source VPN client built around a modified sing-box core.**
+
+[English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
+  <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Version-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
+  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
+</p>
+
+[Download APK](https://github.com/yamixdev/Etonify/releases) • [Changelog](CHANGELOG.md) • [Report a Problem](https://github.com/yamixdev/Etonify/issues/new/choose) • [Telegram Channel](https://t.me/etonify)
+
+<br/>
+
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="Etonify interface" width="720">
+
+</div>
 
 Etonify is an open-source VPN client for Android, built with Flutter and [etonify-core](https://github.com/yamixdev/etonify-core), a maintained fork of sing-box. It manages subscriptions, server selection, DNS and traffic routing.
 
 The application does not provide VPN servers. You need your own server or a subscription from a provider.
 
-[Download APK](https://github.com/yamixdev/Etonify/releases) · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
-
-![Etonify interface](https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde)
-
 ## Versions and requirements
 
 | Component | Version or requirement |
-| --- | --- |
+| :--- | :--- |
 | Client source | `0.3.6+26` |
-| Bundled core | `v1.15.0-alpha.3-etonify.1`, based on sing-box `1.15.0-alpha.3` |
+| Bundled core | `v1.15.0-alpha.3-etonify.5`, based on sing-box `1.15.0-alpha.3` |
+| Flutter SDK | `3.47.2` (Dart 3.13) |
 | Android | 8.0 or later (API 26+) |
 | APK architectures | `arm64-v8a`, `armeabi-v7a` |
 | Interface languages | English and Russian |

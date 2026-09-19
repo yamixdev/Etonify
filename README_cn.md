@@ -1,18 +1,35 @@
+<div align="center">
+
 # Etonify
 
-[English](README.md) / [Русский](README_ru.md) / [Українська](README_uk.md) / [简体中文](README_cn.md) / [فارسی](README_fa.md)
+**基于 Flutter 和 sing-box 核心的 Android 开源 VPN 客户端。**
+
+[English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
+  <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/版本-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="版本"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
+  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
+</p>
+
+[下载 APK](https://github.com/yamixdev/Etonify/releases) • [更新记录](CHANGELOG.md) • [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) • [Telegram 频道](https://t.me/etonify)
+
+</div>
 
 Etonify 是面向 Android 的开源 VPN 客户端，使用 Flutter 和 [etonify-core](https://github.com/yamixdev/etonify-core)（基于 sing-box 维护的分支），用于管理订阅、选择节点、配置 DNS 和流量路由。应用不提供 VPN 服务器，需要自行准备服务器或服务商订阅。
-
-[下载 APK](https://github.com/yamixdev/Etonify/releases) · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
 
 ## 版本与要求
 
 | 组件 | 版本或要求 |
-| --- | --- |
+| :--- | :--- |
 | 客户端源码版本 | `0.3.6+26` |
-| 内置核心 | `v1.15.0-alpha.3-etonify.1`，基于 sing-box `1.15.0-alpha.3` |
-| Android | 8.0 及以上（API 26+） |
+| Flutter SDK | `3.47.2` (Dart `3.13`) |
+| 内置核心 | `v1.15.0-alpha.3-etonify.5`，基于 sing-box `1.15.0-alpha.3` |
+| Android | 8.0 及以上 (API 26+) |
 | APK 架构 | `arm64-v8a`、`armeabi-v7a` |
 | 应用界面语言 | 英语、俄语 |
 

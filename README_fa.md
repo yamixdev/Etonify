@@ -1,17 +1,34 @@
+<div align="center">
+
 # Etonify
 
-[English](README.md) / [Русский](README_ru.md) / [Українська](README_uk.md) / [简体中文](README_cn.md) / [فارسی](README_fa.md)
+**کلاینت VPN متن‌باز برای Android بر پایهٔ Flutter و هستهٔ sing-box.**
+
+[English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
+  <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/%D9%86%D8%B3%D8%AE%D9%87-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="نسخه"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
+  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
+</p>
+
+[دانلود APK](https://github.com/yamixdev/Etonify/releases) • [تغییرات](CHANGELOG.md) • [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) • [کانال تلگرام](https://t.me/etonify)
+
+</div>
 
 Etonify یک کلاینت VPN متن‌باز برای Android است که با Flutter و [etonify-core](https://github.com/yamixdev/etonify-core)، شاخه‌ای نگهداری‌شده از sing-box، ساخته شده است. برنامه برای مدیریت اشتراک‌ها، انتخاب سرور، DNS و مسیریابی ترافیک استفاده می‌شود. برنامه سرور VPN ارائه نمی‌کند؛ به سرور شخصی یا اشتراک سرویس‌دهنده نیاز دارید.
-
-[دانلود APK](https://github.com/yamixdev/Etonify/releases) · [تغییرات](CHANGELOG.md) · [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
 
 ## نسخه‌ها و پیش‌نیازها
 
 | بخش | نسخه یا پیش‌نیاز |
-| --- | --- |
+| :--- | :--- |
 | نسخهٔ کد کلاینت | `0.3.6+26` |
-| هستهٔ داخلی | `v1.15.0-alpha.3-etonify.1` بر پایهٔ sing-box `1.15.0-alpha.3` |
+| Flutter SDK | `3.47.2` (Dart `3.13`) |
+| هستهٔ داخلی | `v1.15.0-alpha.3-etonify.5` بر پایهٔ sing-box `1.15.0-alpha.3` |
 | Android | نسخهٔ 8.0 و بالاتر (API 26+) |
 | معماری APK | `arm64-v8a`، `armeabi-v7a` |
 | زبان رابط برنامه | انگلیسی و روسی |
