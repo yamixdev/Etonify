@@ -783,32 +783,69 @@ void main() {
     expect(await completed, isFalse);
   });
 
-  test('background deadline dynamically scales for large subscription', () async {
-    final requests = <LatencyTestRequest>[];
-    final coordinator = LatencyCoordinator(
-      runTest: (request) async => requests.add(request),
-      isConnected: () => true,
-      isForeground: () => true,
-      activeOutboundTag: () => 'a',
-      testUrl: () => '',
-      outboundCount: () => 215,
-      timeoutSeconds: () => 6,
-      concurrency: () => 10,
-      capabilities: _v3Capabilities,
-      onSessionChanged: (_, _, _) {},
-      uiPolicy: _testPolicy,
-    );
-    addTearDown(coordinator.dispose);
+  test(
+    'background deadline dynamically scales for large subscription',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = LatencyCoordinator(
+        runTest: (request) async => requests.add(request),
+        isConnected: () => true,
+        isForeground: () => true,
+        activeOutboundTag: () => 'a',
+        testUrl: () => '',
+        outboundCount: () => 215,
+        timeoutSeconds: () => 6,
+        concurrency: () => 10,
+        capabilities: _v3Capabilities,
+        onSessionChanged: (_, _, _) {},
+        uiPolicy: _testPolicy,
+      );
+      addTearDown(coordinator.dispose);
 
-    final completed = coordinator.runFull(reason: 'startup');
-    await Future<void>.delayed(Duration.zero);
-    expect(requests.single.mode, 'background');
-    expect(requests.single.concurrency, 10);
-    // 22 batches * 6000ms + 22000ms headroom = 154000ms (> 120s old cap)
-    expect(requests.single.deadlineMillis, 154000);
-    coordinator.cancel();
-    await completed;
-  });
+      final completed = coordinator.runFull(reason: 'startup');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.mode, 'background');
+      expect(requests.single.concurrency, 10);
+      // 22 batches * 6000ms + 22000ms headroom = 154000ms (> 120s old cap)
+      expect(requests.single.deadlineMillis, 154000);
+      coordinator.cancel();
+      await completed;
+    },
+  );
+
+  test(
+    'background session watchdog never outlives its configured hard limit',
+    () async {
+      const policy = LatencyUiPolicy(
+        rpcAckTimeout: Duration(milliseconds: 80),
+        initialEventTimeout: Duration(milliseconds: 60),
+        eventInactivityTimeout: Duration(milliseconds: 25),
+        hardWatchdog: Duration(milliseconds: 50),
+      );
+      final coordinator = LatencyCoordinator(
+        runTest: (_) async {},
+        isConnected: () => true,
+        isForeground: () => true,
+        activeOutboundTag: () => 'a',
+        testUrl: () => '',
+        outboundCount: () => 1,
+        timeoutSeconds: () => 1,
+        concurrency: () => 1,
+        capabilities: _v3Capabilities,
+        onSessionChanged: (_, _, _) {},
+        uiPolicy: policy,
+      );
+      addTearDown(coordinator.dispose);
+
+      final completed = coordinator.runFull(reason: 'startup');
+
+      expect(
+        await completed.timeout(const Duration(milliseconds: 500)),
+        isFalse,
+      );
+      expect(coordinator.isRunning, isFalse);
+    },
+  );
 
   test(
     'full session continues while forced target completes independently with a distinct sessionId',

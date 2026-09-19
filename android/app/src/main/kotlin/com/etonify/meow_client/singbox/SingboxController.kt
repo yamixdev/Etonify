@@ -56,10 +56,14 @@ object SingboxController {
         TimeUnit.SECONDS,
         java.util.concurrent.ArrayBlockingQueue(64),
         { runnable -> Thread(runnable, "MeowLookup").apply { isDaemon = true } },
-        ThreadPoolExecutor.DiscardOldestPolicy(),
+        ThreadPoolExecutor.AbortPolicy(),
     ).apply {
         allowCoreThreadTimeOut(true)
     }
+    private val lookupTasks = CallbackTaskExecutor(
+        worker = lookupExecutor,
+        callbackExecutor = java.util.concurrent.Executor { runnable -> mainHandler.post(runnable) },
+    )
     private val statusEventScheduled = AtomicBoolean(false)
     private val groupsEventScheduled = AtomicBoolean(false)
     private val runtimeGeneration = AtomicLong(0)
@@ -977,18 +981,19 @@ object SingboxController {
 
     fun lookupOutboundExternalInfo(outboundTag: String, callback: (Result<Map<String, String>>) -> Unit) {
         val operationGeneration = activeRuntimeGeneration
-        lookupExecutor.execute {
-            var result = runCatching {
+        lookupTasks.execute(
+            task = {
                 check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
                     "stale runtime before outbound IP lookup"
                 }
-                fetchOutboundExternalInfo(outboundTag)
-            }
-            if (operationGeneration != activeRuntimeGeneration) {
-                result = Result.failure(IllegalStateException("stale runtime after outbound IP lookup"))
-            }
-            mainHandler.post { callback(result) }
-        }
+                val result = fetchOutboundExternalInfo(outboundTag)
+                check(operationGeneration == activeRuntimeGeneration) {
+                    "stale runtime after outbound IP lookup"
+                }
+                result
+            },
+            callback = callback,
+        )
     }
 
     fun fetchUrlViaOutbound(
@@ -1000,24 +1005,25 @@ object SingboxController {
         callback: (Result<Map<String, Any?>>) -> Unit,
     ) {
         val operationGeneration = activeRuntimeGeneration
-        lookupExecutor.execute {
-            var result = runCatching {
+        lookupTasks.execute(
+            task = {
                 check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
                     "stale runtime before outbound HTTP fetch"
                 }
-                fetchUrlViaOutbound(
+                val result = fetchUrlViaOutbound(
                     outboundTag = outboundTag,
                     url = url,
                     headersJson = JSONObject(headers).toString(),
                     maxBytes = maxBytes,
                     timeoutMillis = timeoutMillis,
                 )
-            }
-            if (operationGeneration != activeRuntimeGeneration) {
-                result = Result.failure(IllegalStateException("stale runtime after outbound HTTP fetch"))
-            }
-            mainHandler.post { callback(result) }
-        }
+                check(operationGeneration == activeRuntimeGeneration) {
+                    "stale runtime after outbound HTTP fetch"
+                }
+                result
+            },
+            callback = callback,
+        )
     }
 
     fun reloadService(callback: (Result<Unit>) -> Unit) {

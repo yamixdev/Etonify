@@ -408,17 +408,15 @@ class SingboxConfigBuilder {
               // resolves proxy endpoints and bootstrap hostnames.
               if (fakeIpActive)
                 {
-                  'query_type': [
-                    'A',
-                    if (vpnEnableIpv6) 'AAAA',
-                  ],
+                  'query_type': ['A', if (vpnEnableIpv6) 'AAAA'],
                   'action': 'route',
                   'server': 'dns-fakeip',
                 },
             ],
           'final': dnsFinal,
           'cache_capacity': 4096,
-          'strategy': vpnEnableIpv6 ? 'prefer_ipv4' : 'ipv4_only',
+          if (vpnInboundEnabled)
+            'strategy': vpnEnableIpv6 ? 'prefer_ipv4' : 'ipv4_only',
         },
         'inbounds': [
           if (vpnInboundEnabled)

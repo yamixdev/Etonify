@@ -3302,64 +3302,100 @@ void main() {
     },
   );
 
-  test('vpnEnableIpv6: false restricts TUN to IPv4 and sets DNS strategy to ipv4_only', () {
-    final builder = _defaultBuilder(
+  test(
+    'vpnEnableIpv6: false restricts TUN to IPv4 and sets DNS strategy to ipv4_only',
+    () {
+      final builder = _defaultBuilder(
+        const Subscription(
+          id: 'sub-1',
+          name: 'Sub',
+          url: 'https://example.com/sub',
+          selectedProxyTag: '',
+          groups: <SubscriptionGroup>[],
+        ),
+        vpnInboundEnabled: true,
+        vpnEnableIpv6: false,
+        experimentalFakeIpEnabled: true,
+      );
+      final config = builder.build();
+      final inbounds = config['inbounds'] as List<dynamic>;
+      final tunIn =
+          inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in')
+              as Map<String, dynamic>;
+      expect(tunIn['address'], ['172.19.0.1/30']);
+
+      final dns = config['dns'] as Map<String, dynamic>;
+      expect(dns['strategy'], 'ipv4_only');
+
+      final servers = dns['servers'] as List<dynamic>;
+      final fakeIpServer =
+          servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip')
+              as Map<String, dynamic>;
+      expect(fakeIpServer.containsKey('inet6_range'), isFalse);
+
+      final rules = dns['rules'] as List<dynamic>;
+      final fakeIpRule =
+          rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip')
+              as Map<String, dynamic>;
+      expect(fakeIpRule['query_type'], ['A']);
+    },
+  );
+
+  test(
+    'vpnEnableIpv6: true includes IPv6 in TUN, sets DNS strategy to prefer_ipv4, and enables AAAA in fakeip',
+    () {
+      final builder = _defaultBuilder(
+        const Subscription(
+          id: 'sub-1',
+          name: 'Sub',
+          url: 'https://example.com/sub',
+          selectedProxyTag: '',
+          groups: <SubscriptionGroup>[],
+        ),
+        vpnInboundEnabled: true,
+        vpnEnableIpv6: true,
+        experimentalFakeIpEnabled: true,
+      );
+      final config = builder.build();
+      final inbounds = config['inbounds'] as List<dynamic>;
+      final tunIn =
+          inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in')
+              as Map<String, dynamic>;
+      expect(tunIn['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
+
+      final dns = config['dns'] as Map<String, dynamic>;
+      expect(dns['strategy'], 'prefer_ipv4');
+
+      final servers = dns['servers'] as List<dynamic>;
+      final fakeIpServer =
+          servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip')
+              as Map<String, dynamic>;
+      expect(fakeIpServer['inet6_range'], 'fc00::/18');
+
+      final rules = dns['rules'] as List<dynamic>;
+      final fakeIpRule =
+          rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip')
+              as Map<String, dynamic>;
+      expect(fakeIpRule['query_type'], ['A', 'AAAA']);
+    },
+  );
+
+  test('proxy-only mode leaves DNS address-family selection to the system', () {
+    final config = _defaultBuilder(
       const Subscription(
-        id: 'sub-1',
-        name: 'Sub',
+        id: 'proxy-only-sub',
+        name: 'Proxy only',
         url: 'https://example.com/sub',
-        selectedProxyTag: '',
-        groups: <SubscriptionGroup>[],
       ),
-      vpnInboundEnabled: true,
+      vpnInboundEnabled: false,
       vpnEnableIpv6: false,
-      experimentalFakeIpEnabled: true,
-    );
-    final config = builder.build();
-    final inbounds = config['inbounds'] as List<dynamic>;
-    final tunIn = inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in') as Map<String, dynamic>;
-    expect(tunIn['address'], ['172.19.0.1/30']);
+      proxyInboundEnabled: true,
+      proxyUsername: 'proxy-user',
+      proxyPassword: 'proxy-password-123',
+    ).build();
 
     final dns = config['dns'] as Map<String, dynamic>;
-    expect(dns['strategy'], 'ipv4_only');
-
-    final servers = dns['servers'] as List<dynamic>;
-    final fakeIpServer = servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip') as Map<String, dynamic>;
-    expect(fakeIpServer.containsKey('inet6_range'), isFalse);
-
-    final rules = dns['rules'] as List<dynamic>;
-    final fakeIpRule = rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip') as Map<String, dynamic>;
-    expect(fakeIpRule['query_type'], ['A']);
-  });
-
-  test('vpnEnableIpv6: true includes IPv6 in TUN, sets DNS strategy to prefer_ipv4, and enables AAAA in fakeip', () {
-    final builder = _defaultBuilder(
-      const Subscription(
-        id: 'sub-1',
-        name: 'Sub',
-        url: 'https://example.com/sub',
-        selectedProxyTag: '',
-        groups: <SubscriptionGroup>[],
-      ),
-      vpnInboundEnabled: true,
-      vpnEnableIpv6: true,
-      experimentalFakeIpEnabled: true,
-    );
-    final config = builder.build();
-    final inbounds = config['inbounds'] as List<dynamic>;
-    final tunIn = inbounds.firstWhere((i) => (i as Map)['tag'] == 'tun-in') as Map<String, dynamic>;
-    expect(tunIn['address'], ['172.19.0.1/30', 'fdfe:dcba:9876::1/126']);
-
-    final dns = config['dns'] as Map<String, dynamic>;
-    expect(dns['strategy'], 'prefer_ipv4');
-
-    final servers = dns['servers'] as List<dynamic>;
-    final fakeIpServer = servers.firstWhere((s) => (s as Map)['tag'] == 'dns-fakeip') as Map<String, dynamic>;
-    expect(fakeIpServer['inet6_range'], 'fc00::/18');
-
-    final rules = dns['rules'] as List<dynamic>;
-    final fakeIpRule = rules.firstWhere((r) => (r as Map)['server'] == 'dns-fakeip') as Map<String, dynamic>;
-    expect(fakeIpRule['query_type'], ['A', 'AAAA']);
+    expect(dns.containsKey('strategy'), isFalse);
   });
 }
 

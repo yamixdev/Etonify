@@ -654,10 +654,10 @@ class LatencyCoordinator {
           const Duration(seconds: 5);
       final sessionBudget =
           capabilities.supportsUrlTestDeadline && request.deadlineMillis > 0
-              ? (nativeBudget > uiPolicy.hardWatchdog
-                  ? nativeBudget
-                  : uiPolicy.hardWatchdog)
-              : uiPolicy.hardWatchdog;
+          ? (nativeBudget < uiPolicy.hardWatchdog
+                ? nativeBudget
+                : uiPolicy.hardWatchdog)
+          : uiPolicy.hardWatchdog;
       _watchdogTimer = Timer(sessionBudget, () {
         if (generation != _generation) return;
         _settleCurrent(
