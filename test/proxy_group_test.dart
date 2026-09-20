@@ -1226,6 +1226,205 @@ void main() {
     });
   });
 
+  test('global TCP Fast Open is not injected into AnyTLS outbounds', () {
+    const subscription = Subscription(
+      id: 'anytls-tfo',
+      name: 'AnyTLS',
+      url: 'file:///anytls.json',
+      selectedProxyTag: 'anytls-node',
+      outbounds: [
+        Outbound(
+          tag: 'anytls-node',
+          name: 'AnyTLS Node',
+          config: {
+            'type': 'anytls',
+            'tag': 'anytls-node',
+            'server': 'anytls.example.com',
+            'server_port': 443,
+            'password': 'secret',
+            'tls': {'enabled': true, 'server_name': 'anytls.example.com'},
+          },
+        ),
+      ],
+    );
+
+    final config = _defaultBuilder(subscription).build();
+    final outbounds = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final anytls = outbounds.firstWhere(
+      (entry) => entry['tag'] == 'anytls-node',
+    );
+
+    expect(anytls.containsKey('tcp_fast_open'), isFalse);
+  });
+
+  test('ordinary TLS unsafe fingerprint falls back to standard TLS', () {
+    const subscription = Subscription(
+      id: 'unsafe-tls',
+      name: 'Unsafe TLS',
+      url: 'file:///unsafe-tls.json',
+      selectedProxyTag: 'tls-node',
+      outbounds: [
+        Outbound(
+          tag: 'tls-node',
+          name: 'TLS Node',
+          config: {
+            'type': 'vless',
+            'tag': 'tls-node',
+            'server': 'tls.example.com',
+            'server_port': 443,
+            'uuid': 'tls-uuid',
+            'tls': {
+              'enabled': true,
+              'server_name': 'tls.example.com',
+              'utls': {'enabled': true, 'fingerprint': 'unsafe'},
+            },
+          },
+        ),
+      ],
+    );
+
+    final config = _defaultBuilder(subscription).build();
+    final outbounds = (config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final node = outbounds.firstWhere((entry) => entry['tag'] == 'tls-node');
+    final tls = (node['tls'] as Map).cast<String, dynamic>();
+
+    expect(tls.containsKey('utls'), isFalse);
+  });
+
+  test('Reality unsafe fingerprint is rejected before native startup', () {
+    const subscription = Subscription(
+      id: 'unsafe-reality',
+      name: 'Unsafe Reality',
+      url: 'file:///unsafe-reality.json',
+      selectedProxyTag: 'valid-node',
+      outbounds: [
+        Outbound(
+          tag: 'invalid-reality',
+          name: 'Invalid Reality',
+          config: {
+            'type': 'vless',
+            'tag': 'invalid-reality',
+            'server': 'invalid.example.com',
+            'server_port': 443,
+            'uuid': 'invalid-uuid',
+            'tls': {
+              'enabled': true,
+              'server_name': 'invalid.example.com',
+              'utls': {'enabled': true, 'fingerprint': 'unsafe'},
+              'reality': {
+                'enabled': true,
+                'public_key': 'public-key',
+                'short_id': '0123456789abcdef',
+              },
+            },
+          },
+        ),
+        Outbound(
+          tag: 'valid-node',
+          name: 'Valid Node',
+          config: {
+            'type': 'vless',
+            'tag': 'valid-node',
+            'server': 'valid.example.com',
+            'server_port': 443,
+            'uuid': 'valid-uuid',
+          },
+        ),
+      ],
+    );
+
+    final plan = _defaultBuilder(subscription).buildPlan();
+    final outbounds = (plan.config['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    final selector = outbounds.firstWhere((entry) => entry['tag'] == 'select');
+
+    expect(
+      outbounds.any((entry) => entry['tag'] == 'invalid-reality'),
+      isFalse,
+    );
+    expect(selector['outbounds'], isNot(contains('invalid-reality')));
+    expect(plan.urlTestOutboundTags, isNot(contains('invalid-reality')));
+  });
+
+  test('startup validation reports every incompatible Reality fingerprint', () {
+    const subscription = Subscription(
+      id: 'startup-validation',
+      name: 'Startup validation',
+      url: 'file:///startup-validation.json',
+      outbounds: [
+        Outbound(
+          tag: 'unsafe-reality',
+          name: 'Unsafe Reality',
+          config: {
+            'type': 'vless',
+            'server': 'unsafe.example.com',
+            'server_port': 443,
+            'uuid': 'unsafe-uuid',
+            'tls': {
+              'enabled': true,
+              'utls': {'enabled': true, 'fingerprint': 'unsafe'},
+              'reality': {
+                'enabled': true,
+                'public_key': 'thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8',
+              },
+            },
+          },
+        ),
+        Outbound(
+          tag: 'hellogolang-reality',
+          name: 'Hello Go Reality',
+          config: {
+            'type': 'vless',
+            'server': 'hellogolang.example.com',
+            'server_port': 443,
+            'uuid': 'hellogolang-uuid',
+            'tls': {
+              'enabled': true,
+              'utls': {'enabled': true, 'fingerprint': 'hellogolang'},
+              'reality': {
+                'enabled': true,
+                'public_key': 'thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8',
+              },
+            },
+          },
+        ),
+        Outbound(
+          tag: 'ordinary-unsafe-tls',
+          name: 'Ordinary unsafe TLS',
+          config: {
+            'type': 'vless',
+            'server': 'ordinary.example.com',
+            'server_port': 443,
+            'uuid': 'ordinary-uuid',
+            'tls': {
+              'enabled': true,
+              'utls': {'enabled': true, 'fingerprint': 'unsafe'},
+            },
+          },
+        ),
+      ],
+    );
+
+    final result = validateStartupOutbounds(
+      const StartupValidationInput(
+        subscription: subscription,
+        excludedOutboundTags: <String>{},
+      ),
+    );
+
+    expect(result.startableCount, 1);
+    expect(result.invalidOutbounds.map((outbound) => outbound.tag), [
+      'unsafe-reality',
+      'hellogolang-reality',
+    ]);
+    expect(
+      result.invalidOutbounds.map((outbound) => outbound.reason),
+      everyElement(contains('Reality')),
+    );
+  });
+
   test('legacy filtered lowest selection becomes the single lowest', () {
     const subscription = Subscription(
       id: 'sub',

@@ -707,6 +707,9 @@ class SingboxConfigBuilder {
     if (!isSupportedOutboundConfig(outbound.config)) {
       return false;
     }
+    if (_outboundCompatibilityError(outbound.config) != null) {
+      return false;
+    }
     if (!_supportsOutboundConfigExtensions(outbound.config)) {
       return false;
     }
@@ -822,7 +825,11 @@ class SingboxConfigBuilder {
     _applyGlobalTlsCertificatePolicy(config, allowUntrustedProxyCertificates);
     _applyTlsFragmentation(config, tlsFragmentationMode);
     config['tag'] = outbound.tag;
-    config['tcp_fast_open'] = tcpFastOpenEnabled;
+    if (_supportsTcpFastOpen(config)) {
+      config['tcp_fast_open'] = tcpFastOpenEnabled;
+    } else {
+      config.remove('tcp_fast_open');
+    }
     config['tcp_multi_path'] = tcpMultiPathEnabled;
     return config;
   }
@@ -877,7 +884,11 @@ class SingboxConfigBuilder {
     _ensureRealityUtls(config, supportsSpiderX: supportsRealitySpiderX);
     _applyGlobalTlsCertificatePolicy(config, allowUntrustedProxyCertificates);
     _applyTlsFragmentation(config, tlsFragmentationMode);
-    config['tcp_fast_open'] = tcpFastOpenEnabled;
+    if (_supportsTcpFastOpen(config)) {
+      config['tcp_fast_open'] = tcpFastOpenEnabled;
+    } else {
+      config.remove('tcp_fast_open');
+    }
     config['tcp_multi_path'] = tcpMultiPathEnabled;
     return config;
   }
@@ -1370,6 +1381,7 @@ class SingboxConfigBuilder {
 
   static void _normalizeStableOutboundSchema(Map<String, dynamic> config) {
     ParsedOutboundSchema.migrateTo114(config);
+    _normalizeXrayTlsFingerprint(config);
     final type = config['type']?.toString().trim().toLowerCase();
     if (type == 'vless') {
       // `none` is the upstream/default VLESS mode and is omitted from the
@@ -1382,6 +1394,52 @@ class SingboxConfigBuilder {
         config['encryption'] = encryption;
       }
     }
+  }
+
+  static void _normalizeXrayTlsFingerprint(Map<String, dynamic> config) {
+    final tls = config['tls'];
+    if (tls is! Map) {
+      return;
+    }
+    final tlsMap = Map<String, dynamic>.from(tls);
+    final reality = tlsMap['reality'];
+    if (reality is Map && reality['enabled'] == true) {
+      return;
+    }
+    final utls = tlsMap['utls'];
+    if (utls is! Map || utls['enabled'] != true) {
+      return;
+    }
+    final fingerprint = utls['fingerprint']?.toString().trim().toLowerCase();
+    if (fingerprint != 'unsafe' && fingerprint != 'hellogolang') {
+      return;
+    }
+    tlsMap.remove('utls');
+    config['tls'] = tlsMap;
+  }
+
+  static String? _outboundCompatibilityError(Map<String, dynamic> config) {
+    final tls = config['tls'];
+    if (tls is! Map) {
+      return null;
+    }
+    final reality = tls['reality'];
+    if (reality is! Map || reality['enabled'] != true) {
+      return null;
+    }
+    final utls = tls['utls'];
+    if (utls is! Map || utls['enabled'] != true) {
+      return null;
+    }
+    final fingerprint = utls['fingerprint']?.toString().trim().toLowerCase();
+    if (fingerprint == 'unsafe' || fingerprint == 'hellogolang') {
+      return 'Reality does not support the Xray $fingerprint fingerprint';
+    }
+    return null;
+  }
+
+  static bool _supportsTcpFastOpen(Map<String, dynamic> config) {
+    return config['type']?.toString().trim().toLowerCase() != 'anytls';
   }
 }
 

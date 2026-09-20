@@ -669,6 +669,9 @@ class ParsedOutboundSchema {
         }
         final fingerprint =
             (utls['fingerprint'] as String?)?.trim().toLowerCase() ?? '';
+        if (fingerprint == 'unsafe' || fingerprint == 'hellogolang') {
+          return 'Reality does not support the Xray $fingerprint fingerprint';
+        }
         if (!_validUtlsFingerprints.contains(fingerprint)) {
           return 'unknown utls fingerprint: ${utls['fingerprint']}';
         }
@@ -1166,8 +1169,9 @@ class ParsedOutboundSchema {
     final alpn = isNaive ? null : _sanitizeAlpn(tls['alpn']);
     final ech = _sanitizeNestedMap(tls['ech'], _tlsEchKeys);
     final utls = isNaive ? null : _sanitizeNestedMap(tls['utls'], _tlsUtlsKeys);
-    final reality =
-        isNaive ? null : _sanitizeNestedMap(tls['reality'], _tlsRealityKeys);
+    final reality = isNaive
+        ? null
+        : _sanitizeNestedMap(tls['reality'], _tlsRealityKeys);
 
     if (ech == null) {
       tls.remove('ech');
