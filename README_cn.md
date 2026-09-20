@@ -62,7 +62,7 @@ Etonify 是面向 Android 的开源 VPN 客户端，使用 Flutter 和 [etonify-
 
 ## 支持项目
 
-Etonify 是一个独立维护的开源项目。如果本应用对你有帮助，可以通过 [Tribute 支持项目开发](https://t.me/tribute/app?startapp=dQAQ)。赞助将用于开发、测试和项目维护。
+Etonify 是一个独立维护的开源项目。如果你喜欢这个应用，可以通过 [Tribute 赞助开发者](https://t.me/tribute/app?startapp=dQAQ)。这份支持对我意义重大，也能帮助我继续开发 Etonify。
 
 ## 开发与许可证
 

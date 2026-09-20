@@ -105,7 +105,7 @@ Project news: [@etonify](https://t.me/etonify). Questions and private support: [
 
 ## Support the project
 
-Etonify is an independent open-source project. If the app is useful to you, you can [support its development through Tribute](https://t.me/tribute/app?startapp=dQAQ). Donations help cover development, testing and project maintenance.
+Etonify is an independent open-source project. If you like the app, you can [support the developer through Tribute](https://t.me/tribute/app?startapp=dQAQ). I would appreciate it, and your support helps me continue working on the project.
 
 ## License and acknowledgements
 
