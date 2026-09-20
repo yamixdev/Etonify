@@ -402,6 +402,37 @@ void main() {
     expect(updated?.outbounds.single.tag, 'proxy-one');
   });
 
+  testWidgets(
+    'subscription settings hide the forced Russia location override',
+    (tester) async {
+      const subscriptionId = 'location-settings';
+      await tester.runAsync(
+        () => SubscriptionStore.save(
+          const Subscription(
+            id: subscriptionId,
+            name: 'Location settings profile',
+            url: 'https://example.com/location-settings',
+            cachedVisibleProxyCount: 0,
+          ),
+        ),
+      );
+
+      await _openSheet(tester, activeSubscriptionId: subscriptionId);
+      await _pumpUntilFound(tester, find.text('Location settings profile'));
+      await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+      await tester.pump();
+      await tester.tap(find.text('Subscription'));
+      await _pumpUi(tester);
+
+      expect(
+        find.byKey(const ValueKey('edit_subscription_url_button')),
+        findsOneWidget,
+      );
+      expect(find.text('Локация'), findsNothing);
+      expect(find.text('Пометить все сервера как Россию'), findsNothing);
+    },
+  );
+
   testWidgets('the URL editor rejects a merged legacy source list', (
     tester,
   ) async {

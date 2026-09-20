@@ -6,6 +6,7 @@ import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 class SettingsCorePage extends StatefulWidget {
@@ -253,9 +254,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
       ),
       title: Text(
         title,
-        style: theme.textTheme.bodyLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-        ),
+        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
       ),
       subtitle: subtitle == null
           ? null
@@ -280,57 +279,15 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
     String current,
   ) => showModalBottomSheet<String>(
     context: context,
-    showDragHandle: true,
+    enableDrag: false,
+    showDragHandle: false,
     isScrollControlled: true,
-    builder: (context) {
-      final theme = Theme.of(context);
-      final cs = theme.colorScheme;
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * .8,
-          ),
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Gap(6),
-              Text(
-                help,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const Gap(12),
-              for (final entry in choices.entries)
-                ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  title: Text(
-                    entry.value,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: entry.key == current
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                  selected: current == entry.key,
-                  trailing: current == entry.key
-                      ? const Icon(Icons.check_rounded, size: 20)
-                      : null,
-                  onTap: () => Navigator.pop(context, entry.key),
-                ),
-            ],
-          ),
-        ),
-      );
-    },
+    builder: (context) => _CoreChoiceSheet(
+      title: title,
+      help: help,
+      choices: choices,
+      current: current,
+    ),
   );
 
   Widget _choice(
@@ -456,10 +413,7 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
             ),
           ),
         ),
-        SettingsTileGroup(
-          dividerIndent: 64,
-          children: children,
-        ),
+        SettingsTileGroup(dividerIndent: 64, children: children),
       ],
     ),
   );
@@ -883,6 +837,195 @@ class _SettingsCorePageState extends State<SettingsCorePage> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoreChoiceSheet extends StatefulWidget {
+  const _CoreChoiceSheet({
+    required this.title,
+    required this.help,
+    required this.choices,
+    required this.current,
+  });
+
+  final String title;
+  final String help;
+  final Map<String, String> choices;
+  final String current;
+
+  @override
+  State<_CoreChoiceSheet> createState() => _CoreChoiceSheetState();
+}
+
+class _CoreChoiceSheetState extends State<_CoreChoiceSheet> {
+  static const _tapTravelTolerance = 8.0;
+
+  double _downwardDrag = 0;
+  Offset? _pointerStart;
+  double _pointerTravel = 0;
+
+  void _startPointer(PointerDownEvent details) {
+    _pointerStart = details.position;
+    _pointerTravel = 0;
+  }
+
+  void _trackPointer(PointerMoveEvent details) {
+    final start = _pointerStart;
+    if (start == null) return;
+    final travel = (details.position - start).distance;
+    if (travel > _pointerTravel) _pointerTravel = travel;
+  }
+
+  void _select(String value) {
+    if (_pointerTravel > _tapTravelTolerance) return;
+    Navigator.pop(context, value);
+  }
+
+  void _updateDrag(DragUpdateDetails details) {
+    _downwardDrag += details.delta.dy;
+    if (_downwardDrag < 0) _downwardDrag = 0;
+  }
+
+  void _finishDrag(DragEndDetails details) {
+    final shouldDismiss = _downwardDrag >= appBottomSheetDragThreshold;
+    _downwardDrag = 0;
+    if (shouldDismiss) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Listener(
+      onPointerDown: _startPointer,
+      onPointerMove: _trackPointer,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: _updateDrag,
+        onVerticalDragEnd: _finishDrag,
+        onVerticalDragCancel: () => _downwardDrag = 0,
+        child: SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .85,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Align(child: AppBottomSheetDragHandle()),
+                  const Gap(18),
+                  Text(
+                    widget.title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Gap(10),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: .62),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Text(
+                        widget.help,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Gap(14),
+                  Material(
+                    color: cs.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: .45),
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (
+                            var index = 0;
+                            index < widget.choices.length;
+                            index++
+                          ) ...[
+                            if (index > 0)
+                              Divider(
+                                height: 1,
+                                indent: 14,
+                                endIndent: 14,
+                                color: cs.outlineVariant.withValues(alpha: .35),
+                              ),
+                            Builder(
+                              builder: (context) {
+                                final entry = widget.choices.entries.elementAt(
+                                  index,
+                                );
+                                final selected = entry.key == widget.current;
+                                return Semantics(
+                                  selected: selected,
+                                  button: true,
+                                  child: ListTile(
+                                    key: ValueKey('core-choice-${entry.key}'),
+                                    minTileHeight: 50,
+                                    dense: true,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(13),
+                                    ),
+                                    selected: selected,
+                                    selectedTileColor: cs.primaryContainer
+                                        .withValues(alpha: .64),
+                                    title: Text(
+                                      entry.value,
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                            color: selected
+                                                ? cs.onPrimaryContainer
+                                                : cs.onSurface,
+                                            fontWeight: selected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                          ),
+                                    ),
+                                    trailing: selected
+                                        ? Icon(
+                                            Icons.check_rounded,
+                                            size: 20,
+                                            color: cs.primary,
+                                          )
+                                        : null,
+                                    onTap: () => _select(entry.key),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

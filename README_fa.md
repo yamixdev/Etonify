@@ -7,16 +7,13 @@
 [English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
 
 <p align="center">
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
-  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
   <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
   <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/%D9%86%D8%B3%D8%AE%D9%87-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="نسخه"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
-  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
 </p>
 
-[دانلود APK](https://github.com/yamixdev/Etonify/releases) • [تغییرات](CHANGELOG.md) • [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) • [کانال تلگرام](https://t.me/etonify)
+[دانلود APK](https://github.com/yamixdev/Etonify/releases) • [تغییرات](CHANGELOG.md) • [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) • [حمایت از پروژه](https://t.me/tribute/app?startapp=dQAQ) • [Telegram](https://t.me/etonify)
 
 </div>
 
@@ -62,6 +59,10 @@ WireGuard از نسخهٔ 0.3.1 به‌دلیل مشکلات عملکرد آن �
 گزینهٔ سراسری ارسال HWID در تنظیمات عمومی، ارسال اطلاعات شناسایی دستگاه به سرویس‌دهنده در درخواست‌های اشتراک را کنترل می‌کند. هر اشتراک نیز ممکن است رضایت ذخیره‌شده داشته باشد. اجازه دادن به گواهی نامعتبر پروکسی، بررسی گواهی را غیرفعال می‌کند و راه‌حل عمومی مشکلات اتصال نیست.
 
 پیش از اشتراک‌گذاری گزارش‌ها، لینک اشتراک، کلیدها، رمزها و شناسه‌های دستگاه را حذف کنید. در [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose)، نسخهٔ برنامه، مدل گوشی، نسخهٔ Android و رابط سازنده و مراحل تکرار مشکل را بنویسید. ارتباط خصوصی: [Etonify Direct](https://t.me/etonify?direct). آسیب‌پذیری‌ها را مطابق [SECURITY.md](SECURITY.md) خصوصی گزارش کنید.
+
+## حمایت از پروژه
+
+Etonify یک پروژهٔ متن‌باز و مستقل است. اگر این برنامه برای شما مفید است، می‌توانید از طریق [Tribute از توسعهٔ آن حمایت کنید](https://t.me/tribute/app?startapp=dQAQ). کمک‌های مالی صرف توسعه، آزمایش و نگهداری پروژه می‌شوند.
 
 ## توسعه و مجوز
 

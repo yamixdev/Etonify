@@ -7,16 +7,13 @@
 [English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
 
 <p align="center">
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
-  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
   <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
   <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/版本-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
-  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
 </p>
 
-[下载 APK](https://github.com/yamixdev/Etonify/releases) • [更新记录](CHANGELOG.md) • [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) • [Telegram 频道](https://t.me/etonify)
+[下载 APK](https://github.com/yamixdev/Etonify/releases) • [更新记录](CHANGELOG.md) • [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) • [支持项目](https://t.me/tribute/app?startapp=dQAQ) • [Telegram](https://t.me/etonify)
 
 </div>
 
@@ -62,6 +59,10 @@ Etonify 是面向 Android 的开源 VPN 客户端，使用 Flutter 和 [etonify-
 常规设置中的全局 HWID 选项控制订阅请求是否向服务商发送设备识别信息，单个订阅也可能保存了授权。允许不受信任的代理证书会跳过证书验证，不应作为通用的连接修复方法。
 
 分享日志前，请移除订阅链接、密钥、密码和设备标识。在 [issue](https://github.com/yamixdev/Etonify/issues/new/choose) 中提供应用版本、手机型号、Android 及厂商系统版本和复现步骤。私下联系：[Etonify Direct](https://t.me/etonify?direct)。安全漏洞请按 [SECURITY.md](SECURITY.md) 私下报告。
+
+## 支持项目
+
+Etonify 是一个独立维护的开源项目。如果本应用对你有帮助，可以通过 [Tribute 支持项目开发](https://t.me/tribute/app?startapp=dQAQ)。赞助将用于开发、测试和项目维护。
 
 ## 开发与许可证
 

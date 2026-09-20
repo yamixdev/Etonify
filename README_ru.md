@@ -7,16 +7,13 @@
 [English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
 
 <p align="center">
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
-  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
   <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
   <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Версия-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="Версия"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Лицензия-GPL%20v3-blue.svg" alt="Лицензия"></a>
-  <a href="https://t.me/etonify"><img src="https://img.shields.io/badge/Telegram-@etonify-2CA5E0?logo=telegram&logoColor=white" alt="Telegram"></a>
 </p>
 
-[Скачать APK](https://github.com/yamixdev/Etonify/releases) • [История изменений](CHANGELOG.md) • [Сообщить об ошибке](https://github.com/yamixdev/Etonify/issues/new/choose) • [Telegram-канал](https://t.me/etonify)
+[Скачать APK](https://github.com/yamixdev/Etonify/releases) • [История изменений](CHANGELOG.md) • [Сообщить об ошибке](https://github.com/yamixdev/Etonify/issues/new/choose) • [Поддержать проект](https://t.me/tribute/app?startapp=dQAQ) • [Telegram](https://t.me/etonify)
 
 <br/>
 
@@ -84,7 +81,7 @@ WireGuard не поддерживается начиная с Etonify 0.3.1 из
 
 ## Сборка и разработка
 
-CI клиента использует Flutter `3.47.2` и JDK `21`. Требования к Dart заданы в [pubspec.yaml](pubspec.yaml), версии инструментов Android — в файлах Gradle. Для сборки ядра используется отдельный набор инструментов, указанный в [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
+CI клиента использует Flutter `3.47.2` и JDK `21`. Требования к Dart заданы в [pubspec.yaml](pubspec.yaml), а версии инструментов Android указаны в файлах Gradle. Для сборки ядра используется отдельный набор инструментов, указанный в [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
 
 ```powershell
 git clone --recurse-submodules https://github.com/yamixdev/Etonify.git
@@ -98,7 +95,7 @@ flutter build apk --debug
 
 Для релизной сборки настройте ключ подписи в `android/key.properties`. Часть ресурсов для совместимости с зашифрованными подписками Happ не публикуется. Учитывайте [требования к закрытым ресурсам сборки](.github/private/README.md), если проверяете эту возможность в локальной сборке.
 
-Коммит исходников, версия, инструменты сборки и контрольная сумма встроенного AAR записаны в [libbox.provenance.json](android/app/libs/libbox.provenance.json). Текущий HEAD подмодуля не обязательно совпадает с исходниками встроенного бинарника. Требования к его замене приведены в [документации ядра](android/app/libs/README.md), правила участия в разработке — в [CONTRIBUTING.md](CONTRIBUTING.md).
+Коммит исходников, версия, инструменты сборки и контрольная сумма встроенного AAR записаны в [libbox.provenance.json](android/app/libs/libbox.provenance.json). Текущий HEAD подмодуля не обязательно совпадает с исходниками встроенного бинарника. Требования к его замене приведены в [документации ядра](android/app/libs/README.md), а правила участия в разработке находятся в [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Поддержка
 
@@ -106,8 +103,12 @@ flutter build apk --debug
 
 Новости проекта: [@etonify](https://t.me/etonify). Вопросы и приватные обращения: [Etonify Direct](https://t.me/etonify?direct).
 
+## Поддержка проекта
+
+Etonify развивается как независимый проект с открытым исходным кодом. Если приложение вам полезно, вы можете [поддержать разработку через Tribute](https://t.me/tribute/app?startapp=dQAQ). Пожертвования помогают оплачивать разработку, тестирование и поддержку проекта.
+
 ## Лицензия и благодарности
 
 Проект поддерживает MeowTeam: [yamixdev](https://github.com/yamixdev) и [dudosxdev](https://github.com/dudosxdev). Etonify использует [sing-box](https://github.com/SagerNet/sing-box) и другие компоненты с открытым исходным кодом.
 
-Лицензия — [GNU GPL v3.0 или новее](LICENSE). Сведения об используемых компонентах и их авторах находятся в [NOTICE.md](NOTICE.md) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Проект распространяется по лицензии [GNU GPL v3.0 или новее](LICENSE). Сведения об используемых компонентах и их авторах находятся в [NOTICE.md](NOTICE.md) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

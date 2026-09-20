@@ -154,26 +154,6 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
   }
 
-  Future<void> _saveMarkAllServersRussia(
-    Subscription subscription, {
-    required bool enabled,
-  }) async {
-    if (subscription.markAllServersRussia == enabled) {
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await SubscriptionStore.save(
-        subscription.copyWith(markAllServersRussia: enabled),
-      );
-      _reloadCurrentSubscription();
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
   Future<void> _saveRequestSettings(Subscription subscription) async {
     final baseInfo = subscription.info ?? const SubscriptionInfo();
     final customHwid = _useCustomHwid ? _customHwidController.text.trim() : '';
@@ -917,27 +897,6 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                           ],
                         ),
                       ),
-                    _DetailsBlock(
-                      title: 'Локация',
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Пометить все сервера как Россию'),
-                        subtitle: const Text(
-                          'Только для этой подписки: список прокси, lowest/open/free и mixed будут считать все outbound российскими.',
-                        ),
-                        secondary: const Icon(Icons.flag_rounded),
-                        value: subscription.markAllServersRussia,
-                        onChanged: _busy
-                            ? null
-                            : (value) async {
-                                _haptic();
-                                await _saveMarkAllServersRussia(
-                                  subscription,
-                                  enabled: value,
-                                );
-                              },
-                      ),
-                    ),
                     if (!isLocalFileImport)
                       _DetailsBlock(
                         title: l10n.serverRequestTitle,

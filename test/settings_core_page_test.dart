@@ -36,6 +36,59 @@ Future<void> reveal(WidgetTester tester, String key) async {
 }
 
 void main() {
+  testWidgets('core choice sheet has no independently scrollable content', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('core-networkStrategy')));
+    await tester.pumpAndSettle();
+
+    final sheet = find.byType(BottomSheet);
+    expect(sheet, findsOneWidget);
+    expect(
+      find.descendant(of: sheet, matching: find.byType(Scrollable)),
+      findsNothing,
+    );
+  });
+
+  testWidgets('core choice sheet dismisses with a deliberate downward swipe', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('core-networkStrategy')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+
+    await tester.drag(find.byType(BottomSheet), const Offset(0, 240));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Hybrid'), findsNothing);
+  });
+
+  testWidgets('small movement on a core choice does not select or close it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('core-networkStrategy')));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.text('Hybrid'), const Offset(0, 18));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    final defaultOption = tester.widget<ListTile>(
+      find.byKey(const ValueKey('core-choice-defaults')),
+    );
+    expect(defaultOption.selected, isTrue);
+  });
+
   testWidgets(
     'multiplex picker excludes group internals regardless of their name',
     (tester) async {
@@ -274,21 +327,32 @@ void main() {
     final strategyTile = find.byKey(const ValueKey('core-networkStrategy'));
     expect(strategyTile, findsOneWidget);
     expect(
-      find.descendant(of: strategyTile, matching: find.byIcon(Icons.alt_route_rounded)),
+      find.descendant(
+        of: strategyTile,
+        matching: find.byIcon(Icons.alt_route_rounded),
+      ),
       findsOneWidget,
     );
 
-    final timeoutTile = find.byKey(const ValueKey('core-connectTimeoutSeconds'));
+    final timeoutTile = find.byKey(
+      const ValueKey('core-connectTimeoutSeconds'),
+    );
     expect(timeoutTile, findsOneWidget);
     expect(
-      find.descendant(of: timeoutTile, matching: find.byIcon(Icons.timer_rounded)),
+      find.descendant(
+        of: timeoutTile,
+        matching: find.byIcon(Icons.timer_rounded),
+      ),
       findsOneWidget,
     );
 
     final keepAliveTile = find.byKey(const ValueKey('core-keepAlive'));
     expect(keepAliveTile, findsOneWidget);
     expect(
-      find.descendant(of: keepAliveTile, matching: find.byIcon(Icons.monitor_heart_rounded)),
+      find.descendant(
+        of: keepAliveTile,
+        matching: find.byIcon(Icons.monitor_heart_rounded),
+      ),
       findsOneWidget,
     );
 
@@ -296,7 +360,10 @@ void main() {
     final udpFragmentTile = find.byKey(const ValueKey('core-udpFragment'));
     expect(udpFragmentTile, findsOneWidget);
     expect(
-      find.descendant(of: udpFragmentTile, matching: find.byIcon(Icons.splitscreen_rounded)),
+      find.descendant(
+        of: udpFragmentTile,
+        matching: find.byIcon(Icons.splitscreen_rounded),
+      ),
       findsOneWidget,
     );
   });
