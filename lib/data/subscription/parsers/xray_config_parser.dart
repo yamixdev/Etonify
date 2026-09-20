@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../import_key_normalizer.dart';
 import 'cert_pin_utils.dart';
 
 /// Extracts outbounds from an Xray / V2Ray JSON configuration and
@@ -745,23 +746,16 @@ class XrayConfigParser {
 
     final extra = <String, dynamic>{};
     for (final entry in value.entries) {
-      final key = _camelToSnake(entry.key.toString());
+      final key = normalizeImportedKey(entry.key.toString());
       final item = entry.value;
       extra[key] = key == 'xmux' && item is Map
           ? {
               for (final xmuxEntry in item.entries)
-                _camelToSnake(xmuxEntry.key.toString()): xmuxEntry.value,
+                normalizeImportedKey(xmuxEntry.key.toString()): xmuxEntry.value,
             }
           : item;
     }
     return extra;
-  }
-
-  static String _camelToSnake(String value) {
-    return value.replaceAllMapped(
-      RegExp(r'[A-Z]'),
-      (match) => '_${match.group(0)!.toLowerCase()}',
-    );
   }
 
   static Map<String, dynamic> _map(dynamic v) {

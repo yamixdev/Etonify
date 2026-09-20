@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'import_key_normalizer.dart';
+
 /// Shared sing-box outbound sanitization and validation used by
 /// subscription import flows.
 class ParsedOutboundSchema {
@@ -1448,9 +1450,35 @@ class ParsedOutboundSchema {
     return xmux.isEmpty ? null : xmux;
   }
 
-  static Map<String, dynamic>? _sanitizeRangeConfig(dynamic value) {
-    return _sanitizeNestedMap(value, _rangeConfigKeys);
+  static dynamic _sanitizeRangeConfig(dynamic value) {
+    if (value is int) {
+      return _isInt32(value) ? value : null;
+    }
+    if (value is String) {
+      final range = value.trim();
+      if (range.isEmpty) return null;
+      final scalar = int.tryParse(range);
+      if (scalar != null) return _isInt32(scalar) ? range : null;
+      for (var index = 1; index < range.length; index++) {
+        if (range.codeUnitAt(index) != 0x2D) continue;
+        final from = int.tryParse(range.substring(0, index).trim());
+        final to = int.tryParse(range.substring(index + 1).trim());
+        if (from != null && to != null && _isInt32(from) && _isInt32(to)) {
+          return range;
+        }
+      }
+      return null;
+    }
+    final range = _sanitizeNestedMap(value, _rangeConfigKeys);
+    if (range == null) return null;
+    for (final item in range.values) {
+      if (item is! int || !_isInt32(item)) return null;
+    }
+    return range;
   }
+
+  static bool _isInt32(int value) =>
+      value >= -0x80000000 && value <= 0x7FFFFFFF;
 
   static Map<String, dynamic>? _sanitizeNestedMap(
     dynamic value,
@@ -1571,16 +1599,9 @@ class ParsedOutboundSchema {
   static Map<String, dynamic> _snakeCaseMap(Map<String, dynamic> source) {
     final normalized = <String, dynamic>{};
     for (final entry in source.entries) {
-      normalized[_camelToSnake(entry.key)] = entry.value;
+      normalized[normalizeImportedKey(entry.key)] = entry.value;
     }
     return normalized;
-  }
-
-  static String _camelToSnake(String value) {
-    return value.replaceAllMapped(
-      RegExp(r'[A-Z]'),
-      (match) => '_${match.group(0)!.toLowerCase()}',
-    );
   }
 
   static const Set<String> _knownTransportTypes = {

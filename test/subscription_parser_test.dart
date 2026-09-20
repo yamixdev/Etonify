@@ -1372,8 +1372,16 @@ void main() {
     });
 
     test('drops unknown xhttp extra parameters from share links', () {
-      const content =
-          'vless://test-uuid@1.1.1.1:29731?encryption=none&type=xhttp&path=%2Fapi%2Fv1%2Fdata&mode=stream-up&extra=%7B%22speed%22%3A%22true%22%2C%22xmux%22%3A%7B%22maxConcurrency%22%3A%7B%22from%22%3A1%2C%22to%22%3A4%7D%2C%22speed%22%3Atrue%7D%7D&security=reality&sni=yastatic.net&fp=chrome&pbk=thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8#xhttp';
+      final extra = Uri.encodeComponent(
+        jsonEncode({
+          'speed': 'true',
+          'noSSEHeader': true,
+          'xPaddingBytes': '100-1000',
+          'xmux': {'maxConcurrency': '16-32', 'speed': true},
+        }),
+      );
+      final content =
+          'vless://test-uuid@1.1.1.1:29731?encryption=none&type=xhttp&path=%2Fapi%2Fv1%2Fdata&mode=stream-up&extra=$extra&security=reality&sni=yastatic.net&fp=chrome&pbk=thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8#xhttp';
 
       final result = SubscriptionParser.parse(content);
       expect(result.outbounds, hasLength(1));
@@ -1383,9 +1391,9 @@ void main() {
       expect(transport.containsKey('speed'), isFalse);
       expect(transport['path'], '/api/v1/data');
       expect(transport['mode'], 'stream-up');
-      expect(transport['xmux'], {
-        'max_concurrency': {'from': 1, 'to': 4},
-      });
+      expect(transport['no_sse_header'], isTrue);
+      expect(transport['x_padding_bytes'], '100-1000');
+      expect(transport['xmux'], {'max_concurrency': '16-32'});
     });
 
     test('preserves Xray auto xhttp mode from share links', () {
@@ -1434,15 +1442,19 @@ void main() {
                 'path': '/api',
                 'mode': 'auto',
                 'extra': {
+                  'noSSEHeader': true,
+                  'noGRPCHeader': true,
+                  'xPaddingBytes': '100-1000',
                   'uplinkDataPlacement': 'body',
-                  'uplinkChunkSize': {'from': 4096, 'to': 8192},
+                  'uplinkChunkSize': 4096,
                   'sessionTable': 'header',
                   'sessionLength': {'from': 8, 'to': 16},
                   'scMaxEachPostBytes': {'from': 100000, 'to': 200000},
                   'scMinPostsIntervalMs': {'from': 20, 'to': 40},
                   'serverMaxHeaderBytes': 8192,
                   'xmux': {
-                    'maxConcurrency': {'from': 1, 'to': 4},
+                    'maxConcurrency': '16-32',
+                    'hMaxRequestTimes': 650,
                     'hKeepAlivePeriod': 30,
                   },
                 },
@@ -1460,15 +1472,19 @@ void main() {
         'host': 'cdn.example.com',
         'path': '/api',
         'mode': 'auto',
+        'no_sse_header': true,
+        'no_grpc_header': true,
+        'x_padding_bytes': '100-1000',
         'uplink_data_placement': 'body',
-        'uplink_chunk_size': {'from': 4096, 'to': 8192},
+        'uplink_chunk_size': 4096,
         'session_table': 'header',
         'session_length': {'from': 8, 'to': 16},
         'sc_max_each_post_bytes': {'from': 100000, 'to': 200000},
         'sc_min_posts_interval_ms': {'from': 20, 'to': 40},
         'server_max_header_bytes': 8192,
         'xmux': {
-          'max_concurrency': {'from': 1, 'to': 4},
+          'max_concurrency': '16-32',
+          'h_max_request_times': 650,
           'h_keep_alive_period': 30,
         },
       });

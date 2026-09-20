@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../import_key_normalizer.dart';
 import 'cert_pin_utils.dart';
 
 /// Parses individual proxy URI links and converts to sing-box outbound format.
@@ -18,7 +19,6 @@ class LinkParser {
   );
   static final RegExp _httpHeaderLineBreakPattern = RegExp(r'\r?\n');
   static final RegExp _authorityTerminatorPattern = RegExp(r'[/?#]');
-  static final RegExp _uppercasePattern = RegExp(r'[A-Z]');
 
   // ───────────────────────────── public API ─────────────────────────────
 
@@ -951,20 +951,12 @@ class LinkParser {
     }
 
     for (final entry in parsed.entries) {
-      final key = _camelToSnake(entry.key.toString());
+      final key = normalizeImportedKey(entry.key.toString());
       if (skipKeys.contains(key)) {
         continue;
       }
       target[key] = entry.value;
     }
-  }
-
-  /// Converts camelCase to snake_case (e.g. xPaddingBytes → x_padding_bytes).
-  static String _camelToSnake(String input) {
-    return input.replaceAllMapped(
-      _uppercasePattern,
-      (m) => '_${m.group(0)!.toLowerCase()}',
-    );
   }
 
   /// Parses host:port (supports [IPv6]:port) and calls [cb].
