@@ -58,10 +58,14 @@ class RemoteDownloadResult {
 }
 
 class RemoteDownloadHttpException extends HttpException {
-  RemoteDownloadHttpException(this.statusCode, {required Uri uri})
-    : super('Remote server returned HTTP $statusCode', uri: uri);
+  RemoteDownloadHttpException(
+    this.statusCode, {
+    required Uri uri,
+    this.headers = const <String, String>{},
+  }) : super('Remote server returned HTTP $statusCode', uri: uri);
 
   final int statusCode;
+  final Map<String, String> headers;
 }
 
 @visibleForTesting
@@ -241,6 +245,7 @@ class VpnAwareRemoteDownloader {
           throw RemoteDownloadHttpException(
             result.statusCode,
             uri: result.finalUri,
+            headers: result.headers,
           );
         }
         return result;
@@ -325,6 +330,7 @@ class VpnAwareRemoteDownloader {
             throw RemoteDownloadHttpException(
               result.statusCode,
               uri: result.finalUri,
+              headers: result.headers,
             );
           }
           await _replaceDestination(attemptFile, destination);

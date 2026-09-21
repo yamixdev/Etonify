@@ -281,6 +281,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not obtain a valid HWID. A custom ID must contain 10 to 64 Latin letters, digits, = or - characters.';
 
   @override
+  String get subscriptionErrorHwidRequired =>
+      'The provider rejected the request because of HWID. Check that HWID sending is allowed for this subscription. If it is already enabled, contact the provider.';
+
+  @override
+  String get subscriptionErrorDeviceLimitReached =>
+      'The device limit for this subscription has been reached. Remove an old device in the provider\'s account or bot, or contact the provider.';
+
+  @override
   String get sendHwidToProvidersTitle => 'Send HWID to providers';
 
   @override

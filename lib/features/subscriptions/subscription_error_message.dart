@@ -20,6 +20,9 @@ String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
     SubscriptionFailureKind.connection => l10n.subscriptionErrorConnection,
     SubscriptionFailureKind.offline => l10n.subscriptionErrorOffline,
     SubscriptionFailureKind.tls => l10n.subscriptionErrorTls,
+    SubscriptionFailureKind.hwidRequired => l10n.subscriptionErrorHwidRequired,
+    SubscriptionFailureKind.deviceLimitReached =>
+      l10n.subscriptionErrorDeviceLimitReached,
     SubscriptionFailureKind.emptyResponse =>
       l10n.subscriptionErrorEmptyResponse,
     SubscriptionFailureKind.htmlResponse => l10n.subscriptionErrorHtmlResponse,

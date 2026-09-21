@@ -280,6 +280,14 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось получить корректный HWID. Если задан свой ID, используйте от 10 до 64 латинских букв, цифр, знаков = или -.';
 
   @override
+  String get subscriptionErrorHwidRequired =>
+      'Провайдер отклонил запрос из-за HWID. Проверьте, разрешена ли отправка HWID для этой подписки. Если она уже включена, обратитесь к провайдеру.';
+
+  @override
+  String get subscriptionErrorDeviceLimitReached =>
+      'Достигнут лимит устройств для этой подписки. Удалите старое устройство в кабинете или боте провайдера либо обратитесь к нему.';
+
+  @override
   String get sendHwidToProvidersTitle => 'Отправлять HWID провайдерам';
 
   @override

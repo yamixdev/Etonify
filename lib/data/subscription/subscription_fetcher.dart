@@ -104,10 +104,10 @@ class SubscriptionFetcher {
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) async {
     final uri = parseRequestUri(url);
-    _logFetchStart(uri, requestInfo);
 
     try {
       final headers = await _requestHeaders(requestInfo);
+      _logFetchStart(uri, requestInfo, hwidSent: _hasHeader(headers, 'x-hwid'));
       _validateRequestSecurity(uri);
       final totalTimeout =
           operationTimeout != null && operationTimeout > Duration.zero
@@ -152,6 +152,20 @@ class SubscriptionFetcher {
       );
       return await _buildResult(url: url, response: response);
     } catch (error, stackTrace) {
+      if (error is RemoteDownloadHttpException) {
+        try {
+          _validateProviderAccessHeaders(
+            (name) => error.headers[name.toLowerCase()],
+          );
+        } on SubscriptionContentException catch (providerError) {
+          await _logFetchFailure(
+            uri: uri,
+            error: providerError,
+            stackTrace: stackTrace,
+          );
+          rethrow;
+        }
+      }
       await _logFetchFailure(uri: uri, error: error, stackTrace: stackTrace);
       if (error is RemoteDownloadHttpException) {
         throw SubscriptionHttpStatusException(
@@ -194,6 +208,7 @@ class SubscriptionFetcher {
     try {
       final response = await _openWithSafeRedirects(client, uri, headers);
       if (response.statusCode != HttpStatus.ok) {
+        _validateProviderAccessHeaders(response.headers.value);
         throw SubscriptionHttpStatusException(response.statusCode, uri: uri);
       }
       final rawContent = await _readUtf8Body(response);
@@ -373,6 +388,7 @@ class SubscriptionFetcher {
     required String? Function(String name) headerValue,
   }) {
     _validateResponseContent(rawContent);
+    _validateProviderAccessHeaders(headerValue);
     return _FetchedSubscriptionResponse(
       rawContent: rawContent,
       headerInfo: _parseHeaderValues(headerValue),
@@ -386,6 +402,7 @@ class SubscriptionFetcher {
     final parseResult = await SubscriptionParser.parseInBackground(
       response.rawContent,
     );
+    _validateProviderAccessMarker(parseResult);
     if (SubscriptionParser.looksLikeHtml(response.rawContent) &&
         (parseResult.format != SubscriptionFormat.htmlPage ||
             parseResult.outbounds.isEmpty)) {
@@ -410,6 +427,67 @@ class SubscriptionFetcher {
     }
   }
 
+  static void _validateProviderAccessHeaders(
+    String? Function(String name) headerValue,
+  ) {
+    if (_headerIsTrue(headerValue('x-hwid-max-devices-reached')) ||
+        _headerIsTrue(headerValue('x-hwid-limit'))) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.deviceLimitReached,
+      );
+    }
+    if (_headerIsTrue(headerValue('x-hwid-not-supported'))) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.hwidRequired,
+      );
+    }
+  }
+
+  static bool _headerIsTrue(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
+  }
+
+  static void _validateProviderAccessMarker(ParseResult parseResult) {
+    if (parseResult.outbounds.length != 1 || parseResult.groups.isNotEmpty) {
+      return;
+    }
+    final outbound = parseResult.outbounds.single;
+    final marker = _normalizeProviderAccessMarker(
+      outbound['_name']?.toString() ?? outbound['tag']?.toString() ?? '',
+    );
+    if (_deviceLimitMarkers.contains(marker)) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.deviceLimitReached,
+      );
+    }
+    if (_hwidRequiredMarkers.contains(marker)) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.hwidRequired,
+      );
+    }
+  }
+
+  static String _normalizeProviderAccessMarker(String value) => value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+
+  static const _deviceLimitMarkers = <String>{
+    'limit-of-devices-reached',
+    'device-limit-reached',
+    'hwid-limit-reached',
+    'maximum-devices-reached',
+    'max-devices-reached',
+  };
+
+  static const _hwidRequiredMarkers = <String>{
+    'hwid-required',
+    'hwid-not-supported',
+    'device-identification-required',
+  };
+
   static Uri parseRequestUri(String url) {
     final trimmed = url.trim();
     try {
@@ -430,13 +508,17 @@ class SubscriptionFetcher {
     return parseRequestUri(url);
   }
 
-  static void _logFetchStart(Uri uri, SubscriptionInfo? requestInfo) {
+  static void _logFetchStart(
+    Uri uri,
+    SubscriptionInfo? requestInfo, {
+    required bool hwidSent,
+  }) {
     final port = uri.hasPort ? uri.port : _defaultPort(uri);
     AppLogStore.info(
       'subscription',
       'fetch start host=${uri.host} port=$port scheme=${uri.scheme} '
           'path=${uri.path.isEmpty ? "/" : uri.path} '
-          'requireHwid=${shouldSendHwid(requestInfo)} '
+          'hwidSent=$hwidSent '
           'customHeaders=${_parseCustomHeaders(requestInfo?.customRequestHeader).length}',
     );
   }

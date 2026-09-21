@@ -13,6 +13,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
     required this.initialSort,
     this.onSortChanged,
     this.onProxyUrlTest,
+    this.onVisibleProxyNeedsLocation,
   });
 
   final AppProxySummary group;
@@ -26,6 +27,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
   final Future<void> Function(String tag)? onProxyUrlTest;
+  final ValueChanged<String>? onVisibleProxyNeedsLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +43,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
       initialSort: initialSort,
       onSortChanged: onSortChanged,
       onProxyUrlTest: onProxyUrlTest,
+      onVisibleProxyNeedsLocation: onVisibleProxyNeedsLocation,
     );
   }
 }
@@ -58,6 +61,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
     required this.initialSort,
     this.onSortChanged,
     this.onProxyUrlTest,
+    this.onVisibleProxyNeedsLocation,
   });
 
   final AppProxySummary group;
@@ -71,6 +75,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
   final Future<void> Function(String tag)? onProxyUrlTest;
+  final ValueChanged<String>? onVisibleProxyNeedsLocation;
 
   @override
   State<_GroupOutboundsSheetBody> createState() =>
@@ -83,6 +88,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   Timer? _runtimeResortTimer;
   List<AppProxySummary>? _sortedChildrenCache;
   ProxySort? _sortedChildrenSort;
+  final Set<String> _locationRequestedTags = <String>{};
 
   @override
   void initState() {
@@ -103,6 +109,13 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
         oldWidget.group.selectedChildTag != widget.group.selectedChildTag) {
       _sortedChildrenCache = null;
       _sortedChildrenSort = null;
+      final currentTags = widget.children.map((proxy) => proxy.tag).toSet();
+      _locationRequestedTags.retainWhere(currentTags.contains);
+      for (final proxy in widget.children) {
+        if (proxy.countryCode.trim().isNotEmpty) {
+          _locationRequestedTags.remove(proxy.tag);
+        }
+      }
     }
     if (oldWidget.selectedTag != widget.selectedTag) {
       _selectedTag = widget.selectedTag;
@@ -219,6 +232,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     VoidCallback? onLongPress,
     required VoidCallback onTap,
   }) {
+    _scheduleVisibleProxyLocation(proxy);
     Widget buildTile(ProxyRuntimeVisualState? state) {
       return ProxyTile(
         proxy: proxy,
@@ -246,6 +260,23 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       valueListenable: runtimeStates.listenableFor(proxy.tag),
       builder: (context, state, _) => buildTile(state),
     );
+  }
+
+  void _scheduleVisibleProxyLocation(AppProxySummary proxy) {
+    final callback = widget.onVisibleProxyNeedsLocation;
+    if (callback == null ||
+        proxy.isGroup ||
+        proxy.countryCode.trim().isNotEmpty ||
+        !_locationRequestedTags.add(proxy.tag)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.onVisibleProxyNeedsLocation == null) {
+        _locationRequestedTags.remove(proxy.tag);
+        return;
+      }
+      widget.onVisibleProxyNeedsLocation!(proxy.tag);
+    });
   }
 
   @override

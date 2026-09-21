@@ -90,10 +90,7 @@ void main() {
 
     test('derives user agent from the installed app version', () {
       SubscriptionFetcher.configureAppVersion('v0.3.7');
-      expect(
-        SubscriptionFetcher.defaultUserAgent,
-        'Happ/3.24.1 Etonify/0.3.7',
-      );
+      expect(SubscriptionFetcher.defaultUserAgent, 'Happ/3.24.1 Etonify/0.3.7');
     });
 
     test('keeps insecure TLS opt-in on the scoped app client', () async {
@@ -341,6 +338,87 @@ void main() {
       );
     });
 
+    test(
+      'rejects a provider device-limit response before importing it',
+      () async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(server.close);
+
+        server.listen((request) async {
+          request.response.headers.set('x-hwid-max-devices-reached', 'true');
+          request.response.write(
+            'vless://uuid@server.com:443?type=tcp&security=tls#Fallback',
+          );
+          await request.response.close();
+        });
+
+        await expectLater(
+          SubscriptionFetcher.fetch(
+            'http://${server.address.host}:${server.port}/sub',
+          ),
+          throwsA(
+            isA<SubscriptionContentException>().having(
+              (error) => error.kind,
+              'kind',
+              SubscriptionContentFailureKind.deviceLimitReached,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('rejects an HWID-required response before importing it', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((request) async {
+        request.response.statusCode = HttpStatus.notFound;
+        request.response.headers.set('x-hwid-not-supported', 'true');
+        request.response.write(
+          'vless://uuid@server.com:443?type=tcp&security=tls#Fallback',
+        );
+        await request.response.close();
+      });
+
+      await expectLater(
+        SubscriptionFetcher.fetch(
+          'http://${server.address.host}:${server.port}/sub',
+        ),
+        throwsA(
+          isA<SubscriptionContentException>().having(
+            (error) => error.kind,
+            'kind',
+            SubscriptionContentFailureKind.hwidRequired,
+          ),
+        ),
+      );
+    });
+
+    test('does not import a single device-limit marker as a proxy', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      server.listen((request) async {
+        request.response.write(
+          'vless://uuid@server.com:443?type=tcp&security=tls#limit-of-devices-reached',
+        );
+        await request.response.close();
+      });
+
+      await expectLater(
+        SubscriptionFetcher.fetch(
+          'http://${server.address.host}:${server.port}/sub',
+        ),
+        throwsA(
+          isA<SubscriptionContentException>().having(
+            (error) => error.kind,
+            'kind',
+            SubscriptionContentFailureKind.deviceLimitReached,
+          ),
+        ),
+      );
+    });
+
     test('rejects an HTML error page returned with HTTP 200', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
@@ -368,14 +446,16 @@ void main() {
       );
     });
 
-    test('parses an HTML landing page containing proxy links or DATA object', () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(server.close);
+    test(
+      'parses an HTML landing page containing proxy links or DATA object',
+      () async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(server.close);
 
-      server.listen((request) async {
-        request.response.statusCode = HttpStatus.ok;
-        request.response.headers.contentType = ContentType.html;
-        request.response.write('''
+        server.listen((request) async {
+          request.response.statusCode = HttpStatus.ok;
+          request.response.headers.contentType = ContentType.html;
+          request.response.write('''
 <!doctype html><html><body>
 <script>
 const DATA = {
@@ -384,17 +464,21 @@ const DATA = {
 };
 </script>
 </body></html>''');
-        await request.response.close();
-      });
+          await request.response.close();
+        });
 
-      final result = await SubscriptionFetcher.fetch(
-        'http://${server.address.host}:${server.port}/sub',
-      );
-      expect(result.parseResult.format, SubscriptionFormat.htmlPage);
-      expect(result.parseResult.outbounds, hasLength(1));
-      expect(result.parseResult.outbounds.first['server'], 'fin.pinkmoon.pro');
-      expect(result.headerInfo.title, 'PinkVPN');
-    });
+        final result = await SubscriptionFetcher.fetch(
+          'http://${server.address.host}:${server.port}/sub',
+        );
+        expect(result.parseResult.format, SubscriptionFormat.htmlPage);
+        expect(result.parseResult.outbounds, hasLength(1));
+        expect(
+          result.parseResult.outbounds.first['server'],
+          'fin.pinkmoon.pro',
+        );
+        expect(result.headerInfo.title, 'PinkVPN');
+      },
+    );
 
     test('parses unicode domains in subscription urls', () {
       final uri = SubscriptionFetcher.parseRequestUriForTest(

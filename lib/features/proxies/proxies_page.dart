@@ -365,6 +365,7 @@ class ProxiesPage extends StatefulWidget {
     required this.onSelected,
     required this.onUrlTest,
     this.onProxyUrlTest,
+    this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
     this.loadProxyChainTargetSources,
     this.loadProxyChainTargetsForSource,
@@ -407,6 +408,7 @@ class ProxiesPage extends StatefulWidget {
   final ValueChanged<String> onSelected;
   final Future<void> Function() onUrlTest;
   final Future<void> Function(String tag)? onProxyUrlTest;
+  final ValueChanged<String>? onVisibleProxyNeedsLocation;
   final Outbound? Function(String tag)? outboundForTag;
   final Future<List<AppProfileSummary>> Function()? loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)?
@@ -453,6 +455,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
   bool? _visibleEntriesCanAddChainCache;
   bool Function(String tag)? _visibleEntriesChainPredicateCache;
   String? _visibleEntriesSelectedTagCache;
+  final Set<String> _locationRequestedTags = <String>{};
 
   bool _isProxyChain(AppProxySummary proxy) =>
       widget.isProxyChainTag?.call(proxy.tag) ?? false;
@@ -488,6 +491,18 @@ class _ProxiesPageState extends State<ProxiesPage> {
         oldWidget.isProxyChainTag != widget.isProxyChainTag ||
         oldWidget.runtimeStates != widget.runtimeStates) {
       _rebuildVisibleItems();
+    }
+    if (oldWidget.proxies != widget.proxies) {
+      final currentTags = widget.proxies.map((proxy) => proxy.tag).toSet();
+      _locationRequestedTags.retainWhere(currentTags.contains);
+      for (final proxy in widget.proxies) {
+        if (proxy.countryCode.trim().isNotEmpty) {
+          _locationRequestedTags.remove(proxy.tag);
+        }
+      }
+    }
+    if (!oldWidget.connected && widget.connected) {
+      _locationRequestedTags.clear();
     }
     if (oldWidget.initialSort != widget.initialSort &&
         widget.initialSort != _sort) {
@@ -797,6 +812,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
                 routeAnimation: animation,
                 onSelected: widget.onSelected,
                 onProxyUrlTest: widget.connected ? widget.onProxyUrlTest : null,
+                onVisibleProxyNeedsLocation: widget.connected
+                    ? widget.onVisibleProxyNeedsLocation
+                    : null,
                 outboundForTag: widget.outboundForTag,
                 initialSort: _sort,
                 onSortChanged: (value) {
@@ -962,9 +980,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       onPressed: () => widget.onUrlTest(),
       tooltip: inFlight ? l10n.cancel : l10n.urlTestTitle,
       child: Icon(
-        inFlight
-            ? FluentIcons.dismiss_24_filled
-            : FluentIcons.flash_24_filled,
+        inFlight ? FluentIcons.dismiss_24_filled : FluentIcons.flash_24_filled,
       ),
     );
   }
@@ -1191,6 +1207,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     switch (entry.type) {
       case _ProxyListEntryType.tile:
         final proxy = entry.proxy!;
+        _scheduleVisibleProxyLocation(proxy);
         Widget buildTile(ProxyRuntimeVisualState? state) => ProxyTile(
           proxy: proxy,
           runtimeState: state,
@@ -1223,6 +1240,26 @@ class _ProxiesPageState extends State<ProxiesPage> {
       case _ProxyListEntryType.divider:
         return const _ProxyListDivider();
     }
+  }
+
+  void _scheduleVisibleProxyLocation(AppProxySummary proxy) {
+    final callback = widget.onVisibleProxyNeedsLocation;
+    if (callback == null ||
+        !widget.connected ||
+        proxy.isGroup ||
+        proxy.countryCode.trim().isNotEmpty ||
+        !_locationRequestedTags.add(proxy.tag)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !widget.connected ||
+          widget.onVisibleProxyNeedsLocation == null) {
+        _locationRequestedTags.remove(proxy.tag);
+        return;
+      }
+      widget.onVisibleProxyNeedsLocation!(proxy.tag);
+    });
   }
 
   Widget _buildEmbeddedEntry({

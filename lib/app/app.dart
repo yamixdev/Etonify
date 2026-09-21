@@ -164,6 +164,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final VpnLifecycleCommands _vpnLifecycleCommands;
   late final AppSettingsCommands _appSettingsCommands;
   late final ProxyLocationCoordinator _proxyLocationCoordinator;
+  final Set<String> _visibleProxyLocationLookups = <String>{};
   late final AppTrafficMonitor _appTrafficMonitor;
   late final DeepLinkImportCoordinator _deepLinkImportCoordinator;
   AdBlockRuleSetStatus _adBlockStatus =
@@ -207,8 +208,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
   final StartupLatencyDeadlineController _startupLatencyDeadline =
       StartupLatencyDeadlineController();
-  final ValueNotifier<bool> _urlTestInFlightNotifier =
-      ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _urlTestInFlightNotifier = ValueNotifier<bool>(
+    false,
+  );
   int _startupGroupUrlTestNativeGeneration = 0;
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
@@ -7124,6 +7126,43 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  Future<void> _resolveVisibleProxyLocation(String outboundTag) async {
+    final tag = outboundTag.trim();
+    if (tag.isEmpty ||
+        !_connected ||
+        !_foregroundLifecycleActive ||
+        !mounted ||
+        _markAllServersRussia ||
+        !_visibleProxyLocationLookups.add(tag)) {
+      return;
+    }
+    try {
+      final subscription = _activeSubscription;
+      if (subscription == null) {
+        return;
+      }
+      _ensureActiveLookupCaches();
+      final outbound = _activeOutboundByTagLookup[tag];
+      if (outbound == null ||
+          outbound.info.deleted ||
+          _hasResolvedExternalLocation(outbound)) {
+        return;
+      }
+      final resolved = await _proxyLocationCoordinator.fetchExternalIpInfo(
+        outboundTag: tag,
+      );
+      if (resolved == null || !mounted) {
+        return;
+      }
+      await _applyResolvedExternalIpInfos(
+        subscriptionId: subscription.id,
+        resolvedByTag: <String, ResolvedExternalIpInfo>{tag: resolved},
+      );
+    } finally {
+      _visibleProxyLocationLookups.remove(tag);
+    }
+  }
+
   List<Outbound> _bestOutboundsForLocationLookup() {
     _ensureActiveLookupCaches();
     final outbounds = _activeVisibleOutboundsLookup
@@ -7304,6 +7343,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         selectProxy: _selectProxy,
         runUrlTest: _runUrlTest,
         runProxyUrlTest: _runProxyUrlTest,
+        resolveVisibleProxyLocation: (tag) =>
+            unawaited(_resolveVisibleProxyLocation(tag)),
         refreshActiveProxyIp: _refreshActiveProxyIp,
         outboundForTag: _outboundForProxyTag,
         loadProxyChainTargetSources: _loadProxyChainTargetSources,

@@ -15,6 +15,8 @@ enum SubscriptionFailureKind {
   connection,
   offline,
   tls,
+  hwidRequired,
+  deviceLimitReached,
   emptyResponse,
   htmlResponse,
   responseTooLarge,
@@ -27,6 +29,8 @@ enum SubscriptionFailureKind {
 }
 
 enum SubscriptionContentFailureKind {
+  hwidRequired,
+  deviceLimitReached,
   emptyResponse,
   htmlResponse,
   responseTooLarge,
@@ -62,6 +66,10 @@ class SubscriptionContentException implements Exception {
 
   @override
   String toString() => switch (kind) {
+    SubscriptionContentFailureKind.hwidRequired =>
+      'The subscription provider requires device identification',
+    SubscriptionContentFailureKind.deviceLimitReached =>
+      'The subscription device limit has been reached',
     SubscriptionContentFailureKind.emptyResponse =>
       'Subscription server returned an empty response',
     SubscriptionContentFailureKind.htmlResponse =>
@@ -104,6 +112,10 @@ SubscriptionFailure classifySubscriptionFailure(Object error) {
   }
   if (error is SubscriptionContentException) {
     return SubscriptionFailure(switch (error.kind) {
+      SubscriptionContentFailureKind.hwidRequired =>
+        SubscriptionFailureKind.hwidRequired,
+      SubscriptionContentFailureKind.deviceLimitReached =>
+        SubscriptionFailureKind.deviceLimitReached,
       SubscriptionContentFailureKind.emptyResponse =>
         SubscriptionFailureKind.emptyResponse,
       SubscriptionContentFailureKind.htmlResponse =>

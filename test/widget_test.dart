@@ -644,6 +644,52 @@ void main() {
     expect(find.text('proxy 79'), findsOneWidget);
   });
 
+  testWidgets(
+    'visible proxy rows request missing countries once and skip cached countries',
+    (tester) async {
+      final requestedTags = <String>[];
+      final proxies = <AppProxySummary>[
+        _proxy(
+          'unknown',
+          'Unknown country',
+          latency: 42,
+        ).copyWith(countryCode: ''),
+        _proxy('cached', 'Cached country', latency: 84),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: SizedBox(
+              height: 720,
+              child: ProxiesPage(
+                proxies: proxies,
+                selectedTag: 'unknown',
+                connected: true,
+                progressiveBlurEnabled: false,
+                onSelected: (_) {},
+                onUrlTest: () async {},
+                onVisibleProxyNeedsLocation: requestedTags.add,
+                embedded: true,
+                sheetAtMaxExtent: true,
+                sheetExtent: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(requestedTags, ['unknown']);
+
+      await tester.pump();
+      expect(requestedTags, ['unknown']);
+    },
+  );
+
   testWidgets('selected proxy stays at the top when latency sorting changes', (
     tester,
   ) async {
