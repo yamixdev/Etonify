@@ -26,6 +26,8 @@ class DeepLinkImportHost {
     required this.reloadSubscriptions,
     required this.offerLikelyHwidFix,
     required this.userFacingSubscriptionError,
+    this.getExistingSubscriptions,
+    this.importSubscription,
   });
 
   final bool Function() isMounted;
@@ -47,6 +49,16 @@ class DeepLinkImportHost {
   final Future<void> Function(Subscription subscription) offerLikelyHwidFix;
   final String Function(Object error, AppLocalizations l10n)
   userFacingSubscriptionError;
+  final List<Subscription> Function()? getExistingSubscriptions;
+  final Future<SubscriptionImportResult> Function({
+    required String url,
+    String? customName,
+    SubscriptionInfo? requestInfo,
+    Duration? operationTimeout,
+    bool allowInsecureTls,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
+  })?
+  importSubscription;
 }
 
 class DeepLinkImportCoordinator {
@@ -140,6 +152,85 @@ class DeepLinkImportCoordinator {
     }
   }
 
+  List<Subscription> _getExistingSubscriptions() {
+    final provider = host.getExistingSubscriptions;
+    if (provider != null) {
+      return provider();
+    }
+    return SubscriptionStore.getAllMetadata();
+  }
+
+  static String _normalizeUrl(String? value) {
+    if (value == null) return '';
+    var trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    while (trimmed.endsWith('/') && trimmed.length > 1) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return trimmed.toLowerCase();
+    return uri.replace(
+      scheme: uri.scheme.toLowerCase(),
+      host: uri.host.toLowerCase(),
+    ).toString();
+  }
+
+  Subscription? _findExistingSubscription(
+    DeepLinkImportPreview preview,
+    DeepLinkImportRequest request,
+  ) {
+    final existingList = _getExistingSubscriptions();
+    if (existingList.isEmpty) {
+      return null;
+    }
+
+    final targetUrls = <String>{
+      _normalizeUrl(preview.resolvedUrl),
+      _normalizeUrl(request.url),
+      if (preview.requestInfo?.happCryptoLink != null)
+        _normalizeUrl(preview.requestInfo!.happCryptoLink),
+    }..remove('');
+
+    for (final sub in existingList) {
+      final subUrls = <String>{
+        _normalizeUrl(sub.url),
+        if (sub.info?.happCryptoLink != null)
+          _normalizeUrl(sub.info!.happCryptoLink),
+      }..remove('');
+
+      if (targetUrls.any(subUrls.contains)) {
+        return sub;
+      }
+    }
+    return null;
+  }
+
+  Future<SubscriptionImportResult> _addSubscriptionFromUrl({
+    required String url,
+    String? customName,
+    SubscriptionInfo? requestInfo,
+  }) {
+    final importer = host.importSubscription;
+    if (importer != null) {
+      return importer(
+        url: url,
+        customName: customName,
+        requestInfo: requestInfo,
+        operationTimeout: host.getSubscriptionOperationTimeout(),
+        allowInsecureTls: host.getAllowUntrustedSubscriptionCertificates(),
+        onRouteAttempt: host.onSubscriptionRouteAttempt,
+      );
+    }
+    return SubscriptionStore.addFromUrl(
+      url,
+      customName: customName,
+      requestInfo: requestInfo,
+      operationTimeout: host.getSubscriptionOperationTimeout(),
+      allowInsecureTls: host.getAllowUntrustedSubscriptionCertificates(),
+      onRouteAttempt: host.onSubscriptionRouteAttempt,
+    );
+  }
+
   Future<void> _handleDeepLinkImport(
     DeepLinkImportRequest request,
     BuildContext context,
@@ -157,6 +248,47 @@ class DeepLinkImportCoordinator {
       if (!context.mounted) {
         return;
       }
+
+      final existing = _findExistingSubscription(preview, request);
+      if (existing != null) {
+        AppLogStore.info(
+          'subscription',
+          'Deep-link subscription already exists: "${existing.name}" (${existing.id})',
+        );
+        host.showSnackBar(copy.alreadyExists(existing.name));
+        return;
+      }
+
+      final hwidSharingEnabled = SubscriptionFetcher.sendHwidToProviders;
+      if (hwidSharingEnabled) {
+        final requestInfo = preview.isHapp
+            ? (preview.requestInfo?.copyWith(requireHwid: true) ??
+                HappCryptoLinkDecoder.happRequestInfo())
+            : preview.requestInfo;
+
+        final createdResult = await host.runSubscriptionOperationWithWarning(
+          _addSubscriptionFromUrl(
+            url: preview.resolvedUrl,
+            customName: request.name,
+            requestInfo: requestInfo,
+          ),
+          slowMessage: l10n.subscriptionOperationSlowWarning,
+          timeoutMessage: l10n.subscriptionOperationTimeout,
+        );
+        final created = createdResult.subscription;
+        await host.reloadSubscriptions();
+        if (!host.isMounted()) {
+          return;
+        }
+        host.showSnackBar(
+          createdResult.hasWarning
+              ? subscriptionSavedWarningMessage(createdResult.warning, l10n)
+              : copy.imported(created.name),
+        );
+        await host.offerLikelyHwidFix(created);
+        return;
+      }
+
       final decision = await showModalBottomSheet<DeepLinkImportDecision>(
         context: context,
         showDragHandle: true,
@@ -165,7 +297,7 @@ class DeepLinkImportCoordinator {
           preview: preview,
           copy: copy,
           l10n: l10n,
-          hwidSharingEnabled: SubscriptionFetcher.sendHwidToProviders,
+          hwidSharingEnabled: false,
         ),
       );
       if (decision == null) {
@@ -175,24 +307,21 @@ class DeepLinkImportCoordinator {
         return;
       }
       final requestInfo = switch (decision) {
-        DeepLinkImportDecision.sendHwid => preview.requestInfo,
+        DeepLinkImportDecision.sendHwid => preview.requestInfo?.copyWith(
+          requireHwid: true,
+        ) ?? HappCryptoLinkDecoder.happRequestInfo(),
         DeepLinkImportDecision.importWithoutHwid =>
           preview.requestInfo?.copyWith(requireHwid: false),
-        // Global consent is evaluated by the fetcher, not saved as a permanent
-        // per-subscription exception when the global switch is later disabled.
         DeepLinkImportDecision.import => preview.requestInfo?.copyWith(
           requireHwid: false,
         ),
       };
 
       final createdResult = await host.runSubscriptionOperationWithWarning(
-        SubscriptionStore.addFromUrl(
-          preview.resolvedUrl,
+        _addSubscriptionFromUrl(
+          url: preview.resolvedUrl,
           customName: request.name,
           requestInfo: requestInfo,
-          operationTimeout: host.getSubscriptionOperationTimeout(),
-          allowInsecureTls: host.getAllowUntrustedSubscriptionCertificates(),
-          onRouteAttempt: host.onSubscriptionRouteAttempt,
         ),
         slowMessage: l10n.subscriptionOperationSlowWarning,
         timeoutMessage: l10n.subscriptionOperationTimeout,

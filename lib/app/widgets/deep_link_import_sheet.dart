@@ -14,6 +14,7 @@ class DeepLinkImportCopy {
     required this.nameLabel,
     required this.importAction,
     required this.importedTextBuilder,
+    this.alreadyExistsTextBuilder,
   });
 
   factory DeepLinkImportCopy.fromContext(BuildContext context) {
@@ -24,6 +25,7 @@ class DeepLinkImportCopy {
       nameLabel: l10n.deepLinkImportNameLabel,
       importAction: l10n.deepLinkImportAction,
       importedTextBuilder: l10n.deepLinkImportSuccess,
+      alreadyExistsTextBuilder: l10n.deepLinkImportAlreadyExists,
     );
   }
 
@@ -32,9 +34,14 @@ class DeepLinkImportCopy {
   final String nameLabel;
   final String importAction;
   final String Function(String name) importedTextBuilder;
+  final String Function(String name)? alreadyExistsTextBuilder;
 
   String imported(String name) {
     return importedTextBuilder(name);
+  }
+
+  String alreadyExists(String name) {
+    return alreadyExistsTextBuilder?.call(name) ?? 'Subscription "$name" is already added';
   }
 }
 

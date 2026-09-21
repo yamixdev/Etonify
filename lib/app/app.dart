@@ -2189,6 +2189,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         reloadSubscriptions: _reloadSubscriptions,
         offerLikelyHwidFix: _offerLikelyHwidFix,
         userFacingSubscriptionError: _userFacingSubscriptionError,
+        getExistingSubscriptions: () => _subscriptions,
       ),
     );
     _vpnLifecycleCommands.bind(

@@ -2434,6 +2434,11 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String deepLinkImportAlreadyExists(String name) {
+    return 'Подписка \"$name\" уже добавлена';
+  }
+
+  @override
   String get happCryptoLinkImportedLabel => 'Импортировано из ссылки Happ';
 
   @override

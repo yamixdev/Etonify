@@ -978,6 +978,12 @@
       "name": { "type": "String" }
     }
   },
+  "deepLinkImportAlreadyExists": "Subscription \"{name}\" is already added",
+  "@deepLinkImportAlreadyExists": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
   "happCryptoLinkImportedLabel": "Imported from a Happ link",
   "happCryptoLinkTitle": "Happ link",
   "happCryptUnsupportedTitle": "Happ crypt5",

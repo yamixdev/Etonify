@@ -2433,6 +2433,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String deepLinkImportAlreadyExists(String name) {
+    return 'Subscription \"$name\" is already added';
+  }
+
+  @override
   String get happCryptoLinkImportedLabel => 'Imported from a Happ link';
 
   @override

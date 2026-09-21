@@ -4361,6 +4361,12 @@ abstract class AppLocalizations {
   /// **'Subscription \"{name}\" imported'**
   String deepLinkImportSuccess(String name);
 
+  /// No description provided for @deepLinkImportAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription \"{name}\" is already added'**
+  String deepLinkImportAlreadyExists(String name);
+
   /// No description provided for @happCryptoLinkImportedLabel.
   ///
   /// In en, this message translates to:

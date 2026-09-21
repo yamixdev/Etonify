@@ -869,6 +869,8 @@ class MainActivity : FlutterFragmentActivity() {
         mainHandler.post {
             deepLinkEventSink?.success(payload)
         }
+        intent?.data = null
+        setIntent(Intent(Intent.ACTION_MAIN).setClass(this, MainActivity::class.java))
     }
 
     private fun writeConfigAtomically(config: String) {
@@ -2228,7 +2230,12 @@ class MainActivity : FlutterFragmentActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInitialImportRequest" -> {
-                    result.success(buildImportDeepLinkPayload(intent?.data))
+                    val payload = buildImportDeepLinkPayload(intent?.data)
+                    if (payload != null) {
+                        intent?.data = null
+                        setIntent(Intent(Intent.ACTION_MAIN).setClass(this@MainActivity, MainActivity::class.java))
+                    }
+                    result.success(payload)
                 }
                 else -> result.notImplemented()
             }

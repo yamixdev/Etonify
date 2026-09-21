@@ -978,6 +978,12 @@
       "name": { "type": "String" }
     }
   },
+  "deepLinkImportAlreadyExists": "Подписка \"{name}\" уже добавлена",
+  "@deepLinkImportAlreadyExists": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
   "happCryptoLinkImportedLabel": "Импортировано из ссылки Happ",
   "happCryptoLinkTitle": "Ссылка Happ",
   "happCryptUnsupportedTitle": "Happ crypt5",
