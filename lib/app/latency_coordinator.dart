@@ -156,6 +156,7 @@ class LatencyCoordinator {
   Completer<void>? _nativeSessionFinished;
   int _nativeSessionId = 0;
   String _sessionMode = '';
+  String _sessionReason = '';
 
   bool get _usesSessionEvents =>
       _capabilities.urlTestCompletionModel ==
@@ -168,6 +169,17 @@ class LatencyCoordinator {
       _phase == LatencySessionPhase.collectingEvents;
   bool get canStartSession =>
       !_disposed && !isRunning && _nativeSessionFinished == null;
+  bool get isCurrentSessionManual =>
+      isRunning && _sessionReason.startsWith('manual');
+  bool get isCurrentSessionAutomatic =>
+      isRunning && !_sessionReason.startsWith('manual');
+
+  void cancelAutomaticSession() {
+    if (isCurrentSessionAutomatic) {
+      cancel();
+    }
+  }
+
   LatencySessionKind? get kind => isRunning ? _kind : null;
   LatencySessionPhase get phase => _phase;
   int get sessionStartedAtSeconds => _sessionStartedAtSeconds;
@@ -218,8 +230,10 @@ class LatencyCoordinator {
         timeSeconds <= (_acceptedEventTimes[tag] ?? 0);
   }
 
-  Future<bool> runFull({required String reason}) {
-    final mode = reason.startsWith('manual') ? 'manual' : 'background';
+  Future<bool> runFull({
+    required String reason,
+    String mode = 'manual',
+  }) {
     return _runGroupSession(
       kind: LatencySessionKind.full,
       reason: reason,
@@ -504,6 +518,7 @@ class LatencyCoordinator {
     _acceptedResultRevisions.clear();
     _nativeSessionId = 0;
     _sessionMode = '';
+    _sessionReason = '';
     final result = _sessionResult;
     _sessionResult = null;
     if (result != null && !result.isCompleted) {
@@ -634,6 +649,7 @@ class LatencyCoordinator {
     _acceptedResultRevisions.clear();
     _nativeSessionId = 0;
     _sessionMode = request.mode;
+    _sessionReason = reason;
     _phase = LatencySessionPhase.startingRpc;
     _kind = kind;
     _targetTag = targetTag;
@@ -781,6 +797,7 @@ class LatencyCoordinator {
     _successfulTags.clear();
     _nativeSessionId = 0;
     _sessionMode = '';
+    _sessionReason = '';
     _sessionResult = null;
     _onSessionChanged(false, previousKind, previousTarget);
     if (result != null && !result.isCompleted) {

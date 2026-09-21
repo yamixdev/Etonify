@@ -188,6 +188,7 @@ void main() {
             experimentalTcpMultiPath: true,
             experimentalInterruptExistingConnections: true,
             experimentalUrlTestStrictTolerance: true,
+            autoCheckNoticeAcknowledged: true,
           ),
         ),
       ),

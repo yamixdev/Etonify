@@ -11,6 +11,8 @@ Widget _subscriptionsSettingsApp({
   Locale locale = const Locale('en'),
   ValueChanged<UrlTestConfig>? onChanged,
   ValueChanged<int>? onLocationLookupLimitChanged,
+  bool autoCheckServers = false,
+  ValueChanged<bool>? onAutoCheckServersChanged,
 }) {
   return MaterialApp(
     locale: locale,
@@ -27,6 +29,8 @@ Widget _subscriptionsSettingsApp({
       currentLocationLookupLimit: 2,
       currentLocationLookupTimeoutSeconds: 3,
       currentLocationLookupConcurrency: 1,
+      autoCheckServers: autoCheckServers,
+      onAutoCheckServersChanged: onAutoCheckServersChanged,
       onChanged: onChanged ?? (_) {},
       onLocationLookupLimitChanged: onLocationLookupLimitChanged ?? (_) {},
       onLocationLookupTimeoutSecondsChanged: (_) {},
@@ -121,5 +125,33 @@ void main() {
 
     expect(selected?.url, 'https://example.com/generate_204');
     expect(find.text('example.com'), findsOneWidget);
+  });
+
+  testWidgets('renders auto check servers toggle and invokes callback', (
+    tester,
+  ) async {
+    bool? updated;
+    await tester.pumpWidget(
+      _subscriptionsSettingsApp(
+        autoCheckServers: false,
+        onAutoCheckServersChanged: (val) => updated = val,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Automatically check servers'), findsOneWidget);
+    final switchFinder = find.widgetWithText(
+      SwitchListTile,
+      'Automatically check servers',
+    );
+    expect(switchFinder, findsOneWidget);
+
+    final switchWidget = tester.widget<SwitchListTile>(switchFinder);
+    expect(switchWidget.value, isFalse);
+
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+
+    expect(updated, isTrue);
   });
 }

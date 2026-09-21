@@ -158,6 +158,8 @@ class AppSettingsController {
   int urlTestConcurrency = appSettingsStandardUrlTestConcurrency;
   int urlTestUnavailableCheckIntervalSeconds =
       appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
+  bool autoCheckServers = false;
+  bool autoCheckNoticeAcknowledged = false;
   int locationLookupLimit = appSettingsStandardLocationLookupLimit;
   int locationLookupTimeoutSeconds =
       appSettingsDefaultLocationLookupTimeoutSeconds;
@@ -248,6 +250,8 @@ class AppSettingsController {
       urlTestConcurrency: urlTestConcurrency,
       urlTestUnavailableCheckIntervalSeconds:
           urlTestUnavailableCheckIntervalSeconds,
+      autoCheckServers: autoCheckServers,
+      autoCheckNoticeAcknowledged: autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit,
       locationLookupTimeoutSeconds: locationLookupTimeoutSeconds,
       locationLookupConcurrency: locationLookupConcurrency,
@@ -332,6 +336,8 @@ class AppSettingsController {
     urlTestConcurrency = state.urlTestConcurrency;
     urlTestUnavailableCheckIntervalSeconds =
         state.urlTestUnavailableCheckIntervalSeconds;
+    autoCheckServers = state.autoCheckServers;
+    autoCheckNoticeAcknowledged = state.autoCheckNoticeAcknowledged;
     locationLookupLimit = state.locationLookupLimit.clamp(0, 50).toInt();
     locationLookupTimeoutSeconds = state.locationLookupTimeoutSeconds
         .clamp(2, 30)
@@ -810,6 +816,20 @@ class AppSettingsController {
       changed: true,
       configReason: 'urltest unavailable check interval changed',
     );
+  }
+
+  AppSettingsChange setAutoCheckServers(bool value) {
+    if (autoCheckServers == value) {
+      return const AppSettingsChange.none();
+    }
+    autoCheckServers = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange acknowledgeAutoCheckNotice() {
+    final changed = !autoCheckNoticeAcknowledged;
+    autoCheckNoticeAcknowledged = true;
+    return AppSettingsChange(changed: changed);
   }
 
   AppSettingsChange setLocationLookupLimit(int value) {

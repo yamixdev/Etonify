@@ -305,6 +305,33 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hwidDefaultEnabledNoticeAction => 'Понятно';
 
   @override
+  String get autoCheckServersTitle => 'Автоматически проверять серверы';
+
+  @override
+  String get autoCheckServersDescription =>
+      'Проверять доступность серверов при подключении, смене сети и переключении прокси';
+
+  @override
+  String get autoCheckDisabledNoticeTitle => 'Автоматическая проверка';
+
+  @override
+  String get autoCheckDisabledNoticeMessage =>
+      'Автоматическая проверка серверов теперь выключена. Проверить все серверы можно кнопкой-молнией. Включить автоматическую проверку можно в разделе «Подписки и проверка». Режим «Самый быстрый» использует результаты уже проверенных серверов; чтобы найти лучший среди всех, проверьте весь список.';
+
+  @override
+  String get autoCheckDisabledNoticeAction => 'Понятно';
+
+  @override
+  String proxiesProgressWorkingTested(int working, int total, int tested) {
+    return 'Работают $working / $total · проверено $tested / $total';
+  }
+
+  @override
+  String proxiesProgressWorking(int working, int total) {
+    return 'Работают $working / $total';
+  }
+
+  @override
   String get profiles => 'Профили';
 
   @override

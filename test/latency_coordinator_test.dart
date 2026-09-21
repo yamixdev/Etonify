@@ -774,7 +774,10 @@ void main() {
     );
     addTearDown(coordinator.dispose);
 
-    final completed = coordinator.runFull(reason: 'startup');
+    final completed = coordinator.runFull(
+      reason: 'startup',
+      mode: 'background',
+    );
     await Future<void>.delayed(Duration.zero);
     expect(requests.single.mode, 'background');
     expect(requests.single.concurrency, 10);
@@ -804,7 +807,10 @@ void main() {
       );
       addTearDown(coordinator.dispose);
 
-      final completed = coordinator.runFull(reason: 'startup');
+      final completed = coordinator.runFull(
+        reason: 'startup',
+        mode: 'background',
+      );
       await Future<void>.delayed(Duration.zero);
       expect(requests.single.mode, 'background');
       expect(requests.single.concurrency, 10);
@@ -839,13 +845,63 @@ void main() {
       );
       addTearDown(coordinator.dispose);
 
-      final completed = coordinator.runFull(reason: 'startup');
+      final completed = coordinator.runFull(
+        reason: 'startup',
+        mode: 'background',
+      );
 
       expect(
         await completed.timeout(const Duration(milliseconds: 500)),
         isFalse,
       );
       expect(coordinator.isRunning, isFalse);
+    },
+  );
+
+  test(
+    'runFull defaults to exhaustive manual mode and supports automatic session cancellation',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final cancellations = <String>[];
+      final coordinator = LatencyCoordinator(
+        runTest: (request) async => requests.add(request),
+        cancelTest: (group, target) async => cancellations.add('$group|$target'),
+        isConnected: () => true,
+        isForeground: () => true,
+        activeOutboundTag: () => 'a',
+        testUrl: () => '',
+        outboundCount: () => 100,
+        timeoutSeconds: () => 5,
+        concurrency: () => 10,
+        capabilities: _v3Capabilities,
+        onSessionChanged: (_, _, _) {},
+        uiPolicy: _testPolicy,
+      );
+      addTearDown(coordinator.dispose);
+
+      final autoCompleted = coordinator.runFull(reason: 'connect');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.mode, 'manual');
+      expect(requests.single.deadlineMillis, 0);
+      expect(coordinator.isCurrentSessionAutomatic, isTrue);
+      expect(coordinator.isCurrentSessionManual, isFalse);
+
+      coordinator.cancelAutomaticSession();
+      expect(await autoCompleted, isFalse);
+      expect(coordinator.isRunning, isFalse);
+
+      requests.clear();
+      final manualCompleted = coordinator.runFull(reason: 'manual_button');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.mode, 'manual');
+      expect(coordinator.isCurrentSessionManual, isTrue);
+      expect(coordinator.isCurrentSessionAutomatic, isFalse);
+
+      // cancelAutomaticSession should NOT cancel manual session
+      coordinator.cancelAutomaticSession();
+      expect(coordinator.isRunning, isTrue);
+      coordinator.cancel();
+      expect(await manualCompleted, isFalse);
     },
   );
 

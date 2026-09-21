@@ -57,6 +57,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
@@ -89,6 +90,7 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/singbox/core_config_migration.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
@@ -211,6 +213,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final ValueNotifier<bool> _urlTestInFlightNotifier = ValueNotifier<bool>(
     false,
   );
+  final ValueNotifier<UrlTestProgressState> _urlTestProgressNotifier =
+      ValueNotifier<UrlTestProgressState>(const UrlTestProgressState());
+  bool _urlTestCancelled = false;
   int _startupGroupUrlTestNativeGeneration = 0;
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
@@ -338,6 +343,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int get _urlTestConcurrency => _settings.urlTestConcurrency;
   int get _urlTestUnavailableCheckIntervalSeconds =>
       _settings.urlTestUnavailableCheckIntervalSeconds;
+  bool get _autoCheckServers => _settings.autoCheckServers;
+  bool get _autoCheckNoticeAcknowledged =>
+      _settings.autoCheckNoticeAcknowledged;
   int get _locationLookupLimit => _settings.locationLookupLimit;
   int get _locationLookupTimeoutSeconds =>
       _settings.locationLookupTimeoutSeconds;
@@ -2091,10 +2099,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ref
             .read(proxyLatencySessionProvider.notifier)
             .update(running: running, kind: kind, targetTag: targetTag);
+        if (running) {
+          _urlTestCancelled = false;
+        }
+        _updateUrlTestProgress(isRunning: running);
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
         if (!running &&
+            _autoCheckServers &&
             _connected &&
             _foregroundLifecycleActive &&
             !_runtimeIntent.explicitStopInProgress &&
@@ -2243,6 +2256,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ? _stateSaveQueue.add(_currentSettingsState())
         : _stateSaveQueue.idle;
     _urlTestInFlightNotifier.dispose();
+    _urlTestProgressNotifier.dispose();
     unawaited(_runtimeEvents.dispose());
     _deepLinkImportCoordinator.dispose();
     final store = _store;
@@ -3891,11 +3905,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _clearRuntimeProxySelectionGuard(generation: selectionGeneration);
           _scheduleActiveOutboundIpRefresh();
           if (_connected && !_runtimeTransitionInProgress) {
-            unawaited(
-              _latencyCoordinator.runTarget(
-                targetOutboundTag: tag,
-                reason: 'selection',
-              ),
+            _scheduleGroupUrlTest(
+              reason: 'selection',
+              delay: const Duration(milliseconds: 1500),
             );
           }
         } catch (error) {
@@ -4004,12 +4016,72 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return _runtimeRecovery.lastStartedUrlTestOutboundTags;
   }
 
+  Set<String> _userVisibleServerTags() {
+    final subscription = _activeSubscription;
+    if (subscription == null) return const <String>{};
+    final tags = <String>{};
+    for (final outbound in subscription.outbounds) {
+      if (!outbound.info.deleted &&
+          isSupportedOutboundConfig(outbound.config) &&
+          !isReservedProxyTag(outbound.tag) &&
+          !isSyntheticProxyTag(outbound.tag) &&
+          !isLowestProxyTag(outbound.tag) &&
+          outbound.tag != 'direct' &&
+          outbound.tag != 'block' &&
+          outbound.tag != 'dns-out' &&
+          outbound.tag != 'select') {
+        tags.add(outbound.tag);
+      }
+    }
+    for (final chain in subscription.proxyChains) {
+      tags.add(chain.tag);
+    }
+    return tags;
+  }
+
+  void _updateUrlTestProgress({
+    bool? isRunning,
+    bool? isCancelled,
+  }) {
+    final tags = _userVisibleServerTags();
+    final total = tags.length;
+    var working = 0;
+    var failed = 0;
+
+    for (final tag in tags) {
+      if (_proxyRuntime.isLatencyInvalidated(tag)) {
+        continue;
+      }
+      if (!_proxyRuntime.runtimeLatencyTimes.containsKey(tag)) {
+        continue;
+      }
+      final latency = _proxyRuntime.runtimeLatencies[tag];
+      if (latency != null && latency > 0) {
+        working++;
+      } else if (_proxyRuntime.unavailableLatencyTags.contains(tag) ||
+          _proxyRuntime.latencyErrors.containsKey(tag)) {
+        failed++;
+      }
+    }
+
+    final running = isRunning ?? _latencyCoordinator.isRunning;
+    final cancelled = isCancelled ?? _urlTestCancelled;
+
+    _urlTestProgressNotifier.value = UrlTestProgressState(
+      isRunning: running,
+      isCancelled: cancelled,
+      total: total,
+      working: working,
+      failed: failed,
+    );
+  }
+
   void _scheduleGroupUrlTest({
     required String reason,
     Duration delay = const Duration(milliseconds: 2500),
-    int maxRunAttempts = 2,
+    int maxRunAttempts = 1,
   }) {
-    if (!mounted || !_foregroundLifecycleActive) {
+    if (!_autoCheckServers || !mounted || !_foregroundLifecycleActive) {
       return;
     }
     AppLogStore.debug(
@@ -4021,6 +4093,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       delay: delay,
       canRun: () {
         return mounted &&
+            _autoCheckServers &&
             _connected &&
             _foregroundLifecycleActive &&
             !_runtimeTransitionInProgress &&
@@ -4033,7 +4106,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'latency',
           'automatic group URLTest start reason=$reason',
         );
-        return _latencyCoordinator.runFull(reason: reason);
+        return _latencyCoordinator.runFull(reason: reason, mode: 'manual');
       },
       maxRunAttempts: maxRunAttempts,
       onSettled: (success) {
@@ -4044,7 +4117,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
                 'reason=$reason attempts=$maxRunAttempts',
           );
         }
-        if (mounted && _connected && _foregroundLifecycleActive) {
+        if (_autoCheckServers &&
+            mounted &&
+            _connected &&
+            _foregroundLifecycleActive) {
           _schedulePeriodicGroupUrlTest();
         }
       },
@@ -4052,7 +4128,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _schedulePeriodicGroupUrlTest() {
-    if (!_latencyCoordinator.capabilities.supportsUrlTestSessionStatus) {
+    if (!_autoCheckServers ||
+        !_latencyCoordinator.capabilities.supportsUrlTestSessionStatus) {
       return;
     }
     _scheduleGroupUrlTest(
@@ -4470,6 +4547,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(
       () => _settings.setUrlTestUnavailableCheckIntervalSeconds(value),
     );
+  }
+
+  void _setAutoCheckServers(bool value) {
+    _applySettingsChange(() => _settings.setAutoCheckServers(value));
+    if (!value) {
+      _groupUrlTestScheduler.cancel();
+      _latencyCoordinator.cancelAutomaticSession();
+    }
   }
 
   void _setLocationLookupLimit(int value) {
@@ -5151,6 +5236,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentLocationLookupLimit: _locationLookupLimit,
           currentLocationLookupTimeoutSeconds: _locationLookupTimeoutSeconds,
           currentLocationLookupConcurrency: _locationLookupConcurrency,
+          autoCheckServers: _autoCheckServers,
+          onAutoCheckServersChanged: _setAutoCheckServers,
           onChanged: (value) async {
             _setUrlTestUrl(value.url ?? '');
             _setUrlTestIntervalSeconds(value.intervalSeconds ?? 180);
@@ -5504,13 +5591,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
       AppLogStore.debug('latency', 'active URLTest cancelled by user');
       _groupUrlTestScheduler.cancel();
       _urlTestInFlightNotifier.value = false;
+      _urlTestCancelled = true;
       _latencyCoordinator.cancel();
+      _updateUrlTestProgress(isRunning: false, isCancelled: true);
       return;
     }
     if (haptic) {
       _haptic();
     }
+    _urlTestCancelled = false;
     _groupUrlTestScheduler.cancel();
+    _updateUrlTestProgress(isRunning: true, isCancelled: false);
     await _latencyCoordinator.runFull(reason: 'manual');
   }
 
@@ -5998,6 +6089,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _resetActiveProxyIpState(rebuild: false);
     _proxyLocationCoordinator.reset();
     _proxyLocationCoordinator.invalidateSignature();
+    _urlTestCancelled = false;
+    _updateUrlTestProgress(isRunning: false, isCancelled: false);
     if (measurementsChanged) {
       _publishProxyRuntimeVisualStates();
     }
@@ -6060,6 +6153,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
                   ProxyRuntimeController.urlTestStatusUnavailable,
         );
         _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
+        _updateUrlTestProgress();
         unawaited(_syncQuickSettingsTileLabel());
       }
     }
@@ -6586,38 +6680,68 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!(_onboardingCompleted && _legalAccepted)) {
       return;
     }
-    if (_settings.hwidDefaultNoticeShown) {
-      return;
-    }
-    final context = _navigatorKey.currentContext;
-    if (context == null || !mounted) {
+    final initialContext = _navigatorKey.currentContext;
+    if (initialContext == null || !initialContext.mounted) {
       return;
     }
     _hwidNoticeDialogShowing = true;
     try {
-      final l10n = AppLocalizations.of(context);
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(l10n.hwidDefaultEnabledNoticeTitle),
-          content: Text(l10n.hwidDefaultEnabledNoticeMessage),
-          actions: [
-            FilledButton(
-              key: const ValueKey('hwid-default-notice-ok'),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.hwidDefaultEnabledNoticeAction),
-            ),
-          ],
-        ),
-      );
-      if (mounted) {
-        _applySettingsChange(_settings.acknowledgeHwidDefaultNotice);
-        _lastAppliedSettingsState =
-            (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
-              hwidDefaultNoticeShown: true,
-            );
-        await _persistState();
+      if (!_settings.hwidDefaultNoticeShown) {
+        final l10n = AppLocalizations.of(initialContext);
+        await showDialog<void>(
+          context: initialContext,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.hwidDefaultEnabledNoticeTitle),
+            content: Text(l10n.hwidDefaultEnabledNoticeMessage),
+            actions: [
+              FilledButton(
+                key: const ValueKey('hwid-default-notice-ok'),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.hwidDefaultEnabledNoticeAction),
+              ),
+            ],
+          ),
+        );
+        if (mounted) {
+          _applySettingsChange(_settings.acknowledgeHwidDefaultNotice);
+          _lastAppliedSettingsState =
+              (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+                hwidDefaultNoticeShown: true,
+              );
+          await _persistState();
+        }
+      }
+
+      if (mounted && !_autoCheckNoticeAcknowledged) {
+        final currentContext = _navigatorKey.currentContext;
+        if (currentContext == null || !currentContext.mounted) {
+          return;
+        }
+        final l10n = AppLocalizations.of(currentContext);
+        await showDialog<void>(
+          context: currentContext,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.autoCheckDisabledNoticeTitle),
+            content: Text(l10n.autoCheckDisabledNoticeMessage),
+            actions: [
+              FilledButton(
+                key: const ValueKey('auto-check-notice-ok'),
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.autoCheckDisabledNoticeAction),
+              ),
+            ],
+          ),
+        );
+        if (mounted) {
+          _applySettingsChange(_settings.acknowledgeAutoCheckNotice);
+          _lastAppliedSettingsState =
+              (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+                autoCheckNoticeAcknowledged: true,
+              );
+          await _persistState();
+        }
       }
     } finally {
       _hwidNoticeDialogShowing = false;
@@ -7326,6 +7450,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         connected: _connected,
         urlTestInFlight: _urlTestInFlight,
         urlTestInFlightListenable: _urlTestInFlightNotifier,
+        urlTestProgressListenable: _urlTestProgressNotifier,
         hapticEnabled: _hapticEnabled,
         trafficAvailable: _appTrafficMonitor.trafficAvailable,
         downlinkBytesPerSecond: _appTrafficMonitor.downlinkBytesPerSecond,

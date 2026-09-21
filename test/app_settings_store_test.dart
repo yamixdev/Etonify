@@ -445,6 +445,29 @@ void main() {
     expect(store.stateToSafeExportMap(state)['dns_direct_through_proxy'], '1');
   });
 
+  test('persists autoCheckServers and local notice acknowledgment', () {
+    final store = _TestSettingsStore();
+    final defaultState = store.mapState(const <String, dynamic>{});
+    expect(defaultState.autoCheckServers, isFalse);
+    expect(defaultState.autoCheckNoticeAcknowledged, isFalse);
+
+    final enabled = defaultState.copyWith(
+      autoCheckServers: true,
+      autoCheckNoticeAcknowledged: true,
+    );
+    final mapped = store.stateToMap(enabled);
+    expect(mapped['auto_check_servers'], '1');
+    expect(mapped['auto_check_notice_acknowledged'], '1');
+
+    final restored = store.mapState(mapped);
+    expect(restored.autoCheckServers, isTrue);
+    expect(restored.autoCheckNoticeAcknowledged, isTrue);
+
+    final exported = store.stateToSafeExportMap(restored);
+    expect(exported['auto_check_servers'], '1');
+    expect(exported.containsKey('auto_check_notice_acknowledged'), isFalse);
+  });
+
   test('shouldCompactAppSettingsBox triggers when threshold is reached', () {
     expect(shouldCompactAppSettingsBox(50, 24), isFalse);
     expect(shouldCompactAppSettingsBox(50, 25), isFalse);

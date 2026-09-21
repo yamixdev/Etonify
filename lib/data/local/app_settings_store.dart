@@ -194,6 +194,8 @@ class AppSettingsState {
     required this.urlTestTimeoutSeconds,
     required this.urlTestConcurrency,
     required this.urlTestUnavailableCheckIntervalSeconds,
+    this.autoCheckServers = false,
+    this.autoCheckNoticeAcknowledged = false,
     required this.locationLookupLimit,
     required this.locationLookupTimeoutSeconds,
     required this.locationLookupConcurrency,
@@ -263,6 +265,8 @@ class AppSettingsState {
   final int urlTestTimeoutSeconds;
   final int urlTestConcurrency;
   final int urlTestUnavailableCheckIntervalSeconds;
+  final bool autoCheckServers;
+  final bool autoCheckNoticeAcknowledged;
   final int locationLookupLimit;
   final int locationLookupTimeoutSeconds;
   final int locationLookupConcurrency;
@@ -332,6 +336,8 @@ class AppSettingsState {
     int? urlTestTimeoutSeconds,
     int? urlTestConcurrency,
     int? urlTestUnavailableCheckIntervalSeconds,
+    bool? autoCheckServers,
+    bool? autoCheckNoticeAcknowledged,
     int? locationLookupLimit,
     int? locationLookupTimeoutSeconds,
     int? locationLookupConcurrency,
@@ -422,6 +428,9 @@ class AppSettingsState {
       urlTestUnavailableCheckIntervalSeconds:
           urlTestUnavailableCheckIntervalSeconds ??
           this.urlTestUnavailableCheckIntervalSeconds,
+      autoCheckServers: autoCheckServers ?? this.autoCheckServers,
+      autoCheckNoticeAcknowledged:
+          autoCheckNoticeAcknowledged ?? this.autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit ?? this.locationLookupLimit,
       locationLookupTimeoutSeconds:
           locationLookupTimeoutSeconds ?? this.locationLookupTimeoutSeconds,
@@ -518,6 +527,10 @@ abstract class AppSettingsStore {
   static const _urlTestConcurrencyKey = 'urltest_concurrency';
   static const _urlTestUnavailableCheckIntervalSecondsKey =
       'urltest_unavailable_check_interval_seconds';
+  static const _autoCheckServersKey = 'auto_check_servers';
+  // Local acknowledgement: intentionally excluded from safeExportKeys.
+  static const _autoCheckNoticeAcknowledgedKey =
+      'auto_check_notice_acknowledged';
   static const _locationLookupLimitKey = 'location_lookup_limit';
   static const _locationLookupTimeoutSecondsKey =
       'location_lookup_timeout_seconds';
@@ -582,6 +595,7 @@ abstract class AppSettingsStore {
     _urlTestTimeoutSecondsKey,
     _urlTestConcurrencyKey,
     _urlTestUnavailableCheckIntervalSecondsKey,
+    _autoCheckServersKey,
     _locationLookupLimitKey,
     _locationLookupTimeoutSecondsKey,
     _locationLookupConcurrencyKey,
@@ -846,6 +860,11 @@ abstract class AppSettingsStore {
               defaultUnavailableCheckInterval,
               3600,
             ),
+      autoCheckServers: boolValue(_autoCheckServersKey, defaultValue: false),
+      autoCheckNoticeAcknowledged: boolValue(
+        _autoCheckNoticeAcknowledgedKey,
+        defaultValue: false,
+      ),
       locationLookupLimit: switch (int.tryParse(
         map[_locationLookupLimitKey]?.toString() ?? '',
       )) {
@@ -977,6 +996,9 @@ abstract class AppSettingsStore {
       _urlTestUnavailableCheckIntervalSecondsKey: state
           .urlTestUnavailableCheckIntervalSeconds
           .toString(),
+      _autoCheckServersKey: state.autoCheckServers ? '1' : '0',
+      _autoCheckNoticeAcknowledgedKey:
+          state.autoCheckNoticeAcknowledged ? '1' : '0',
       _locationLookupLimitKey: state.locationLookupLimit.toString(),
       _locationLookupTimeoutSecondsKey: state.locationLookupTimeoutSeconds
           .toString(),

@@ -5,6 +5,7 @@ import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/url_test_progress.dart';
 
 @immutable
 class ProxiesPresentationData {
@@ -17,6 +18,7 @@ class ProxiesPresentationData {
     required this.connected,
     this.urlTestInFlight = false,
     this.urlTestInFlightListenable,
+    this.urlTestProgressListenable,
     required this.hapticEnabled,
     required this.trafficAvailable,
     required this.downlinkBytesPerSecond,
@@ -37,6 +39,7 @@ class ProxiesPresentationData {
   final bool connected;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
+  final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
   final bool hapticEnabled;
   final bool trafficAvailable;
   final int downlinkBytesPerSecond;
@@ -119,6 +122,7 @@ class ProxiesPresentationBuilder {
       connected: data.connected,
       urlTestInFlight: data.urlTestInFlight,
       urlTestInFlightListenable: data.urlTestInFlightListenable,
+      urlTestProgressListenable: data.urlTestProgressListenable,
       hapticEnabled: data.hapticEnabled,
       speedBytesPerSecond: data.speedBytesPerSecond,
       trafficBytes: data.trafficBytes,

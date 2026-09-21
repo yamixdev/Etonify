@@ -626,6 +626,48 @@ abstract class AppLocalizations {
   /// **'Got it'**
   String get hwidDefaultEnabledNoticeAction;
 
+  /// No description provided for @autoCheckServersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically check servers'**
+  String get autoCheckServersTitle;
+
+  /// No description provided for @autoCheckServersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Check server availability on connect, network change, and proxy switch'**
+  String get autoCheckServersDescription;
+
+  /// No description provided for @autoCheckDisabledNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic server check'**
+  String get autoCheckDisabledNoticeTitle;
+
+  /// No description provided for @autoCheckDisabledNoticeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic server checking is now turned off. You can test all servers using the lightning bolt button. You can re-enable automatic checks under \'Subscriptions and testing\'. \'Fastest\' mode uses results from tested servers; test the full list to find the best one.'**
+  String get autoCheckDisabledNoticeMessage;
+
+  /// No description provided for @autoCheckDisabledNoticeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get autoCheckDisabledNoticeAction;
+
+  /// No description provided for @proxiesProgressWorkingTested.
+  ///
+  /// In en, this message translates to:
+  /// **'Working {working} / {total} · tested {tested} / {total}'**
+  String proxiesProgressWorkingTested(int working, int total, int tested);
+
+  /// No description provided for @proxiesProgressWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Working {working} / {total}'**
+  String proxiesProgressWorking(int working, int total);
+
   /// No description provided for @profiles.
   ///
   /// In en, this message translates to:

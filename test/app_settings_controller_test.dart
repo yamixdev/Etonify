@@ -337,4 +337,24 @@ void main() {
     );
     expect(controller.useRussiaRouteData, isTrue);
   });
+
+  test('autoCheckServers toggle changes state without restarting VPN', () {
+    final controller = AppSettingsController();
+    expect(controller.autoCheckServers, isFalse);
+    expect(controller.autoCheckNoticeAcknowledged, isFalse);
+
+    final change = controller.setAutoCheckServers(true);
+    expect(change.changed, isTrue);
+    expect(change.restartRuntime, isFalse);
+    expect(change.forceFullServiceRestart, isFalse);
+    expect(controller.autoCheckServers, isTrue);
+
+    final noop = controller.setAutoCheckServers(true);
+    expect(noop.changed, isFalse);
+
+    final noticeChange = controller.acknowledgeAutoCheckNotice();
+    expect(noticeChange.changed, isTrue);
+    expect(noticeChange.restartRuntime, isFalse);
+    expect(controller.autoCheckNoticeAcknowledged, isTrue);
+  });
 }

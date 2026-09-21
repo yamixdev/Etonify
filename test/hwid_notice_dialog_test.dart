@@ -33,9 +33,18 @@ void main() {
     await tester.tap(find.text('Got it'));
     await tester.pumpAndSettle();
 
+    // Auto-check notice dialog appears sequentially after HWID notice
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Automatic server check'), findsOneWidget);
+    expect(find.byKey(const ValueKey('auto-check-notice-ok')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('auto-check-notice-ok')));
+    await tester.pumpAndSettle();
+
     expect(find.byType(AlertDialog), findsNothing);
     final updated = await store.loadState();
     expect(updated.hwidDefaultNoticeShown, isTrue);
+    expect(updated.autoCheckNoticeAcknowledged, isTrue);
     expect(updated.sendHwidToProviders, isTrue);
   });
 
@@ -68,12 +77,54 @@ void main() {
     await tester.tap(find.text('Понятно'));
     await tester.pumpAndSettle();
 
+    // Auto-check notice dialog appears sequentially in Russian
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Автоматическая проверка'), findsOneWidget);
+    expect(find.byKey(const ValueKey('auto-check-notice-ok')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('auto-check-notice-ok')));
+    await tester.pumpAndSettle();
+
     expect(find.byType(AlertDialog), findsNothing);
     final updated = await store.loadState();
     expect(updated.hwidDefaultNoticeShown, isTrue);
+    expect(updated.autoCheckNoticeAcknowledged, isTrue);
   });
 
-  testWidgets('HWID notice dialog does NOT show during onboarding or legal consent', (
+  testWidgets('Auto-check notice dialog shows directly when HWID was already acknowledged', (
+    tester,
+  ) async {
+    final base = await MemoryAppSettingsStore().loadState();
+    final store = MemoryAppSettingsStore(
+      base.copyWith(
+        onboardingCompleted: true,
+        acceptedLegalVersion: '0.2.1',
+        acceptedLegalAtMillis: 1,
+        hwidDefaultNoticeShown: true,
+        autoCheckNoticeAcknowledged: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MeowClient(store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Automatic server check'), findsOneWidget);
+    expect(find.byKey(const ValueKey('auto-check-notice-ok')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('auto-check-notice-ok')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    final updated = await store.loadState();
+    expect(updated.autoCheckNoticeAcknowledged, isTrue);
+  });
+
+  testWidgets('HWID and auto-check notice dialogs do NOT show during onboarding or legal consent', (
     tester,
   ) async {
     final base = await MemoryAppSettingsStore().loadState();
@@ -82,6 +133,7 @@ void main() {
         onboardingCompleted: false,
         acceptedLegalVersion: '',
         hwidDefaultNoticeShown: false,
+        autoCheckNoticeAcknowledged: false,
         sendHwidToProviders: true,
       ),
     );

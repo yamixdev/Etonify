@@ -306,6 +306,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hwidDefaultEnabledNoticeAction => 'Got it';
 
   @override
+  String get autoCheckServersTitle => 'Automatically check servers';
+
+  @override
+  String get autoCheckServersDescription =>
+      'Check server availability on connect, network change, and proxy switch';
+
+  @override
+  String get autoCheckDisabledNoticeTitle => 'Automatic server check';
+
+  @override
+  String get autoCheckDisabledNoticeMessage =>
+      'Automatic server checking is now turned off. You can test all servers using the lightning bolt button. You can re-enable automatic checks under \'Subscriptions and testing\'. \'Fastest\' mode uses results from tested servers; test the full list to find the best one.';
+
+  @override
+  String get autoCheckDisabledNoticeAction => 'Got it';
+
+  @override
+  String proxiesProgressWorkingTested(int working, int total, int tested) {
+    return 'Working $working / $total · tested $tested / $total';
+  }
+
+  @override
+  String proxiesProgressWorking(int working, int total) {
+    return 'Working $working / $total';
+  }
+
+  @override
   String get profiles => 'Profiles';
 
   @override

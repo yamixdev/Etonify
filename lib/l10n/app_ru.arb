@@ -89,6 +89,36 @@
   "hwidDefaultEnabledNoticeTitle": "Отправка HWID",
   "hwidDefaultEnabledNoticeMessage": "Отправка HWID включена по умолчанию. Многим провайдерам нужен ID устройства для выдачи и работы подписки, иначе клиент не поддерживается.\n\nОтключить можно в любой момент: Настройки -> Общие.",
   "hwidDefaultEnabledNoticeAction": "Понятно",
+  "autoCheckServersTitle": "Автоматически проверять серверы",
+  "autoCheckServersDescription": "Проверять доступность серверов при подключении, смене сети и переключении прокси",
+  "autoCheckDisabledNoticeTitle": "Автоматическая проверка",
+  "autoCheckDisabledNoticeMessage": "Автоматическая проверка серверов теперь выключена. Проверить все серверы можно кнопкой-молнией. Включить автоматическую проверку можно в разделе «Подписки и проверка». Режим «Самый быстрый» использует результаты уже проверенных серверов; чтобы найти лучший среди всех, проверьте весь список.",
+  "autoCheckDisabledNoticeAction": "Понятно",
+  "proxiesProgressWorkingTested": "Работают {working} / {total} · проверено {tested} / {total}",
+  "@proxiesProgressWorkingTested": {
+    "placeholders": {
+      "working": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "tested": {
+        "type": "int"
+      }
+    }
+  },
+  "proxiesProgressWorking": "Работают {working} / {total}",
+  "@proxiesProgressWorking": {
+    "placeholders": {
+      "working": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "profiles": "Профили",
   "close": "Закрыть",
   "homeTab": "Главная",

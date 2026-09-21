@@ -18,6 +18,8 @@ class SettingsSubscriptionsPage extends StatefulWidget {
     required this.currentLocationLookupLimit,
     required this.currentLocationLookupTimeoutSeconds,
     required this.currentLocationLookupConcurrency,
+    this.autoCheckServers = false,
+    this.onAutoCheckServersChanged,
     required this.onChanged,
     required this.onLocationLookupLimitChanged,
     required this.onLocationLookupTimeoutSecondsChanged,
@@ -30,6 +32,8 @@ class SettingsSubscriptionsPage extends StatefulWidget {
   final int currentLocationLookupLimit;
   final int currentLocationLookupTimeoutSeconds;
   final int currentLocationLookupConcurrency;
+  final bool autoCheckServers;
+  final ValueChanged<bool>? onAutoCheckServersChanged;
   final ValueChanged<UrlTestConfig> onChanged;
   final ValueChanged<int> onLocationLookupLimitChanged;
   final ValueChanged<int> onLocationLookupTimeoutSecondsChanged;
@@ -55,10 +59,12 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
   late int _locationLookupLimit;
   late int _locationLookupTimeoutSeconds;
   late int _locationLookupConcurrency;
+  late bool _autoCheckServers;
 
   @override
   void initState() {
     super.initState();
+    _autoCheckServers = widget.autoCheckServers;
     _urlController = TextEditingController(
       text: widget.currentConfig.url ?? '',
     );
@@ -85,6 +91,14 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
         .toInt();
     _loadAndroidId();
     _loadHappSupport();
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsSubscriptionsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.autoCheckServers != widget.autoCheckServers) {
+      _autoCheckServers = widget.autoCheckServers;
+    }
   }
 
   @override
@@ -236,6 +250,20 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
             SettingsTileGroup(
               dividerIndent: 64,
               children: [
+                SwitchListTile(
+                  key: const ValueKey('auto-check-servers-switch'),
+                  secondary: SettingsLeadingIcon(
+                    icon: Icons.bolt_rounded,
+                    color: cs.primary,
+                  ),
+                  title: Text(l10n.autoCheckServersTitle),
+                  subtitle: Text(l10n.autoCheckServersDescription),
+                  value: _autoCheckServers,
+                  onChanged: (value) {
+                    setState(() => _autoCheckServers = value);
+                    widget.onAutoCheckServersChanged?.call(value);
+                  },
+                ),
                 _CompactSettingTile(
                   key: const ValueKey('urltest-url-setting'),
                   icon: Icons.link_rounded,

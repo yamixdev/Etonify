@@ -103,6 +103,7 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.connected,
     required this.urlTestInFlight,
     this.urlTestInFlightListenable,
+    this.urlTestProgressListenable,
     required this.hapticEnabled,
     required this.speedBytesPerSecond,
     required this.trafficBytes,
@@ -124,6 +125,7 @@ class _ProxySheetHeader extends StatelessWidget {
   final bool connected;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
+  final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -209,19 +211,74 @@ class _ProxySheetHeader extends StatelessWidget {
                 ),
               ),
             Positioned(
-              left: 16,
-              right: 16,
+              left: 96,
+              right: 96,
               top: toolbarTop,
               bottom: toolbarBottom,
               child: Opacity(
                 opacity: headerOpacity,
                 child: Center(
-                  child: Text(
-                    l10n.proxiesTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        l10n.proxiesTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (urlTestProgressListenable != null)
+                        ValueListenableBuilder<UrlTestProgressState>(
+                          valueListenable: urlTestProgressListenable!,
+                          builder: (context, progressState, _) {
+                            final showProgress = progressState.total > 0 &&
+                                (progressState.isRunning ||
+                                    progressState.hasResults ||
+                                    progressState.isCancelled);
+                            if (!showProgress) {
+                              return const SizedBox.shrink();
+                            }
+                            final statusText =
+                                (progressState.isRunning || progressState.isCancelled)
+                                    ? l10n.proxiesProgressWorkingTested(
+                                        progressState.working,
+                                        progressState.total,
+                                        progressState.tested,
+                                      )
+                                    : l10n.proxiesProgressWorking(
+                                        progressState.working,
+                                        progressState.total,
+                                      );
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    statusText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  _ProxyTestProgressBar(
+                                    key: const ValueKey('proxy-test-progress-bar'),
+                                    total: progressState.total,
+                                    working: progressState.working,
+                                    failed: progressState.failed,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -596,3 +653,62 @@ class _ProxyListDivider extends StatelessWidget {
     );
   }
 }
+
+class _ProxyTestProgressBar extends StatelessWidget {
+  const _ProxyTestProgressBar({
+    super.key,
+    required this.total,
+    required this.working,
+    required this.failed,
+  });
+
+  final int total;
+  final int working;
+  final int failed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (total <= 0) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    final workingColor = theme.brightness == Brightness.dark
+        ? Colors.lightGreen
+        : Colors.green;
+    final failedColor = theme.colorScheme.error;
+    final pendingColor =
+        theme.colorScheme.outlineVariant.withValues(alpha: 0.38);
+
+    final safeWorking = working.clamp(0, total);
+    final safeFailed = failed.clamp(0, total - safeWorking);
+    final safePending = (total - safeWorking - safeFailed).clamp(0, total);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(1.5),
+      child: SizedBox(
+        height: 2.5,
+        width: 140,
+        child: Row(
+          children: [
+            if (safeWorking > 0)
+              Expanded(
+                flex: safeWorking,
+                child: ColoredBox(color: workingColor),
+              ),
+            if (safeFailed > 0)
+              Expanded(
+                flex: safeFailed,
+                child: ColoredBox(color: failedColor),
+              ),
+            if (safePending > 0)
+              Expanded(
+                flex: safePending,
+                child: ColoredBox(color: pendingColor),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

@@ -16,6 +16,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
@@ -355,6 +356,7 @@ class ProxiesPage extends StatefulWidget {
     required this.connected,
     this.urlTestInFlight = false,
     this.urlTestInFlightListenable,
+    this.urlTestProgressListenable,
     this.hapticEnabled = true,
     this.speedBytesPerSecond = 0,
     this.trafficBytes = 0,
@@ -398,6 +400,7 @@ class ProxiesPage extends StatefulWidget {
   final bool connected;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
+  final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
   final bool hapticEnabled;
   final double speedBytesPerSecond;
   final double trafficBytes;
@@ -1051,6 +1054,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     connected: widget.connected,
                     urlTestInFlight: widget.urlTestInFlight,
                     urlTestInFlightListenable: widget.urlTestInFlightListenable,
+                    urlTestProgressListenable: widget.urlTestProgressListenable,
                     hapticEnabled: widget.hapticEnabled,
                     speedBytesPerSecond: widget.speedBytesPerSecond,
                     trafficBytes: widget.trafficBytes,
