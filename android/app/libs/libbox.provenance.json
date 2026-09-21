@@ -1,7 +1,7 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "ec14bf2c80de81aeadefe128ba0da6d41907b20747899558f5017ac60a5868cc",
-  "source_commit": "6cba829f534c26661467ebffc309decce13019c5",
+  "sha256": "2ad9358d2ed5555f82c5dc65ee386d525275137b8670c98361ae3608ff3b233a",
+  "source_commit": "2a1f142f662c0a56a74f8ffa40cf710e3ca542fd",
   "source_version": "v1.15.0-alpha.3-etonify.5",
   "etonify_version": "v1.15.0-alpha.3-etonify.5",
   "upstream_commit": "93fff5954390367dd456cad3cbd79be54f8b941f",
