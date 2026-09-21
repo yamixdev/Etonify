@@ -87,7 +87,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingApkInstallResult: MethodChannel.Result? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var deepLinkEventSink: EventChannel.EventSink? = null
-    private var pendingDeepLinkPayload: Map<String, Any>? = null
+    private var pendingDeepLinkPayload: Map<String, Any?>? = null
     @Volatile
     private var singboxEventSinkRegistration = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
