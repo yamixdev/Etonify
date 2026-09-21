@@ -168,7 +168,8 @@ class DeepLinkImportCoordinator {
       trimmed = trimmed.substring(0, trimmed.length - 1);
     }
     final uri = Uri.tryParse(trimmed);
-    if (uri == null) return trimmed.toLowerCase();
+    if (uri == null) return trimmed;
+    if (!uri.hasScheme && uri.host.isEmpty) return trimmed;
     return uri.replace(
       scheme: uri.scheme.toLowerCase(),
       host: uri.host.toLowerCase(),

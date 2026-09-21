@@ -1911,6 +1911,7 @@ void main() {
             'encryption': 'none',
             'tls': {
               'enabled': true,
+              'alpn': ['h2', 'http/1.1'],
               'utls': {'enabled': true, 'fingerprint': 'QQ'},
               'reality': {
                 'enabled': true,
@@ -1931,6 +1932,7 @@ void main() {
     final leaf = outbounds.firstWhere((entry) => entry['tag'] == 'leaf');
 
     expect(leaf['tls']['utls']['fingerprint'], 'qq');
+    expect(leaf['tls'], isNot(contains('alpn')));
     expect(leaf, isNot(contains('encryption')));
   });
 

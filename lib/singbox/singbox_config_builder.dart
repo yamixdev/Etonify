@@ -1264,6 +1264,7 @@ class SingboxConfigBuilder {
         }
         tlsMap['utls'] = utlsMap;
       }
+      tlsMap.remove('alpn');
       tlsMap['enabled'] = true;
       config['tls'] = tlsMap;
     }

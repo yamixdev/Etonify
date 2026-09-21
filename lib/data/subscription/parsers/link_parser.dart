@@ -84,7 +84,9 @@ class LinkParser {
 
     final tls = _buildTls(p);
     if (tls != null) {
-      if (transport?['type'] == 'xhttp' && !tls.containsKey('alpn')) {
+      if (transport?['type'] == 'xhttp' &&
+          !tls.containsKey('alpn') &&
+          tls['reality']?['enabled'] != true) {
         tls['alpn'] = const ['h2', 'http/1.1'];
       }
       result['tls'] = tls;
@@ -691,7 +693,7 @@ class LinkParser {
     }
 
     final alpn = p['alpn'] ?? '';
-    if (alpn.isNotEmpty) tls['alpn'] = alpn.split(',');
+    if (!isReality && alpn.isNotEmpty) tls['alpn'] = alpn.split(',');
 
     final fp = p['fp'] ?? '';
     if (fp.isNotEmpty) {

@@ -87,6 +87,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingApkInstallResult: MethodChannel.Result? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var deepLinkEventSink: EventChannel.EventSink? = null
+    private var pendingDeepLinkPayload: Map<String, Any>? = null
     @Volatile
     private var singboxEventSinkRegistration = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -867,7 +868,12 @@ class MainActivity : FlutterFragmentActivity() {
     private fun dispatchImportDeepLink(intent: Intent?) {
         val payload = buildImportDeepLinkPayload(intent?.data) ?: return
         mainHandler.post {
-            deepLinkEventSink?.success(payload)
+            val sink = deepLinkEventSink
+            if (sink != null) {
+                sink.success(payload)
+            } else {
+                pendingDeepLinkPayload = payload
+            }
         }
         intent?.data = null
         setIntent(Intent(Intent.ACTION_MAIN).setClass(this, MainActivity::class.java))
@@ -2216,6 +2222,10 @@ class MainActivity : FlutterFragmentActivity() {
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     deepLinkEventSink = events
+                    pendingDeepLinkPayload?.let { payload ->
+                        events?.success(payload)
+                        pendingDeepLinkPayload = null
+                    }
                 }
 
                 override fun onCancel(arguments: Any?) {
@@ -2230,7 +2240,8 @@ class MainActivity : FlutterFragmentActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInitialImportRequest" -> {
-                    val payload = buildImportDeepLinkPayload(intent?.data)
+                    val payload = pendingDeepLinkPayload ?: buildImportDeepLinkPayload(intent?.data)
+                    pendingDeepLinkPayload = null
                     if (payload != null) {
                         intent?.data = null
                         setIntent(Intent(Intent.ACTION_MAIN).setClass(this@MainActivity, MainActivity::class.java))
@@ -2261,6 +2272,7 @@ class MainActivity : FlutterFragmentActivity() {
             SingboxController.clearEventSink(registration)
         }
         deepLinkEventSink = null
+        pendingDeepLinkPayload = null
         mainHandler.removeCallbacksAndMessages(null)
         ioExecutor.shutdownNow()
         subscriptionNetworkExecutor.shutdownNow()

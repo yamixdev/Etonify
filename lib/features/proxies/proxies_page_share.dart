@@ -367,7 +367,9 @@ void _appendHyTlsQuery(
   if (tls['insecure'] == true) {
     _putQuery(query, insecureKey, '1');
   }
-  if (tls['alpn'] is List) {
+  final reality = tls['reality'];
+  final isReality = reality is Map && reality['enabled'] == true;
+  if (!isReality && tls['alpn'] is List) {
     _putQuery(query, 'alpn', (tls['alpn'] as List).join(','));
   }
   _putQuery(

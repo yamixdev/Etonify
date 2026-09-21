@@ -1193,7 +1193,8 @@ class ParsedOutboundSchema {
       tls['reality'] = reality;
     }
 
-    if (alpn == null) {
+    final isReality = reality != null && reality['enabled'] == true;
+    if (alpn == null || isReality) {
       tls.remove('alpn');
     } else {
       tls['alpn'] = alpn;
