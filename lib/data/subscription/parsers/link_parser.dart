@@ -1,6 +1,7 @@
 import 'dart:convert';
-import '../import_key_normalizer.dart';
-import 'cert_pin_utils.dart';
+import 'package:meow_client/core/base64.dart';
+import 'package:meow_client/data/subscription/import_key_normalizer.dart';
+import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
 /// Parses individual proxy URI links and converts to sing-box outbound format.
 ///
@@ -587,7 +588,9 @@ class LinkParser {
     // TLS
     final tls = <String, dynamic>{'enabled': true};
     _putIfPresent(tls, 'server_name', p['sni']);
-    final tuicInsecure = (p['allow_insecure'] ?? p['allowInsecure'] ?? p['insecure'] ?? '0').toLowerCase();
+    final tuicInsecure =
+        (p['allow_insecure'] ?? p['allowInsecure'] ?? p['insecure'] ?? '0')
+            .toLowerCase();
     if (tuicInsecure == '1' || tuicInsecure == 'true') {
       tls['insecure'] = true;
     }
@@ -618,7 +621,9 @@ class LinkParser {
     // TLS (always on)
     final tls = <String, dynamic>{'enabled': true};
     _putIfPresent(tls, 'server_name', p['sni'] ?? p['peer']);
-    final anytlsInsecure = (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '0').toLowerCase();
+    final anytlsInsecure =
+        (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '0')
+            .toLowerCase();
     if (anytlsInsecure == '1' || anytlsInsecure == 'true') {
       tls['insecure'] = true;
     }
@@ -640,8 +645,7 @@ class LinkParser {
       final s = idleCheck.trim();
       result['idle_session_check_interval'] = s.endsWith('s') ? s : '${s}s';
     }
-    final idleTimeout =
-        p['idle_session_timeout'] ?? p['idle-session-timeout'];
+    final idleTimeout = p['idle_session_timeout'] ?? p['idle-session-timeout'];
     if (idleTimeout != null && idleTimeout.trim().isNotEmpty) {
       final s = idleTimeout.trim();
       result['idle_session_timeout'] = s.endsWith('s') ? s : '${s}s';
@@ -675,12 +679,15 @@ class LinkParser {
 
     _putIfPresent(tls, 'server_name', p['sni'] ?? p['peer']);
 
-    final insecureVal = (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '').toLowerCase();
+    final insecureVal =
+        (p['insecure'] ?? p['allowInsecure'] ?? p['allow_insecure'] ?? '')
+            .toLowerCase();
     if (insecureVal == '1' || insecureVal == 'true') {
       tls['insecure'] = true;
     }
 
-    final rawPins = p['pinnedPeerCertSha256'] ??
+    final rawPins =
+        p['pinnedPeerCertSha256'] ??
         p['pinnedPeerCertificateSha256'] ??
         p['pinSHA256'] ??
         p['pin_sha256'] ??
@@ -718,7 +725,8 @@ class LinkParser {
     final type = (p['type'] ?? p['net'] ?? 'tcp').toLowerCase();
     final host = p['host'] ?? '';
     final path = p['path'] ?? '';
-    final serviceName = p['serviceName'] ?? p['service_name'] ?? p['service-name'] ?? '';
+    final serviceName =
+        p['serviceName'] ?? p['service_name'] ?? p['service-name'] ?? '';
     final headerType = p['headerType'] ?? '';
 
     switch (type) {
@@ -805,14 +813,7 @@ class LinkParser {
   static String? _decodeBase64(String input) {
     if (input.isEmpty) return null;
     try {
-      String s = input.replaceAll('-', '+').replaceAll('_', '/');
-      switch (s.length % 4) {
-        case 2:
-          s += '==';
-        case 3:
-          s += '=';
-      }
-      return utf8.decode(base64Decode(s));
+      return utf8.decode(base64Decode(toStandardBase64(input)));
     } catch (_) {
       return null;
     }

@@ -103,74 +103,77 @@ void main() {
       monitor.publish();
       expect(
         monitor.trafficUiSnapshotNotifier.value,
-        const TrafficUiSnapshot(
-          speedBytesPerSecond: 2048,
-          trafficBytes: 15000,
-        ),
+        const TrafficUiSnapshot(speedBytesPerSecond: 2048, trafficBytes: 15000),
       );
     });
 
-    test('recordTrafficSample records when dashboard is open and connected', () {
-      monitor.openDashboard();
-      expect(monitor.isTrafficDashboardOpen, isTrue);
+    test(
+      'recordTrafficSample records when dashboard is open and connected',
+      () {
+        monitor.openDashboard();
+        expect(monitor.isTrafficDashboardOpen, isTrue);
 
-      monitor.applyStatus(
-        const RuntimeTrafficStatus(
-          uplinkBytesPerSecond: 500,
-          downlinkBytesPerSecond: 1500,
-          uplinkTotalBytes: 2000,
-          downlinkTotalBytes: 4000,
-          available: true,
-        ),
-      );
+        monitor.applyStatus(
+          const RuntimeTrafficStatus(
+            uplinkBytesPerSecond: 500,
+            downlinkBytesPerSecond: 1500,
+            uplinkTotalBytes: 2000,
+            downlinkTotalBytes: 4000,
+            available: true,
+          ),
+        );
 
-      final now = DateTime(2026, 1, 1, 12, 10);
-      monitor.recordTrafficSample(now);
+        final now = DateTime(2026, 1, 1, 12, 10);
+        monitor.recordTrafficSample(now);
 
-      expect(monitor.samplesCount, 1);
-      expect(monitor.trafficSamples.first.downlinkBps, 1500);
-      expect(monitor.trafficSamples.first.uplinkBps, 500);
-      expect(monitor.trafficSamples.first.totalBytes, 6000);
+        expect(monitor.samplesCount, 1);
+        expect(monitor.trafficSamples.first.downlinkBps, 1500);
+        expect(monitor.trafficSamples.first.uplinkBps, 500);
+        expect(monitor.trafficSamples.first.totalBytes, 6000);
 
-      monitor.closeDashboard();
-      expect(monitor.isTrafficDashboardOpen, isFalse);
-      expect(monitor.samplesCount, 0);
-      expect(
-        monitor.trafficDashboardSnapshotNotifier.value,
-        TrafficDashboardSnapshot.empty,
-      );
-    });
+        monitor.closeDashboard();
+        expect(monitor.isTrafficDashboardOpen, isFalse);
+        expect(monitor.samplesCount, 0);
+        expect(
+          monitor.trafficDashboardSnapshotNotifier.value,
+          TrafficDashboardSnapshot.empty,
+        );
+      },
+    );
 
-    test('recordTrafficSample prunes old samples beyond 5 minutes and caps at 180', () {
-      monitor.openDashboard();
-      monitor.applyStatus(
-        const RuntimeTrafficStatus(
-          uplinkBytesPerSecond: 10,
-          downlinkBytesPerSecond: 20,
-          uplinkTotalBytes: 100,
-          downlinkTotalBytes: 200,
-          available: true,
-        ),
-      );
+    test(
+      'recordTrafficSample prunes old samples beyond 5 minutes and caps at 180',
+      () {
+        monitor.openDashboard();
+        monitor.applyStatus(
+          const RuntimeTrafficStatus(
+            uplinkBytesPerSecond: 10,
+            downlinkBytesPerSecond: 20,
+            uplinkTotalBytes: 100,
+            downlinkTotalBytes: 200,
+            available: true,
+          ),
+        );
 
-      final baseTime = DateTime(2026, 1, 1, 12, 0);
-      // Add 200 samples 1 second apart
-      for (var i = 0; i < 200; i++) {
-        monitor.recordTrafficSample(baseTime.add(Duration(seconds: i)));
-      }
+        final baseTime = DateTime(2026, 1, 1, 12, 0);
+        // Add 200 samples 1 second apart
+        for (var i = 0; i < 200; i++) {
+          monitor.recordTrafficSample(baseTime.add(Duration(seconds: i)));
+        }
 
-      // Max capped at 180
-      expect(monitor.samplesCount, 180);
+        // Max capped at 180
+        expect(monitor.samplesCount, 180);
 
-      // Now add a sample 6 minutes later: old samples (> 5 mins before) should be pruned
-      final later = baseTime.add(const Duration(minutes: 6));
-      monitor.recordTrafficSample(later);
+        // Now add a sample 6 minutes later: old samples (> 5 mins before) should be pruned
+        final later = baseTime.add(const Duration(minutes: 6));
+        monitor.recordTrafficSample(later);
 
-      // Cutoff is 6 mins - 5 mins = 1 min = 60s.
-      // Samples from baseTime+0s to baseTime+59s are before cutoff, so they are pruned.
-      expect(monitor.samplesCount, lessThan(180));
-      expect(monitor.trafficSamples.last.timestamp, later);
-    });
+        // Cutoff is 6 mins - 5 mins = 1 min = 60s.
+        // Samples from baseTime+0s to baseTime+59s are before cutoff, so they are pruned.
+        expect(monitor.samplesCount, lessThan(180));
+        expect(monitor.trafficSamples.last.timestamp, later);
+      },
+    );
 
     test('handleMemoryPressure trims samples or resets if disconnected', () {
       monitor.openDashboard();
@@ -201,22 +204,25 @@ void main() {
       expect(monitor.trafficAvailable, isFalse);
     });
 
-    test('handleTrafficStatusEvent flushes immediately if elapsed >= interval', () {
-      final event = {
-        'uplink': 100,
-        'downlink': 200,
-        'uplinkTotal': 1000,
-        'downlinkTotal': 2000,
-        'trafficAvailable': true,
-      };
+    test(
+      'handleTrafficStatusEvent flushes immediately if elapsed >= interval',
+      () {
+        final event = {
+          'uplink': 100,
+          'downlink': 200,
+          'uplinkTotal': 1000,
+          'downlinkTotal': 2000,
+          'trafficAvailable': true,
+        };
 
-      monitor.handleTrafficStatusEvent(event);
-      expect(monitor.uplinkBytesPerSecond, 100);
-      expect(monitor.downlinkBytesPerSecond, 200);
-      expect(monitor.uplinkTotalBytes, 1000);
-      expect(monitor.downlinkTotalBytes, 2000);
-      expect(monitor.trafficAvailable, isTrue);
-    });
+        monitor.handleTrafficStatusEvent(event);
+        expect(monitor.uplinkBytesPerSecond, 100);
+        expect(monitor.downlinkBytesPerSecond, 200);
+        expect(monitor.uplinkTotalBytes, 1000);
+        expect(monitor.downlinkTotalBytes, 2000);
+        expect(monitor.trafficAvailable, isTrue);
+      },
+    );
 
     test('suspendForegroundWork cancels timers and pending events', () {
       monitor.suspendForegroundWork();

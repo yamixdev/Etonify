@@ -114,7 +114,7 @@ class AppSurfaceTheme extends ThemeExtension<AppSurfaceTheme> {
 // Theme builder
 // ---------------------------------------------------------------------------
 
-ThemeData buildDemoTheme(
+ThemeData buildAppTheme(
   Brightness brightness, {
   Color? seedColor,
   ColorScheme? dynamicLightScheme,
@@ -324,7 +324,7 @@ ThemeData buildAmoledTheme({
   ColorScheme? dynamicLightScheme,
   ColorScheme? dynamicDarkScheme,
 }) {
-  final base = buildDemoTheme(
+  final base = buildAppTheme(
     Brightness.dark,
     seedColor: seedColor,
     dynamicLightScheme: dynamicLightScheme,

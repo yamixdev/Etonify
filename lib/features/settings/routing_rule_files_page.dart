@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
@@ -146,8 +147,8 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
     final isRetrying = progress.isRetryingWithoutVpn;
     if (progress.totalBytes > 0) {
       final text = l10n.russiaRoutesDownloadProgress(
-        _formatBytes(progress.completedBytes),
-        _formatBytes(progress.totalBytes),
+        formatRuleSetBytes(progress.completedBytes),
+        formatRuleSetBytes(progress.totalBytes),
       );
       return isRetrying
           ? '${l10n.remoteDownloadRetryWithoutVpn} • $text'
@@ -286,7 +287,7 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
                 _RouteMetadataTile(
                   icon: Icons.data_usage_rounded,
                   label: l10n.routingRuleFilesTotalSizeTitle,
-                  value: _formatBytes(totalSizeBytes),
+                  value: formatRuleSetBytes(totalSizeBytes),
                 ),
                 ListTile(
                   enabled: !_busy,
@@ -462,7 +463,7 @@ class _RoutingRuleFileTile extends StatelessWidget {
         ),
       ),
       trailing: Text(
-        _formatBytes(file.sizeBytes),
+        formatRuleSetBytes(file.sizeBytes),
         style: theme.textTheme.labelLarge?.copyWith(
           color: cs.onSurfaceVariant,
           fontFeatures: const [FontFeature.tabularFigures()],
@@ -496,14 +497,6 @@ String _shortDuration(AppLocalizations l10n, int seconds) {
     return l10n.routingRuleFilesMinutesShort((seconds / 60).ceil());
   }
   return l10n.routingRuleFilesSecondsShort(seconds);
-}
-
-String _formatBytes(int bytes) {
-  if (bytes >= 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  return '$bytes B';
 }
 
 String _formatRouteVersion(String value) {

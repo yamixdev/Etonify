@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'happ_crypto_link.dart';
+import 'package:meow_client/data/subscription/happ_crypto_link.dart';
 
 enum SubscriptionFailureKind {
   invalidHwid,

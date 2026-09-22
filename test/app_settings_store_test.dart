@@ -28,9 +28,7 @@ void main() {
         isFalse,
       );
       expect(
-        store
-            .mergeSafeImportMap(store.mapState({}), exported)
-            .coreSettings,
+        store.mergeSafeImportMap(store.mapState({}), exported).coreSettings,
         restored.coreSettings,
       );
       final controller = AppSettingsController()..applyState(restored);

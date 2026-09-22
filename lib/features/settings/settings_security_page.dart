@@ -122,8 +122,8 @@ class SettingsSecurityPage extends ConsumerWidget {
                     ),
                     title: Text(l10n.securityUntrustedProxyCertificatesTitle),
                     value: settings.allowUntrustedProxyCertificates,
-                    onChanged:
-                        (value) => _setProxyCertificates(context, ref, value),
+                    onChanged: (value) =>
+                        _setProxyCertificates(context, ref, value),
                   ),
                   SwitchListTile(
                     key: const ValueKey(
@@ -137,9 +137,8 @@ class SettingsSecurityPage extends ConsumerWidget {
                       l10n.securityUntrustedSubscriptionCertificatesTitle,
                     ),
                     value: settings.allowUntrustedSubscriptionCertificates,
-                    onChanged:
-                        (value) =>
-                            _setSubscriptionCertificates(context, ref, value),
+                    onChanged: (value) =>
+                        _setSubscriptionCertificates(context, ref, value),
                   ),
                 ],
               ),

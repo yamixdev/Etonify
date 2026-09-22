@@ -8,15 +8,46 @@ import 'package:meow_client/data/subscription/parsers/xray_config_parser.dart';
 
 void main() {
   group('Certificate PIN Normalization', () {
-    const rawHex = '286a028eb00102030405060708090a0b0c0d0e0f101112131415161718191a1b';
-    const hexWithColons = '28:6A:02:8E:B0:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:10:11:12:13:14:15:16:17:18:19:1A:1B';
-    const hexWithSpaces = '28 6a 02 8e b0 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b';
+    const rawHex =
+        '286a028eb00102030405060708090a0b0c0d0e0f101112131415161718191a1b';
+    const hexWithColons =
+        '28:6A:02:8E:B0:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:10:11:12:13:14:15:16:17:18:19:1A:1B';
+    const hexWithSpaces =
+        '28 6a 02 8e b0 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b';
 
     final expectedBytes = [
-      0x28, 0x6a, 0x02, 0x8e, 0xb0, 0x01, 0x02, 0x03,
-      0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b,
-      0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
-      0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+      0x28,
+      0x6a,
+      0x02,
+      0x8e,
+      0xb0,
+      0x01,
+      0x02,
+      0x03,
+      0x04,
+      0x05,
+      0x06,
+      0x07,
+      0x08,
+      0x09,
+      0x0a,
+      0x0b,
+      0x0c,
+      0x0d,
+      0x0e,
+      0x0f,
+      0x10,
+      0x11,
+      0x12,
+      0x13,
+      0x14,
+      0x15,
+      0x16,
+      0x17,
+      0x18,
+      0x19,
+      0x1a,
+      0x1b,
     ];
     final expectedBase64 = base64.encode(expectedBytes);
 
@@ -112,7 +143,8 @@ void main() {
 
   group('LinkParser certificate_sha256', () {
     test('parses pinnedPeerCertSha256 from URI query parameter', () {
-      const uri = 'vless://a0000000-0000-0000-0000-000000000001@198.51.100.1:443?security=tls&sni=lte118.vpn.internal&fp=qq&pinnedPeerCertSha256=28:6A:02:8E:B0:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:10:11:12:13:14:15:16:17:18:19:1A:1B&type=grpc&serviceName=vless-grpc#0.1X%20-%20LTE%20%E2%84%96118%20-%20%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0';
+      const uri =
+          'vless://a0000000-0000-0000-0000-000000000001@198.51.100.1:443?security=tls&sni=lte118.vpn.internal&fp=qq&pinnedPeerCertSha256=28:6A:02:8E:B0:01:02:03:04:05:06:07:08:09:0A:0B:0C:0D:0E:0F:10:11:12:13:14:15:16:17:18:19:1A:1B&type=grpc&serviceName=vless-grpc#0.1X%20-%20LTE%20%E2%84%96118%20-%20%D0%9C%D0%BE%D1%81%D0%BA%D0%B2%D0%B0';
       final parsed = LinkParser.tryParse(uri);
       expect(parsed, isNotNull);
 

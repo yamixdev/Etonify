@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -1114,7 +1115,7 @@ class _UpdateInfoCard extends StatelessWidget {
             if (checkedAt != null) ...[
               const Gap(8),
               Text(
-                l10n.updatesLastChecked(_formatTime(checkedAt!)),
+                l10n.updatesLastChecked(formatLocalDateTime(checkedAt!)),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -1265,11 +1266,4 @@ String _formatEta(BuildContext context, int? seconds) {
   if (seconds == null || seconds < 0) return '—';
   if (seconds < 60) return l10n.updatesEtaSeconds(seconds);
   return l10n.updatesEtaMinutes(seconds ~/ 60, seconds % 60);
-}
-
-String _formatTime(DateTime time) {
-  final local = time.toLocal();
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(local.day)}.${two(local.month)}.${local.year} '
-      '${two(local.hour)}:${two(local.minute)}';
 }

@@ -8,9 +8,7 @@ import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
-Widget _experimentalSettingsApp({
-  required ProviderContainer container,
-}) {
+Widget _experimentalSettingsApp({required ProviderContainer container}) {
   return UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
@@ -65,9 +63,7 @@ void main() {
         },
       );
 
-      await tester.pumpWidget(
-        _experimentalSettingsApp(container: container),
-      );
+      await tester.pumpWidget(_experimentalSettingsApp(container: container));
 
       await tester.ensureVisible(find.text('Soft core memory limit'));
       await tester.pumpAndSettle();

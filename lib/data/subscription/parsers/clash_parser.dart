@@ -1,5 +1,5 @@
 import 'package:yaml/yaml.dart';
-import 'cert_pin_utils.dart';
+import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
 /// Parses Clash / Clash Meta YAML configs into sing-box outbound JSON maps.
 class ClashParser {
@@ -254,8 +254,7 @@ class ClashParser {
       }
     }
 
-    final idleTimeout =
-        p['idle-session-timeout'] ?? p['idle_session_timeout'];
+    final idleTimeout = p['idle-session-timeout'] ?? p['idle_session_timeout'];
     if (idleTimeout != null) {
       if (idleTimeout is int && idleTimeout > 0) {
         r['idle_session_timeout'] = '${idleTimeout}s';
@@ -347,7 +346,8 @@ class ClashParser {
       tls['utls'] = {'enabled': true, 'fingerprint': fp};
     }
 
-    final rawCertPin = p['pinned-peer-cert-sha256'] ??
+    final rawCertPin =
+        p['pinned-peer-cert-sha256'] ??
         p['pinnedPeerCertSha256'] ??
         p['certificate-sha256'] ??
         p['certificate_sha256'];
@@ -421,10 +421,12 @@ class ClashParser {
             : null;
         final t = <String, dynamic>{'type': 'grpc'};
         if (opts != null) {
-          final sn = _s(opts['grpc-service-name'] ??
-              opts['grpcServiceName'] ??
-              opts['service-name'] ??
-              opts['serviceName']);
+          final sn = _s(
+            opts['grpc-service-name'] ??
+                opts['grpcServiceName'] ??
+                opts['service-name'] ??
+                opts['serviceName'],
+          );
           if (sn.isNotEmpty) t['service_name'] = sn;
         }
         r['transport'] = t;

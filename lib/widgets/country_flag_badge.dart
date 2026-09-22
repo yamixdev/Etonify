@@ -52,7 +52,11 @@ class CountryFlagBadge extends StatelessWidget {
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   clipBehavior: Clip.hardEdge,
-                  child: CircleFlag(circleFlagCode, size: size - 8, shape: null),
+                  child: CircleFlag(
+                    circleFlagCode,
+                    size: size - 8,
+                    shape: null,
+                  ),
                 )
               : Container(
                   width: size - 8,

@@ -11,7 +11,8 @@ import 'package:meow_client/data/subscription/subscription_failure.dart';
 typedef SubscriptionMetadataLoader = Future<List<Subscription>> Function();
 typedef SubscriptionLoader = Future<Subscription?> Function(String id);
 typedef SubscriptionRefresher = Future<Subscription> Function(String id);
-typedef SubscriptionPayloadSnapshotLoader = FutureOr<dynamic> Function(String id);
+typedef SubscriptionPayloadSnapshotLoader =
+    FutureOr<dynamic> Function(String id);
 typedef SubscriptionPayloadPreloader = Future<void> Function();
 
 class SubscriptionAutoRefreshResult {

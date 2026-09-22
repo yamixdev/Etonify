@@ -173,7 +173,8 @@ Future<void> _pumpPage(
   commands.bindRoutingHandlers(
     setBlockLeaks: (_) {},
     setAdBlockEnabled: (_) {},
-    downloadAdBlockRuleSet: () async => const AdBlockRuleSetStatus.unavailable(),
+    downloadAdBlockRuleSet: () async =>
+        const AdBlockRuleSetStatus.unavailable(),
     deleteAdBlockRuleSet: () async => const AdBlockRuleSetStatus.unavailable(),
     refreshRoutingRuleData: () async => routeStatus,
     setTrafficRulePreset: (_) {},

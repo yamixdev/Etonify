@@ -13,8 +13,7 @@ Widget _logsApp({
   String singBoxLogLevel = 'warning',
   ValueChanged<String>? onSingBoxLogLevelChanged,
 }) {
-  final controller = AppSettingsController()
-    ..singBoxLogLevel = singBoxLogLevel;
+  final controller = AppSettingsController()..singBoxLogLevel = singBoxLogLevel;
   final commands = AppSettingsCommands();
   final container = ProviderContainer(
     overrides: [

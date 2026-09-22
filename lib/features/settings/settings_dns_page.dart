@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
-
-final _kDnsSingleLineFormatter = FilteringTextInputFormatter.deny(
-  RegExp(r'[\r\n]'),
-);
 
 String dnsResolverFieldText(String value) {
   final trimmed = value.trim();
@@ -339,7 +335,7 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                       textInputAction: TextInputAction.done,
                       onTapOutside: (_) => _directFocusNode.unfocus(),
                       onSubmitted: (_) => _directFocusNode.unfocus(),
-                      inputFormatters: [_kDnsSingleLineFormatter],
+                      inputFormatters: [noNewlineInputFormatter],
                       decoration: InputDecoration(
                         labelText: l10n.dnsResolverTitle,
                         helperText: l10n.dnsDirectResolverSubtitle,
@@ -391,7 +387,7 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                       textInputAction: TextInputAction.done,
                       onTapOutside: (_) => _proxyFocusNode.unfocus(),
                       onSubmitted: (_) => _proxyFocusNode.unfocus(),
-                      inputFormatters: [_kDnsSingleLineFormatter],
+                      inputFormatters: [noNewlineInputFormatter],
                       decoration: InputDecoration(
                         labelText: l10n.dnsResolverTitle,
                         helperText: l10n.dnsProxyResolverSubtitle,

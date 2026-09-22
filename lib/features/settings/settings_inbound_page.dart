@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/core/security/sensitive_clipboard.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -217,12 +218,12 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
         title: l10n.tunImplementationTitle,
         current: widget.currentVpnTunImplementation,
         items: [
-          _RadioItem(
+          RadioChoice(
             value: TunImplementationPreference.native,
             label: l10n.tunImplementationNative,
             subtitle: l10n.tunImplementationNativeSubtitle,
           ),
-          _RadioItem(
+          RadioChoice(
             value: TunImplementationPreference.system,
             label: l10n.tunImplementationSystem,
             subtitle: l10n.tunImplementationSystemSubtitle,
@@ -527,7 +528,7 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
                           },
                           keyboardType: TextInputType.number,
                           inputFormatters: [
-                            FilteringTextInputFormatter.deny(RegExp(r'[\r\n]')),
+                            noNewlineInputFormatter,
                             FilteringTextInputFormatter.digitsOnly,
                           ],
                           decoration: InputDecoration(
@@ -790,14 +791,6 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _RadioItem<T> {
-  const _RadioItem({required this.value, required this.label, this.subtitle});
-
-  final T value;
-  final String label;
-  final String? subtitle;
-}
-
 class _RadioSheet<T> extends StatelessWidget {
   const _RadioSheet({
     required this.title,
@@ -807,7 +800,7 @@ class _RadioSheet<T> extends StatelessWidget {
 
   final String title;
   final T current;
-  final List<_RadioItem<T>> items;
+  final List<RadioChoice<T>> items;
 
   @override
   Widget build(BuildContext context) {

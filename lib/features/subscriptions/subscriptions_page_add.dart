@@ -302,7 +302,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -872,7 +872,7 @@ class _AddSubscriptionManualCard extends StatelessWidget {
             TextField(
               controller: nameController,
               textInputAction: TextInputAction.done,
-              inputFormatters: [_kSingleLineFormatter],
+              inputFormatters: [noNewlineInputFormatter],
               decoration: InputDecoration(
                 isDense: true,
                 labelText: nameLabel,
@@ -955,7 +955,7 @@ class _AddSubscriptionManualCard extends StatelessWidget {
                   TextField(
                     controller: customUserAgentController,
                     textInputAction: TextInputAction.done,
-                    inputFormatters: [_kSingleLineFormatter],
+                    inputFormatters: [noNewlineInputFormatter],
                     decoration: InputDecoration(
                       isDense: true,
                       labelText: customUserAgentLabel,
@@ -991,7 +991,7 @@ class _AddSubscriptionManualCard extends StatelessWidget {
                   TextField(
                     controller: customHwidController,
                     textInputAction: TextInputAction.done,
-                    inputFormatters: [_kSingleLineFormatter],
+                    inputFormatters: [noNewlineInputFormatter],
                     decoration: InputDecoration(
                       isDense: true,
                       labelText: customHwidLabel,

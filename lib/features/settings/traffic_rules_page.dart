@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -595,9 +595,7 @@ class _TrafficRuleDetailsPageState extends State<_TrafficRuleDetailsPage> {
                           textInputAction: TextInputAction.done,
                           onTapOutside: (_) => _russiaDnsFocusNode.unfocus(),
                           onSubmitted: (_) => _russiaDnsFocusNode.unfocus(),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.deny(RegExp(r'[\r\n]')),
-                          ],
+                          inputFormatters: [noNewlineInputFormatter],
                           decoration: InputDecoration(
                             labelText: l10n.dnsResolverTitle,
                             helperText: l10n.trafficRulesRuDnsSubtitle,

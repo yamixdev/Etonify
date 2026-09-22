@@ -60,9 +60,7 @@ void main() {
     final original = _loadVersion021Fixture(store);
     final result = CoreConfigMigration.plan(
       state: original,
-      capabilities: _versionedCapabilities(
-        tunStacks: const <String>{'system'},
-      ),
+      capabilities: _versionedCapabilities(tunStacks: const <String>{'system'}),
     );
 
     expect(result.status, CoreConfigMigrationStatus.readyForValidation);

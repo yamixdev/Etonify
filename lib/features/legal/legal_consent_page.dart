@@ -326,6 +326,9 @@ class _LegalDocumentPageState extends State<LegalDocumentPage> {
   }
 }
 
+// Hoisted out of build(): the document view rebuilds on every scroll frame.
+final RegExp _boldMarkdownPattern = RegExp(r'\*\*(.+?)\*\*');
+
 class _LegalMarkdownText extends StatelessWidget {
   const _LegalMarkdownText({required this.text, required this.style});
 
@@ -335,9 +338,8 @@ class _LegalMarkdownText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spans = <InlineSpan>[];
-    final pattern = RegExp(r'\*\*(.+?)\*\*');
     var offset = 0;
-    for (final match in pattern.allMatches(text)) {
+    for (final match in _boldMarkdownPattern.allMatches(text)) {
       if (match.start > offset) {
         spans.add(TextSpan(text: text.substring(offset, match.start)));
       }

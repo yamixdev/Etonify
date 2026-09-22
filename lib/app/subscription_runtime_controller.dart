@@ -213,7 +213,8 @@ class SubscriptionRuntimeController {
     required String selectedProxyTag,
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
-    required FutureOr<dynamic> Function(String subscriptionId) payloadSnapshotFor,
+    required FutureOr<dynamic> Function(String subscriptionId)
+    payloadSnapshotFor,
     bool buildFullProxyList = true,
   }) async {
     if (metadataSubscriptions.isEmpty) {

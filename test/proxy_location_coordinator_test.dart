@@ -7,7 +7,8 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 class _FakeSingboxRuntime extends Fake implements SingboxRuntime {
   _FakeSingboxRuntime(this._lookupHandler);
 
-  final Future<Map<String, dynamic>> Function(String outboundTag) _lookupHandler;
+  final Future<Map<String, dynamic>> Function(String outboundTag)
+  _lookupHandler;
 
   @override
   Future<Map<String, dynamic>> lookupOutboundExternalInfo({
@@ -20,10 +21,10 @@ class _FakeSingboxRuntime extends Fake implements SingboxRuntime {
 void main() {
   group('ResolvedExternalIpInfo', () {
     test('parses valid IP and 2-letter country code', () {
-      final info = ResolvedExternalIpInfo.fromResponse(
-        {'ip': '1.2.3.4', 'countryCode': 'de'},
-        normalizeCountryCode: ResolvedExternalIpInfo.normalizeCountryCode,
-      );
+      final info = ResolvedExternalIpInfo.fromResponse({
+        'ip': '1.2.3.4',
+        'countryCode': 'de',
+      }, normalizeCountryCode: ResolvedExternalIpInfo.normalizeCountryCode);
 
       expect(info, isNotNull);
       expect(info!.ip, '1.2.3.4');
@@ -31,10 +32,9 @@ void main() {
     });
 
     test('returns null when IP is missing or empty', () {
-      final info = ResolvedExternalIpInfo.fromResponse(
-        {'countryCode': 'us'},
-        normalizeCountryCode: ResolvedExternalIpInfo.normalizeCountryCode,
-      );
+      final info = ResolvedExternalIpInfo.fromResponse({
+        'countryCode': 'us',
+      }, normalizeCountryCode: ResolvedExternalIpInfo.normalizeCountryCode);
 
       expect(info, isNull);
     });
@@ -60,59 +60,60 @@ void main() {
   });
 
   group('ProxyLocationCoordinator', () {
-    test('fetches external IP info and deduplicates concurrent lookups', () async {
-      var callCount = 0;
-      final completer = Completer<Map<String, dynamic>>();
+    test(
+      'fetches external IP info and deduplicates concurrent lookups',
+      () async {
+        var callCount = 0;
+        final completer = Completer<Map<String, dynamic>>();
 
-      final runtime = _FakeSingboxRuntime((tag) {
-        callCount++;
-        return completer.future;
-      });
+        final runtime = _FakeSingboxRuntime((tag) {
+          callCount++;
+          return completer.future;
+        });
 
-      final coordinator = ProxyLocationCoordinator(
-        runtime: runtime,
-        getLocationLookupLimit: () => 5,
-        getLocationLookupTimeoutSeconds: () => 5,
-        getLocationLookupConcurrency: () => 2,
-        isConnected: () => true,
-        isForegroundLifecycleActive: () => true,
-        isMarkAllServersRussia: () => false,
-        isProxyPanelInteractionActive: () => false,
-        getDiagnosticGeneration: () => 1,
-        getActiveSubscription: () => null,
-        getBestOutbounds: () => const [],
-        hasResolvedExternalLocation: (_) => false,
-        getEffectiveOutboundLatency: (_) => 100,
-        onApplyResolvedInfos: ({
-          required subscriptionId,
-          required resolvedByTag,
-        }) async {},
-      );
+        final coordinator = ProxyLocationCoordinator(
+          runtime: runtime,
+          getLocationLookupLimit: () => 5,
+          getLocationLookupTimeoutSeconds: () => 5,
+          getLocationLookupConcurrency: () => 2,
+          isConnected: () => true,
+          isForegroundLifecycleActive: () => true,
+          isMarkAllServersRussia: () => false,
+          isProxyPanelInteractionActive: () => false,
+          getDiagnosticGeneration: () => 1,
+          getActiveSubscription: () => null,
+          getBestOutbounds: () => const [],
+          hasResolvedExternalLocation: (_) => false,
+          getEffectiveOutboundLatency: (_) => 100,
+          onApplyResolvedInfos:
+              ({required subscriptionId, required resolvedByTag}) async {},
+        );
 
-      // Start two concurrent lookups for the same tag
-      final future1 = coordinator.fetchExternalIpInfo(
-        outboundTag: 'server-1',
-        highPriority: true,
-      );
-      final future2 = coordinator.fetchExternalIpInfo(
-        outboundTag: 'server-1',
-        highPriority: true,
-      );
+        // Start two concurrent lookups for the same tag
+        final future1 = coordinator.fetchExternalIpInfo(
+          outboundTag: 'server-1',
+          highPriority: true,
+        );
+        final future2 = coordinator.fetchExternalIpInfo(
+          outboundTag: 'server-1',
+          highPriority: true,
+        );
 
-      expect(callCount, 1);
+        expect(callCount, 1);
 
-      completer.complete({'ip': '5.6.7.8', 'countryCode': 'nl'});
+        completer.complete({'ip': '5.6.7.8', 'countryCode': 'nl'});
 
-      final result1 = await future1;
-      final result2 = await future2;
+        final result1 = await future1;
+        final result2 = await future2;
 
-      expect(result1?.ip, '5.6.7.8');
-      expect(result1?.countryCode, 'NL');
-      expect(result2?.ip, '5.6.7.8');
-      expect(result2?.countryCode, 'NL');
+        expect(result1?.ip, '5.6.7.8');
+        expect(result1?.countryCode, 'NL');
+        expect(result2?.ip, '5.6.7.8');
+        expect(result2?.countryCode, 'NL');
 
-      coordinator.dispose();
-    });
+        coordinator.dispose();
+      },
+    );
 
     test('respects concurrency limit and queues slots', () async {
       final completers = <String, Completer<Map<String, dynamic>>>{
@@ -138,10 +139,8 @@ void main() {
         getBestOutbounds: () => const [],
         hasResolvedExternalLocation: (_) => false,
         getEffectiveOutboundLatency: (_) => 100,
-        onApplyResolvedInfos: ({
-          required subscriptionId,
-          required resolvedByTag,
-        }) async {},
+        onApplyResolvedInfos:
+            ({required subscriptionId, required resolvedByTag}) async {},
       );
 
       // First call acquires the single slot
@@ -180,10 +179,8 @@ void main() {
         getBestOutbounds: () => const [],
         hasResolvedExternalLocation: (_) => false,
         getEffectiveOutboundLatency: (_) => 100,
-        onApplyResolvedInfos: ({
-          required subscriptionId,
-          required resolvedByTag,
-        }) async {},
+        onApplyResolvedInfos:
+            ({required subscriptionId, required resolvedByTag}) async {},
       );
 
       // Acquire slot

@@ -198,7 +198,10 @@ Endpoint = wg.example.com:51820
         (stored as Uint8List).length,
         lessThan(subscription.rawContent.length ~/ 10),
       );
-      expect(await SubscriptionStore.payloadSnapshotFor(subscription.id), stored);
+      expect(
+        await SubscriptionStore.payloadSnapshotFor(subscription.id),
+        stored,
+      );
       expect(
         jsonDecode((await SubscriptionStore.payloadJsonFor(subscription.id))!)
             as Map<String, dynamic>,
@@ -824,10 +827,9 @@ Endpoint = wg.example.com:51820
 
     // Simulate a previous interrupted save: metadata still describes the old
     // payload while the payload box already contains the newer bytes.
-    await Hive.box<dynamic>('subscriptions_secure_v1').put(
-      original.id,
-      jsonEncode(originalSnapshot.toMetadataMap()),
-    );
+    await Hive.box<dynamic>(
+      'subscriptions_secure_v1',
+    ).put(original.id, jsonEncode(originalSnapshot.toMetadataMap()));
 
     await SubscriptionStore.save(originalSnapshot.copyWith(name: 'Restored'));
 

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
-import 'package:meow_client/theme/demo_app_theme.dart';
+import 'package:meow_client/theme/app_theme.dart';
 
 class ConnectionButton extends StatefulWidget {
   const ConnectionButton({
@@ -173,11 +173,7 @@ class ConnectionButtonShape {
       return const ConnectionButtonShape(phase: 3, rotation: 0, emphasis: .96);
     }
     if (connected) {
-      return const ConnectionButtonShape(
-        phase: 2,
-        rotation: 0,
-        emphasis: 1.16,
-      );
+      return const ConnectionButtonShape(phase: 2, rotation: 0, emphasis: 1.16);
     }
     if (connecting) {
       return const ConnectionButtonShape(phase: 1, rotation: 0, emphasis: .52);

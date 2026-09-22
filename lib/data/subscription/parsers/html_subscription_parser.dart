@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'link_parser.dart';
+import 'package:meow_client/data/subscription/parsers/link_parser.dart';
 
 /// Result of parsing an HTML subscription landing page.
 class HtmlSubscriptionParseResult {

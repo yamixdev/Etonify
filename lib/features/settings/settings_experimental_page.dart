@@ -123,7 +123,8 @@ class SettingsExperimentalPage extends ConsumerWidget {
     final currentUrlTestStrictTolerance =
         settings.experimentalUrlTestStrictTolerance;
     final currentFakeIpEnabled = settings.experimentalFakeIpEnabled;
-    final fakeIpAvailable = settings.vpnInboundEnabled &&
+    final fakeIpAvailable =
+        settings.vpnInboundEnabled &&
         settings.splitRoutingMode == SplitRoutingMode.disabled;
     final currentTlsFragmentationMode = settings.tlsFragmentationMode;
     final currentMemoryLimitEnabled = settings.memoryLimitEnabled;
@@ -229,8 +230,7 @@ class SettingsExperimentalPage extends ConsumerWidget {
                       l10n.experimentalUrlTestStrictToleranceSubtitle,
                     ),
                     value: currentUrlTestStrictTolerance,
-                    onChanged:
-                        commands.setExperimentalUrlTestStrictTolerance,
+                    onChanged: commands.setExperimentalUrlTestStrictTolerance,
                   ),
                   SwitchListTile(
                     secondary: SettingsLeadingIcon(
@@ -249,8 +249,7 @@ class SettingsExperimentalPage extends ConsumerWidget {
                         context,
                         commands,
                         value,
-                        warningDismissed:
-                            currentMemoryLimitWarningDismissed,
+                        warningDismissed: currentMemoryLimitWarningDismissed,
                       ),
                     ),
                   ),

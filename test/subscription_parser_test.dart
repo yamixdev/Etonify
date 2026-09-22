@@ -1823,7 +1823,10 @@ proxies:
           'utls': {'enabled': true, 'fingerprint': 'chrome'},
           'reality': {'enabled': true, 'public_key': 'abc'},
           'certificate': ['ca-cert'],
-          'ech': {'enabled': true, 'config': ['ech-config']},
+          'ech': {
+            'enabled': true,
+            'config': ['ech-config'],
+          },
         },
       };
 
@@ -1835,7 +1838,10 @@ proxies:
       expect(tls['enabled'], true);
       expect(tls['server_name'], 'sni.example.com');
       expect(tls['certificate'], ['ca-cert']);
-      expect(tls['ech'], {'enabled': true, 'config': ['ech-config']});
+      expect(tls['ech'], {
+        'enabled': true,
+        'config': ['ech-config'],
+      });
 
       // Stripped fields that sing-box Naive rejects
       expect(tls.containsKey('insecure'), isFalse);
@@ -1856,28 +1862,31 @@ proxies:
       expect(tls.containsKey('reality'), isFalse);
     });
 
-    test('sanitizes AnyTLS preserving client_metadata and stripping tcp_fast_open', () {
-      final config = {
-        'type': 'anytls',
-        'server': 'anytls.server.com',
-        'server_port': 443,
-        'password': 'pass',
-        'client_metadata': 'custom_meta_payload',
-        'idle_session_check_interval': '20s',
-        'idle_session_timeout': '45s',
-        'min_idle_session': 3,
-        'tcp_fast_open': true,
-        'tls': {'enabled': true, 'server_name': 'anytls.server.com'},
-      };
+    test(
+      'sanitizes AnyTLS preserving client_metadata and stripping tcp_fast_open',
+      () {
+        final config = {
+          'type': 'anytls',
+          'server': 'anytls.server.com',
+          'server_port': 443,
+          'password': 'pass',
+          'client_metadata': 'custom_meta_payload',
+          'idle_session_check_interval': '20s',
+          'idle_session_timeout': '45s',
+          'min_idle_session': 3,
+          'tcp_fast_open': true,
+          'tls': {'enabled': true, 'server_name': 'anytls.server.com'},
+        };
 
-      final sanitized = ParsedOutboundSchema.sanitize(config);
-      expect(sanitized, isNotNull);
-      expect(sanitized!['client_metadata'], 'custom_meta_payload');
-      expect(sanitized['idle_session_check_interval'], '20s');
-      expect(sanitized['idle_session_timeout'], '45s');
-      expect(sanitized['min_idle_session'], 3);
-      expect(sanitized.containsKey('tcp_fast_open'), isFalse);
-    });
+        final sanitized = ParsedOutboundSchema.sanitize(config);
+        expect(sanitized, isNotNull);
+        expect(sanitized!['client_metadata'], 'custom_meta_payload');
+        expect(sanitized['idle_session_check_interval'], '20s');
+        expect(sanitized['idle_session_timeout'], '45s');
+        expect(sanitized['min_idle_session'], 3);
+        expect(sanitized.containsKey('tcp_fast_open'), isFalse);
+      },
+    );
 
     test('parses AnyTLS link with metadata and session options', () {
       const link =

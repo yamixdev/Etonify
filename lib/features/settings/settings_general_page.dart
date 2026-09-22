@@ -3,7 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_notification_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
-import 'subscription_background_tile.dart';
+import 'package:meow_client/features/settings/subscription_background_tile.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
@@ -115,9 +115,9 @@ class SettingsGeneralPage extends StatelessWidget {
         title: l10n.languageSettingTitle,
         current: currentLocaleCode,
         items: [
-          _RadioItem(value: 'system', label: l10n.languageSystem),
-          _RadioItem(value: 'en', label: l10n.languageEnglish),
-          _RadioItem(value: 'ru', label: l10n.languageRussian),
+          RadioChoice(value: 'system', label: l10n.languageSystem),
+          RadioChoice(value: 'en', label: l10n.languageEnglish),
+          RadioChoice(value: 'ru', label: l10n.languageRussian),
         ],
       ),
     );
@@ -638,13 +638,6 @@ class _AccentSwatch extends StatelessWidget {
 // Radio bottom sheet (for language)
 // ---------------------------------------------------------------------------
 
-class _RadioItem<T> {
-  const _RadioItem({required this.value, required this.label, this.subtitle});
-  final T value;
-  final String label;
-  final String? subtitle;
-}
-
 class _RadioSheet<T> extends StatelessWidget {
   const _RadioSheet({
     required this.title,
@@ -654,7 +647,7 @@ class _RadioSheet<T> extends StatelessWidget {
 
   final String title;
   final T current;
-  final List<_RadioItem<T>> items;
+  final List<RadioChoice<T>> items;
 
   @override
   Widget build(BuildContext context) {

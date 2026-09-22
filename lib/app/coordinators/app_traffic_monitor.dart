@@ -34,8 +34,8 @@ class AppTrafficMonitor {
     required this.host,
     Duration uiUpdateInterval = const Duration(seconds: 1),
     TrafficStatusReducer trafficStatusReducer = const TrafficStatusReducer(),
-  })  : _uiUpdateInterval = uiUpdateInterval,
-        _trafficStatusReducer = trafficStatusReducer;
+  }) : _uiUpdateInterval = uiUpdateInterval,
+       _trafficStatusReducer = trafficStatusReducer;
 
   final AppTrafficMonitorHost host;
   final Duration _uiUpdateInterval;
@@ -68,18 +68,18 @@ class AppTrafficMonitor {
   int get samplesCount => _trafficSamples.length;
   bool get isTrafficDashboardOpen => _trafficDashboardOpen;
 
-  ValueNotifier<TrafficDashboardSnapshot> get trafficDashboardSnapshotNotifier =>
-      _trafficDashboardSnapshot;
+  ValueNotifier<TrafficDashboardSnapshot>
+  get trafficDashboardSnapshotNotifier => _trafficDashboardSnapshot;
   ValueNotifier<TrafficUiSnapshot> get trafficUiSnapshotNotifier =>
       _trafficUiSnapshot;
 
   RuntimeTrafficStatus get currentStatus => RuntimeTrafficStatus(
-        uplinkBytesPerSecond: _uplinkBytesPerSecond,
-        downlinkBytesPerSecond: _downlinkBytesPerSecond,
-        uplinkTotalBytes: _uplinkTotalBytes,
-        downlinkTotalBytes: _downlinkTotalBytes,
-        available: _trafficAvailable,
-      );
+    uplinkBytesPerSecond: _uplinkBytesPerSecond,
+    downlinkBytesPerSecond: _downlinkBytesPerSecond,
+    uplinkTotalBytes: _uplinkTotalBytes,
+    downlinkTotalBytes: _downlinkTotalBytes,
+    available: _trafficAvailable,
+  );
 
   RuntimeTrafficStatus reduceRuntimeEvent(RuntimeTrafficEvent event) {
     return _trafficStatusReducer
@@ -146,14 +146,12 @@ class AppTrafficMonitor {
       connecting: connecting,
       trafficAvailable: _trafficAvailable,
       hideServerIp: hideServerIp,
-      downlinkBps:
-          connected && _trafficAvailable ? _downlinkBytesPerSecond : 0,
-      uplinkBps:
-          connected && _trafficAvailable ? _uplinkBytesPerSecond : 0,
-      uplinkTotalBytes:
-          connected && _trafficAvailable ? _uplinkTotalBytes : 0,
-      downlinkTotalBytes:
-          connected && _trafficAvailable ? _downlinkTotalBytes : 0,
+      downlinkBps: connected && _trafficAvailable ? _downlinkBytesPerSecond : 0,
+      uplinkBps: connected && _trafficAvailable ? _uplinkBytesPerSecond : 0,
+      uplinkTotalBytes: connected && _trafficAvailable ? _uplinkTotalBytes : 0,
+      downlinkTotalBytes: connected && _trafficAvailable
+          ? _downlinkTotalBytes
+          : 0,
       connectedSince: connected ? connectedSince : null,
       activeProfile: activeProfile,
       activeProxy: activeProxy,

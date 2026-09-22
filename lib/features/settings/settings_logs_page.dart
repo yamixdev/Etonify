@@ -168,8 +168,10 @@ class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
 
   Future<void> _showSingBoxLogLevelPicker(BuildContext context) async {
     final l10n = AppLocalizations.of(context);
-    final currentSingBoxLogLevel =
-        ref.read(appSettingsProvider).controller.singBoxLogLevel;
+    final currentSingBoxLogLevel = ref
+        .read(appSettingsProvider)
+        .controller
+        .singBoxLogLevel;
     final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -237,8 +239,10 @@ class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final currentSingBoxLogLevel =
-        ref.watch(appSettingsProvider).controller.singBoxLogLevel;
+    final currentSingBoxLogLevel = ref
+        .watch(appSettingsProvider)
+        .controller
+        .singBoxLogLevel;
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(

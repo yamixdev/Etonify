@@ -69,7 +69,10 @@ void main() {
         String.fromCharCodes(await file.readAsBytes()),
         isNot(contains('private-proxy-credential')),
       );
-      expect(await openPayloadBox(name: 'payload', cipher: cipher), same(lazyBox));
+      expect(
+        await openPayloadBox(name: 'payload', cipher: cipher),
+        same(lazyBox),
+      );
     },
   );
 

@@ -69,17 +69,20 @@ void main() {
       expect(await SingboxRuntime.instance.status(), isEmpty);
     });
 
-    test('fetchUrlViaOutbound throws UnsupportedError on non-Android', () async {
-      expect(
-        () => SingboxRuntime.instance.fetchUrlViaOutbound(
-          outboundTag: 'proxy',
-          uri: Uri.parse('https://example.com'),
-          headers: const {},
-          maxBytes: 1024,
-          timeout: const Duration(seconds: 5),
-        ),
-        throwsUnsupportedError,
-      );
-    });
+    test(
+      'fetchUrlViaOutbound throws UnsupportedError on non-Android',
+      () async {
+        expect(
+          () => SingboxRuntime.instance.fetchUrlViaOutbound(
+            outboundTag: 'proxy',
+            uri: Uri.parse('https://example.com'),
+            headers: const {},
+            maxBytes: 1024,
+            timeout: const Duration(seconds: 5),
+          ),
+          throwsUnsupportedError,
+        );
+      },
+    );
   });
 }

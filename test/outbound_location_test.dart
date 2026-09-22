@@ -75,64 +75,69 @@ void main() {
       );
     });
 
-    testWidgets('proxy tile renders the observed exit flag when no source country', (tester) async {
-      final outbound = _outbound(
-        sourceCountry: null,
-        exitCountry: 'US',
-        externalIp: '203.0.113.7',
-      );
-      final cache = buildProxyCache(
-        ProxyCacheBuildInput(
-          subscription: Subscription(
-            id: 'location-test',
-            name: 'Location test',
-            url: 'file:///location-test',
-            outbounds: [outbound],
+    testWidgets(
+      'proxy tile renders the observed exit flag when no source country',
+      (tester) async {
+        final outbound = _outbound(
+          sourceCountry: null,
+          exitCountry: 'US',
+          externalIp: '203.0.113.7',
+        );
+        final cache = buildProxyCache(
+          ProxyCacheBuildInput(
+            subscription: Subscription(
+              id: 'location-test',
+              name: 'Location test',
+              url: 'file:///location-test',
+              outbounds: [outbound],
+            ),
+            selectedProxyTag: outbound.tag,
+            lowestLatency: null,
+            runtimeLowestOutboundTag: null,
+            runtimeLowestSelections: const <String, String>{},
+            urlTestInFlight: false,
+            runtimeLatencies: const <String, int>{},
+            unavailableLatencyTags: const <String>{},
+            latencyErrors: const <String, String>{},
+            runtimeGroupSelections: const <String, String>{},
+            markAllServersRussia: false,
           ),
-          selectedProxyTag: outbound.tag,
-          lowestLatency: null,
-          runtimeLowestOutboundTag: null,
-          runtimeLowestSelections: const <String, String>{},
-          urlTestInFlight: false,
-          runtimeLatencies: const <String, int>{},
-          unavailableLatencyTags: const <String>{},
-          latencyErrors: const <String, String>{},
-          runtimeGroupSelections: const <String, String>{},
-          markAllServersRussia: false,
-        ),
-      );
-      final proxy = cache.activeProxies.firstWhere(
-        (entry) => entry.tag == outbound.tag,
-      );
+        );
+        final proxy = cache.activeProxies.firstWhere(
+          (entry) => entry.tag == outbound.tag,
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: ProxyTile(
-              proxy: proxy,
-              selected: true,
-              animate: false,
-              onTap: () {},
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: ProxyTile(
+                proxy: proxy,
+                selected: true,
+                animate: false,
+                onTap: () {},
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(
-        find.byWidgetPredicate(
-          (widget) => widget is CountryFlagBadge && widget.countryCode == 'US',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.byWidgetPredicate(
-          (widget) => widget is CountryFlagBadge && widget.countryCode == 'CZ',
-        ),
-        findsNothing,
-      );
-    });
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is CountryFlagBadge && widget.countryCode == 'US',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is CountryFlagBadge && widget.countryCode == 'CZ',
+          ),
+          findsNothing,
+        );
+      },
+    );
   });
 }
 

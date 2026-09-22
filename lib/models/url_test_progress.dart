@@ -48,11 +48,6 @@ class UrlTestProgressState {
           failed == other.failed;
 
   @override
-  int get hashCode => Object.hash(
-        isRunning,
-        isCancelled,
-        total,
-        working,
-        failed,
-      );
+  int get hashCode =>
+      Object.hash(isRunning, isCancelled, total, working, failed);
 }

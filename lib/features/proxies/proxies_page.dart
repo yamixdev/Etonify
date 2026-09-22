@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:meow_client/core/demo_utils.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -22,9 +22,9 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
-import 'proxy_list_ordering.dart';
-import 'proxy_latency_button.dart';
-import 'proxy_panel_shell.dart';
+import 'package:meow_client/features/proxies/proxy_list_ordering.dart';
+import 'package:meow_client/features/proxies/proxy_latency_button.dart';
+import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 
 part 'proxies_page_chains.dart';
 part 'proxies_page_group_sheet.dart';

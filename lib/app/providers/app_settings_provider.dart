@@ -109,4 +109,3 @@ final installedAppsCacheProvider =
       InstalledAppsCacheNotifier.new,
       name: 'installedAppsCacheProvider',
     );
-

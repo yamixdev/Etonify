@@ -38,9 +38,9 @@ void main() {
           isLegalAccepted: () => legalAccepted,
           getNavigatorContext: () => null,
           showSnackBar: (msg) => snackBars.add(msg),
-          runSubscriptionOperationWithWarning: (future,
-                  {required slowMessage, required timeoutMessage}) =>
-              future,
+          runSubscriptionOperationWithWarning:
+              (future, {required slowMessage, required timeoutMessage}) =>
+                  future,
           getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
           getAllowUntrustedSubscriptionCertificates: () => false,
           onSubscriptionRouteAttempt: (route, isFallback) {},
@@ -113,137 +113,146 @@ void main() {
       expect(coordinator.hasPendingImport, isFalse);
     });
 
-    testWidgets('does not show sheet and notifies if subscription is already added', (tester) async {
-      late BuildContext navigatorContext;
-      await tester.pumpWidget(
-        MaterialApp(
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                navigatorContext = context;
-                return const SizedBox();
-              },
+    testWidgets(
+      'does not show sheet and notifies if subscription is already added',
+      (tester) async {
+        late BuildContext navigatorContext;
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  navigatorContext = context;
+                  return const SizedBox();
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      final existing = const Subscription(
-        id: 'flagman-1',
-        name: 'Flagman',
-        url: 'https://link.flagman.click/sub/f13cZEvb8zKdeYsJqqwrvWbEt',
-      );
-
-      final widgetCoordinator = DeepLinkImportCoordinator(
-        importStream: streamController.stream,
-        initialRequestProvider: () async => null,
-        host: DeepLinkImportHost(
-          isMounted: () => true,
-          isReady: () => true,
-          isOnboardingCompleted: () => true,
-          isLegalAccepted: () => true,
-          getNavigatorContext: () => navigatorContext,
-          showSnackBar: (msg) => snackBars.add(msg),
-          runSubscriptionOperationWithWarning: (future,
-                  {required slowMessage, required timeoutMessage}) =>
-              future,
-          getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
-          getAllowUntrustedSubscriptionCertificates: () => false,
-          onSubscriptionRouteAttempt: (route, isFallback) {},
-          reloadSubscriptions: () async {},
-          offerLikelyHwidFix: (sub) async {},
-          userFacingSubscriptionError: (err, l10n) => err.toString(),
-          getExistingSubscriptions: () => [existing],
-        ),
-      );
-
-      widgetCoordinator.enqueue(
-        const DeepLinkImportRequest(
+        final existing = const Subscription(
+          id: 'flagman-1',
+          name: 'Flagman',
           url: 'https://link.flagman.click/sub/f13cZEvb8zKdeYsJqqwrvWbEt',
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
 
-      expect(find.byType(DeepLinkImportSheet), findsNothing);
-      expect(snackBars, contains('Subscription "Flagman" is already added'));
-      widgetCoordinator.dispose();
-    });
+        final widgetCoordinator = DeepLinkImportCoordinator(
+          importStream: streamController.stream,
+          initialRequestProvider: () async => null,
+          host: DeepLinkImportHost(
+            isMounted: () => true,
+            isReady: () => true,
+            isOnboardingCompleted: () => true,
+            isLegalAccepted: () => true,
+            getNavigatorContext: () => navigatorContext,
+            showSnackBar: (msg) => snackBars.add(msg),
+            runSubscriptionOperationWithWarning:
+                (future, {required slowMessage, required timeoutMessage}) =>
+                    future,
+            getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
+            getAllowUntrustedSubscriptionCertificates: () => false,
+            onSubscriptionRouteAttempt: (route, isFallback) {},
+            reloadSubscriptions: () async {},
+            offerLikelyHwidFix: (sub) async {},
+            userFacingSubscriptionError: (err, l10n) => err.toString(),
+            getExistingSubscriptions: () => [existing],
+          ),
+        );
 
-    testWidgets('auto-imports with HWID without prompt when sendHwidToProviders is true', (tester) async {
-      SubscriptionFetcher.configureHwidSharing(true);
-      late BuildContext navigatorContext;
-      await tester.pumpWidget(
-        MaterialApp(
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: Builder(
-              builder: (context) {
-                navigatorContext = context;
-                return const SizedBox();
-              },
+        widgetCoordinator.enqueue(
+          const DeepLinkImportRequest(
+            url: 'https://link.flagman.click/sub/f13cZEvb8zKdeYsJqqwrvWbEt',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DeepLinkImportSheet), findsNothing);
+        expect(snackBars, contains('Subscription "Flagman" is already added'));
+        widgetCoordinator.dispose();
+      },
+    );
+
+    testWidgets(
+      'auto-imports with HWID without prompt when sendHwidToProviders is true',
+      (tester) async {
+        SubscriptionFetcher.configureHwidSharing(true);
+        late BuildContext navigatorContext;
+        await tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  navigatorContext = context;
+                  return const SizedBox();
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      bool operationCalled = false;
-      final createdSub = const Subscription(
-        id: 'new-1',
-        name: 'New Provider',
-        url: 'https://example.com/sub/new',
-      );
+        bool operationCalled = false;
+        final createdSub = const Subscription(
+          id: 'new-1',
+          name: 'New Provider',
+          url: 'https://example.com/sub/new',
+        );
 
-      final widgetCoordinator = DeepLinkImportCoordinator(
-        importStream: streamController.stream,
-        initialRequestProvider: () async => null,
-        host: DeepLinkImportHost(
-          isMounted: () => true,
-          isReady: () => true,
-          isOnboardingCompleted: () => true,
-          isLegalAccepted: () => true,
-          getNavigatorContext: () => navigatorContext,
-          showSnackBar: (msg) => snackBars.add(msg),
-          runSubscriptionOperationWithWarning: (future,
-                  {required slowMessage, required timeoutMessage}) =>
-              future,
-          importSubscription: ({
-            required url,
-            customName,
-            requestInfo,
-            operationTimeout,
-            allowInsecureTls = false,
-            onRouteAttempt,
-          }) async {
-            operationCalled = true;
-            return SubscriptionImportResult(subscription: createdSub);
-          },
-          getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
-          getAllowUntrustedSubscriptionCertificates: () => false,
-          onSubscriptionRouteAttempt: (route, isFallback) {},
-          reloadSubscriptions: () async {},
-          offerLikelyHwidFix: (sub) async {},
-          userFacingSubscriptionError: (err, l10n) => err.toString(),
-          getExistingSubscriptions: () => [],
-        ),
-      );
+        final widgetCoordinator = DeepLinkImportCoordinator(
+          importStream: streamController.stream,
+          initialRequestProvider: () async => null,
+          host: DeepLinkImportHost(
+            isMounted: () => true,
+            isReady: () => true,
+            isOnboardingCompleted: () => true,
+            isLegalAccepted: () => true,
+            getNavigatorContext: () => navigatorContext,
+            showSnackBar: (msg) => snackBars.add(msg),
+            runSubscriptionOperationWithWarning:
+                (future, {required slowMessage, required timeoutMessage}) =>
+                    future,
+            importSubscription:
+                ({
+                  required url,
+                  customName,
+                  requestInfo,
+                  operationTimeout,
+                  allowInsecureTls = false,
+                  onRouteAttempt,
+                }) async {
+                  operationCalled = true;
+                  return SubscriptionImportResult(subscription: createdSub);
+                },
+            getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
+            getAllowUntrustedSubscriptionCertificates: () => false,
+            onSubscriptionRouteAttempt: (route, isFallback) {},
+            reloadSubscriptions: () async {},
+            offerLikelyHwidFix: (sub) async {},
+            userFacingSubscriptionError: (err, l10n) => err.toString(),
+            getExistingSubscriptions: () => [],
+          ),
+        );
 
-      widgetCoordinator.enqueue(
-        const DeepLinkImportRequest(url: 'https://example.com/sub/new'),
-      );
-      await tester.pumpAndSettle();
+        widgetCoordinator.enqueue(
+          const DeepLinkImportRequest(url: 'https://example.com/sub/new'),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.byType(DeepLinkImportSheet), findsNothing);
-      expect(operationCalled, isTrue);
-      expect(snackBars, contains('Subscription "New Provider" imported'));
-      widgetCoordinator.dispose();
-    });
+        expect(find.byType(DeepLinkImportSheet), findsNothing);
+        expect(operationCalled, isTrue);
+        expect(snackBars, contains('Subscription "New Provider" imported'));
+        widgetCoordinator.dispose();
+      },
+    );
 
-    testWidgets('shows sheet when sendHwidToProviders is false', (tester) async {
+    testWidgets('shows sheet when sendHwidToProviders is false', (
+      tester,
+    ) async {
       SubscriptionFetcher.configureHwidSharing(false);
       late BuildContext navigatorContext;
       await tester.pumpWidget(
@@ -272,9 +281,9 @@ void main() {
           isLegalAccepted: () => true,
           getNavigatorContext: () => navigatorContext,
           showSnackBar: (msg) => snackBars.add(msg),
-          runSubscriptionOperationWithWarning: (future,
-                  {required slowMessage, required timeoutMessage}) =>
-              future,
+          runSubscriptionOperationWithWarning:
+              (future, {required slowMessage, required timeoutMessage}) =>
+                  future,
           getSubscriptionOperationTimeout: () => const Duration(seconds: 5),
           getAllowUntrustedSubscriptionCertificates: () => false,
           onSubscriptionRouteAttempt: (route, isFallback) {},

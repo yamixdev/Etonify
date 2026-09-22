@@ -170,10 +170,9 @@ class DeepLinkImportCoordinator {
     final uri = Uri.tryParse(trimmed);
     if (uri == null) return trimmed;
     if (!uri.hasScheme && uri.host.isEmpty) return trimmed;
-    return uri.replace(
-      scheme: uri.scheme.toLowerCase(),
-      host: uri.host.toLowerCase(),
-    ).toString();
+    return uri
+        .replace(scheme: uri.scheme.toLowerCase(), host: uri.host.toLowerCase())
+        .toString();
   }
 
   Subscription? _findExistingSubscription(
@@ -264,7 +263,7 @@ class DeepLinkImportCoordinator {
       if (hwidSharingEnabled) {
         final requestInfo = preview.isHapp
             ? (preview.requestInfo?.copyWith(requireHwid: true) ??
-                HappCryptoLinkDecoder.happRequestInfo())
+                  HappCryptoLinkDecoder.happRequestInfo())
             : preview.requestInfo;
 
         final createdResult = await host.runSubscriptionOperationWithWarning(
@@ -308,9 +307,9 @@ class DeepLinkImportCoordinator {
         return;
       }
       final requestInfo = switch (decision) {
-        DeepLinkImportDecision.sendHwid => preview.requestInfo?.copyWith(
-          requireHwid: true,
-        ) ?? HappCryptoLinkDecoder.happRequestInfo(),
+        DeepLinkImportDecision.sendHwid =>
+          preview.requestInfo?.copyWith(requireHwid: true) ??
+              HappCryptoLinkDecoder.happRequestInfo(),
         DeepLinkImportDecision.importWithoutHwid =>
           preview.requestInfo?.copyWith(requireHwid: false),
         DeepLinkImportDecision.import => preview.requestInfo?.copyWith(

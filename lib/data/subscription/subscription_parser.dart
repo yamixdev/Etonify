@@ -2,15 +2,16 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import 'outbound_schema.dart';
-import 'outbound_support.dart';
-import 'parsers/clash_parser.dart';
-import 'parsers/link_parser.dart';
-import 'parsers/singbox_config_parser.dart';
-import 'parsers/html_subscription_parser.dart';
-import 'parsers/sip008_parser.dart';
-import 'parsers/wireguard_config_parser.dart';
-import 'parsers/xray_config_parser.dart';
+import 'package:meow_client/core/base64.dart';
+import 'package:meow_client/data/subscription/outbound_schema.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
+import 'package:meow_client/data/subscription/parsers/clash_parser.dart';
+import 'package:meow_client/data/subscription/parsers/link_parser.dart';
+import 'package:meow_client/data/subscription/parsers/singbox_config_parser.dart';
+import 'package:meow_client/data/subscription/parsers/html_subscription_parser.dart';
+import 'package:meow_client/data/subscription/parsers/sip008_parser.dart';
+import 'package:meow_client/data/subscription/parsers/wireguard_config_parser.dart';
+import 'package:meow_client/data/subscription/parsers/xray_config_parser.dart';
 
 /// The format that was detected during parsing.
 enum SubscriptionFormat {
@@ -366,14 +367,7 @@ class SubscriptionParser {
     if (!_base64AlphabetPattern.hasMatch(clean)) return null;
 
     try {
-      String s = clean.replaceAll('-', '+').replaceAll('_', '/');
-      switch (s.length % 4) {
-        case 2:
-          s += '==';
-        case 3:
-          s += '=';
-      }
-      final bytes = base64Decode(s);
+      final bytes = base64Decode(toStandardBase64(clean));
       final decoded = utf8.decode(bytes, allowMalformed: true);
 
       // Sanity check: decoded should contain at least one known proxy scheme

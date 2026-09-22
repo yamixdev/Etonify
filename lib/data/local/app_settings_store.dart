@@ -9,7 +9,7 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
-import 'secure_hive_storage.dart';
+import 'package:meow_client/data/local/secure_hive_storage.dart';
 
 enum AppThemePreference { system, light, dark, amoled }
 
@@ -997,8 +997,9 @@ abstract class AppSettingsStore {
           .urlTestUnavailableCheckIntervalSeconds
           .toString(),
       _autoCheckServersKey: state.autoCheckServers ? '1' : '0',
-      _autoCheckNoticeAcknowledgedKey:
-          state.autoCheckNoticeAcknowledged ? '1' : '0',
+      _autoCheckNoticeAcknowledgedKey: state.autoCheckNoticeAcknowledged
+          ? '1'
+          : '0',
       _locationLookupLimitKey: state.locationLookupLimit.toString(),
       _locationLookupTimeoutSecondsKey: state.locationLookupTimeoutSeconds
           .toString(),

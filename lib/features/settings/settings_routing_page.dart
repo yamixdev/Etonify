@@ -9,11 +9,11 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
-import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/routing_rule_files_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
@@ -357,9 +357,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
     final commands = ref.read(appSettingsCommandsProvider);
 
     final splitAvailable =
-        !_splitRoutingTemporarilyDisabled &&
-        isAndroid &&
-        vpnInboundEnabled;
+        !_splitRoutingTemporarilyDisabled && isAndroid && vpnInboundEnabled;
     final selectedPackages = _selectedPackages();
     final installedAppByPackage = <String, _InstalledApp>{
       for (final app in _installedApps) app.packageName: app,
@@ -464,9 +462,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                 subtitle: Text(
                   russiaRouteDataStatus.available
                       ? l10n.routingRuleFilesSettingsReady(
-                          russiaRouteDataStatus
-                              .verifiedFiles
-                              .length,
+                          russiaRouteDataStatus.verifiedFiles.length,
                         )
                       : l10n.routingRuleFilesSettingsPreparing,
                 ),
@@ -640,13 +636,12 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                               title: l10n.splitRoutingModeDisabled,
                               subtitle: l10n.splitRoutingModeDisabledSubtitle,
                               selected:
-                                  splitRoutingMode ==
-                                  SplitRoutingMode.disabled,
+                                  splitRoutingMode == SplitRoutingMode.disabled,
                               onTap: _splitRoutingTemporarilyDisabled
                                   ? null
                                   : () => commands.setSplitRoutingMode(
-                                        SplitRoutingMode.disabled,
-                                      ),
+                                      SplitRoutingMode.disabled,
+                                    ),
                             ),
                             const Gap(10),
                             _RoutingModeCard(
@@ -659,8 +654,8 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                                   SplitRoutingMode.proxySelected,
                               onTap: splitAvailable
                                   ? () => commands.setSplitRoutingMode(
-                                        SplitRoutingMode.proxySelected,
-                                      )
+                                      SplitRoutingMode.proxySelected,
+                                    )
                                   : null,
                             ),
                             const Gap(10),
@@ -674,8 +669,8 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                                   SplitRoutingMode.bypassSelected,
                               onTap: splitAvailable
                                   ? () => commands.setSplitRoutingMode(
-                                        SplitRoutingMode.bypassSelected,
-                                      )
+                                      SplitRoutingMode.bypassSelected,
+                                    )
                                   : null,
                             ),
                             if (splitRoutingMode ==
@@ -1865,7 +1860,7 @@ class _AdBlockStatusPanel extends StatelessWidget {
                 ? _progressHint(l10n, progress)
                 : status.available
                 ? l10n.adBlockMeta(
-                    updatedAt == null ? '—' : _formatDateTime(updatedAt),
+                    updatedAt == null ? '—' : formatLocalDateTime(updatedAt),
                     status.allowedDomainCount,
                   )
                 : l10n.adBlockMissingHint,
@@ -1905,219 +1900,14 @@ class _AdBlockStatusPanel extends StatelessWidget {
       }
       return l10n.adBlockPreparingHint;
     }
-    final completed = _RussiaRouteDataStatusPanel._formatBytes(
-      progress.completedBytes,
-    );
+    final completed = formatRuleSetBytes(progress.completedBytes);
     if (progress.totalBytes <= 0) {
       return l10n.adBlockDownloadedProgress(completed);
     }
-    final total = _RussiaRouteDataStatusPanel._formatBytes(progress.totalBytes);
+    final total = formatRuleSetBytes(progress.totalBytes);
     final eta = progress.estimatedSecondsRemaining;
     return eta == null
         ? l10n.adBlockDownloadProgress(completed, total)
         : l10n.adBlockDownloadProgressEta(completed, total, eta);
-  }
-
-  static String _formatDateTime(DateTime value) {
-    final local = value.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day.$month.${local.year} $hour:$minute';
-  }
-}
-
-class _RussiaRouteDataStatusPanel extends StatelessWidget {
-  const _RussiaRouteDataStatusPanel({
-    required this.status,
-    required this.busy,
-    required this.progress,
-    required this.l10n,
-  });
-
-  final RussiaRouteDataStatus status;
-  final bool busy;
-  final RussiaRouteUpdateProgress? progress;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final releaseTimestamp = parseRussiaRouteVersionTimestamp(
-      status.releaseTag ?? status.versionTag,
-    );
-    final verifiedAt = releaseTimestamp ?? status.verifiedAt;
-    final versionLabel = releaseTimestamp == null
-        ? status.versionTag.replaceFirst('bundled-', '')
-        : _AdBlockStatusPanel._formatDateTime(releaseTimestamp);
-    final routeSource =
-        status.sourceKind == RussiaRouteDataService.sourceKindLive
-        ? l10n.russiaRoutesLiveSource
-        : l10n.russiaRoutesBundledSource;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cs.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  l10n.russiaRoutesRunetFreedomBadge,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.secondary.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  l10n.russiaRoutesDomainListBadge,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.secondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Gap(10),
-          Text(
-            busy
-                ? _stageLabel(l10n, progress?.stage)
-                : status.available
-                ? l10n.russiaRoutesReadyStatus(versionLabel)
-                : l10n.russiaRoutesMissingStatus,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Gap(4),
-          Text(
-            busy
-                ? _progressHint(l10n, progress)
-                : status.available
-                ? l10n.russiaRoutesReadyHint
-                : l10n.russiaRoutesMissingHint,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.3,
-            ),
-          ),
-          if (status.available) ...[
-            const Gap(4),
-            Text(
-              l10n.russiaRoutesSourceMeta(
-                routeSource,
-                verifiedAt == null
-                    ? '—'
-                    : _AdBlockStatusPanel._formatDateTime(verifiedAt),
-                status.verifiedFiles.length,
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-                height: 1.3,
-              ),
-            ),
-          ],
-          if (busy) ...[
-            const Gap(12),
-            LinearProgressIndicator(minHeight: 4, value: progress?.fraction),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _stageLabel(
-    AppLocalizations l10n,
-    RussiaRouteUpdateStage? stage,
-  ) => switch (stage) {
-    RussiaRouteUpdateStage.checking => l10n.russiaRoutesStageChecking,
-    RussiaRouteUpdateStage.retryingWithoutVpn =>
-      l10n.remoteDownloadRetryWithoutVpn,
-    RussiaRouteUpdateStage.downloadingPackage =>
-      l10n.russiaRoutesStageDownloading,
-    RussiaRouteUpdateStage.verifyingPackage => l10n.russiaRoutesStageVerifying,
-    RussiaRouteUpdateStage.extractingPackage =>
-      l10n.russiaRoutesStageExtracting,
-    RussiaRouteUpdateStage.downloadingCategories =>
-      l10n.russiaRoutesStageCategories,
-    RussiaRouteUpdateStage.compiling => l10n.russiaRoutesStageCompiling,
-    RussiaRouteUpdateStage.activating => l10n.russiaRoutesStageActivating,
-    RussiaRouteUpdateStage.complete => l10n.russiaRoutesStageComplete,
-    null => l10n.russiaRoutesPreparingStatus,
-  };
-
-  static String _progressHint(
-    AppLocalizations l10n,
-    RussiaRouteUpdateProgress? progress,
-  ) {
-    if (progress == null) return l10n.russiaRoutesPreparingHint;
-    final isRetrying = progress.isRetryingWithoutVpn;
-    if (progress.totalBytes > 0) {
-      final text = l10n.russiaRoutesDownloadProgress(
-        _formatBytes(progress.completedBytes),
-        _formatBytes(progress.totalBytes),
-      );
-      return isRetrying
-          ? '${l10n.remoteDownloadRetryWithoutVpn}: $text'
-          : text;
-    }
-    if (progress.totalItems > 0) {
-      final text = l10n.russiaRoutesItemsProgress(
-        progress.completedItems,
-        progress.totalItems,
-      );
-      return isRetrying
-          ? '${l10n.remoteDownloadRetryWithoutVpn}: $text'
-          : text;
-    }
-    if (progress.completedItems > 0) {
-      final text = l10n.russiaRoutesItemsProcessed(progress.completedItems);
-      return isRetrying
-          ? '${l10n.remoteDownloadRetryWithoutVpn}: $text'
-          : text;
-    }
-    if (isRetrying ||
-        progress.stage == RussiaRouteUpdateStage.retryingWithoutVpn) {
-      return l10n.remoteDownloadRetryWithoutVpnHint;
-    }
-    return l10n.russiaRoutesPreparingHint;
-  }
-
-  static String _formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    return '$bytes B';
   }
 }

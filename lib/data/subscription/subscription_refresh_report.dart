@@ -1,6 +1,6 @@
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/local/secure_hive_storage.dart';
-import 'subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
 
 class SubscriptionRefreshEntry {
   const SubscriptionRefreshEntry({

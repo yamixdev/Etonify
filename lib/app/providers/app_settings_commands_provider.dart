@@ -8,7 +8,8 @@ typedef SetBlockLeaksCommand = void Function(bool value);
 typedef SetAdBlockEnabledCommand = void Function(bool value);
 typedef DownloadAdBlockRuleSetCommand = Future<AdBlockRuleSetStatus> Function();
 typedef DeleteAdBlockRuleSetCommand = Future<AdBlockRuleSetStatus> Function();
-typedef RefreshRoutingRuleDataCommand = Future<RussiaRouteDataStatus> Function();
+typedef RefreshRoutingRuleDataCommand =
+    Future<RussiaRouteDataStatus> Function();
 typedef SetTrafficRulePresetCommand = void Function(TrafficRulePreset value);
 typedef PrepareTrafficRuleDataCommand =
     Future<RussiaRouteDataStatus> Function(TrafficRulePreset preset);
@@ -64,16 +65,16 @@ class AppSettingsCommands {
   SetExperimentalTcpFastOpenCommand? _setExperimentalTcpFastOpen;
   SetExperimentalTcpMultiPathCommand? _setExperimentalTcpMultiPath;
   SetExperimentalInterruptExistingConnectionsCommand?
-      _setExperimentalInterruptExistingConnections;
+  _setExperimentalInterruptExistingConnections;
   SetExperimentalUrlTestStrictToleranceCommand?
-      _setExperimentalUrlTestStrictTolerance;
+  _setExperimentalUrlTestStrictTolerance;
   SetExperimentalFakeIpEnabledCommand? _setExperimentalFakeIpEnabled;
   SetTlsFragmentationModeCommand? _setTlsFragmentationMode;
   SetMemoryLimitEnabledCommand? _setMemoryLimitEnabled;
   SetAllowUntrustedProxyCertificatesCommand?
-      _setAllowUntrustedProxyCertificates;
+  _setAllowUntrustedProxyCertificates;
   SetAllowUntrustedSubscriptionCertificatesCommand?
-      _setAllowUntrustedSubscriptionCertificates;
+  _setAllowUntrustedSubscriptionCertificates;
   SetSingBoxLogLevelCommand? _setSingBoxLogLevel;
 
   bool get isDnsBound =>
@@ -122,9 +123,9 @@ class AppSettingsCommands {
     required SetExperimentalTcpFastOpenCommand setExperimentalTcpFastOpen,
     required SetExperimentalTcpMultiPathCommand setExperimentalTcpMultiPath,
     required SetExperimentalInterruptExistingConnectionsCommand
-        setExperimentalInterruptExistingConnections,
+    setExperimentalInterruptExistingConnections,
     required SetExperimentalUrlTestStrictToleranceCommand
-        setExperimentalUrlTestStrictTolerance,
+    setExperimentalUrlTestStrictTolerance,
     required SetExperimentalFakeIpEnabledCommand setExperimentalFakeIpEnabled,
     required SetTlsFragmentationModeCommand setTlsFragmentationMode,
     required SetMemoryLimitEnabledCommand setMemoryLimitEnabled,
@@ -156,9 +157,9 @@ class AppSettingsCommands {
 
   void bindSecurityHandlers({
     required SetAllowUntrustedProxyCertificatesCommand
-        setAllowUntrustedProxyCertificates,
+    setAllowUntrustedProxyCertificates,
     required SetAllowUntrustedSubscriptionCertificatesCommand
-        setAllowUntrustedSubscriptionCertificates,
+    setAllowUntrustedSubscriptionCertificates,
   }) {
     _setAllowUntrustedProxyCertificates = setAllowUntrustedProxyCertificates;
     _setAllowUntrustedSubscriptionCertificates =

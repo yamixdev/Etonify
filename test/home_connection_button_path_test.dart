@@ -18,8 +18,14 @@ void main() {
         resolvingProxy: false,
       );
 
-      final path1 = connectionButtonCookiePathForTesting(buttonSize, idleShape1);
-      final path2 = connectionButtonCookiePathForTesting(buttonSize, idleShape2);
+      final path1 = connectionButtonCookiePathForTesting(
+        buttonSize,
+        idleShape1,
+      );
+      final path2 = connectionButtonCookiePathForTesting(
+        buttonSize,
+        idleShape2,
+      );
       expect(identical(path1, path2), isTrue);
 
       final connectedShape1 = ConnectionButtonShape.forState(

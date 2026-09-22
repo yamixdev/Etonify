@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/app/bounded_task_runner.dart';
-import 'package:meow_client/core/demo_utils.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/core/security/sensitive_clipboard.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -51,9 +52,6 @@ const _kAddSubscriptionSecondaryRowHeight = 48.0;
 const _kSubscriptionSheetAnimationDuration = appBottomSheetAnimationDuration;
 const _kSubscriptionSummaryHydrationDelay = Duration(milliseconds: 420);
 const _kAutoRefreshOptions = <int>[0, 60, 180, 360, 720, 1440];
-final _kSingleLineFormatter = FilteringTextInputFormatter.deny(
-  RegExp(r'[\r\n]'),
-);
 
 double _addSubscriptionQuickButtonHeight(double availableWidth) {
   return ((availableWidth - 18 * 2 - 10 * 2) / 3).clamp(124.0, 132.0);

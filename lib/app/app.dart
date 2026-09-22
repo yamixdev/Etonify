@@ -95,7 +95,7 @@ import 'package:meow_client/singbox/core_config_migration.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
-import 'package:meow_client/theme/demo_app_theme.dart';
+import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 class MeowClient extends ConsumerStatefulWidget {
@@ -4040,10 +4040,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return tags;
   }
 
-  void _updateUrlTestProgress({
-    bool? isRunning,
-    bool? isCancelled,
-  }) {
+  void _updateUrlTestProgress({bool? isRunning, bool? isCancelled}) {
     final tags = _userVisibleServerTags();
     final total = tags.length;
     var working = 0;
@@ -4585,12 +4582,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final seedColor = _seedColor;
 
     if (useDynamicScheme) {
-      _lightTheme = buildDemoTheme(
+      _lightTheme = buildAppTheme(
         Brightness.light,
         dynamicLightScheme: _dynamicLightScheme,
         dynamicDarkScheme: _dynamicDarkScheme,
       );
-      _darkTheme = buildDemoTheme(
+      _darkTheme = buildAppTheme(
         Brightness.dark,
         dynamicLightScheme: _dynamicLightScheme,
         dynamicDarkScheme: _dynamicDarkScheme,
@@ -4600,8 +4597,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         dynamicDarkScheme: _dynamicDarkScheme,
       );
     } else {
-      _lightTheme = buildDemoTheme(Brightness.light, seedColor: seedColor);
-      _darkTheme = buildDemoTheme(Brightness.dark, seedColor: seedColor);
+      _lightTheme = buildAppTheme(Brightness.light, seedColor: seedColor);
+      _darkTheme = buildAppTheme(Brightness.dark, seedColor: seedColor);
       _amoledTheme = buildAmoledTheme(seedColor: seedColor);
     }
   }

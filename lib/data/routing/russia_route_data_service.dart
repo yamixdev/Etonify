@@ -351,11 +351,15 @@ class RussiaRouteDataService {
     int totalItems = 0,
     bool? isRetryingWithoutVpn,
   }) {
-    final isDownloading = stage == RussiaRouteUpdateStage.downloadingPackage ||
+    final isDownloading =
+        stage == RussiaRouteUpdateStage.downloadingPackage ||
         stage == RussiaRouteUpdateStage.downloadingCategories ||
         stage == RussiaRouteUpdateStage.checking;
-    final retrying = isRetryingWithoutVpn ??
-        (isDownloading ? (progress.value?.isRetryingWithoutVpn ?? false) : false);
+    final retrying =
+        isRetryingWithoutVpn ??
+        (isDownloading
+            ? (progress.value?.isRetryingWithoutVpn ?? false)
+            : false);
 
     progress.value = RussiaRouteUpdateProgress(
       stage: stage,
@@ -675,9 +679,9 @@ class RussiaRouteDataService {
           ),
         );
       } else {
-        packageInfo = _InstalledRoutePackageInfo.fromStatus(current).copyWith(
-          lastUpdateCheckAtMillis: nowMillis,
-        );
+        packageInfo = _InstalledRoutePackageInfo.fromStatus(
+          current,
+        ).copyWith(lastUpdateCheckAtMillis: nowMillis);
       }
       livePackageCheckSucceeded = true;
     } catch (_) {
@@ -820,8 +824,7 @@ class RussiaRouteDataService {
       verifiedAtMillis: packageInfo.verifiedAtMillis,
       verifiedFiles: packageInfo.verifiedFiles,
       geositeRuBlockedPath: paths.geositeRuBlockedPath,
-      geositeRuAvailableOnlyInsidePath:
-          paths.geositeRuAvailableOnlyInsidePath,
+      geositeRuAvailableOnlyInsidePath: paths.geositeRuAvailableOnlyInsidePath,
       geositeCategoryRuPath: paths.geositeCategoryRuPath,
       geoipRuBlockedPath: paths.geoipRuBlockedPath,
       geoipRuWhitelistPath: paths.geoipRuWhitelistPath,

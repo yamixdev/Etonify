@@ -1,6 +1,6 @@
 import 'dart:convert';
-import '../import_key_normalizer.dart';
-import 'cert_pin_utils.dart';
+import 'package:meow_client/data/subscription/import_key_normalizer.dart';
+import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
 /// Extracts outbounds from an Xray / V2Ray JSON configuration and
 /// converts them to sing-box outbound format.
@@ -600,7 +600,8 @@ class XrayConfigParser {
       if (fp.isNotEmpty) {
         tls['utls'] = {'enabled': true, 'fingerprint': fp};
       }
-      final rawPins = ts['pinnedPeerCertSha256'] ??
+      final rawPins =
+          ts['pinnedPeerCertSha256'] ??
           ts['pinnedPeerCertificateSha256'] ??
           ts['pinSHA256'] ??
           ts['certificate_sha256'];
@@ -636,7 +637,9 @@ class XrayConfigParser {
       case 'grpc':
         final gs = _map(stream['grpcSettings']);
         final t = <String, dynamic>{'type': 'grpc'};
-        final sn = _s(gs['serviceName'] ?? gs['service_name'] ?? gs['service-name']);
+        final sn = _s(
+          gs['serviceName'] ?? gs['service_name'] ?? gs['service-name'],
+        );
         if (sn.isNotEmpty) t['service_name'] = sn;
         r['transport'] = t;
 

@@ -41,7 +41,8 @@ class DeepLinkImportCopy {
   }
 
   String alreadyExists(String name) {
-    return alreadyExistsTextBuilder?.call(name) ?? 'Subscription "$name" is already added';
+    return alreadyExistsTextBuilder?.call(name) ??
+        'Subscription "$name" is already added';
   }
 }
 

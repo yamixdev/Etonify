@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:meow_client/core/demo_utils.dart';
+import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
-import 'package:meow_client/theme/demo_app_theme.dart';
+import 'package:meow_client/theme/app_theme.dart';
 
 class HomeSubscriptionCard extends StatelessWidget {
   const HomeSubscriptionCard({

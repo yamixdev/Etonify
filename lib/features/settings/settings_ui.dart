@@ -5,6 +5,14 @@ const double settingsIslandGap = 12;
 const double settingsSectionGap = 16;
 const double settingsSectionLabelGap = 8;
 
+class RadioChoice<T> {
+  const RadioChoice({required this.value, required this.label, this.subtitle});
+
+  final T value;
+  final String label;
+  final String? subtitle;
+}
+
 ThemeData settingsTileTheme(BuildContext context) {
   final theme = Theme.of(context);
   return theme.copyWith(

@@ -285,8 +285,8 @@ void main() {
         profileId: 'p',
       );
 
-      final outbounds =
-          (value['outbounds'] as List).cast<Map<String, dynamic>>();
+      final outbounds = (value['outbounds'] as List)
+          .cast<Map<String, dynamic>>();
       final naiveHttps = outbounds.firstWhere((o) => o['tag'] == 'naive-https');
       final naiveQuic = outbounds.firstWhere((o) => o['tag'] == 'naive-quic');
       final vlessQuic = outbounds.firstWhere((o) => o['tag'] == 'vless-quic');

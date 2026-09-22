@@ -5,14 +5,15 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:meow_client/core/base64.dart';
 import 'package:meow_client/core/network/remote_download_timeout.dart';
 import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
-import 'subscription_failure.dart';
-import 'subscription_parser.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_parser.dart';
 
 /// Result returned by [SubscriptionFetcher.fetch].
 class FetchResult {
@@ -1037,14 +1038,7 @@ class SubscriptionFetcher {
         source = source.substring(7).trim();
       }
 
-      String s = source.replaceAll('-', '+').replaceAll('_', '/');
-      switch (s.length % 4) {
-        case 2:
-          s += '==';
-        case 3:
-          s += '=';
-      }
-      return utf8.decode(base64Decode(s));
+      return utf8.decode(base64Decode(toStandardBase64(source)));
     } catch (_) {
       return input;
     }

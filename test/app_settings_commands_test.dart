@@ -37,7 +37,8 @@ void main() {
           refreshed = true;
           return const RussiaRouteDataStatus.unavailable();
         },
-        setTrafficRulePreset: (TrafficRulePreset value) => trafficPreset = value,
+        setTrafficRulePreset: (TrafficRulePreset value) =>
+            trafficPreset = value,
         prepareTrafficRuleData: (TrafficRulePreset preset) async {
           preparedPreset = preset;
           return const RussiaRouteDataStatus.unavailable();
@@ -143,60 +144,64 @@ void main() {
       expect(directPreset, 'cloudflare');
     });
 
-    test('forwards calls to bound experimental handlers and unbinds cleanly', () {
-      final commands = AppSettingsCommands();
-      var tcpFastOpen = false;
-      var tcpMultiPath = false;
-      var interruptConns = false;
-      var urlTolerance = false;
-      var fakeIp = false;
-      var tlsMode = TlsFragmentationMode.disabled;
-      var memoryLimit = false;
-      var observedWarningDismissed = false;
+    test(
+      'forwards calls to bound experimental handlers and unbinds cleanly',
+      () {
+        final commands = AppSettingsCommands();
+        var tcpFastOpen = false;
+        var tcpMultiPath = false;
+        var interruptConns = false;
+        var urlTolerance = false;
+        var fakeIp = false;
+        var tlsMode = TlsFragmentationMode.disabled;
+        var memoryLimit = false;
+        var observedWarningDismissed = false;
 
-      commands.bindExperimentalHandlers(
-        setExperimentalTcpFastOpen: (v) => tcpFastOpen = v,
-        setExperimentalTcpMultiPath: (v) => tcpMultiPath = v,
-        setExperimentalInterruptExistingConnections: (v) => interruptConns = v,
-        setExperimentalUrlTestStrictTolerance: (v) => urlTolerance = v,
-        setExperimentalFakeIpEnabled: (v) => fakeIp = v,
-        setTlsFragmentationMode: (v) => tlsMode = v,
-        setMemoryLimitEnabled: (v, {bool warningDismissed = false}) {
-          memoryLimit = v;
-          observedWarningDismissed = warningDismissed;
-        },
-      );
+        commands.bindExperimentalHandlers(
+          setExperimentalTcpFastOpen: (v) => tcpFastOpen = v,
+          setExperimentalTcpMultiPath: (v) => tcpMultiPath = v,
+          setExperimentalInterruptExistingConnections: (v) =>
+              interruptConns = v,
+          setExperimentalUrlTestStrictTolerance: (v) => urlTolerance = v,
+          setExperimentalFakeIpEnabled: (v) => fakeIp = v,
+          setTlsFragmentationMode: (v) => tlsMode = v,
+          setMemoryLimitEnabled: (v, {bool warningDismissed = false}) {
+            memoryLimit = v;
+            observedWarningDismissed = warningDismissed;
+          },
+        );
 
-      expect(commands.isExperimentalBound, isTrue);
+        expect(commands.isExperimentalBound, isTrue);
 
-      commands.setExperimentalTcpFastOpen(true);
-      expect(tcpFastOpen, isTrue);
+        commands.setExperimentalTcpFastOpen(true);
+        expect(tcpFastOpen, isTrue);
 
-      commands.setExperimentalTcpMultiPath(true);
-      expect(tcpMultiPath, isTrue);
+        commands.setExperimentalTcpMultiPath(true);
+        expect(tcpMultiPath, isTrue);
 
-      commands.setExperimentalInterruptExistingConnections(true);
-      expect(interruptConns, isTrue);
+        commands.setExperimentalInterruptExistingConnections(true);
+        expect(interruptConns, isTrue);
 
-      commands.setExperimentalUrlTestStrictTolerance(true);
-      expect(urlTolerance, isTrue);
+        commands.setExperimentalUrlTestStrictTolerance(true);
+        expect(urlTolerance, isTrue);
 
-      commands.setExperimentalFakeIpEnabled(true);
-      expect(fakeIp, isTrue);
+        commands.setExperimentalFakeIpEnabled(true);
+        expect(fakeIp, isTrue);
 
-      commands.setTlsFragmentationMode(TlsFragmentationMode.fragment);
-      expect(tlsMode, TlsFragmentationMode.fragment);
+        commands.setTlsFragmentationMode(TlsFragmentationMode.fragment);
+        expect(tlsMode, TlsFragmentationMode.fragment);
 
-      commands.setMemoryLimitEnabled(true, warningDismissed: true);
-      expect(memoryLimit, isTrue);
-      expect(observedWarningDismissed, isTrue);
+        commands.setMemoryLimitEnabled(true, warningDismissed: true);
+        expect(memoryLimit, isTrue);
+        expect(observedWarningDismissed, isTrue);
 
-      commands.unbindExperimentalHandlers();
-      expect(commands.isExperimentalBound, isFalse);
+        commands.unbindExperimentalHandlers();
+        expect(commands.isExperimentalBound, isFalse);
 
-      commands.setExperimentalTcpFastOpen(false);
-      expect(tcpFastOpen, isTrue);
-    });
+        commands.setExperimentalTcpFastOpen(false);
+        expect(tcpFastOpen, isTrue);
+      },
+    );
 
     test('forwards calls to bound security handlers and unbinds cleanly', () {
       final commands = AppSettingsCommands();
@@ -227,9 +232,7 @@ void main() {
       final commands = AppSettingsCommands();
       var logLevel = '';
 
-      commands.bindLogsHandlers(
-        setSingBoxLogLevel: (v) => logLevel = v,
-      );
+      commands.bindLogsHandlers(setSingBoxLogLevel: (v) => logLevel = v);
 
       expect(commands.isLogsBound, isTrue);
 

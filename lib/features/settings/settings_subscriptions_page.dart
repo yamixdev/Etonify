@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/happ_crypt5_local.dart';
 import 'package:meow_client/data/subscription/happ_crypto_link.dart';
@@ -74,8 +74,9 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
     _timeoutSeconds = (widget.currentConfig.timeoutSeconds ?? 15)
         .clamp(1, 60)
         .toInt();
-    _concurrency =
-        (widget.currentConfig.concurrency ?? 10).clamp(1, 10).toInt();
+    _concurrency = (widget.currentConfig.concurrency ?? 10)
+        .clamp(1, 10)
+        .toInt();
     _unavailableCheckIntervalSeconds =
         (widget.currentConfig.unavailableCheckIntervalSeconds ?? 120)
             .clamp(120, 3600)
@@ -783,9 +784,7 @@ class _UrlTestEditorSheetState extends State<_UrlTestEditorSheet> {
                 autofocus: true,
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.done,
-                inputFormatters: [
-                  FilteringTextInputFormatter.deny(RegExp(r'[\r\n]')),
-                ],
+                inputFormatters: [noNewlineInputFormatter],
                 decoration: InputDecoration(
                   labelText: widget.title,
                   hintText: defaultUrlTestUrl,

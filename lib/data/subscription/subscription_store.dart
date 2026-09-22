@@ -14,11 +14,11 @@ import 'package:meow_client/data/local/secure_hive_storage.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 
-import 'location_aliases.dart';
-import 'outbound_schema.dart';
-import 'subscription_failure.dart';
-import 'subscription_fetcher.dart';
-import 'subscription_parser.dart';
+import 'package:meow_client/data/subscription/location_aliases.dart';
+import 'package:meow_client/data/subscription/outbound_schema.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
+import 'package:meow_client/data/subscription/subscription_parser.dart';
 
 class SubscriptionImportResult {
   const SubscriptionImportResult({required this.subscription, this.warning});

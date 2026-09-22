@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:meow_client/models/subscription.dart';
-import 'subscription_fetcher.dart';
-import 'subscription_store.dart';
-import 'subscription_failure.dart';
-import 'subscription_refresh_report.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
+import 'package:meow_client/data/subscription/subscription_store.dart';
+import 'package:meow_client/data/subscription/subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 
 class SubscriptionBackgroundUpdates {
   static const _channel = MethodChannel('meow_client/subscription_refresh');

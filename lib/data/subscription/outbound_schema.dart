@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'import_key_normalizer.dart';
+import 'package:meow_client/data/subscription/import_key_normalizer.dart';
 
 /// Shared sing-box outbound sanitization and validation used by
 /// subscription import flows.

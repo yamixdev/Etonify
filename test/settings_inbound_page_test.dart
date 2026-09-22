@@ -84,15 +84,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(changedIpv6, isTrue);
 
-    expect(
-      find.textContaining('sing-tun (рекомендуется)'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('sing-tun (рекомендуется)'), findsOneWidget);
     expect(find.textContaining('Собственный стек sing-tun'), findsOneWidget);
 
-    final nativeDescription = find.textContaining(
-      'sing-tun (рекомендуется)',
-    );
+    final nativeDescription = find.textContaining('sing-tun (рекомендуется)');
     final nativeTile = find.ancestor(
       of: nativeDescription,
       matching: find.byType(ListTile),

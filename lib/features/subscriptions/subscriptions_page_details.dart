@@ -578,7 +578,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                                   await _saveName(subscription);
                                 },
                                 textInputAction: TextInputAction.done,
-                                inputFormatters: [_kSingleLineFormatter],
+                                inputFormatters: [noNewlineInputFormatter],
                                 minLines: 1,
                                 maxLines: 3,
                                 keyboardType: TextInputType.text,
@@ -962,7 +962,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                                   FocusScope.of(context).unfocus();
                                   await _saveRequestSettings(subscription);
                                 },
-                                inputFormatters: [_kSingleLineFormatter],
+                                inputFormatters: [noNewlineInputFormatter],
                                 decoration: InputDecoration(
                                   labelText: l10n.customHwidTitle,
                                   helperText: l10n.customHwidSubtitle,
@@ -982,7 +982,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                                 FocusScope.of(context).unfocus();
                                 await _saveRequestSettings(subscription);
                               },
-                              inputFormatters: [_kSingleLineFormatter],
+                              inputFormatters: [noNewlineInputFormatter],
                               decoration: InputDecoration(
                                 labelText: l10n.customUserAgentTitle,
                                 helperText: l10n.customUserAgentSubtitle,
