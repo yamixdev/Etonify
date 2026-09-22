@@ -16,6 +16,7 @@ void main() {
       selectedProfileId: null,
       afterMetadataFingerprint: 'metadata-a',
       afterActiveRuntimeFingerprint: 'runtime-a',
+      activeProfileRemoved: false,
       runtimeActiveOrRequested: true,
       connected: true,
     );
@@ -30,6 +31,7 @@ void main() {
       selectedProfileId: null,
       afterMetadataFingerprint: 'metadata-b',
       afterActiveRuntimeFingerprint: 'runtime-a',
+      activeProfileRemoved: false,
       runtimeActiveOrRequested: true,
       connected: true,
     );
@@ -50,6 +52,7 @@ void main() {
         selectedProfileId: null,
         afterMetadataFingerprint: 'metadata-b',
         afterActiveRuntimeFingerprint: 'runtime-b',
+        activeProfileRemoved: false,
         runtimeActiveOrRequested: true,
         connected: true,
       );
@@ -68,6 +71,7 @@ void main() {
       selectedProfileId: 'profile-b',
       afterMetadataFingerprint: 'metadata-a',
       afterActiveRuntimeFingerprint: 'runtime-a',
+      activeProfileRemoved: false,
       runtimeActiveOrRequested: true,
       connected: true,
     );
@@ -84,6 +88,7 @@ void main() {
       selectedProfileId: 'profile-a',
       afterMetadataFingerprint: 'metadata-a',
       afterActiveRuntimeFingerprint: 'runtime-a',
+      activeProfileRemoved: false,
       runtimeActiveOrRequested: true,
       connected: true,
     );
@@ -91,5 +96,60 @@ void main() {
     expect(decision.isProfileSwitch, isTrue);
     expect(decision.shouldStopRuntime, isFalse);
     expect(decision.reloadPlan!.preferredProxyTag, isEmpty);
+  });
+
+  test(
+    'deleting the active profile stops the tunnel instead of adopting one',
+    () {
+      final decision = controller.decide(
+        session: session,
+        selectedProfileId: null,
+        afterMetadataFingerprint: 'metadata-b',
+        afterActiveRuntimeFingerprint: null,
+        activeProfileRemoved: true,
+        runtimeActiveOrRequested: true,
+        connected: true,
+      );
+
+      expect(decision.isProfileSwitch, isFalse);
+      expect(decision.shouldStopRuntime, isTrue);
+      expect(decision.stopReason, 'active_profile_deleted');
+
+      final plan = decision.reloadPlan!;
+      expect(plan.applyRuntime, isFalse);
+      expect(plan.resetRuntimeState, isTrue);
+      expect(plan.restartRuntimeOnApply, isFalse);
+      expect(plan.urlTestAfterApply, isFalse);
+    },
+  );
+
+  test('deleting the active profile while disconnected reloads only', () {
+    final decision = controller.decide(
+      session: session,
+      selectedProfileId: null,
+      afterMetadataFingerprint: 'metadata-b',
+      afterActiveRuntimeFingerprint: null,
+      activeProfileRemoved: true,
+      runtimeActiveOrRequested: false,
+      connected: false,
+    );
+
+    expect(decision.shouldStopRuntime, isFalse);
+    expect(decision.reloadPlan!.applyRuntime, isFalse);
+  });
+
+  test('deleting some other profile leaves the running tunnel up', () {
+    final decision = controller.decide(
+      session: session,
+      selectedProfileId: null,
+      afterMetadataFingerprint: 'metadata-b',
+      afterActiveRuntimeFingerprint: 'runtime-a',
+      activeProfileRemoved: false,
+      runtimeActiveOrRequested: true,
+      connected: true,
+    );
+
+    expect(decision.shouldStopRuntime, isFalse);
+    expect(decision.reloadPlan!.restartRuntimeOnApply, isFalse);
   });
 }

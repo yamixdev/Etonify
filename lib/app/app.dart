@@ -4912,13 +4912,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setState(() {});
     }
 
+    final afterActiveRuntimeFingerprint = await _subscriptionCoordinator
+        .runtimeFingerprintFromStore(_activeProfileId);
     final decision = _subscriptionProfileFlow.decide(
       session: session,
       selectedProfileId: selectedProfileId,
       afterMetadataFingerprint: await _subscriptionCoordinator
           .metadataFingerprint(),
-      afterActiveRuntimeFingerprint: await _subscriptionCoordinator
-          .runtimeFingerprintFromStore(_activeProfileId),
+      afterActiveRuntimeFingerprint: afterActiveRuntimeFingerprint,
+      // runtimeFingerprintFromStore only answers null for an id that is no
+      // longer in the store, so a missing fingerprint for a profile that was
+      // active when the sheet opened means it was deleted.
+      activeProfileRemoved:
+          session.activeProfileId.trim().isNotEmpty &&
+          afterActiveRuntimeFingerprint == null,
       runtimeActiveOrRequested: _runtimeActiveOrRequested,
       connected: _connected,
     );
@@ -4930,26 +4937,33 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
 
-    if (decision.isProfileSwitch) {
-      _haptic();
+    if (decision.shouldStopRuntime) {
+      if (decision.isProfileSwitch) {
+        _haptic();
+      }
       await _proxySelection.waitForPersistence();
       if (!mounted) {
         return;
       }
       AppLogStore.info(
         'subscription',
-        'profile switch requested from=$_activeProfileId '
+        'runtime stop requested reason=${decision.stopReason} '
+            'from=$_activeProfileId '
             'to=${decision.reloadPlan!.preferredSubscriptionId} '
             'running=$_runtimeActiveOrRequested',
       );
-      if (decision.shouldStopRuntime) {
-        final stopped = await _stopRuntime(
-          reason: 'profile_switch',
-          allowQueuedRestart: false,
-        );
-        if (!mounted || !stopped) {
-          return;
-        }
+      final stopped = await _stopRuntime(
+        reason: decision.stopReason!,
+        allowQueuedRestart: false,
+      );
+      if (!mounted) {
+        return;
+      }
+      // A failed switch must not layer the new profile's config onto a tunnel
+      // that is still up. A deleted profile is the other way round: leaving
+      // it in the catalog would be worse, so the reload goes ahead.
+      if (!stopped && decision.isProfileSwitch) {
+        return;
       }
     }
 

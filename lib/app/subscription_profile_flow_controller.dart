@@ -40,7 +40,7 @@ class SubscriptionProfileFlowDecision {
   const SubscriptionProfileFlowDecision._({
     required this.kind,
     this.reloadPlan,
-    this.shouldStopRuntime = false,
+    this.stopReason,
   });
 
   const SubscriptionProfileFlowDecision.unchanged()
@@ -48,9 +48,14 @@ class SubscriptionProfileFlowDecision {
 
   final SubscriptionProfileFlowKind kind;
   final SubscriptionReloadPlan? reloadPlan;
-  final bool shouldStopRuntime;
+
+  /// Why the tunnel has to come down before the plan is applied, or null when
+  /// a running session may be left alone. [shouldStopRuntime] is derived from
+  /// this so the two can never disagree.
+  final String? stopReason;
 
   bool get shouldReload => reloadPlan != null;
+  bool get shouldStopRuntime => stopReason != null;
   bool get isProfileSwitch => kind == SubscriptionProfileFlowKind.selectProfile;
 }
 
@@ -66,6 +71,7 @@ class SubscriptionProfileFlowController {
     required String? selectedProfileId,
     required String afterMetadataFingerprint,
     required String? afterActiveRuntimeFingerprint,
+    required bool activeProfileRemoved,
     required bool runtimeActiveOrRequested,
     required bool connected,
   }) {
@@ -77,6 +83,26 @@ class SubscriptionProfileFlowController {
           session.activeRuntimeFingerprint != afterActiveRuntimeFingerprint;
       if (!subscriptionsChanged && !activeRuntimeChanged) {
         return const SubscriptionProfileFlowDecision.unchanged();
+      }
+      if (activeProfileRemoved) {
+        // The subscription the running tunnel was built from is gone. Bring
+        // the connection down rather than carrying it over onto whichever
+        // profile the catalog happens to fall back to: silently switching
+        // servers the user never picked is worse than a disconnected app.
+        return SubscriptionProfileFlowDecision._(
+          kind: SubscriptionProfileFlowKind.reloadCurrentProfile,
+          stopReason: runtimeActiveOrRequested
+              ? 'active_profile_deleted'
+              : null,
+          reloadPlan: SubscriptionReloadPlan(
+            preferredSubscriptionId: session.activeProfileId,
+            preferredProxyTag: session.selectedProxyTag,
+            applyRuntime: false,
+            resetRuntimeState: true,
+            restartRuntimeOnApply: false,
+            urlTestAfterApply: false,
+          ),
+        );
       }
       return SubscriptionProfileFlowDecision._(
         kind: SubscriptionProfileFlowKind.reloadCurrentProfile,
@@ -94,7 +120,9 @@ class SubscriptionProfileFlowController {
     final switchingProfile = selectedId != session.activeProfileId;
     return SubscriptionProfileFlowDecision._(
       kind: SubscriptionProfileFlowKind.selectProfile,
-      shouldStopRuntime: switchingProfile && runtimeActiveOrRequested,
+      stopReason: switchingProfile && runtimeActiveOrRequested
+          ? 'profile_switch'
+          : null,
       reloadPlan: SubscriptionReloadPlan(
         preferredSubscriptionId: selectedId,
         preferredProxyTag: '',
