@@ -42,7 +42,11 @@ class RuntimeRecoveryController {
   Map<int, String>? _proxyOutboundTagsByIndex;
   Map<String, dynamic>? _lastStartedConfig;
   Set<String> _lastStartedUrlTestOutboundTags = <String>{};
-  String? _pendingMutationExcludedTag;
+
+  /// Tags excluded from the running set but still present in
+  /// [_lastStartedConfig], i.e. not yet removed by a mutation or a rebuild.
+  final Set<String> _pendingMutationExcludedTags = <String>{};
+  String? _mutationTagInFlight;
   String? _lastPresentedRuntimeError;
 
   bool get retryScheduled => _retryScheduled;
@@ -102,13 +106,18 @@ class RuntimeRecoveryController {
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
         .toSet();
+    // A freshly cached build already honours the whole exclusion set, so no
+    // removal is outstanding.
+    _pendingMutationExcludedTags.clear();
+    _mutationTagInFlight = null;
   }
 
   void clearBuildCache() {
     _proxyOutboundTagsByIndex = null;
     _lastStartedConfig = null;
     _lastStartedUrlTestOutboundTags.clear();
-    _pendingMutationExcludedTag = null;
+    _pendingMutationExcludedTags.clear();
+    _mutationTagInFlight = null;
   }
 
   void clearExcludedOutbounds() {
@@ -128,11 +137,17 @@ class RuntimeRecoveryController {
       final fallbackTagsByIndex = await loadFallbackTagsByIndex();
       tag = fallbackTagsByIndex?[runtimeError.outboundIndex];
     }
-    if (tag == null || _excludedOutboundTags.contains(tag)) {
+    if (tag == null) {
       return null;
     }
-    _excludedOutboundTags.add(tag);
-    _pendingMutationExcludedTag = tag;
+    // Reserve atomically. The fallback lookup above awaits, so a containment
+    // check followed by a later insert would let two overlapping runtime-error
+    // handlers claim the same tag. Set.add reports whether this call is the
+    // one that excluded it.
+    if (!_excludedOutboundTags.add(tag)) {
+      return null;
+    }
+    _pendingMutationExcludedTags.add(tag);
     return InvalidOutboundRecovery(tag: tag, reason: runtimeError.reason);
   }
 
@@ -143,10 +158,18 @@ class RuntimeRecoveryController {
   ConfigMutationInput? createMutationInput(String outputPath) {
     final config = _lastStartedConfig;
     final tagsByIndex = _proxyOutboundTagsByIndex;
-    final excludedTag = _pendingMutationExcludedTag;
-    if (config == null || tagsByIndex == null || excludedTag == null) {
+    if (config == null || tagsByIndex == null) {
       return null;
     }
+    // The in-place mutation removes a single tag. With more than one pending
+    // removal the cached config would still carry an excluded outbound, so
+    // refuse the fast path and let the caller rebuild, which honours the whole
+    // exclusion set.
+    if (_pendingMutationExcludedTags.length != 1) {
+      return null;
+    }
+    final excludedTag = _pendingMutationExcludedTags.first;
+    _mutationTagInFlight = excludedTag;
     return ConfigMutationInput(
       config: config,
       proxyOutboundTagsByIndex: tagsByIndex,
@@ -156,9 +179,10 @@ class RuntimeRecoveryController {
   }
 
   void applyMutation(ConfigMutationResult mutation) {
-    final excludedTag = _pendingMutationExcludedTag;
-    _pendingMutationExcludedTag = null;
+    final excludedTag = _mutationTagInFlight;
+    _mutationTagInFlight = null;
     if (excludedTag != null) {
+      _pendingMutationExcludedTags.remove(excludedTag);
       _lastStartedUrlTestOutboundTags.remove(excludedTag);
     }
     _lastStartedConfig = Map<String, dynamic>.from(mutation.config);

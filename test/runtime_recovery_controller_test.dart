@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_recovery_controller.dart';
@@ -79,6 +81,35 @@ void main() {
       expect(controller.lastStartedUrlTestOutboundTags, {'healthy-tag'});
       controller.clearBuildCache();
       expect(controller.lastStartedUrlTestOutboundTags, isEmpty);
+    },
+  );
+
+  test(
+    'overlapping invalid outbound errors refuse the single tag mutation',
+    () async {
+      final controller = RuntimeRecoveryController();
+      // An empty cached mapping forces both handlers through the awaited
+      // fallback lookup, which is where their reservations used to race.
+      controller.cacheStartedBuild(_buildResult(tagsByIndex: const {}));
+      final gate = Completer<Map<int, String>?>();
+
+      final first = controller.registerInvalidOutboundError(
+        'initialize outbound[4]: invalid Reality public key',
+        loadFallbackTagsByIndex: () => gate.future,
+      );
+      final second = controller.registerInvalidOutboundError(
+        'initialize outbound[5]: unsupported transport',
+        loadFallbackTagsByIndex: () => gate.future,
+      );
+      gate.complete(const <int, String>{4: 'tag-a', 5: 'tag-b'});
+
+      expect((await first)?.tag, 'tag-a');
+      expect((await second)?.tag, 'tag-b');
+      expect(controller.excludedOutboundTags, {'tag-a', 'tag-b'});
+      // The in-place mutation drops exactly one tag, so it must be refused and
+      // the caller has to rebuild a config honouring both exclusions.
+      expect(controller.createMutationInput('config.json'), isNull);
+      controller.dispose();
     },
   );
 
