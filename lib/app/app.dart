@@ -4664,6 +4664,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
             _activeProfileCache == null,
       );
     });
+    if (shouldResetRuntimeState && !preserveLatencyDuringReload) {
+      // The header counters describe the servers of the profile that was
+      // active before this reload, and its latency map is now gone.
+      _urlTestCancelled = false;
+      _updateUrlTestProgress(isRunning: false, isCancelled: false);
+    }
     unawaited(_syncQuickSettingsTileLabel());
     if (_connected) {
       _scheduleActiveOutboundIpRefresh();
@@ -4768,6 +4774,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
           );
         }
       });
+      if (shouldResetRuntimeState && !preserveLatencyDuringReload) {
+        _urlTestCancelled = false;
+        _updateUrlTestProgress(isRunning: false, isCancelled: false);
+      }
       unawaited(_syncQuickSettingsTileLabel());
       if (_connected) {
         _scheduleActiveOutboundIpRefresh();
