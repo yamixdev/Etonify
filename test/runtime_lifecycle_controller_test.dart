@@ -34,6 +34,40 @@ void main() {
   });
 
   test(
+    'apply RPC is bounded so a hung native call cannot pin the apply queue',
+    () async {
+      final runtime = _FakeRuntime(hangApply: true);
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        startTimeout: const Duration(milliseconds: 10),
+        healthCheckTimeout: const Duration(milliseconds: 20),
+      );
+      addTearDown(controller.dispose);
+
+      final result = await controller
+          .applyRuntimeBuild(
+            build: _build(),
+            useVpn: true,
+            policy: RuntimeApplyPolicy.safeCoreRestart,
+            promotePreparedConfig: (_) {},
+            cacheStartedBuild: (_) {},
+            logCall: (_, _) {},
+            trimMemory: (_) {},
+            onWatchdogTimeout: (_) {},
+          )
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () =>
+                throw StateError('applyRuntimeBuild never returned'),
+          );
+
+      expect(result.success, isFalse);
+      expect(result.timedOut, isTrue);
+      expect(runtime.applyPreparedConfigCalls, 1);
+    },
+  );
+
+  test(
     'safe core restart waits for a newer native runtime generation',
     () async {
       final runtime = _FakeRuntime(confirmApplyImmediately: false);
@@ -620,6 +654,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     this.ignoreStop = false,
     this.confirmStartImmediately = true,
     this.confirmApplyImmediately = true,
+    this.hangApply = false,
   }) : recordedServiceAlive = running,
        activeRuntimeOwner = running,
        runtimeGeneration = running ? 1 : 0;
@@ -632,6 +667,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   bool ignoreStop;
   bool confirmStartImmediately;
   bool confirmApplyImmediately;
+  bool hangApply;
   bool recordedServiceAlive;
   bool activeRuntimeOwner;
   int runtimeGeneration;
@@ -676,6 +712,9 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   }) async {
     applyPreparedConfigCalls++;
     lastRestartCore = restartCore;
+    if (hangApply) {
+      await Completer<void>().future;
+    }
     if (failApplyAndStopRuntime) {
       failApplyAndStopRuntime = false;
       running = false;

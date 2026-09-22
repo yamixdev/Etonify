@@ -544,6 +544,7 @@ class RuntimeLifecycleController {
       return RuntimeLifecycleResult.failure(
         policy: policy,
         error: error.toString(),
+        timedOut: error is TimeoutException,
       );
     }
   }
@@ -733,6 +734,12 @@ class RuntimeLifecycleController {
     required RuntimeLogHook logCall,
   }) async {
     cacheStartedBuild(build);
+    // Bound the apply RPC like start/stop/status already are. Without a
+    // deadline a native call that never returns pins the serial apply queue in
+    // SingboxConfigCoordinator, so every later settings change queues behind it
+    // and never reaches the core. Restarting the core through apply costs about
+    // what a start does, so it reuses the tuned start budget; the caller's
+    // catch verifies health and falls back to a full service restart.
     if (build.hasPreparedConfig) {
       await promotePreparedConfig(build);
       logCall(
@@ -740,10 +747,9 @@ class RuntimeLifecycleController {
         'reason=apply runtime useVpn=$useVpn restartCore=$restartCore '
             'configOutbounds=${build.configOutboundCount}',
       );
-      return _runtime.applyPreparedConfig(
-        useVpn: useVpn,
-        restartCore: restartCore,
-      );
+      return _runtime
+          .applyPreparedConfig(useVpn: useVpn, restartCore: restartCore)
+          .timeout(startTimeout);
     }
     logCall(
       'applyConfig',
@@ -751,11 +757,13 @@ class RuntimeLifecycleController {
           'configOutbounds=${build.configOutboundCount} '
           'configChars=${build.configLength}',
     );
-    return _runtime.applyConfig(
-      config: build.configJson,
-      useVpn: useVpn,
-      restartCore: restartCore,
-    );
+    return _runtime
+        .applyConfig(
+          config: build.configJson,
+          useVpn: useVpn,
+          restartCore: restartCore,
+        )
+        .timeout(startTimeout);
   }
 
   int _armStartWatchdog({
