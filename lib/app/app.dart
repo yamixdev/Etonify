@@ -3239,7 +3239,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxyLocationCoordinator.reset();
     _appTrafficMonitor.suspendForegroundWork();
     _groupUrlTestScheduler.cancel();
-    _latencyCoordinator.cancel();
+    // The in-flight URLTest sweep is deliberately left running. It is the
+    // native core doing the work, and a full pass over a large profile takes
+    // minutes; cancelling it here meant that switching apps or dimming the
+    // screen threw away every measurement and restarted from the first server.
     _networkRecovery.cancelDecision();
     if (_invalidOutboundRetryScheduled && _runtimeDesiredByUser) {
       _runtimeIntent.deferRetryUntilResume();

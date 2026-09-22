@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
+import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 const _testPolicy = LatencyUiPolicy(
@@ -1011,6 +1012,137 @@ void main() {
       );
       expect(await fullCompleted, isTrue);
       expect(coordinator.isRunning, isFalse);
+    },
+  );
+
+  test('v3 results that arrive before the running event still count', () async {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const ['a', 'b'],
+      capabilities: _v3Capabilities,
+    );
+    addTearDown(coordinator.dispose);
+
+    final completed = coordinator.runFull(reason: 'manual');
+    await Future<void>.delayed(Duration.zero);
+
+    // The core can finish a probe before the session status event reaches
+    // the client. Dropping it made a finished sweep look unfinished.
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'a',
+        sessionId: 7,
+        revision: 1,
+        available: true,
+      ),
+      isTrue,
+    );
+    expect(coordinator.isChecking('a'), isFalse);
+    expect(coordinator.isChecking('b'), isTrue);
+
+    // A result from a different session is still rejected.
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'b',
+        sessionId: 6,
+        revision: 1,
+        available: true,
+      ),
+      isFalse,
+    );
+
+    // The status event stays authoritative and re-pins the session.
+    expect(
+      coordinator.handleCoreSession(
+        sessionId: 8,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      ),
+      isTrue,
+    );
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'b',
+        sessionId: 7,
+        revision: 2,
+        available: true,
+      ),
+      isFalse,
+    );
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'b',
+        sessionId: 8,
+        revision: 2,
+        available: true,
+      ),
+      isTrue,
+    );
+    coordinator.handleCoreSession(
+      sessionId: 8,
+      groupTag: 'select',
+      targetTag: '',
+      mode: 'manual',
+      state: 'completed',
+      terminalReason: 'completed',
+      available: 2,
+    );
+    expect(await completed, isTrue);
+  });
+
+  test(
+    'settling reports measurements the core took but events missed',
+    () async {
+      AppLogStore.clear();
+      addTearDown(AppLogStore.clear);
+      final startedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final coreMeasurements = <String, int>{};
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const ['a', 'b', 'c'],
+        eventBaselineTimes: () => Map<String, int>.from(coreMeasurements),
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final completed = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 1,
+          revision: 1,
+          available: true,
+        ),
+        isTrue,
+      );
+      // Two further probes finished inside the core, and only one of them is
+      // newer than the measurement this session started from.
+      coreMeasurements
+        ..['a'] = startedAt + 5
+        ..['b'] = startedAt + 5
+        ..['c'] = startedAt - 60;
+      coordinator.handleCoreSession(
+        sessionId: 1,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 1,
+      );
+      expect(await completed, isTrue);
+
+      final settled = AppLogStore.dump()
+          .split('\n')
+          .lastWhere((line) => line.contains('latency session settled'));
+      expect(settled, contains('expected=3'));
+      expect(settled, contains('received=2'));
     },
   );
 }

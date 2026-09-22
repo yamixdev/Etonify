@@ -155,6 +155,11 @@ class LatencyCoordinator {
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
   int _nativeSessionId = 0;
+
+  /// True when [_nativeSessionId] was inferred from a result rather than from
+  /// the session's own `running` event. Only meaningful while the identifier is
+  /// non-zero: every write of an identifier also sets or clears this flag.
+  bool _nativeSessionIdPinnedByResult = false;
   String _sessionMode = '';
   String _sessionReason = '';
 
@@ -427,6 +432,13 @@ class LatencyCoordinator {
       return false;
     }
     final activeCheck = _activeTargetChecks[normalizedTag];
+    if (isRunning && _nativeSessionId == 0) {
+      // Results can reach the client before the session's `running` event does.
+      // Pin the identifier from the first one so those measurements are not
+      // discarded; the `running` event still overrides this guess below.
+      _nativeSessionId = sessionId;
+      _nativeSessionIdPinnedByResult = true;
+    }
     final belongsToMainSession = isRunning && sessionId == _nativeSessionId;
 
     if (!belongsToMainSession && activeCheck == null) {
@@ -472,18 +484,22 @@ class LatencyCoordinator {
     if (_kind == LatencySessionKind.full && mode != _sessionMode) {
       return false;
     }
-    if (_nativeSessionId == 0) {
-      if (state != 'running' || sessionId <= 0) {
+    if (state == 'running') {
+      if (sessionId <= 0) return false;
+      if (_nativeSessionId != 0 &&
+          _nativeSessionId != sessionId &&
+          !_nativeSessionIdPinnedByResult) {
         return false;
       }
       _nativeSessionId = sessionId;
-    }
-    if (sessionId <= 0 || sessionId != _nativeSessionId) {
-      return false;
-    }
-    if (state == 'running') {
+      _nativeSessionIdPinnedByResult = false;
       _phase = LatencySessionPhase.collectingEvents;
       return true;
+    }
+    if (_nativeSessionId == 0 ||
+        sessionId <= 0 ||
+        sessionId != _nativeSessionId) {
+      return false;
     }
     if (state != 'completed' && state != 'cancelled') {
       return false;
@@ -504,6 +520,10 @@ class LatencyCoordinator {
     final wasRunning = isRunning;
     final previousKind = _kind;
     final previousTarget = _targetTag;
+    final previousReason = _sessionReason;
+    final receivedCount = _acceptedEventTimes.length;
+    final successfulCount = _successfulTags.length;
+    final expectedCount = _sessionExpectedTags.length;
     _cancelSessionTimers();
     _phase = LatencySessionPhase.idle;
     _kind = null;
@@ -522,6 +542,13 @@ class LatencyCoordinator {
       result.complete(false);
     }
     if (wasRunning) {
+      AppLogStore.info(
+        'latency',
+        'latency session cancelled kind=${previousKind?.name ?? 'unknown'} '
+            'reason=$previousReason target=$previousTarget '
+            'received=$receivedCount successful=$successfulCount '
+            'expected=$expectedCount',
+      );
       _onSessionChanged(false, previousKind, previousTarget);
       if (_usesSessionEvents && _capabilities.supportsUrlTestCancel) {
         final cancelTest = _cancelTest;
@@ -776,12 +803,33 @@ class LatencyCoordinator {
     return !_disposed && generation == _generation && isRunning;
   }
 
+  /// Counts servers the core measured but this session never recorded.
+  ///
+  /// The runtime's own latency map is the authoritative tally of what the core
+  /// probed. A result can reach the client while a runtime transition freezes
+  /// updates, or be dropped because it left the visible state unchanged, and
+  /// counting only the events that survived would report those servers as
+  /// never tested.
+  void _adoptCoreMeasurements() {
+    if (_sessionExpectedTags.isEmpty) return;
+    final measuredAt = _eventBaselineTimes();
+    for (final tag in _sessionExpectedTags) {
+      if (_acceptedEventTimes.containsKey(tag)) continue;
+      final seconds = measuredAt[tag] ?? 0;
+      if (seconds >= _sessionStartedAtSeconds &&
+          seconds > (_baselineEventTimes[tag] ?? 0)) {
+        _acceptedEventTimes[tag] = seconds;
+      }
+    }
+  }
+
   void _settleCurrent({required bool success, required String reason}) {
     if (!isRunning) return;
     final previousKind = _kind;
     final previousTarget = _targetTag;
     final result = _sessionResult;
     final expectedCount = _sessionExpectedTags.length;
+    _adoptCoreMeasurements();
     final receivedCount = _acceptedEventTimes.keys
         .where(_sessionExpectedTags.contains)
         .length;
