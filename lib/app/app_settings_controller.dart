@@ -1095,10 +1095,18 @@ class AppSettingsController {
     }
   }
 
+  /// Stored accents are either the sentinel or six hex digits with no marker.
+  ///
+  /// Anything else has to be rejected here rather than at the theme, which
+  /// parses the value with `int.tryParse(..., radix: 16)` and would fold
+  /// surplus digits into a different color instead of failing.
   static String normalizeAccentColorHex(String value) => switch (value) {
     'dynamic-2' || 'dynamic-3' => 'default',
-    _ => value,
+    _ when _accentColorHexPattern.hasMatch(value) => value,
+    _ => 'default',
   };
+
+  static final RegExp _accentColorHexPattern = RegExp(r'^[0-9a-fA-F]{6}$');
 
   static String normalizedUrlTestUrl(String value) {
     final normalized = value.trim();

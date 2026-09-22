@@ -357,4 +357,67 @@ void main() {
     expect(noticeChange.restartRuntime, isFalse);
     expect(controller.autoCheckNoticeAcknowledged, isTrue);
   });
+
+  test('accent color keeps the sentinel and exactly six hex digits', () {
+    expect(
+      AppSettingsController.normalizeAccentColorHex('default'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('2D5BFF'),
+      equals('2D5BFF'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('2d5bff'),
+      equals('2d5bff'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('dynamic-2'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('dynamic-3'),
+      equals('default'),
+    );
+  });
+
+  test('a malformed accent hex falls back instead of truncating', () {
+    // Eight digits used to survive normalization and reach the theme, where
+    // `0xFF000000 | int.tryParse(value, radix: 16)` folded the surplus byte
+    // into a color nobody picked.
+    expect(
+      AppSettingsController.normalizeAccentColorHex('2D5BFF00'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('#2D5BFF'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('2D5BF'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex('ZZZZZZ'),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex(''),
+      equals('default'),
+    );
+    expect(
+      AppSettingsController.normalizeAccentColorHex(' 2D5BFF'),
+      equals('default'),
+    );
+  });
+
+  test('setAccentColor refuses to store a malformed value', () {
+    final controller = AppSettingsController();
+    expect(controller.setAccentColor('E91E63').changed, isTrue);
+    expect(controller.accentColorHex, equals('E91E63'));
+
+    expect(controller.setAccentColor('2D5BFF00').changed, isTrue);
+    expect(controller.accentColorHex, equals('default'));
+    expect(controller.setAccentColor('nonsense').changed, isFalse);
+  });
 }
