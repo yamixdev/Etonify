@@ -468,6 +468,32 @@ abstract class AppSettingsStore {
   static const exportFormatVersion = 1;
   static const exportMinClientVersion = '0.2.0';
 
+  /// Ceiling and default for concurrent URLTest probes. Builds before 0.3.7
+  /// shipped `4` as both the default and a quarter of the old ceiling, so an
+  /// upgraded install can hold that value without ever having opened the
+  /// setting.
+  static const defaultUrlTestConcurrency = 10;
+  static const maximumUrlTestConcurrency = 10;
+  static const _legacyDefaultUrlTestConcurrency = 4;
+
+  /// Decide the one-shot rewrite of a stored URLTest concurrency, apart from
+  /// storage I/O.
+  ///
+  /// Returns the replacement value, or `null` when the stored value must be
+  /// kept. Once [alreadyMigrated] is set the stored number is trusted, so a
+  /// user who later picks `4` deliberately keeps it.
+  static int? migratedUrlTestConcurrency({
+    required String? stored,
+    required bool alreadyMigrated,
+  }) {
+    if (alreadyMigrated) return null;
+    if (int.tryParse(stored?.trim() ?? '') !=
+        _legacyDefaultUrlTestConcurrency) {
+      return null;
+    }
+    return defaultUrlTestConcurrency;
+  }
+
   static const _onboardingCompletedKey = 'onboarding_completed';
   static const _coreConfigSchemaVersionKey = 'core_config_schema_version';
   static const _coreSettingsKey = 'core_settings_v1';
@@ -527,6 +553,9 @@ abstract class AppSettingsStore {
   static const _urlTestConcurrencyKey = 'urltest_concurrency';
   static const _urlTestUnavailableCheckIntervalSecondsKey =
       'urltest_unavailable_check_interval_seconds';
+  // One-shot marker: intentionally excluded from safeExportKeys.
+  static const _urlTestConcurrencyDefaultMigratedKey =
+      'urltest_concurrency_default_migrated';
   static const _autoCheckServersKey = 'auto_check_servers';
   // Local acknowledgement: intentionally excluded from safeExportKeys.
   static const _autoCheckNoticeAcknowledgedKey =
@@ -672,10 +701,9 @@ abstract class AppSettingsStore {
                 2)
             .clamp(1, 10)
             .toInt();
-    const defaultUrlTestConcurrency = 10;
-    const maximumUrlTestConcurrency = 10;
     final normalizedUrlTestConcurrency =
-        ((legacyEconomy && urlTestConcurrency == 4)
+        ((legacyEconomy &&
+                    urlTestConcurrency == _legacyDefaultUrlTestConcurrency)
                 ? defaultUrlTestConcurrency
                 : urlTestConcurrency ?? defaultUrlTestConcurrency)
             .clamp(1, maximumUrlTestConcurrency);
@@ -1140,10 +1168,33 @@ class HiveAppSettingsStore extends AppSettingsStore {
 
   @override
   Future<AppSettingsState> loadState() async {
+    await _migrateUrlTestConcurrencyDefault();
     final raw = _box.toMap().map(
       (key, value) => MapEntry(key.toString(), value),
     );
     return mapState(raw);
+  }
+
+  /// Rewrites the pre-0.3.7 default probe concurrency exactly once. See
+  /// [migratedUrlTestConcurrency] for the decision.
+  Future<void> _migrateUrlTestConcurrencyDefault() async {
+    final replacement = AppSettingsStore.migratedUrlTestConcurrency(
+      stored: _box.get(AppSettingsStore._urlTestConcurrencyKey)?.toString(),
+      alreadyMigrated: _box.containsKey(
+        AppSettingsStore._urlTestConcurrencyDefaultMigratedKey,
+      ),
+    );
+    if (replacement != null) {
+      await _box.put(AppSettingsStore._urlTestConcurrencyKey, '$replacement');
+      await _box.flush();
+      AppLogStore.info(
+        'settings storage',
+        'migrated urltest concurrency '
+            '${AppSettingsStore._legacyDefaultUrlTestConcurrency} -> '
+            '$replacement',
+      );
+    }
+    await _box.put(AppSettingsStore._urlTestConcurrencyDefaultMigratedKey, '1');
   }
 
   @override

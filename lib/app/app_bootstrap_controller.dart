@@ -277,7 +277,7 @@ class AppBootstrapController {
       urlTestUrl: defaultUrlTestUrl,
       urlTestIntervalSeconds: 1800,
       urlTestTimeoutSeconds: 15,
-      urlTestConcurrency: 4,
+      urlTestConcurrency: AppSettingsStore.defaultUrlTestConcurrency,
       urlTestUnavailableCheckIntervalSeconds: 120,
       locationLookupLimit: 2,
       locationLookupTimeoutSeconds: 5,

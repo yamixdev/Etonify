@@ -466,6 +466,51 @@ void main() {
     expect(exported.containsKey('auto_check_notice_acknowledged'), isFalse);
   });
 
+  test('stale pre-0.3.7 probe concurrency is rewritten exactly once', () {
+    expect(
+      AppSettingsStore.migratedUrlTestConcurrency(
+        stored: '4',
+        alreadyMigrated: false,
+      ),
+      AppSettingsStore.defaultUrlTestConcurrency,
+    );
+    expect(
+      AppSettingsStore.migratedUrlTestConcurrency(
+        stored: ' 4 ',
+        alreadyMigrated: false,
+      ),
+      AppSettingsStore.defaultUrlTestConcurrency,
+    );
+    // Anything else is the user's own number, including a deliberate 4 chosen
+    // after the rewrite and an absent value that already maps to the default.
+    expect(
+      AppSettingsStore.migratedUrlTestConcurrency(
+        stored: null,
+        alreadyMigrated: false,
+      ),
+      isNull,
+    );
+    expect(
+      AppSettingsStore.migratedUrlTestConcurrency(
+        stored: '8',
+        alreadyMigrated: false,
+      ),
+      isNull,
+    );
+    expect(
+      AppSettingsStore.migratedUrlTestConcurrency(
+        stored: '4',
+        alreadyMigrated: true,
+      ),
+      isNull,
+    );
+    // The marker is device state, so it must never leave through an export.
+    expect(
+      AppSettingsStore.safeExportKeys,
+      isNot(contains('urltest_concurrency_default_migrated')),
+    );
+  });
+
   test('shouldCompactAppSettingsBox triggers when threshold is reached', () {
     expect(shouldCompactAppSettingsBox(50, 24), isFalse);
     expect(shouldCompactAppSettingsBox(50, 25), isFalse);
