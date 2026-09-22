@@ -495,7 +495,7 @@ class ParsedOutboundSchema {
 
     if (type == 'vless' && config.containsKey('encryption')) {
       final encryption = config['encryption'];
-      if (encryption is! String || !_isValidVlessEncryption(encryption)) {
+      if (encryption is! String || !isValidVlessEncryption(encryption)) {
         return 'invalid vless encryption: $encryption';
       }
     }
@@ -822,7 +822,9 @@ class ParsedOutboundSchema {
     return null;
   }
 
-  static bool _isValidVlessEncryption(String value) {
+  /// Grammar of a VLESS post-quantum `encryption` value, shared with the core
+  /// capability gate so import validation and config build agree.
+  static bool isValidVlessEncryption(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty || normalized == 'none') {
       return true;

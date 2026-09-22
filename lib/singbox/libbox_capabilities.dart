@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:meow_client/data/subscription/outbound_schema.dart';
+
 enum UrlTestCompletionModel { rpcCompletion, groupEvents, sessionEvents }
 
 enum LibboxContractStatus { legacy, compatible, incompatible }
@@ -458,11 +460,14 @@ class LibboxCapabilities {
     return xHttpModes.contains(normalized);
   }
 
-  bool supportsVlessEncryptionValue(String value) {
-    final normalized = value.trim().toLowerCase();
-    if (normalized.isEmpty || normalized == 'none') return true;
-    return vlessEncryptionModes.any(normalized.contains);
-  }
+  /// Whether a VLESS `encryption` value is one this core build can act on.
+  ///
+  /// The value is a dot-separated scheme rather than a keyword, so matching it
+  /// on substrings waved through mangled values that then failed the handshake
+  /// instead of leaving the server out of the profile. The grammar itself lives
+  /// with import validation so both gates agree.
+  bool supportsVlessEncryptionValue(String value) =>
+      ParsedOutboundSchema.isValidVlessEncryption(value);
 
   bool supportsTunStack(String value) =>
       tunStacks.contains(value.trim().toLowerCase());

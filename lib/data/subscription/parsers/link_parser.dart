@@ -3,6 +3,20 @@ import 'package:meow_client/core/base64.dart';
 import 'package:meow_client/data/subscription/import_key_normalizer.dart';
 import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
+/// Thrown when a link names a transport the core cannot be configured with.
+///
+/// [LinkParser.tryParse] turns it into the same `null` as any other unreadable
+/// link, so the import reports the server as unsupported rather than importing
+/// it with a silently different transport.
+class UnsupportedLinkTransportException implements Exception {
+  const UnsupportedLinkTransportException(this.transport);
+
+  final String transport;
+
+  @override
+  String toString() => 'unsupported link transport: $transport';
+}
+
 /// Parses individual proxy URI links and converts to sing-box outbound format.
 ///
 /// Supported schemes: vless, vmess, trojan, ss, ssr, socks/socks4/socks5,
@@ -721,8 +735,22 @@ class LinkParser {
   // ━━━━━━━━━━━━━━━━━━━━━━━━ Transport helper ━━━━━━━━━━━━━━━━━━━━
 
   /// Builds V2Ray transport options from common query parameters.
+  ///
+  /// An undeclared transport is rejected instead of falling back to raw TCP:
+  /// the resulting outbound looked importable but could never connect, and the
+  /// server's real transport was invisible in the UI.
   static Map<String, dynamic>? _buildTransport(Map<String, String> p) {
-    final type = (p['type'] ?? p['net'] ?? 'tcp').toLowerCase();
+    // Xray's newer names for the same transports: `raw` is plain TCP and
+    // `websocket` is WebSocket. An absent `type`/`net`/`network` is TCP.
+    const transportAliases = <String, String>{
+      '': 'tcp',
+      'raw': 'tcp',
+      'websocket': 'ws',
+    };
+    final declared = (p['type'] ?? p['net'] ?? p['network'] ?? '')
+        .trim()
+        .toLowerCase();
+    final type = transportAliases[declared] ?? declared;
     final host = p['host'] ?? '';
     final path = p['path'] ?? '';
     final serviceName =
@@ -769,15 +797,6 @@ class LinkParser {
         _mergeExtraJson(t, p['extra'], skipKeys: const {'type'});
         return t;
 
-      case 'kcp':
-      case 'mkcp':
-        final t = <String, dynamic>{'type': 'mkcp'};
-        final seed = p['seed'] ?? '';
-        if (seed.isNotEmpty) t['seed'] = seed;
-        final ht = headerType.isNotEmpty ? headerType : (p['headerType'] ?? '');
-        if (ht.isNotEmpty && ht != 'none') t['header_type'] = ht;
-        return t;
-
       case 'tcp':
         // tcp with headerType=http → sing-box "http" transport
         if (headerType == 'http') {
@@ -792,7 +811,7 @@ class LinkParser {
         return <String, dynamic>{'type': 'quic'};
 
       default:
-        return null;
+        throw UnsupportedLinkTransportException(type);
     }
   }
 

@@ -121,6 +121,50 @@ void main() {
       expect(capabilities.supportsTunStack('native'), isTrue);
     });
 
+    test('VLESS encryption gate reads the value as dot-separated segments', () {
+      final capabilities = LibboxCapabilities.parseStrict(_strictContract);
+      const key = 'MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs';
+
+      expect(capabilities.supportsVlessEncryptionValue('none'), isTrue);
+      expect(capabilities.supportsVlessEncryptionValue(''), isTrue);
+      expect(
+        capabilities.supportsVlessEncryptionValue(
+          'mlkem768x25519plus.native.0rtt.$key',
+        ),
+        isTrue,
+      );
+      // Happ and Astracat put tuning fields between the mode and the key.
+      expect(
+        capabilities.supportsVlessEncryptionValue(
+          'mlkem768x25519plus.native.0rtt.100-111-1111.75-0-111.$key',
+        ),
+        isTrue,
+      );
+      // The previous substring match waved all of these through, and the core
+      // then failed the handshake instead of leaving the server out.
+      expect(capabilities.supportsVlessEncryptionValue('mlkem768'), isFalse);
+      expect(capabilities.supportsVlessEncryptionValue('x25519'), isFalse);
+      expect(capabilities.supportsVlessEncryptionValue('auto'), isFalse);
+      expect(
+        capabilities.supportsVlessEncryptionValue(
+          'mlkem768x25519plus.garbage.0rtt.$key',
+        ),
+        isFalse,
+      );
+      expect(
+        capabilities.supportsVlessEncryptionValue(
+          'mlkem768x25519plus.native.9rtt.$key',
+        ),
+        isFalse,
+      );
+      expect(
+        capabilities.supportsVlessEncryptionValue(
+          'mlkem768x25519plus.native.0rtt',
+        ),
+        isFalse,
+      );
+    });
+
     test('strict parser rejects an absent, old, or incomplete contract', () {
       expect(
         LibboxCapabilities.parseStrict(null).contractError,

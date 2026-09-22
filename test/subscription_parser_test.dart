@@ -265,6 +265,49 @@ void main() {
       );
     });
 
+    test('reads the network parameter as a transport name', () {
+      const link =
+          'vless://uuid@server.com:443'
+          '?network=grpc&serviceName=grpc-service#Grpc';
+
+      final r = LinkParser.tryParse(link)!;
+      expect(r['transport'], {'type': 'grpc', 'service_name': 'grpc-service'});
+    });
+
+    test('accepts Xray transport aliases', () {
+      const raw =
+          'vless://uuid@server.com:443'
+          '?type=raw&security=tls#Raw';
+      const websocket =
+          'vless://uuid@server.com:443'
+          '?type=websocket&path=%2Fws&host=ws.example#Ws';
+
+      expect(LinkParser.tryParse(raw)!['transport'], isNull);
+      expect(LinkParser.tryParse(websocket)!['transport'], {
+        'type': 'ws',
+        'path': '/ws',
+        'headers': {'Host': 'ws.example'},
+      });
+    });
+
+    test('drops a link whose transport the core cannot express', () {
+      const mkcp =
+          'vless://uuid@server.com:443'
+          '?type=mkcp&seed=secret#Mkcp';
+      const unknown =
+          'vless://uuid@server.com:443'
+          '?type=xdrive#Unknown';
+
+      expect(LinkParser.tryParse(mkcp), isNull);
+      expect(LinkParser.tryParse(unknown), isNull);
+      // A rejected link must not take its neighbours with it.
+      final parsed = SubscriptionParser.parse(
+        '$mkcp\nvless://uuid@example.com:443#Good',
+      );
+      expect(parsed.outbounds, hasLength(1));
+      expect(parsed.outbounds.single['server'], 'example.com');
+    });
+
     test('rejects invalid VLESS packet encoding during import validation', () {
       const outbound = {
         'type': 'vless',
