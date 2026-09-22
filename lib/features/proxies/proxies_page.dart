@@ -33,7 +33,12 @@ part 'proxies_page_share.dart';
 part 'proxy_tile.dart';
 
 const _kProxySheetHeaderHeight = 108.0;
-const _kProxySheetCompactHeaderHeight = 72.0;
+
+// Must hold the collapsed header's tallest possible column: title (24) +
+// progress line at two lines (32) + gaps (5) + progress bar (2.5), plus the
+// 8/4 toolbar insets. Anything tighter overflows once the progress string
+// wraps, which is the common case outside English.
+const _kProxySheetCompactHeaderHeight = 80.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
 const _kProxySheetRowExtent = proxyPanelRowExtent;
 const _kProxyListScrollCacheExtent = ScrollCacheExtent.pixels(

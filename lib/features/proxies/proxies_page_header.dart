@@ -1,5 +1,28 @@
 part of 'proxies_page.dart';
 
+/// Width of the strip at the bottom of the header where the backdrop fades
+/// out, so rows dissolve under it instead of stopping on a hard edge.
+const _kProxySheetHeaderEdgeFade = 18.0;
+
+/// Backdrop painted behind the pinned header, which list rows scroll under.
+///
+/// Stays fully opaque across the whole header except for the last
+/// [_kProxySheetHeaderEdgeFade] pixels: this gradient is the only thing
+/// separating the header from the list, so any transparency inside the title's
+/// band draws row text through the title and the progress line.
+LinearGradient _proxySheetHeaderGradient(Color surface, double height) {
+  final fadeStart = ((height - _kProxySheetHeaderEdgeFade) / height).clamp(
+    0.0,
+    1.0,
+  );
+  return LinearGradient(
+    colors: [surface, surface, surface.withValues(alpha: 0)],
+    stops: [0, fadeStart, 1],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+}
+
 class _ProxySheetHeaderBackdrop extends StatelessWidget {
   const _ProxySheetHeaderBackdrop({
     required this.enabled,
@@ -15,48 +38,41 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.scaffoldBackgroundColor;
-    final fallbackGradient = LinearGradient(
-      colors: [
-        color.withValues(alpha: .36),
-        color.withValues(alpha: .18),
-        Colors.transparent,
-      ],
-      stops: const [0, .72, 1],
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
+    final color = Theme.of(context).scaffoldBackgroundColor;
+    final borderRadius = BorderRadius.vertical(
+      top: Radius.circular(cornerRadius),
     );
     if (!enabled) {
       return ClipRRect(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(cornerRadius)),
+        borderRadius: borderRadius,
         child: SizedBox(
           height: height,
           child: DecoratedBox(
-            decoration: BoxDecoration(gradient: fallbackGradient),
+            decoration: BoxDecoration(
+              gradient: _proxySheetHeaderGradient(color, height),
+            ),
             child: child,
           ),
         ),
       );
     }
     return ClipRRect(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(cornerRadius)),
+      borderRadius: borderRadius,
       child: SizedBox(
         height: height,
         child: RepaintBoundary(
           child: Stack(
             clipBehavior: Clip.hardEdge,
             children: [
-              if (enabled)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: height,
-                  child: const IgnorePointer(
-                    child: _ProxySheetProgressiveBlur(),
-                  ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: height,
+                child: IgnorePointer(
+                  child: _ProxySheetProgressiveBlur(height: height),
                 ),
+              ),
               Positioned(left: 0, right: 0, top: 0, child: child),
             ],
           ),
@@ -66,24 +82,19 @@ class _ProxySheetHeaderBackdrop extends StatelessWidget {
   }
 }
 
-/// Lightweight header merge effect for Android cool/balanced paths.
+/// Header backdrop for device tiers that opt in to the layered sheet.
 class _ProxySheetProgressiveBlur extends StatelessWidget {
-  const _ProxySheetProgressiveBlur();
+  const _ProxySheetProgressiveBlur({required this.height});
+
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.scaffoldBackgroundColor;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.94),
-            color.withValues(alpha: 0.70),
-            color.withValues(alpha: 0.0),
-          ],
+        gradient: _proxySheetHeaderGradient(
+          Theme.of(context).scaffoldBackgroundColor,
+          height,
         ),
       ),
     );
@@ -234,7 +245,8 @@ class _ProxySheetHeader extends StatelessWidget {
                         ValueListenableBuilder<UrlTestProgressState>(
                           valueListenable: urlTestProgressListenable!,
                           builder: (context, progressState, _) {
-                            final showProgress = progressState.total > 0 &&
+                            final showProgress =
+                                progressState.total > 0 &&
                                 (progressState.isRunning ||
                                     progressState.hasResults ||
                                     progressState.isCancelled);
@@ -242,16 +254,17 @@ class _ProxySheetHeader extends StatelessWidget {
                               return const SizedBox.shrink();
                             }
                             final statusText =
-                                (progressState.isRunning || progressState.isCancelled)
-                                    ? l10n.proxiesProgressWorkingTested(
-                                        progressState.working,
-                                        progressState.total,
-                                        progressState.tested,
-                                      )
-                                    : l10n.proxiesProgressWorking(
-                                        progressState.working,
-                                        progressState.total,
-                                      );
+                                (progressState.isRunning ||
+                                    progressState.isCancelled)
+                                ? l10n.proxiesProgressWorkingTested(
+                                    progressState.working,
+                                    progressState.total,
+                                    progressState.tested,
+                                  )
+                                : l10n.proxiesProgressWorking(
+                                    progressState.working,
+                                    progressState.total,
+                                  );
                             return Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Column(
@@ -259,7 +272,11 @@ class _ProxySheetHeader extends StatelessWidget {
                                 children: [
                                   Text(
                                     statusText,
-                                    maxLines: 1,
+                                    // Two lines: the band is bounded by the
+                                    // back and action buttons, and the running
+                                    // variant ("… · проверено …") is wider than
+                                    // it on every non-English locale.
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.labelSmall?.copyWith(
@@ -268,7 +285,9 @@ class _ProxySheetHeader extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 3),
                                   _ProxyTestProgressBar(
-                                    key: const ValueKey('proxy-test-progress-bar'),
+                                    key: const ValueKey(
+                                      'proxy-test-progress-bar',
+                                    ),
                                     total: progressState.total,
                                     working: progressState.working,
                                     failed: progressState.failed,
@@ -325,9 +344,9 @@ class _ProxySheetHeader extends StatelessWidget {
                                   valueListenable: urlTestInFlightListenable!,
                                   builder: (context, inFlight, _) =>
                                       _buildUrlTestButton(
-                                    l10n: l10n,
-                                    inFlight: inFlight,
-                                  ),
+                                        l10n: l10n,
+                                        inFlight: inFlight,
+                                      ),
                                 )
                               : _buildUrlTestButton(
                                   l10n: l10n,
@@ -363,9 +382,7 @@ class _ProxySheetHeader extends StatelessWidget {
       onPressed: () => onUrlTest(),
       tooltip: inFlight ? l10n.cancel : l10n.urlTestTitle,
       icon: Icon(
-        inFlight
-            ? FluentIcons.dismiss_24_filled
-            : FluentIcons.flash_24_filled,
+        inFlight ? FluentIcons.dismiss_24_filled : FluentIcons.flash_24_filled,
       ),
     );
   }
@@ -676,8 +693,9 @@ class _ProxyTestProgressBar extends StatelessWidget {
         ? Colors.lightGreen
         : Colors.green;
     final failedColor = theme.colorScheme.error;
-    final pendingColor =
-        theme.colorScheme.outlineVariant.withValues(alpha: 0.38);
+    final pendingColor = theme.colorScheme.outlineVariant.withValues(
+      alpha: 0.38,
+    );
 
     final safeWorking = working.clamp(0, total);
     final safeFailed = failed.clamp(0, total - safeWorking);
@@ -711,4 +729,3 @@ class _ProxyTestProgressBar extends StatelessWidget {
     );
   }
 }
-
