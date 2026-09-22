@@ -230,10 +230,7 @@ class LatencyCoordinator {
         timeSeconds <= (_acceptedEventTimes[tag] ?? 0);
   }
 
-  Future<bool> runFull({
-    required String reason,
-    String mode = 'manual',
-  }) {
+  Future<bool> runFull({required String reason, String mode = 'manual'}) {
     return _runGroupSession(
       kind: LatencySessionKind.full,
       reason: reason,
@@ -665,25 +662,27 @@ class LatencyCoordinator {
           '${capabilities.urlTestCompletionModel.name}',
     );
 
-    // Allow the coalesced result stream to drain after the native deadline.
-    if (!_usesSessionEvents || request.mode != 'manual') {
-      final nativeBudget =
-          Duration(milliseconds: request.deadlineMillis) +
-          const Duration(seconds: 5);
-      final sessionBudget =
-          capabilities.supportsUrlTestDeadline && request.deadlineMillis > 0
-          ? (nativeBudget < uiPolicy.hardWatchdog
-                ? nativeBudget
-                : uiPolicy.hardWatchdog)
-          : uiPolicy.hardWatchdog;
-      _watchdogTimer = Timer(sessionBudget, () {
-        if (generation != _generation) return;
-        _settleCurrent(
-          success: _successfulTags.isNotEmpty,
-          reason: 'hard_watchdog',
-        );
-      });
-    }
+    // Every session needs a backstop. Manual session-event runs settle from
+    // core events, so a core that accepts the URLTest and then never emits a
+    // terminal event — a service reload mid-test is enough — would otherwise
+    // leave isRunning true forever, pinning the spinner and blocking every
+    // automatic check. Whatever did arrive still counts as success.
+    final nativeBudget =
+        Duration(milliseconds: request.deadlineMillis) +
+        const Duration(seconds: 5);
+    final sessionBudget =
+        capabilities.supportsUrlTestDeadline && request.deadlineMillis > 0
+        ? (nativeBudget < uiPolicy.hardWatchdog
+              ? nativeBudget
+              : uiPolicy.hardWatchdog)
+        : uiPolicy.hardWatchdog;
+    _watchdogTimer = Timer(sessionBudget, () {
+      if (generation != _generation) return;
+      _settleCurrent(
+        success: _successfulTags.isNotEmpty,
+        reason: 'hard_watchdog',
+      );
+    });
     unawaited(
       _invokeNativeTest(
         generation: generation,

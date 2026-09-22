@@ -252,6 +252,33 @@ void main() {
   });
 
   test(
+    'manual session event run releases when the core stays silent',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const ['a', 'b'],
+        capabilities: _v3Capabilities,
+        uiPolicy: const LatencyUiPolicy(
+          rpcAckTimeout: Duration(milliseconds: 20),
+          initialEventTimeout: Duration(milliseconds: 20),
+          eventInactivityTimeout: Duration(milliseconds: 20),
+          hardWatchdog: Duration(milliseconds: 60),
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      // The core acknowledges the URLTest and then emits nothing, for example
+      // because the service reloaded mid-test. Without a watchdog the session
+      // would report isRunning forever and block every automatic check.
+      final result = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(coordinator.isRunning, isFalse);
+      expect(await result, isFalse);
+    },
+  );
+
+  test(
     '900 queued proxies keep checking across gaps between batches',
     () async {
       final tags = List.generate(900, (index) => 'proxy-$index');
@@ -865,7 +892,8 @@ void main() {
       final cancellations = <String>[];
       final coordinator = LatencyCoordinator(
         runTest: (request) async => requests.add(request),
-        cancelTest: (group, target) async => cancellations.add('$group|$target'),
+        cancelTest: (group, target) async =>
+            cancellations.add('$group|$target'),
         isConnected: () => true,
         isForeground: () => true,
         activeOutboundTag: () => 'a',
