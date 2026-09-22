@@ -54,6 +54,15 @@ jobs:
           flutter --version
           dart --version
 
+      # Pigeon emits unformatted Dart, so its output is exempt: hand-formatting
+      # a generated file would be undone by the next `dart run pigeon`.
+      - name: Check formatting
+        shell: bash
+        run: |
+          git ls-files 'lib/*.dart' 'test/*.dart' \
+            | grep -v '\.g\.dart$' \
+            | xargs -n 50 dart format --output=none --set-exit-if-changed
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -70,7 +79,7 @@ jobs:
           fi
 
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --fatal-infos
 
       - name: Test
         run: flutter test
