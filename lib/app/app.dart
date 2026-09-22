@@ -6289,7 +6289,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (wasRetryScheduled) {
       _runtimeRecovery.cancelRetry();
     }
-    if (await _tryRecoverFromInvalidOutbound(error)) {
+    bool recovered;
+    try {
+      recovered = await _tryRecoverFromInvalidOutbound(error);
+    } catch (recoveryError, recoveryStackTrace) {
+      // Recovery rebuilds can throw (incompatible libbox contract, missing
+      // config path). This handler is often invoked unawaited, so an escaping
+      // error would leave the user stuck on "Recovering" with the desired
+      // runtime intent still set and no failure dialog.
+      AppLogStore.error(
+        'sing-box',
+        'Automatic outbound recovery failed: $recoveryError\n'
+            '$recoveryStackTrace',
+      );
+      recovered = false;
+    }
+    if (recovered) {
       if (mounted) {
         setState(() {
           _setConnectionPhase(
