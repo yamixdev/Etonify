@@ -506,6 +506,15 @@ class SingboxConfigCoordinator {
         trimMemory: _trimRuntimeStartMemory,
         onWatchdogTimeout: _onRuntimeLifecycleTimeout,
       );
+      if (result.success) {
+        // The native core is now serving this build, so the promoted file is
+        // authoritative. Rolling it back because a newer apply was requested
+        // mid-flight would leave the disk behind the running core, and the
+        // next service restart would silently restore superseded settings.
+        runtimeApplySucceeded = true;
+        await preparedConfigTransaction?.commit();
+        preparedConfigTransaction = null;
+      }
       if (!_isMounted() || !_isCurrentApply(generation)) {
         return _recordApplyResult(
           SingboxConfigApplyResult(
@@ -529,9 +538,6 @@ class SingboxConfigCoordinator {
           ),
         );
       }
-      runtimeApplySucceeded = true;
-      await preparedConfigTransaction?.commit();
-      preparedConfigTransaction = null;
       if (result.policy == RuntimeApplyPolicy.safeCoreRestart) {
         _setPhase(SingboxConfigCoordinatorPhase.connected);
         if (result.recovered) {
@@ -841,8 +847,21 @@ class SingboxConfigCoordinator {
     );
   }
 
-  Future<String?> ensureSingboxConfigPath() {
-    return _singboxConfigPathFuture ??= _readConfigPath();
+  Future<String?> ensureSingboxConfigPath() async {
+    final pending = _singboxConfigPathFuture ??= _readConfigPath();
+    try {
+      return await pending;
+    } catch (_) {
+      // Only a successful read may be memoised. The host can answer
+      // getConfigPath with a transient PlatformException, for example while
+      // an Activity recreation occupies the native lane; caching that
+      // rejection would disable prepared-config promotion for the rest of the
+      // process lifetime.
+      if (identical(_singboxConfigPathFuture, pending)) {
+        _singboxConfigPathFuture = null;
+      }
+      rethrow;
+    }
   }
 
   Future<RuntimeApplyPolicy> _resolveRuntimeApplyPolicy({

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
@@ -213,6 +214,72 @@ void main() {
     expect(
       temp.listSync().whereType<File>().map((file) => file.path),
       everyElement(isNot(contains('.rollback.'))),
+    );
+  });
+
+  test(
+    'superseded apply that already reached the core keeps its config file',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'etonify-config-supersede-',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+      final target = File('${temp.path}/config.json')..writeAsStringSync('old');
+      final candidate = File('${temp.path}/candidate.json')
+        ..writeAsStringSync('new');
+      final runtime = _SupersedingPreparedRuntime();
+      final lifecycle = RuntimeLifecycleController(
+        runtime: runtime,
+        healthCheckTimeout: const Duration(milliseconds: 20),
+      );
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+      );
+      addTearDown(coordinator.dispose);
+      runtime.onApply = () async => coordinator.cancelPendingWork(
+        reason: 'newer settings change requested',
+      );
+
+      final result = await coordinator.applyRuntimeConfig(
+        build: _build('', configPath: candidate.path),
+        useVpn: true,
+        restartRuntime: true,
+      );
+
+      expect(result.status, SingboxConfigApplyStatus.superseded);
+      expect(target.readAsStringSync(), 'new');
+      expect(
+        temp.listSync().whereType<File>().map((file) => file.path),
+        everyElement(isNot(contains('.rollback.'))),
+      );
+    },
+  );
+
+  test('transient config path failure is not memoised', () async {
+    var remainingFailures = 1;
+    final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(
+      runtimeLifecycle: lifecycle,
+      readConfigPath: () async {
+        if (remainingFailures > 0) {
+          remainingFailures--;
+          throw PlatformException(code: 'channel-error');
+        }
+        return '/data/user/0/com.example/config.json';
+      },
+    );
+    addTearDown(coordinator.dispose);
+
+    await expectLater(
+      coordinator.ensureSingboxConfigPath(),
+      throwsA(isA<PlatformException>()),
+    );
+    expect(
+      await coordinator.ensureSingboxConfigPath(),
+      '/data/user/0/com.example/config.json',
     );
   });
 
@@ -443,6 +510,21 @@ class _FailingPreparedRuntime extends _BlockingRuntime {
   @override
   Future<void> startPrepared({required bool useVpn}) async {
     throw StateError('prepared restart failed');
+  }
+}
+
+/// Applies the prepared config successfully, but lets the test supersede the
+/// running generation while the native call is still in flight.
+class _SupersedingPreparedRuntime extends _BlockingRuntime {
+  Future<void> Function()? onApply;
+
+  @override
+  Future<void> applyPreparedConfig({
+    required bool useVpn,
+    required bool restartCore,
+  }) async {
+    await onApply?.call();
+    _confirmCoreRestart(useVpn: useVpn);
   }
 }
 
