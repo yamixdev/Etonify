@@ -829,6 +829,7 @@ class ParsedOutboundSchema {
     if (normalized.isEmpty || normalized == 'none') {
       return true;
     }
+    if (normalized.length > 16 * 1024) return false;
 
     final parts = normalized.split('.');
     if (parts.length < 4) {
@@ -843,23 +844,24 @@ class ParsedOutboundSchema {
     if (parts[2] != '0rtt' && parts[2] != '1rtt') {
       return false;
     }
-    return _isValidVlessEncryptionKey(parts.sublist(3).join('.'));
+    var keysStarted = false;
+    var keyCount = 0;
+    for (final part in parts.skip(3)) {
+      if (part.length < 20) {
+        if (keysStarted) return false;
+        continue;
+      }
+      keysStarted = true;
+      if (!_isValidVlessEncryptionKey(part)) return false;
+      keyCount++;
+      if (keyCount > 8) return false;
+    }
+    return keyCount > 0;
   }
 
   static bool _isValidVlessEncryptionKey(String value) {
-    if (value.isEmpty || value.length < 20) {
-      return false;
-    }
-    if (value.contains(RegExp(r'\s'))) {
-      return false;
-    }
-    // Some Happ/Astracat subscriptions use a structured custom-encryption
-    // payload with dot-separated tuning fields before the key material.
-    // sing-box accepts the value as an opaque VLESS encryption string, so keep
-    // obviously structured values instead of dropping the whole outbound.
-    if (value.contains('.') && RegExp(r'^[A-Za-z0-9_.-]+$').hasMatch(value)) {
-      return true;
-    }
+    // The core uses base64.RawURLEncoding: padding characters are invalid.
+    if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value)) return false;
     final padded = switch (value.length % 4) {
       0 => value,
       2 => '$value==',

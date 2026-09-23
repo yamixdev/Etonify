@@ -57,6 +57,28 @@ class SubscriptionProfileFlowDecision {
   bool get shouldReload => reloadPlan != null;
   bool get shouldStopRuntime => stopReason != null;
   bool get isProfileSwitch => kind == SubscriptionProfileFlowKind.selectProfile;
+
+  /// A failed stop leaves the old tunnel active, even when its profile was
+  /// deleted from storage. Do not present another profile as the live one.
+  bool canApplyReloadAfterStop(bool stopped) => !shouldStopRuntime || stopped;
+}
+
+/// Remembers a deleted active profile when its VPN tunnel could not stop.
+/// The catalog is reconciled only after the old tunnel has actually stopped.
+class DeferredProfileDeletionReload {
+  String? _pendingProfileId;
+
+  void defer(String profileId) {
+    final normalized = profileId.trim();
+    if (normalized.isNotEmpty) _pendingProfileId = normalized;
+  }
+
+  String? takeAfterStop({required bool stopped}) {
+    if (!stopped) return null;
+    final pending = _pendingProfileId;
+    _pendingProfileId = null;
+    return pending;
+  }
 }
 
 /// Decides how to apply the result returned by the subscriptions sheet.

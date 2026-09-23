@@ -5,6 +5,37 @@ import 'package:meow_client/app/runtime_event_controller.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 void main() {
+  test('early URLTest results wait for the matching session', () {
+    const oldResult = RuntimeUrlTestResult(
+      tag: 'server-a',
+      measuredAtMillis: 1000,
+      delay: 60,
+      status: 'available',
+      error: '',
+      errorCode: '',
+      revision: 1,
+      networkGeneration: 2,
+      sessionId: 7,
+    );
+    const newResult = RuntimeUrlTestResult(
+      tag: 'server-a',
+      measuredAtMillis: 1001,
+      delay: 75,
+      status: 'available',
+      error: '',
+      errorCode: '',
+      revision: 2,
+      networkGeneration: 2,
+      sessionId: 8,
+    );
+    final pending = PendingRuntimeUrlTestResults();
+    pending.remember(oldResult);
+    pending.remember(newResult);
+
+    expect(pending.takeForSession(8), [newResult]);
+    expect(pending.takeForSession(7), isEmpty);
+  });
+
   test(
     'early group snapshots coalesce and replay once for the same runtime',
     () {

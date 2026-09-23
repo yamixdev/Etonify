@@ -51,3 +51,57 @@ class UrlTestProgressState {
   int get hashCode =>
       Object.hash(isRunning, isCancelled, total, working, failed);
 }
+
+/// Keeps the proxy header totals current without rescanning a subscription for
+/// every URLTest result. A full scan is needed only when the active testable
+/// server set changes.
+class UrlTestProgressCounter {
+  Set<String> _tags = const <String>{};
+  final Map<String, bool> _results = <String, bool>{};
+  int _working = 0;
+  int _failed = 0;
+
+  void reset({
+    required Iterable<String> visibleTags,
+    required Set<String> testableTags,
+    required bool? Function(String tag) resultForTag,
+  }) {
+    _tags = visibleTags.where(testableTags.contains).toSet();
+    _results.clear();
+    _working = 0;
+    _failed = 0;
+    update(_tags, resultForTag);
+  }
+
+  void update(
+    Iterable<String> changedTags,
+    bool? Function(String tag) resultForTag,
+  ) {
+    for (final tag in changedTags) {
+      if (!_tags.contains(tag)) continue;
+      final previous = _results[tag];
+      final next = resultForTag(tag);
+      if (previous == next) continue;
+      if (previous == true) _working--;
+      if (previous == false) _failed--;
+      if (next == null) {
+        _results.remove(tag);
+      } else {
+        _results[tag] = next;
+      }
+      if (next == true) _working++;
+      if (next == false) _failed++;
+    }
+  }
+
+  UrlTestProgressState state({
+    bool isRunning = false,
+    bool isCancelled = false,
+  }) => UrlTestProgressState(
+    isRunning: isRunning,
+    isCancelled: isCancelled,
+    total: _tags.length,
+    working: _working,
+    failed: _failed,
+  );
+}

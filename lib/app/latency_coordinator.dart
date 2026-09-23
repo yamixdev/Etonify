@@ -150,6 +150,8 @@ class LatencyCoordinator {
   final Map<String, int> _acceptedEventTimes = <String, int>{};
   final Set<String> _successfulTags = <String>{};
   final Map<String, int> _acceptedResultRevisions = <String, int>{};
+  final Set<String> _provisionalResultTags = <String>{};
+  final Set<String> _rejectedProvisionalTags = <String>{};
   final Map<String, _ActiveTargetCheck> _activeTargetChecks =
       <String, _ActiveTargetCheck>{};
   Completer<bool>? _sessionResult;
@@ -172,6 +174,10 @@ class LatencyCoordinator {
   bool get isRunning =>
       _phase == LatencySessionPhase.startingRpc ||
       _phase == LatencySessionPhase.collectingEvents;
+  bool get awaitingCoreSession =>
+      _usesSessionEvents && isRunning && _nativeSessionId == 0;
+  bool hasActiveTargetCheck(String tag) =>
+      _activeTargetChecks.containsKey(tag.trim());
   bool get canStartSession =>
       !_disposed && !isRunning && _nativeSessionFinished == null;
   bool get isCurrentSessionManual =>
@@ -432,7 +438,7 @@ class LatencyCoordinator {
       return false;
     }
     final activeCheck = _activeTargetChecks[normalizedTag];
-    if (isRunning && _nativeSessionId == 0) {
+    if (isRunning && _nativeSessionId == 0 && activeCheck == null) {
       // Results can reach the client before the session's `running` event does.
       // Pin the identifier from the first one so those measurements are not
       // discarded; the `running` event still overrides this guess below.
@@ -448,6 +454,13 @@ class LatencyCoordinator {
       return false;
     }
     _acceptedResultRevisions[normalizedTag] = revision;
+    if (belongsToMainSession) {
+      if (_nativeSessionIdPinnedByResult) {
+        _provisionalResultTags.add(normalizedTag);
+      } else {
+        _rejectedProvisionalTags.remove(normalizedTag);
+      }
+    }
     if (activeCheck != null) {
       activeCheck.timeoutTimer?.cancel();
       _activeTargetChecks.remove(normalizedTag);
@@ -461,6 +474,11 @@ class LatencyCoordinator {
         _successfulTags.remove(normalizedTag);
       }
       _phase = LatencySessionPhase.collectingEvents;
+      if (belongsToMainSession && _sessionMode == 'manual') {
+        // An exhaustive sweep can outlive the absolute UI watchdog on large
+        // subscriptions. Only silence, not total elapsed time, is a stall.
+        _armWatchdog(uiPolicy.hardWatchdog);
+      }
     }
     return true;
   }
@@ -491,6 +509,15 @@ class LatencyCoordinator {
           !_nativeSessionIdPinnedByResult) {
         return false;
       }
+      if (_nativeSessionIdPinnedByResult && _nativeSessionId != sessionId) {
+        for (final tag in _provisionalResultTags) {
+          _acceptedEventTimes.remove(tag);
+          _successfulTags.remove(tag);
+          _acceptedResultRevisions.remove(tag);
+        }
+        _rejectedProvisionalTags.addAll(_provisionalResultTags);
+      }
+      _provisionalResultTags.clear();
       _nativeSessionId = sessionId;
       _nativeSessionIdPinnedByResult = false;
       _phase = LatencySessionPhase.collectingEvents;
@@ -533,6 +560,8 @@ class LatencyCoordinator {
     _acceptedEventTimes.clear();
     _successfulTags.clear();
     _acceptedResultRevisions.clear();
+    _provisionalResultTags.clear();
+    _rejectedProvisionalTags.clear();
     _nativeSessionId = 0;
     _sessionMode = '';
     _sessionReason = '';
@@ -671,6 +700,8 @@ class LatencyCoordinator {
     _acceptedEventTimes.clear();
     _successfulTags.clear();
     _acceptedResultRevisions.clear();
+    _provisionalResultTags.clear();
+    _rejectedProvisionalTags.clear();
     _nativeSessionId = 0;
     _sessionMode = request.mode;
     _sessionReason = reason;
@@ -703,13 +734,7 @@ class LatencyCoordinator {
               ? nativeBudget
               : uiPolicy.hardWatchdog)
         : uiPolicy.hardWatchdog;
-    _watchdogTimer = Timer(sessionBudget, () {
-      if (generation != _generation) return;
-      _settleCurrent(
-        success: _successfulTags.isNotEmpty,
-        reason: 'hard_watchdog',
-      );
-    });
+    _armWatchdog(sessionBudget);
     unawaited(
       _invokeNativeTest(
         generation: generation,
@@ -803,6 +828,33 @@ class LatencyCoordinator {
     return !_disposed && generation == _generation && isRunning;
   }
 
+  void _armWatchdog(Duration budget) {
+    _watchdogTimer?.cancel();
+    final generation = _generation;
+    _watchdogTimer = Timer(budget, () {
+      if (!_isActiveGeneration(generation)) return;
+      unawaited(_expireWatchdog(generation));
+    });
+  }
+
+  Future<void> _expireWatchdog(int generation) async {
+    final cancelTest = _cancelTest;
+    if (_usesSessionEvents &&
+        _capabilities.supportsUrlTestCancel &&
+        cancelTest != null) {
+      try {
+        await cancelTest('select', _targetTag).timeout(uiPolicy.rpcAckTimeout);
+      } catch (error) {
+        AppLogStore.warning('latency', 'native URLTest cancel failed: $error');
+      }
+    }
+    if (!_isActiveGeneration(generation)) return;
+    _settleCurrent(
+      success: _successfulTags.isNotEmpty,
+      reason: 'hard_watchdog',
+    );
+  }
+
   /// Counts servers the core measured but this session never recorded.
   ///
   /// The runtime's own latency map is the authoritative tally of what the core
@@ -815,6 +867,7 @@ class LatencyCoordinator {
     final measuredAt = _eventBaselineTimes();
     for (final tag in _sessionExpectedTags) {
       if (_acceptedEventTimes.containsKey(tag)) continue;
+      if (_rejectedProvisionalTags.contains(tag)) continue;
       final seconds = measuredAt[tag] ?? 0;
       if (seconds >= _sessionStartedAtSeconds &&
           seconds > (_baselineEventTimes[tag] ?? 0)) {
@@ -842,6 +895,8 @@ class LatencyCoordinator {
     _sessionExpectedTags = const <String>{};
     _acceptedEventTimes.clear();
     _successfulTags.clear();
+    _provisionalResultTags.clear();
+    _rejectedProvisionalTags.clear();
     _nativeSessionId = 0;
     _sessionMode = '';
     _sessionReason = '';

@@ -215,11 +215,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
   );
   final ValueNotifier<UrlTestProgressState> _urlTestProgressNotifier =
       ValueNotifier<UrlTestProgressState>(const UrlTestProgressState());
+  final UrlTestProgressCounter _urlTestProgressCounter =
+      UrlTestProgressCounter();
+  final PendingRuntimeUrlTestResults _pendingUrlTestResults =
+      PendingRuntimeUrlTestResults();
+  bool _fullUrlTestSessionRunning = false;
   bool _urlTestCancelled = false;
   int _startupGroupUrlTestNativeGeneration = 0;
   late final SubscriptionCoordinator _subscriptionCoordinator;
   static const SubscriptionProfileFlowController _subscriptionProfileFlow =
       SubscriptionProfileFlowController();
+  final DeferredProfileDeletionReload _deferredProfileDeletionReload =
+      DeferredProfileDeletionReload();
   AppProfileSummary? _activeProfileCache;
   AppProxySummary? _displayProxyCache;
   List<AppProxySummary> _activeProxiesCache = const [];
@@ -2094,6 +2101,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
       onSessionChanged: (running, kind, targetTag) {
+        final fullSessionRunning = running && kind == LatencySessionKind.full;
+        if (!running || (fullSessionRunning && !_fullUrlTestSessionRunning)) {
+          _pendingUrlTestResults.clear();
+        }
+        _fullUrlTestSessionRunning = fullSessionRunning;
         _urlTestInFlightNotifier.value =
             running && (kind == null || kind == LatencySessionKind.full);
         ref
@@ -3659,6 +3671,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _applyRuntimeStateToDerivedCaches();
     });
     unawaited(_syncQuickSettingsTileLabel());
+    final deletedProfileId = _deferredProfileDeletionReload.takeAfterStop(
+      stopped: true,
+    );
+    if (deletedProfileId != null && mounted) {
+      await _reloadSubscriptions(
+        preferredSubscriptionId: deletedProfileId,
+        applyRuntime: false,
+        resetRuntimeState: true,
+      );
+    }
     if (startAfterStop && mounted) {
       AppLogStore.info(
         'runtime',
@@ -4044,36 +4066,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _updateUrlTestProgress({bool? isRunning, bool? isCancelled}) {
-    final tags = _userVisibleServerTags();
-    final total = tags.length;
-    var working = 0;
-    var failed = 0;
+    _urlTestProgressCounter.reset(
+      visibleTags: _userVisibleServerTags(),
+      testableTags: _runtimeRecovery.lastStartedUrlTestOutboundTags,
+      resultForTag: _urlTestProgressResultForTag,
+    );
+    _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
+      isRunning: isRunning ?? _latencyCoordinator.isRunning,
+      isCancelled: isCancelled ?? _urlTestCancelled,
+    );
+  }
 
-    for (final tag in tags) {
-      if (_proxyRuntime.isLatencyInvalidated(tag)) {
-        continue;
-      }
-      if (!_proxyRuntime.runtimeLatencyTimes.containsKey(tag)) {
-        continue;
-      }
-      final latency = _proxyRuntime.runtimeLatencies[tag];
-      if (latency != null && latency > 0) {
-        working++;
-      } else if (_proxyRuntime.unavailableLatencyTags.contains(tag) ||
-          _proxyRuntime.latencyErrors.containsKey(tag)) {
-        failed++;
-      }
+  bool? _urlTestProgressResultForTag(String tag) {
+    if (_proxyRuntime.isLatencyInvalidated(tag) ||
+        !_proxyRuntime.runtimeLatencyTimes.containsKey(tag)) {
+      return null;
     }
+    final latency = _proxyRuntime.runtimeLatencies[tag];
+    if (latency != null && latency > 0) return true;
+    if (_proxyRuntime.unavailableLatencyTags.contains(tag) ||
+        _proxyRuntime.latencyErrors.containsKey(tag)) {
+      return false;
+    }
+    return null;
+  }
 
-    final running = isRunning ?? _latencyCoordinator.isRunning;
-    final cancelled = isCancelled ?? _urlTestCancelled;
-
-    _urlTestProgressNotifier.value = UrlTestProgressState(
-      isRunning: running,
-      isCancelled: cancelled,
-      total: total,
-      working: working,
-      failed: failed,
+  void _updateUrlTestProgressForTags(Iterable<String> changedTags) {
+    _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
+    _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
+      isRunning: _latencyCoordinator.isRunning,
+      isCancelled: _urlTestCancelled,
     );
   }
 
@@ -4962,10 +4984,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (!mounted) {
         return;
       }
-      // A failed switch must not layer the new profile's config onto a tunnel
-      // that is still up. A deleted profile is the other way round: leaving
-      // it in the catalog would be worse, so the reload goes ahead.
-      if (!stopped && decision.isProfileSwitch) {
+      // Keep the in-memory active profile aligned with the still-running
+      // tunnel. The deleted store entry can be reconciled after a later stop.
+      if (!decision.canApplyReloadAfterStop(stopped)) {
+        if (decision.stopReason == 'active_profile_deleted') {
+          _deferredProfileDeletionReload.defer(session.activeProfileId);
+        }
+        return;
+      }
+      if (decision.stopReason == 'active_profile_deleted' &&
+          _activeProfileId != session.activeProfileId) {
+        // A prior failed stop may have reconciled the catalog inside this
+        // successful stop. Avoid applying the same reload twice.
         return;
       }
     }
@@ -6159,33 +6189,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final result = event.result;
     if (result != null &&
         result.networkGeneration == _networkInterfaceGeneration) {
-      final affectedTags = _proxyRuntime.applyUrlTestResult(
-        tag: result.tag,
-        measuredAtMillis: result.measuredAtMillis,
-        delay: result.delay,
-        status: result.status,
-        error: result.error,
-        revision: result.revision,
-      );
-      if (affectedTags.isNotEmpty) {
-        _latencyCoordinator.handleCoreResult(
-          tag: result.tag,
-          sessionId: result.sessionId,
-          revision: result.revision,
-          available:
-              result.delay > 0 &&
-              result.status.toLowerCase() !=
-                  ProxyRuntimeController.urlTestStatusUnavailable,
-        );
-        _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
-        _updateUrlTestProgress();
-        unawaited(_syncQuickSettingsTileLabel());
+      if (_latencyCoordinator.awaitingCoreSession &&
+          !_latencyCoordinator.hasActiveTargetCheck(result.tag)) {
+        _pendingUrlTestResults.remember(result);
+      } else {
+        _applyRuntimeUrlTestResult(result);
       }
     }
     final session = event.session;
     if (session != null &&
         session.networkGeneration == _networkInterfaceGeneration) {
-      _latencyCoordinator.handleCoreSession(
+      final accepted = _latencyCoordinator.handleCoreSession(
         sessionId: session.sessionId,
         groupTag: session.groupTag,
         targetTag: session.targetTag,
@@ -6194,7 +6208,39 @@ class _MeowClientState extends ConsumerState<MeowClient>
         terminalReason: session.terminalReason,
         available: session.available,
       );
+      if (accepted && session.state == 'running') {
+        for (final pending in _pendingUrlTestResults.takeForSession(
+          session.sessionId,
+        )) {
+          _applyRuntimeUrlTestResult(pending);
+        }
+      }
     }
+  }
+
+  void _applyRuntimeUrlTestResult(RuntimeUrlTestResult result) {
+    final accepted = _latencyCoordinator.handleCoreResult(
+      tag: result.tag,
+      sessionId: result.sessionId,
+      revision: result.revision,
+      available:
+          result.delay > 0 &&
+          result.status.toLowerCase() !=
+              ProxyRuntimeController.urlTestStatusUnavailable,
+    );
+    if (!accepted) return;
+    final affectedTags = _proxyRuntime.applyUrlTestResult(
+      tag: result.tag,
+      measuredAtMillis: result.measuredAtMillis,
+      delay: result.delay,
+      status: result.status,
+      error: result.error,
+      revision: result.revision,
+    );
+    if (affectedTags.isEmpty) return;
+    _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
+    _updateUrlTestProgressForTags(affectedTags);
+    unawaited(_syncQuickSettingsTileLabel());
   }
 
   Future<void> _syncRuntimeState() async {
@@ -6728,7 +6774,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     try {
       if (!_settings.hwidDefaultNoticeShown) {
         final l10n = AppLocalizations.of(initialContext);
-        await showDialog<void>(
+        final acknowledged = await showDialog<bool>(
           context: initialContext,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
@@ -6737,20 +6783,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
             actions: [
               FilledButton(
                 key: const ValueKey('hwid-default-notice-ok'),
-                onPressed: () => Navigator.of(dialogContext).pop(),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: Text(l10n.hwidDefaultEnabledNoticeAction),
               ),
             ],
           ),
         );
-        if (mounted) {
-          _applySettingsChange(_settings.acknowledgeHwidDefaultNotice);
-          _lastAppliedSettingsState =
-              (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
-                hwidDefaultNoticeShown: true,
-              );
-          await _persistState();
-        }
+        if (acknowledged != true || !mounted) return;
+        _applySettingsChange(_settings.acknowledgeHwidDefaultNotice);
+        _lastAppliedSettingsState =
+            (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+              hwidDefaultNoticeShown: true,
+            );
+        await _persistState();
       }
 
       if (mounted && !_autoCheckNoticeAcknowledged) {
@@ -6759,7 +6804,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           return;
         }
         final l10n = AppLocalizations.of(currentContext);
-        await showDialog<void>(
+        final acknowledged = await showDialog<bool>(
           context: currentContext,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
@@ -6768,13 +6813,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
             actions: [
               FilledButton(
                 key: const ValueKey('auto-check-notice-ok'),
-                onPressed: () => Navigator.of(dialogContext).pop(),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
                 child: Text(l10n.autoCheckDisabledNoticeAction),
               ),
             ],
           ),
         );
-        if (mounted) {
+        if (acknowledged == true && mounted) {
           _applySettingsChange(_settings.acknowledgeAutoCheckNotice);
           _lastAppliedSettingsState =
               (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(

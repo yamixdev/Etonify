@@ -280,6 +280,61 @@ void main() {
   );
 
   test(
+    'manual exhaustive sweep stays active while results keep arriving',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const ['a', 'b', 'c'],
+        capabilities: _v3Capabilities,
+        uiPolicy: const LatencyUiPolicy(
+          rpcAckTimeout: Duration(milliseconds: 20),
+          initialEventTimeout: Duration(milliseconds: 20),
+          eventInactivityTimeout: Duration(milliseconds: 20),
+          hardWatchdog: Duration(milliseconds: 180),
+        ),
+      );
+      addTearDown(coordinator.dispose);
+
+      final completed = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      coordinator.handleCoreSession(
+        sessionId: 3,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 110));
+      coordinator.handleCoreResult(
+        tag: 'a',
+        sessionId: 3,
+        revision: 1,
+        available: true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 110));
+      coordinator.handleCoreResult(
+        tag: 'b',
+        sessionId: 3,
+        revision: 2,
+        available: true,
+      );
+      expect(coordinator.isRunning, isTrue);
+      coordinator.handleCoreSession(
+        sessionId: 3,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 2,
+      );
+      expect(await completed, isTrue);
+    },
+  );
+
+  test(
     '900 queued proxies keep checking across gaps between batches',
     () async {
       final tags = List.generate(900, (index) => 'proxy-$index');
@@ -974,6 +1029,7 @@ void main() {
       expect(requests.last.targetOutboundTag, 'server-1');
       expect(requests.last.force, isTrue);
       expect(coordinator.isChecking('server-1'), isTrue);
+      expect(coordinator.hasActiveTargetCheck('server-1'), isTrue);
 
       expect(
         coordinator.handleCoreResult(
@@ -986,6 +1042,7 @@ void main() {
       );
 
       expect(coordinator.isChecking('server-1'), isFalse);
+      expect(coordinator.hasActiveTargetCheck('server-1'), isFalse);
       expect(coordinator.isChecking('server-2'), isTrue);
       expect(coordinator.isRunning, isTrue);
       expect(await targetResult, isTrue);
@@ -1025,6 +1082,7 @@ void main() {
 
     final completed = coordinator.runFull(reason: 'manual');
     await Future<void>.delayed(Duration.zero);
+    expect(coordinator.awaitingCoreSession, isTrue);
 
     // The core can finish a probe before the session status event reaches
     // the client. Dropping it made a finished sweep look unfinished.
@@ -1064,6 +1122,7 @@ void main() {
       ),
       isTrue,
     );
+    expect(coordinator.awaitingCoreSession, isFalse);
     expect(
       coordinator.handleCoreResult(
         tag: 'b',
@@ -1093,6 +1152,103 @@ void main() {
     );
     expect(await completed, isTrue);
   });
+
+  test('early targeted result does not pin the full session ID', () async {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      expectedTags: () => const ['a', 'b'],
+      capabilities: _v3Capabilities,
+    );
+    addTearDown(coordinator.dispose);
+
+    final full = coordinator.runFull(reason: 'manual');
+    await Future<void>.delayed(Duration.zero);
+    final targeted = coordinator.runTarget(
+      targetOutboundTag: 'a',
+      reason: 'manual_tap',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'a',
+        sessionId: 16,
+        revision: 1,
+        available: true,
+      ),
+      isTrue,
+    );
+    expect(coordinator.awaitingCoreSession, isTrue);
+    expect(
+      coordinator.handleCoreSession(
+        sessionId: 15,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      ),
+      isTrue,
+    );
+    coordinator.handleCoreSession(
+      sessionId: 15,
+      groupTag: 'select',
+      targetTag: '',
+      mode: 'manual',
+      state: 'completed',
+      terminalReason: 'completed',
+      available: 1,
+    );
+    expect(await targeted, isTrue);
+    expect(await full, isTrue);
+  });
+
+  test(
+    'a delayed result from another session does not count in a new sweep',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const ['a'],
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final completed = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 7,
+          revision: 1,
+          available: true,
+        ),
+        isTrue,
+      );
+      expect(
+        coordinator.handleCoreSession(
+          sessionId: 8,
+          groupTag: 'select',
+          targetTag: '',
+          mode: 'manual',
+          state: 'running',
+          terminalReason: '',
+          available: 0,
+        ),
+        isTrue,
+      );
+      expect(coordinator.isChecking('a'), isTrue);
+      coordinator.handleCoreSession(
+        sessionId: 8,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 0,
+      );
+      expect(await completed, isFalse);
+    },
+  );
 
   test(
     'settling reports measurements the core took but events missed',

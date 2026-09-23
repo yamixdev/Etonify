@@ -644,7 +644,7 @@ void main() {
           'mlkem768x25519plus.native.0rtt.MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs';
       const structuredEncrypted =
           'mlkem768x25519plus.native.0rtt.100-111-1111.75-0-111.50-0-3333.'
-          'PJUiVjxhudMO-vFYcUl5PMO5xVg8WdG4Kbo1IVKrFuc_2kQ_Y2MsH2pErIQQ3YB0';
+          'MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs';
 
       expect(
         ParsedOutboundSchema.validate({...baseOutbound, 'encryption': 'none'}),
@@ -670,6 +670,28 @@ void main() {
       );
       expect(
         ParsedOutboundSchema.sanitize({...baseOutbound, 'encryption': 'auto'}),
+        isNull,
+      );
+    });
+
+    test('rejects structured VLESS encryption the core cannot decode', () {
+      const baseOutbound = {
+        'type': 'vless',
+        'tag': 'invalid-encryption',
+        'server': 'server.com',
+        'server_port': 443,
+        'uuid': '7c6a5b3e-4f1a-4d2b-8c9e-1a2b3c4d5e6f',
+      };
+      const invalid =
+          'mlkem768x25519plus.native.0rtt.100-111-1111.'
+          'aaaaaaaaaaaaaaaaaaaa.notakey';
+
+      expect(
+        ParsedOutboundSchema.validate({...baseOutbound, 'encryption': invalid}),
+        'invalid vless encryption: $invalid',
+      );
+      expect(
+        ParsedOutboundSchema.sanitize({...baseOutbound, 'encryption': invalid}),
         isNull,
       );
     });

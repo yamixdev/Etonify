@@ -114,6 +114,8 @@ void main() {
       expect(decision.isProfileSwitch, isFalse);
       expect(decision.shouldStopRuntime, isTrue);
       expect(decision.stopReason, 'active_profile_deleted');
+      expect(decision.canApplyReloadAfterStop(false), isFalse);
+      expect(decision.canApplyReloadAfterStop(true), isTrue);
 
       final plan = decision.reloadPlan!;
       expect(plan.applyRuntime, isFalse);
@@ -151,5 +153,14 @@ void main() {
 
     expect(decision.shouldStopRuntime, isFalse);
     expect(decision.reloadPlan!.restartRuntimeOnApply, isFalse);
+  });
+
+  test('a deleted profile is reconciled after a later successful stop', () {
+    final deferred = DeferredProfileDeletionReload();
+    deferred.defer('profile-a');
+
+    expect(deferred.takeAfterStop(stopped: false), isNull);
+    expect(deferred.takeAfterStop(stopped: true), 'profile-a');
+    expect(deferred.takeAfterStop(stopped: true), isNull);
   });
 }

@@ -124,6 +124,58 @@ void main() {
     },
   );
 
+  testWidgets('system Back does not acknowledge the auto-check notice', (
+    tester,
+  ) async {
+    final base = await MemoryAppSettingsStore().loadState();
+    final store = MemoryAppSettingsStore(
+      base.copyWith(
+        onboardingCompleted: true,
+        acceptedLegalVersion: '0.2.1',
+        acceptedLegalAtMillis: 1,
+        hwidDefaultNoticeShown: true,
+        autoCheckNoticeAcknowledged: false,
+      ),
+    );
+
+    await tester.pumpWidget(ProviderScope(child: MeowClient(store: store)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('auto-check-notice-ok')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect((await store.loadState()).autoCheckNoticeAcknowledged, isFalse);
+  });
+
+  testWidgets('system Back keeps the HWID notice pending before auto-check', (
+    tester,
+  ) async {
+    final base = await MemoryAppSettingsStore().loadState();
+    final store = MemoryAppSettingsStore(
+      base.copyWith(
+        onboardingCompleted: true,
+        acceptedLegalVersion: '0.2.1',
+        acceptedLegalAtMillis: 1,
+        hwidDefaultNoticeShown: false,
+        autoCheckNoticeAcknowledged: false,
+      ),
+    );
+
+    await tester.pumpWidget(ProviderScope(child: MeowClient(store: store)));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('hwid-default-notice-ok')),
+      findsOneWidget,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    final updated = await store.loadState();
+    expect(updated.hwidDefaultNoticeShown, isFalse);
+    expect(updated.autoCheckNoticeAcknowledged, isFalse);
+    expect(find.byKey(const ValueKey('auto-check-notice-ok')), findsNothing);
+  });
+
   testWidgets(
     'HWID and auto-check notice dialogs do NOT show during onboarding or legal consent',
     (tester) async {

@@ -95,6 +95,31 @@ class RuntimeUrlTestEvent {
   final RuntimeUrlTestSession? session;
 }
 
+/// Holds results delivered before the core's authoritative `running` event.
+/// An older session may still have events in the platform channel when the
+/// next check starts, so only replay the matching session's results.
+class PendingRuntimeUrlTestResults {
+  final Map<int, Map<String, RuntimeUrlTestResult>> _bySession = {};
+
+  void remember(RuntimeUrlTestResult result) {
+    if (result.sessionId <= 0 || result.revision <= 0) return;
+    final results = _bySession.putIfAbsent(result.sessionId, () => {});
+    final previous = results[result.tag];
+    if (previous == null || result.revision > previous.revision) {
+      results[result.tag] = result;
+    }
+  }
+
+  List<RuntimeUrlTestResult> takeForSession(int sessionId) {
+    final results = _bySession[sessionId]?.values.toList() ?? [];
+    _bySession.clear();
+    results.sort((a, b) => a.revision.compareTo(b.revision));
+    return results;
+  }
+
+  void clear() => _bySession.clear();
+}
+
 typedef RuntimeStateHandler = void Function(RuntimeStateEvent event);
 
 /// A full snapshot replaces its predecessor; never queue thousands of rows
