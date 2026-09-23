@@ -252,6 +252,7 @@ class LatencyCoordinator {
   Future<bool> runTarget({
     required String targetOutboundTag,
     required String reason,
+    bool force = true,
   }) {
     final targetTag = targetOutboundTag.trim();
     if (targetTag.isEmpty || !_capabilities.supportsTargetedUrlTest) {
@@ -269,7 +270,11 @@ class LatencyCoordinator {
           !_canRunDiagnostics()) {
         return Future<bool>.value(false);
       }
-      return _runParallelTarget(targetTag: targetTag, reason: reason);
+      return _runParallelTarget(
+        targetTag: targetTag,
+        reason: reason,
+        force: force,
+      );
     }
     return _runSession(
       kind: LatencySessionKind.targeted,
@@ -286,6 +291,7 @@ class LatencyCoordinator {
         timeoutMillis: _configuredTimeoutMillis,
         concurrency: 1,
         deadlineMillis: _targetDeadlineMillis,
+        force: force,
         mode: 'targeted',
       ),
     );
@@ -294,6 +300,7 @@ class LatencyCoordinator {
   Future<bool> _runParallelTarget({
     required String targetTag,
     required String reason,
+    required bool force,
   }) async {
     if (_activeTargetChecks.containsKey(targetTag)) {
       return true;
@@ -326,7 +333,7 @@ class LatencyCoordinator {
           timeoutMillis: _configuredTimeoutMillis,
           concurrency: 1,
           deadlineMillis: _targetDeadlineMillis,
-          force: true,
+          force: force,
           mode: 'targeted',
         ),
       ).timeout(uiPolicy.rpcAckTimeout);

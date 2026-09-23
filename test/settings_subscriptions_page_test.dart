@@ -139,10 +139,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Automatically check servers'), findsOneWidget);
+    expect(find.text('Automatically check all servers'), findsOneWidget);
     final switchFinder = find.widgetWithText(
       SwitchListTile,
-      'Automatically check servers',
+      'Automatically check all servers',
     );
     expect(switchFinder, findsOneWidget);
 

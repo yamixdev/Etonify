@@ -89,26 +89,25 @@
   "hwidDefaultEnabledNoticeTitle": "Отправка HWID",
   "hwidDefaultEnabledNoticeMessage": "Отправка HWID включена по умолчанию. Многим провайдерам нужен ID устройства для выдачи и работы подписки, иначе клиент не поддерживается.\n\nОтключить можно в любой момент: Настройки -> Общие.",
   "hwidDefaultEnabledNoticeAction": "Понятно",
-  "autoCheckServersTitle": "Автоматически проверять серверы",
-  "autoCheckServersDescription": "Проверять доступность серверов при подключении, смене сети и переключении прокси",
+  "autoCheckServersTitle": "Автоматически проверять все серверы",
+  "autoCheckServersDescription": "Проверять весь список при подключении, смене сети и выборе прокси. Выбранный сервер проверяется и без этой настройки.",
   "autoCheckDisabledNoticeTitle": "Автоматическая проверка",
-  "autoCheckDisabledNoticeMessage": "Автоматическая проверка серверов теперь выключена. Проверить все серверы можно кнопкой-молнией. Включить автоматическую проверку можно в разделе «Подписки и проверка». Режим «Самый быстрый» использует результаты уже проверенных серверов; чтобы найти лучший среди всех, проверьте весь список.",
+  "autoCheckDisabledNoticeMessage": "Полная автоматическая проверка серверов теперь выключена. Выбранный сервер всё равно проверяется после подключения, смены сети или выбора. Проверить весь список можно кнопкой-молнией, а вернуть автопроверку — в разделе «Подписки и проверка». Режим «Самый быстрый» использует уже полученные результаты; чтобы найти лучший из всех серверов, проверьте весь список.",
   "autoCheckDisabledNoticeAction": "Понятно",
-  "proxiesProgressWorkingTested": "Работают {working} / {total} · проверено {tested} / {total}",
-  "@proxiesProgressWorkingTested": {
+  "proxiesProgressWorking": "Работают {working} / {total}",
+  "proxiesProgressTested": "Проверено {tested} / {total}",
+  "@proxiesProgressTested": {
     "placeholders": {
-      "working": {
-        "type": "int"
-      },
-      "total": {
-        "type": "int"
-      },
-      "tested": {
-        "type": "int"
-      }
+      "tested": {"type": "int"},
+      "total": {"type": "int"}
     }
   },
-  "proxiesProgressWorking": "Работают {working} / {total}",
+  "proxiesTotal": "Всего {total}",
+  "@proxiesTotal": {
+    "placeholders": {
+      "total": {"type": "int"}
+    }
+  },
   "@proxiesProgressWorking": {
     "placeholders": {
       "working": {

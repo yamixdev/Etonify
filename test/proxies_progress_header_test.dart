@@ -10,6 +10,10 @@ Widget _buildHeaderTestApp({
   Locale locale = const Locale('ru'),
   double progress = 1.0,
   int proxyCount = 1,
+  bool connected = true,
+  int? serverCount,
+  int? proxyLatency,
+  bool proxyLatencyFresh = false,
 }) {
   return MaterialApp(
     locale: locale,
@@ -28,8 +32,8 @@ Widget _buildHeaderTestApp({
             port: 443,
             detailText: 'vless',
             ip: '',
-            latency: null,
-            latencyFresh: false,
+            latency: proxyLatency,
+            latencyFresh: proxyLatencyFresh,
             latencyChecking: false,
             latencyUnavailable: false,
             latencyError: null,
@@ -39,7 +43,8 @@ Widget _buildHeaderTestApp({
           ),
         ),
         selectedTag: 'node-0',
-        connected: true,
+        connected: connected,
+        serverCount: serverCount ?? proxyCount,
         progressiveBlurEnabled: false,
         embedded: true,
         sheetAtMaxExtent: true,
@@ -75,7 +80,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Работают 5 / 10 · проверено 7 / 10'), findsOneWidget);
+      expect(find.text('Работают 5 / 10'), findsOneWidget);
+      expect(find.text('Проверено 7 / 10'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('Работают 5 / 10')).style?.color,
+        Colors.green,
+      );
 
       // Verify progress bar colored boxes
       final barFinder = find.byKey(const ValueKey('proxy-test-progress-bar'));
@@ -111,6 +121,21 @@ void main() {
     },
   );
 
+  testWidgets('an incomplete run keeps its checked count visible', (
+    tester,
+  ) async {
+    final progressNotifier = ValueNotifier<UrlTestProgressState>(
+      const UrlTestProgressState(total: 239, working: 29, failed: 190),
+    );
+    addTearDown(progressNotifier.dispose);
+    await tester.pumpWidget(
+      _buildHeaderTestApp(progressNotifier: progressNotifier),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Работают 29 / 239'), findsOneWidget);
+    expect(find.text('Проверено 219 / 239'), findsOneWidget);
+  });
+
   testWidgets(
     'progress bar and counter display cancelled status with tested count',
     (tester) async {
@@ -131,9 +156,56 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Работают 4 / 10 · проверено 5 / 10'), findsOneWidget);
+      expect(find.text('Работают 4 / 10'), findsOneWidget);
+      expect(find.text('Проверено 5 / 10'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'offline shows only the profile server count, not stale results',
+    (tester) async {
+      final progressNotifier = ValueNotifier<UrlTestProgressState>(
+        const UrlTestProgressState(total: 10, working: 8, failed: 2),
+      );
+      addTearDown(progressNotifier.dispose);
+
+      await tester.pumpWidget(
+        _buildHeaderTestApp(
+          progressNotifier: progressNotifier,
+          connected: false,
+          serverCount: 141,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Всего 141'), findsOneWidget);
+      expect(find.textContaining('Работают'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('proxy-test-progress-bar')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('a stale measurement does not masquerade as current ping', (
+    tester,
+  ) async {
+    final progressNotifier = ValueNotifier<UrlTestProgressState>(
+      UrlTestProgressState.idle,
+    );
+    addTearDown(progressNotifier.dispose);
+    await tester.pumpWidget(
+      _buildHeaderTestApp(
+        progressNotifier: progressNotifier,
+        proxyLatency: 45,
+        proxyLatencyFresh: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('45 ms'), findsNothing);
+    expect(find.text('Нет данных'), findsWidgets);
+    expect(find.byType(ProxyLatencyDots), findsNothing);
+  });
 
   testWidgets('progress bar and counter are hidden when idle without results', (
     tester,
@@ -156,6 +228,7 @@ void main() {
 
     expect(find.text('Прокси'), findsOneWidget);
     expect(find.textContaining('Работают'), findsNothing);
+    expect(find.text('Всего 1'), findsNothing);
   });
 
   // The header is an overlay the list scrolls beneath, and the progressive
@@ -255,11 +328,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final status = find.text('Работают 38 / 57 · проверено 41 / 57');
-    expect(status, findsOneWidget);
-    // Two lines of labelSmall. A single line here would mean the trailing
-    // "проверено" half was clipped, which is the reported bug.
-    expect(tester.getSize(status).height, greaterThan(24));
+    final working = find.text('Работают 38 / 57');
+    final tested = find.text('Проверено 41 / 57');
+    expect(working, findsOneWidget);
+    expect(tested, findsOneWidget);
+    expect(
+      tester.getTopLeft(tested).dy,
+      greaterThan(tester.getTopLeft(working).dy),
+    );
     expect(tester.takeException(), isNull);
   });
 }

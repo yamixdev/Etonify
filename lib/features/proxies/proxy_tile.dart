@@ -37,8 +37,10 @@ class ProxyTile extends StatelessWidget {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     final state = runtimeState;
-    final latency = state == null ? proxy.latency : state.latency;
     final latencyFresh = state?.latencyFresh ?? proxy.latencyFresh;
+    final latency = latencyFresh
+        ? (state == null ? proxy.latency : state.latency)
+        : null;
     final latencyChecking = state?.latencyChecking ?? proxy.latencyChecking;
     final latencyUnavailable =
         state?.latencyUnavailable ?? proxy.latencyUnavailable;

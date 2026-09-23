@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
+import 'package:meow_client/app/automatic_url_test_policy.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_root_shell.dart';
@@ -208,6 +209,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final LatencyCoordinator _latencyCoordinator;
   CoreConfigMigrationResult? _pendingCoreConfigMigration;
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
+  final DeferredAutomaticUrlTest _deferredAutomaticUrlTest =
+      DeferredAutomaticUrlTest();
   final StartupLatencyDeadlineController _startupLatencyDeadline =
       StartupLatencyDeadlineController();
   final ValueNotifier<bool> _urlTestInFlightNotifier = ValueNotifier<bool>(
@@ -1436,8 +1439,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       latencyFresh:
           !latencyInvalidated &&
           (runtimeLatency != null || targetSummary.latencyFresh),
-      latencyChecking:
-          latencyInvalidated || _latencyCoordinator.isChecking(tag),
+      latencyChecking: _latencyCoordinator.isChecking(tag),
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyError,
       clearLatencyError: latencyError == null,
@@ -1463,8 +1465,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ip: outbound.info.externalIp?.trim() ?? '',
       latency: runtimeLatency ?? outbound.info.latestPing,
       latencyFresh: !latencyInvalidated && runtimeLatency != null,
-      latencyChecking:
-          latencyInvalidated || _latencyCoordinator.isChecking(outbound.tag),
+      latencyChecking: _latencyCoordinator.isChecking(outbound.tag),
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyInvalidated ? null : _latencyErrors[outbound.tag],
       protocolLabel: protocolLabel,
@@ -1719,7 +1720,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       clearLatency: shouldClearLatency,
       latencyFresh:
           !latencyInvalidated && runtimeLatency != null && latencyError == null,
-      latencyChecking: latencyChecking || latencyInvalidated,
+      latencyChecking: latencyChecking,
       latencyUnavailable: latencyUnavailable,
       latencyError: latencyError,
       clearLatencyError: latencyError == null,
@@ -2102,7 +2103,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       expectedTags: () => _expectedLatencyTagsForSession(''),
       onSessionChanged: (running, kind, targetTag) {
         final fullSessionRunning = running && kind == LatencySessionKind.full;
-        if (!running || (fullSessionRunning && !_fullUrlTestSessionRunning)) {
+        final startingFullSession =
+            fullSessionRunning && !_fullUrlTestSessionRunning;
+        if (!running || startingFullSession) {
           _pendingUrlTestResults.clear();
         }
         _fullUrlTestSessionRunning = fullSessionRunning;
@@ -2114,7 +2117,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (running) {
           _urlTestCancelled = false;
         }
-        _updateUrlTestProgress(isRunning: running);
+        _updateUrlTestProgress(
+          isRunning: fullSessionRunning,
+          resetCounter: startingFullSession,
+        );
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
@@ -3178,6 +3184,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _startupLatencyDeadline.resetForNextService();
       _startupGroupUrlTestNativeGeneration = 0;
       _urlTestInFlightNotifier.value = false;
+      _deferredAutomaticUrlTest.clear();
     }
     if (!_connected &&
         (phase == AppConnectionPhase.idle ||
@@ -3250,6 +3257,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _activeProxyIpController.cancelPending();
     _proxyLocationCoordinator.reset();
     _appTrafficMonitor.suspendForegroundWork();
+    if (_groupUrlTestScheduler.hasPendingWork) {
+      _deferredAutomaticUrlTest.defer();
+    }
     _groupUrlTestScheduler.cancel();
     // The in-flight URLTest sweep is deliberately left running. It is the
     // native core doing the work, and a full pass over a large profile takes
@@ -3325,10 +3335,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
-    AppLogStore.debug(
-      'runtime',
-      'resume reconcile completed without scheduling URLTest',
-    );
+    if (_deferredAutomaticUrlTest.take()) {
+      _scheduleGroupUrlTest(
+        reason: 'resume_deferred',
+        delay: const Duration(milliseconds: 700),
+      );
+    }
+    AppLogStore.debug('runtime', 'resume reconcile completed');
   }
 
   void _setMemoryLimitEnabled(bool value, {bool warningDismissed = false}) {
@@ -3670,6 +3683,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _latencyFailureCounts.clear();
       _applyRuntimeStateToDerivedCaches();
     });
+    _urlTestCancelled = false;
+    _updateUrlTestProgress(isRunning: false, isCancelled: false);
     unawaited(_syncQuickSettingsTileLabel());
     final deletedProfileId = _deferredProfileDeletionReload.takeAfterStop(
       stopped: true,
@@ -4065,14 +4080,27 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return tags;
   }
 
-  void _updateUrlTestProgress({bool? isRunning, bool? isCancelled}) {
-    _urlTestProgressCounter.reset(
-      visibleTags: _userVisibleServerTags(),
-      testableTags: _runtimeRecovery.lastStartedUrlTestOutboundTags,
-      resultForTag: _urlTestProgressResultForTag,
-    );
+  void _updateUrlTestProgress({
+    bool? isRunning,
+    bool? isCancelled,
+    bool resetCounter = true,
+  }) {
+    if (resetCounter) {
+      _urlTestProgressCounter.reset(
+        visibleTags: _userVisibleServerTags(),
+        testableTags: _runtimeRecovery.lastStartedUrlTestOutboundTags,
+        // A new full sweep starts at zero even when previous measurements are
+        // still cached for routing. Only results of this run count here.
+        resultForTag: isRunning == true
+            ? (_) => null
+            : _urlTestProgressResultForTag,
+      );
+    }
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
-      isRunning: isRunning ?? _latencyCoordinator.isRunning,
+      isRunning:
+          isRunning ??
+          (_latencyCoordinator.isRunning &&
+              _latencyCoordinator.kind == LatencySessionKind.full),
       isCancelled: isCancelled ?? _urlTestCancelled,
     );
   }
@@ -4094,7 +4122,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _updateUrlTestProgressForTags(Iterable<String> changedTags) {
     _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
-      isRunning: _latencyCoordinator.isRunning,
+      isRunning: _fullUrlTestSessionRunning,
       isCancelled: _urlTestCancelled,
     );
   }
@@ -4104,32 +4132,69 @@ class _MeowClientState extends ConsumerState<MeowClient>
     Duration delay = const Duration(milliseconds: 2500),
     int maxRunAttempts = 1,
   }) {
-    if (!_autoCheckServers || !mounted || !_foregroundLifecycleActive) {
+    if (!mounted || (!_autoCheckServers && reason == 'periodic')) {
       return;
     }
+    if (!_foregroundLifecycleActive) {
+      if (reason != 'periodic') _deferredAutomaticUrlTest.defer();
+      return;
+    }
+    AutomaticUrlTestScope scope() => automaticUrlTestScope(
+      reason: reason,
+      autoCheckServers: _autoCheckServers,
+      supportsTargeted:
+          _latencyCoordinator.capabilities.supportsTargetedUrlTest,
+      selectedTag: _currentResolvedActiveOutboundTag() ?? '',
+    );
     AppLogStore.debug(
       'latency',
-      'automatic group URLTest scheduled reason=$reason '
+      'automatic URLTest scheduled reason=$reason '
           'delayMs=${delay.inMilliseconds}',
     );
     _groupUrlTestScheduler.schedule(
       delay: delay,
       canRun: () {
-        return mounted &&
-            _autoCheckServers &&
-            _connected &&
-            _foregroundLifecycleActive &&
-            !_runtimeTransitionInProgress &&
-            _runtimeOperations.diagnosticsReady &&
-            !_urlTestInFlight &&
-            _latencyCoordinator.canStartSession;
+        if (!mounted ||
+            !_connected ||
+            !_foregroundLifecycleActive ||
+            _runtimeTransitionInProgress ||
+            !_runtimeOperations.diagnosticsReady) {
+          return false;
+        }
+        final nextScope = scope();
+        return switch (nextScope) {
+          AutomaticUrlTestScope.none => false,
+          AutomaticUrlTestScope.full =>
+            !_urlTestInFlight && _latencyCoordinator.canStartSession,
+          AutomaticUrlTestScope.selected =>
+            (!_latencyCoordinator.isRunning &&
+                    _latencyCoordinator.canStartSession) ||
+                _latencyCoordinator.kind == LatencySessionKind.full,
+        };
       },
       run: () {
+        final nextScope = scope();
         AppLogStore.info(
           'latency',
-          'automatic group URLTest start reason=$reason',
+          'automatic URLTest start reason=$reason scope=${nextScope.name}',
         );
-        return _latencyCoordinator.runFull(reason: reason, mode: 'manual');
+        if (nextScope == AutomaticUrlTestScope.selected) {
+          final tag = _currentResolvedActiveOutboundTag()?.trim() ?? '';
+          if (tag.isEmpty) return Future<bool>.value(false);
+          if (_latencyCoordinator.kind == LatencySessionKind.full &&
+              _urlTestProgressResultForTag(tag) != null) {
+            return Future<bool>.value(true);
+          }
+          return _latencyCoordinator.runTarget(
+            targetOutboundTag: tag,
+            reason: 'automatic_selected_$reason',
+            force: false,
+          );
+        }
+        if (nextScope == AutomaticUrlTestScope.full) {
+          return _latencyCoordinator.runFull(reason: reason, mode: 'manual');
+        }
+        return Future<bool>.value(false);
       },
       maxRunAttempts: maxRunAttempts,
       onSettled: (success) {
@@ -4577,6 +4642,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!value) {
       _groupUrlTestScheduler.cancel();
       _latencyCoordinator.cancelAutomaticSession();
+    }
+    if (_connected) {
+      _scheduleGroupUrlTest(
+        reason: 'auto_check_setting_changed',
+        delay: const Duration(milliseconds: 500),
+      );
     }
   }
 
@@ -5648,7 +5719,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _urlTestInFlightNotifier.value = false;
       _urlTestCancelled = true;
       _latencyCoordinator.cancel();
-      _updateUrlTestProgress(isRunning: false, isCancelled: true);
+      _updateUrlTestProgress(
+        isRunning: false,
+        isCancelled: true,
+        resetCounter: false,
+      );
       return;
     }
     if (haptic) {
@@ -6155,13 +6230,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _onRuntimeDiagnosticsReady();
     }
     if (!_foregroundLifecycleActive) {
+      _deferredAutomaticUrlTest.defer();
       _runtimeIntent.deferRetryUntilResume();
       return;
     }
     if (usable) {
-      // Give the new transport a moment to settle, then refresh only the
-      // selected endpoint metadata. A full URLTest here can flood a freshly
-      // attached cellular resolver and compete with real application traffic.
+      // Give the new transport a moment to settle. With automatic full-list
+      // checks disabled, only the selected outbound will be probed; otherwise
+      // the scheduled exhaustive sweep follows the user's setting.
       _scheduleActiveOutboundIpRefresh(
         delay: const Duration(seconds: 2),
         forceRefresh: true,
@@ -6208,6 +6284,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
         terminalReason: session.terminalReason,
         available: session.available,
       );
+      if (accepted && session.targetTag.trim().isEmpty) {
+        _urlTestProgressCounter.applyCoreSessionSnapshot(
+          total: session.total,
+          completed: session.completed,
+          available: session.available,
+          unavailable: session.unavailable,
+          terminal: session.terminal,
+        );
+        _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
+          isRunning: session.state == 'running',
+          isCancelled: session.state == 'cancelled',
+        );
+      }
       if (accepted && session.state == 'running') {
         for (final pending in _pendingUrlTestResults.takeForSession(
           session.sessionId,
@@ -7016,24 +7105,27 @@ class _MeowClientState extends ConsumerState<MeowClient>
         delay: const Duration(milliseconds: 1200),
       );
     }
-    final configuredTimeoutSeconds =
-        _activeSubscription?.urlTestConfig.timeoutSeconds ??
-        _urlTestTimeoutSeconds;
-    final delay = startupLatencyDeadlineDelay(configuredTimeoutSeconds);
-    final armed = _startupLatencyDeadline.armOnce(
-      delay: delay,
-      onExpired: _applyStartupLatencyDeadline,
-    );
-    if (armed) {
-      AppLogStore.info(
-        'latency',
-        'startup URLTest deadline armed delayMs=${delay.inMilliseconds}',
+    if (_autoCheckServers) {
+      final configuredTimeoutSeconds =
+          _activeSubscription?.urlTestConfig.timeoutSeconds ??
+          _urlTestTimeoutSeconds;
+      final delay = startupLatencyDeadlineDelay(configuredTimeoutSeconds);
+      final armed = _startupLatencyDeadline.armOnce(
+        delay: delay,
+        onExpired: _applyStartupLatencyDeadline,
       );
+      if (armed) {
+        AppLogStore.info(
+          'latency',
+          'startup URLTest deadline armed delayMs=${delay.inMilliseconds}',
+        );
+      }
     }
   }
 
   void _applyStartupLatencyDeadline() {
     if (!mounted ||
+        !_autoCheckServers ||
         !_connected ||
         _runtimeTransitionInProgress ||
         !_runtimeOperations.diagnosticsReady) {
@@ -7533,6 +7625,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
         activeProxy: _displayProxy,
         hideActiveProxyIp: _hideServerIp,
         connected: _connected,
+        serverCount: _fullProxyListCacheReady
+            ? max(
+                0,
+                _activeTopLevelProxiesCount -
+                    (_activeProxiesCache.isNotEmpty &&
+                            isLowestProxyTag(_activeProxiesCache.first.tag)
+                        ? 1
+                        : 0),
+              )
+            : (_activeProfileCache?.outboundsCount ?? 0),
         urlTestInFlight: _urlTestInFlight,
         urlTestInFlightListenable: _urlTestInFlightNotifier,
         urlTestProgressListenable: _urlTestProgressNotifier,

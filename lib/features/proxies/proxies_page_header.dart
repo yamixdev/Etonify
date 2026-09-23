@@ -112,6 +112,7 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.l10n,
     required this.sort,
     required this.connected,
+    required this.serverCount,
     required this.urlTestInFlight,
     this.urlTestInFlightListenable,
     this.urlTestProgressListenable,
@@ -134,6 +135,7 @@ class _ProxySheetHeader extends StatelessWidget {
   final AppLocalizations l10n;
   final ProxySort sort;
   final bool connected;
+  final int serverCount;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
   final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
@@ -245,6 +247,20 @@ class _ProxySheetHeader extends StatelessWidget {
                         ValueListenableBuilder<UrlTestProgressState>(
                           valueListenable: urlTestProgressListenable!,
                           builder: (context, progressState, _) {
+                            if (!connected) {
+                              if (serverCount <= 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  l10n.proxiesTotal(serverCount),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              );
+                            }
                             final showProgress =
                                 progressState.total > 0 &&
                                 (progressState.isRunning ||
@@ -253,36 +269,48 @@ class _ProxySheetHeader extends StatelessWidget {
                             if (!showProgress) {
                               return const SizedBox.shrink();
                             }
-                            final statusText =
-                                (progressState.isRunning ||
-                                    progressState.isCancelled)
-                                ? l10n.proxiesProgressWorkingTested(
-                                    progressState.working,
-                                    progressState.total,
-                                    progressState.tested,
-                                  )
-                                : l10n.proxiesProgressWorking(
-                                    progressState.working,
-                                    progressState.total,
-                                  );
+                            final showTested =
+                                progressState.isRunning ||
+                                progressState.isCancelled ||
+                                progressState.tested < progressState.total;
+                            final workingColor =
+                                theme.brightness == Brightness.dark
+                                ? Colors.lightGreen
+                                : Colors.green;
                             return Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    statusText,
-                                    // Two lines: the band is bounded by the
-                                    // back and action buttons, and the running
-                                    // variant ("… · проверено …") is wider than
-                                    // it on every non-English locale.
-                                    maxLines: 2,
+                                    l10n.proxiesProgressWorking(
+                                      progressState.working,
+                                      progressState.total,
+                                    ),
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                     style: theme.textTheme.labelSmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
+                                      color: workingColor,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
+                                  if (showTested)
+                                    Text(
+                                      l10n.proxiesProgressTested(
+                                        progressState.tested,
+                                        progressState.total,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
                                   const SizedBox(height: 3),
                                   _ProxyTestProgressBar(
                                     key: const ValueKey(

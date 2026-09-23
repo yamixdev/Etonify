@@ -305,30 +305,35 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hwidDefaultEnabledNoticeAction => 'Понятно';
 
   @override
-  String get autoCheckServersTitle => 'Автоматически проверять серверы';
+  String get autoCheckServersTitle => 'Автоматически проверять все серверы';
 
   @override
   String get autoCheckServersDescription =>
-      'Проверять доступность серверов при подключении, смене сети и переключении прокси';
+      'Проверять весь список при подключении, смене сети и выборе прокси. Выбранный сервер проверяется и без этой настройки.';
 
   @override
   String get autoCheckDisabledNoticeTitle => 'Автоматическая проверка';
 
   @override
   String get autoCheckDisabledNoticeMessage =>
-      'Автоматическая проверка серверов теперь выключена. Проверить все серверы можно кнопкой-молнией. Включить автоматическую проверку можно в разделе «Подписки и проверка». Режим «Самый быстрый» использует результаты уже проверенных серверов; чтобы найти лучший среди всех, проверьте весь список.';
+      'Полная автоматическая проверка серверов теперь выключена. Выбранный сервер всё равно проверяется после подключения, смены сети или выбора. Проверить весь список можно кнопкой-молнией, а вернуть автопроверку — в разделе «Подписки и проверка». Режим «Самый быстрый» использует уже полученные результаты; чтобы найти лучший из всех серверов, проверьте весь список.';
 
   @override
   String get autoCheckDisabledNoticeAction => 'Понятно';
 
   @override
-  String proxiesProgressWorkingTested(int working, int total, int tested) {
-    return 'Работают $working / $total · проверено $tested / $total';
+  String proxiesProgressWorking(int working, int total) {
+    return 'Работают $working / $total';
   }
 
   @override
-  String proxiesProgressWorking(int working, int total) {
-    return 'Работают $working / $total';
+  String proxiesProgressTested(int tested, int total) {
+    return 'Проверено $tested / $total';
+  }
+
+  @override
+  String proxiesTotal(int total) {
+    return 'Всего $total';
   }
 
   @override

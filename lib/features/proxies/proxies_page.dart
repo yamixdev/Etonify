@@ -359,6 +359,7 @@ class ProxiesPage extends StatefulWidget {
     this.activeProxy,
     this.activeProxyHideIp = false,
     required this.connected,
+    this.serverCount = 0,
     this.urlTestInFlight = false,
     this.urlTestInFlightListenable,
     this.urlTestProgressListenable,
@@ -403,6 +404,7 @@ class ProxiesPage extends StatefulWidget {
   final AppProxySummary? activeProxy;
   final bool activeProxyHideIp;
   final bool connected;
+  final int serverCount;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
   final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
@@ -1057,6 +1059,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     l10n: l10n,
                     sort: _sort,
                     connected: widget.connected,
+                    serverCount: widget.serverCount,
                     urlTestInFlight: widget.urlTestInFlight,
                     urlTestInFlightListenable: widget.urlTestInFlightListenable,
                     urlTestProgressListenable: widget.urlTestProgressListenable,

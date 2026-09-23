@@ -306,30 +306,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hwidDefaultEnabledNoticeAction => 'Got it';
 
   @override
-  String get autoCheckServersTitle => 'Automatically check servers';
+  String get autoCheckServersTitle => 'Automatically check all servers';
 
   @override
   String get autoCheckServersDescription =>
-      'Check server availability on connect, network change, and proxy switch';
+      'Check the full list on connect, network change, and proxy selection. The selected server is checked even when this is off.';
 
   @override
   String get autoCheckDisabledNoticeTitle => 'Automatic server check';
 
   @override
   String get autoCheckDisabledNoticeMessage =>
-      'Automatic server checking is now turned off. You can test all servers using the lightning bolt button. You can re-enable automatic checks under \'Subscriptions and testing\'. \'Fastest\' mode uses results from tested servers; test the full list to find the best one.';
+      'Automatic full-list checks are now off. The selected server is still checked after connecting, changing networks, or choosing a server. Use the lightning bolt to test the full list, or turn automatic checks back on under \'Subscriptions and testing\'. \'Fastest\' uses results already available; test the full list to find the best server overall.';
 
   @override
   String get autoCheckDisabledNoticeAction => 'Got it';
 
   @override
-  String proxiesProgressWorkingTested(int working, int total, int tested) {
-    return 'Working $working / $total · tested $tested / $total';
+  String proxiesProgressWorking(int working, int total) {
+    return 'Working $working / $total';
   }
 
   @override
-  String proxiesProgressWorking(int working, int total) {
-    return 'Working $working / $total';
+  String proxiesProgressTested(int tested, int total) {
+    return 'Tested $tested / $total';
+  }
+
+  @override
+  String proxiesTotal(int total) {
+    return 'Total $total';
   }
 
   @override

@@ -16,6 +16,7 @@ class ProxiesPresentationData {
     required this.activeProxy,
     required this.hideActiveProxyIp,
     required this.connected,
+    this.serverCount = 0,
     this.urlTestInFlight = false,
     this.urlTestInFlightListenable,
     this.urlTestProgressListenable,
@@ -37,6 +38,7 @@ class ProxiesPresentationData {
   final AppProxySummary? activeProxy;
   final bool hideActiveProxyIp;
   final bool connected;
+  final int serverCount;
   final bool urlTestInFlight;
   final ValueListenable<bool>? urlTestInFlightListenable;
   final ValueListenable<UrlTestProgressState>? urlTestProgressListenable;
@@ -120,6 +122,7 @@ class ProxiesPresentationBuilder {
       activeProxy: data.activeProxy,
       activeProxyHideIp: data.hideActiveProxyIp,
       connected: data.connected,
+      serverCount: data.serverCount,
       urlTestInFlight: data.urlTestInFlight,
       urlTestInFlightListenable: data.urlTestInFlightListenable,
       urlTestProgressListenable: data.urlTestProgressListenable,

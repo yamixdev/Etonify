@@ -150,6 +150,38 @@ void main() {
     },
   );
 
+  test(
+    'automatic target joins full queue without forcing a duplicate',
+    () async {
+      final calls = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => calls.add(request),
+        expectedTags: () => const ['active', 'other'],
+        capabilities: LibboxCapabilities.parseOrLegacy('''{
+        "api_version": 2,
+        "supports_targeted_url_test": true,
+        "supports_url_test_queue_priority": true
+      }'''),
+      );
+      addTearDown(coordinator.dispose);
+      final full = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        await coordinator.runTarget(
+          targetOutboundTag: 'active',
+          reason: 'automatic_selected',
+          force: false,
+        ),
+        isTrue,
+      );
+      expect(calls, hasLength(2));
+      expect(calls.last.force, isFalse);
+      coordinator.cancel();
+      await full;
+    },
+  );
+
   test('unrelated group events cannot complete a targeted session', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final coordinator = _coordinator(

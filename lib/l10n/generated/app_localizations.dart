@@ -629,13 +629,13 @@ abstract class AppLocalizations {
   /// No description provided for @autoCheckServersTitle.
   ///
   /// In en, this message translates to:
-  /// **'Automatically check servers'**
+  /// **'Automatically check all servers'**
   String get autoCheckServersTitle;
 
   /// No description provided for @autoCheckServersDescription.
   ///
   /// In en, this message translates to:
-  /// **'Check server availability on connect, network change, and proxy switch'**
+  /// **'Check the full list on connect, network change, and proxy selection. The selected server is checked even when this is off.'**
   String get autoCheckServersDescription;
 
   /// No description provided for @autoCheckDisabledNoticeTitle.
@@ -647,7 +647,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoCheckDisabledNoticeMessage.
   ///
   /// In en, this message translates to:
-  /// **'Automatic server checking is now turned off. You can test all servers using the lightning bolt button. You can re-enable automatic checks under \'Subscriptions and testing\'. \'Fastest\' mode uses results from tested servers; test the full list to find the best one.'**
+  /// **'Automatic full-list checks are now off. The selected server is still checked after connecting, changing networks, or choosing a server. Use the lightning bolt to test the full list, or turn automatic checks back on under \'Subscriptions and testing\'. \'Fastest\' uses results already available; test the full list to find the best server overall.'**
   String get autoCheckDisabledNoticeMessage;
 
   /// No description provided for @autoCheckDisabledNoticeAction.
@@ -656,17 +656,23 @@ abstract class AppLocalizations {
   /// **'Got it'**
   String get autoCheckDisabledNoticeAction;
 
-  /// No description provided for @proxiesProgressWorkingTested.
-  ///
-  /// In en, this message translates to:
-  /// **'Working {working} / {total} · tested {tested} / {total}'**
-  String proxiesProgressWorkingTested(int working, int total, int tested);
-
   /// No description provided for @proxiesProgressWorking.
   ///
   /// In en, this message translates to:
   /// **'Working {working} / {total}'**
   String proxiesProgressWorking(int working, int total);
+
+  /// No description provided for @proxiesProgressTested.
+  ///
+  /// In en, this message translates to:
+  /// **'Tested {tested} / {total}'**
+  String proxiesProgressTested(int tested, int total);
+
+  /// No description provided for @proxiesTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total {total}'**
+  String proxiesTotal(int total);
 
   /// No description provided for @profiles.
   ///

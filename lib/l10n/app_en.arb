@@ -89,26 +89,25 @@
   "hwidDefaultEnabledNoticeTitle": "HWID sending",
   "hwidDefaultEnabledNoticeMessage": "HWID sending is enabled by default. Many providers require a device ID to issue and run subscriptions.\n\nYou can disable it anytime: Settings -> General.",
   "hwidDefaultEnabledNoticeAction": "Got it",
-  "autoCheckServersTitle": "Automatically check servers",
-  "autoCheckServersDescription": "Check server availability on connect, network change, and proxy switch",
+  "autoCheckServersTitle": "Automatically check all servers",
+  "autoCheckServersDescription": "Check the full list on connect, network change, and proxy selection. The selected server is checked even when this is off.",
   "autoCheckDisabledNoticeTitle": "Automatic server check",
-  "autoCheckDisabledNoticeMessage": "Automatic server checking is now turned off. You can test all servers using the lightning bolt button. You can re-enable automatic checks under 'Subscriptions and testing'. 'Fastest' mode uses results from tested servers; test the full list to find the best one.",
+  "autoCheckDisabledNoticeMessage": "Automatic full-list checks are now off. The selected server is still checked after connecting, changing networks, or choosing a server. Use the lightning bolt to test the full list, or turn automatic checks back on under 'Subscriptions and testing'. 'Fastest' uses results already available; test the full list to find the best server overall.",
   "autoCheckDisabledNoticeAction": "Got it",
-  "proxiesProgressWorkingTested": "Working {working} / {total} · tested {tested} / {total}",
-  "@proxiesProgressWorkingTested": {
+  "proxiesProgressWorking": "Working {working} / {total}",
+  "proxiesProgressTested": "Tested {tested} / {total}",
+  "@proxiesProgressTested": {
     "placeholders": {
-      "working": {
-        "type": "int"
-      },
-      "total": {
-        "type": "int"
-      },
-      "tested": {
-        "type": "int"
-      }
+      "tested": {"type": "int"},
+      "total": {"type": "int"}
     }
   },
-  "proxiesProgressWorking": "Working {working} / {total}",
+  "proxiesTotal": "Total {total}",
+  "@proxiesTotal": {
+    "placeholders": {
+      "total": {"type": "int"}
+    }
+  },
   "@proxiesProgressWorking": {
     "placeholders": {
       "working": {
