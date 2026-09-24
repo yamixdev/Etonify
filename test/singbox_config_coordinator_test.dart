@@ -387,6 +387,66 @@ void main() {
     expect(target.readAsStringSync(), 'previous');
     expect(File(build.configPath!).existsSync(), isFalse);
   });
+
+  test('probe build has no inbound and keeps a stable fingerprint', () async {
+    final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(runtimeLifecycle: lifecycle);
+    addTearDown(coordinator.dispose);
+
+    final probe = await coordinator.buildProbeConfig(validateConfig: false);
+    expect(probe, isNotNull);
+    expect(probe!.build.plan.config['inbounds'], isEmpty);
+    expect(probe.build.configJson, isNot(contains('tun-in')));
+    expect(probe.probeFingerprint, isNotEmpty);
+  });
+
+  test('real VPN and probe builds share a handoff fingerprint', () async {
+    final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(runtimeLifecycle: lifecycle);
+    addTearDown(coordinator.dispose);
+
+    final vpn = await coordinator.buildCurrentSingboxConfigInBackground(
+      prepareConfig: false,
+      returnConfig: true,
+      validateConfig: false,
+    );
+    final probe = await coordinator.buildProbeConfig(validateConfig: false);
+    expect(vpn, isNotNull);
+    expect(probe, isNotNull);
+    expect(probeFingerprintForConfig(vpn!.plan.config),
+        probe!.probeFingerprint);
+  });
+
+  test('probe fingerprint ignores selector and TUN-only differences', () {
+    final probe = <String, dynamic>{
+      'inbounds': <Object>[],
+      'outbounds': [
+        {'type': 'selector', 'tag': 'select', 'default': 'a'},
+        {'type': 'vless', 'tag': 'a', 'server': 'example.com'},
+      ],
+      'dns': {'servers': <Object>[]},
+      'route': {'rules': <Object>[]},
+    };
+    final vpn = <String, dynamic>{
+      ...probe,
+      'inbounds': [
+        {'type': 'tun', 'tag': 'tun-in', 'mtu': 9000},
+      ],
+      'outbounds': [
+        {'type': 'selector', 'tag': 'select', 'default': 'b'},
+        {'type': 'vless', 'tag': 'a', 'server': 'example.com'},
+      ],
+      'dns': {'servers': <Object>[], 'strategy': 'ipv4_only'},
+      'route': {
+        'rules': [
+          {'inbound': 'tun-in', 'action': 'reject'},
+        ],
+      },
+    };
+    expect(probeFingerprintForConfig(probe), probeFingerprintForConfig(vpn));
+  });
 }
 
 SingboxConfigCoordinator _coordinator({

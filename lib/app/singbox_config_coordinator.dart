@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -17,6 +19,50 @@ enum SingboxConfigCoordinatorPhase {
   stopping,
   connected,
   failed,
+}
+
+class ProbeConfigBuildResult {
+  const ProbeConfigBuildResult({
+    required this.build,
+    required this.probeFingerprint,
+  });
+
+  final SingboxConfigBuildResult build;
+  final String probeFingerprint;
+}
+
+/// Hashes probe-relevant configuration without the current selector choice or
+/// local inbounds. The same physical servers can continue after TUN startup.
+String probeFingerprintForConfig(Map<String, dynamic> config) {
+  final outbounds = (config['outbounds'] as List? ?? const <Object>[])
+      .whereType<Map<String, dynamic>>()
+      .map((outbound) {
+        final normalized = Map<String, dynamic>.from(outbound);
+        if (normalized['type'] == 'selector') normalized.remove('default');
+        return normalized;
+      })
+      .toList(growable: false);
+  final route = Map<String, dynamic>.from(config['route'] as Map? ?? const {});
+  final dns = Map<String, dynamic>.from(config['dns'] as Map? ?? const {});
+  // The builder emits this only when the TUN inbound is enabled. It controls
+  // application DNS behavior, not whether a proxy endpoint can be probed.
+  dns.remove('strategy');
+  route['rules'] = (route['rules'] as List? ?? const <Object>[])
+      .whereType<Map<String, dynamic>>()
+      .where((rule) => rule['inbound'] != 'tun-in')
+      .toList(growable: false);
+  return sha256
+      .convert(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'outbounds': outbounds,
+            'dns': dns,
+            'route': route,
+            'experimental': config['experimental'],
+          }),
+        ),
+      )
+      .toString();
 }
 
 enum SingboxConfigApplyStatus {
@@ -614,6 +660,53 @@ class SingboxConfigCoordinator {
     );
   }
 
+  Future<ProbeConfigBuildResult?> buildProbeConfig({
+    bool validateConfig = true,
+  }) async {
+    var capabilities = _readSnapshot().capabilities;
+    if (!capabilities.isCompatible && _refreshCapabilities != null) {
+      capabilities = await _refreshCapabilities();
+    }
+    if (!capabilities.isCompatible) {
+      throw StateError(
+        'Incompatible libbox contract: ${capabilities.contractError}',
+      );
+    }
+    if (!await _ensureActiveSubscriptionHydrated() || !_isMounted()) {
+      return null;
+    }
+    final generation = ++_singboxConfigBuildGeneration;
+    final input = _currentSingboxConfigBuildInput(
+      returnConfig: true,
+      capabilitiesOverride: capabilities,
+      probeOnly: true,
+    );
+    final initialFingerprint = await singboxConfigFingerprintInBackground(
+      input,
+    );
+    final build = await buildSingboxConfigInBackground(input);
+    if (validateConfig && capabilities.supportsConfigCheck) {
+      await SingboxRuntime.instance.checkConfig(build.configJson);
+    }
+    if (!_isMounted() || generation != _singboxConfigBuildGeneration) {
+      return null;
+    }
+    final currentFingerprint = await singboxConfigFingerprintInBackground(
+      _currentSingboxConfigBuildInput(
+        returnConfig: false,
+        probeOnly: true,
+        capabilitiesOverride: capabilities,
+      ),
+    );
+    if (currentFingerprint != initialFingerprint) {
+      return null;
+    }
+    return ProbeConfigBuildResult(
+      build: build,
+      probeFingerprint: probeFingerprintForConfig(build.plan.config),
+    );
+  }
+
   Future<SingboxConfigBuildResult?> buildCurrentSingboxConfigInBackground({
     bool dropStale = true,
     bool prepareConfig = true,
@@ -922,18 +1015,19 @@ class SingboxConfigCoordinator {
     String? outputConfigPath,
     required bool returnConfig,
     LibboxCapabilities? capabilitiesOverride,
+    bool probeOnly = false,
   }) {
     final snapshot = _readSnapshot();
     return SingboxConfigBuildInput(
       activeSubscription: snapshot.activeSubscription,
       selectedProxyTag: snapshot.selectedProxyTag,
       excludedOutboundTags: Set<String>.from(snapshot.excludedOutboundTags),
-      vpnInboundEnabled: snapshot.vpnInboundEnabled,
+      vpnInboundEnabled: !probeOnly && snapshot.vpnInboundEnabled,
       vpnMtu: snapshot.vpnMtu,
       vpnStrictRoute: snapshot.vpnStrictRoute,
       vpnEnableIpv6: snapshot.vpnEnableIpv6,
       vpnTunImplementation: snapshot.vpnTunImplementation,
-      proxyInboundEnabled: snapshot.proxyInboundEnabled,
+      proxyInboundEnabled: !probeOnly && snapshot.proxyInboundEnabled,
       proxyMixedListen: snapshot.proxyMixedListen,
       proxyMixedPort: snapshot.proxyMixedPort,
       proxyUsername: snapshot.proxyUsername,
