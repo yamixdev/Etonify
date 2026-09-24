@@ -415,8 +415,10 @@ void main() {
     final probe = await coordinator.buildProbeConfig(validateConfig: false);
     expect(vpn, isNotNull);
     expect(probe, isNotNull);
-    expect(probeFingerprintForConfig(vpn!.plan.config),
-        probe!.probeFingerprint);
+    expect(
+      probeFingerprintForConfig(vpn!.plan.config),
+      probe!.probeFingerprint,
+    );
   });
 
   test('probe fingerprint ignores selector and TUN-only differences', () {
