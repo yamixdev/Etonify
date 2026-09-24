@@ -112,4 +112,32 @@ class NetworkCallbackDecisionTest {
         assertTrue(recovery.duplicate)
         assertTrue(recovery.shouldDispatch)
     }
+
+    @Test
+    fun failedInterfaceUpdateCanBeRetried() {
+        val gate = InterfaceUpdateGate()
+        gate.evaluate("wifi:wlan0:12", force = false)
+        gate.failed("wifi:wlan0:12")
+
+        assertTrue(gate.evaluate("wifi:wlan0:12", force = false).shouldDispatch)
+    }
+
+    @Test
+    fun lateFailureCannotEraseNewerInterfaceUpdate() {
+        val gate = InterfaceUpdateGate()
+        gate.evaluate("wifi:wlan0:12", force = false)
+        gate.evaluate("cellular:rmnet0:14", force = false)
+        gate.failed("wifi:wlan0:12")
+
+        assertFalse(gate.evaluate("cellular:rmnet0:14", force = false).shouldDispatch)
+    }
+
+    @Test
+    fun closingOldRuntimeCannotDetachNewInterfaceListener() {
+        val oldListener = Any()
+        val newListener = Any()
+
+        assertFalse(shouldDetachInterfaceListener(newListener, oldListener))
+        assertTrue(shouldDetachInterfaceListener(newListener, newListener))
+    }
 }

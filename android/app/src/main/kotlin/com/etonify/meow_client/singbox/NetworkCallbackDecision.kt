@@ -36,7 +36,16 @@ internal class InterfaceUpdateGate {
             shouldDispatch = force || !duplicate,
         )
     }
+
+    @Synchronized
+    fun failed(key: String) {
+        if (lastKey == key) lastKey = null
+    }
 }
+
+/** An older libbox instance must not detach the listener of its replacement. */
+internal fun <T : Any> shouldDetachInterfaceListener(current: T?, closing: T?): Boolean =
+    current != null && current === closing
 
 internal fun <T> decideUsableNetworkCallback(
     currentNetwork: T?,

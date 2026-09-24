@@ -3930,7 +3930,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (status['running'] == true &&
           status['mode'] == 'vpn' &&
           _connected &&
-          _runtimeOperations.urlTestReady) {
+          _runtimeOperations.urlTestReady &&
+          await _networkInterfaceUsable(reason: 'offline_handoff_ready')) {
         session.resumeOnVpn();
         _offlineProbeConfig = null;
         _publishOfflineUrlTestProgress();
@@ -6017,7 +6018,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (mode == 'probe') {
           _offlineProbeRuntimeGeneration = nativeGeneration;
         }
-        if (mode != 'probe' || _runtimeOperations.urlTestReady) return true;
+        if (mode != 'probe') return true;
+        if (_runtimeOperations.urlTestReady &&
+            await _networkInterfaceUsable(reason: 'offline_probe_ready')) {
+          return true;
+        }
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }

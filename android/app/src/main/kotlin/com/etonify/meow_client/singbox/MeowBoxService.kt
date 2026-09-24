@@ -738,8 +738,14 @@ class MeowBoxService(
                     "tun_fd_ownership owner=libbox service=${service.javaClass.simpleName} " +
                     "startElapsedMs=$elapsedMs",
             )
-            MeowDefaultNetworkMonitor.reassertDefaultInterface("after_start_or_reload_service")
-            if (hasUsableInterface) {
+            val interfaceApplied = MeowDefaultNetworkMonitor.reassertDefaultInterfaceAndWait(
+                "after_start_or_reload_service",
+            )
+            if (hasUsableInterface && !interfaceApplied) {
+                fail("Default network interface was not accepted by the core")
+                return
+            }
+            if (hasUsableInterface && interfaceApplied) {
                 showForeground("Connected")
             } else {
                 showForeground("Waiting for network")

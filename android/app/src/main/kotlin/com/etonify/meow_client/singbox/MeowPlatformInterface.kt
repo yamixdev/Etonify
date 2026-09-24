@@ -87,7 +87,7 @@ abstract class MeowBasePlatformInterface(
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
-        MeowDefaultNetworkMonitor.setListener(null)
+        MeowDefaultNetworkMonitor.clearListener(listener)
     }
 
     override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {
