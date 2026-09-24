@@ -61,6 +61,8 @@ class ProxyTile extends StatelessWidget {
         ? '... ms'
         : latency == null
         ? l10n.proxyLatencyNoResult
+        : latency >= 1000
+        ? '${(latency / 1000).toStringAsFixed(1)} s'
         : '$latency ms';
     final delayColor = selecting
         ? theme.colorScheme.primary
@@ -74,11 +76,9 @@ class ProxyTile extends StatelessWidget {
         ? (theme.brightness == Brightness.dark
               ? Colors.lightGreen
               : Colors.green)
-        : latency < 1500
-        ? (theme.brightness == Brightness.dark
+        : (theme.brightness == Brightness.dark
               ? Colors.orange
-              : Colors.deepOrangeAccent)
-        : Colors.red;
+              : Colors.deepOrangeAccent);
     final latencyContent = _ProxyLatencyLabel(
       text: latencyText,
       color: delayColor,

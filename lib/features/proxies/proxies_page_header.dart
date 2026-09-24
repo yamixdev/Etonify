@@ -2,7 +2,7 @@ part of 'proxies_page.dart';
 
 /// Width of the strip at the bottom of the header where the backdrop fades
 /// out, so rows dissolve under it instead of stopping on a hard edge.
-const _kProxySheetHeaderEdgeFade = 18.0;
+const _kProxySheetHeaderEdgeFade = 10.0;
 
 /// Backdrop painted behind the pinned header, which list rows scroll under.
 ///

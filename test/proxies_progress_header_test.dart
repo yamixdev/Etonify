@@ -333,9 +333,74 @@ void main() {
 
     expect(
       tester.getSize(find.byKey(const ValueKey('proxy-sheet-header'))).height,
-      closeTo(80, 0.5),
+      closeTo(100, 0.5),
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'collapsed progress bar stays above the translucent header edge',
+    (tester) async {
+      final progressNotifier = ValueNotifier<UrlTestProgressState>(
+        const UrlTestProgressState(
+          isRunning: true,
+          total: 367,
+          working: 14,
+          failed: 144,
+        ),
+      );
+      addTearDown(progressNotifier.dispose);
+      await tester.binding.setSurfaceSize(const Size(393, 873));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _buildHeaderTestApp(progressNotifier: progressNotifier, proxyCount: 12),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -160));
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const ValueKey('proxy-sheet-header'));
+      final gradient = tester
+          .widgetList<DecoratedBox>(
+            find.ancestor(of: header, matching: find.byType(DecoratedBox)),
+          )
+          .map((widget) => widget.decoration)
+          .whereType<BoxDecoration>()
+          .map((decoration) => decoration.gradient)
+          .whereType<LinearGradient>()
+          .single;
+      final opaqueBottom =
+          tester.getTopLeft(header).dy +
+          tester.getSize(header).height * gradient.stops![1];
+      final progressBottom = tester
+          .getBottomRight(find.byKey(const ValueKey('proxy-test-progress-bar')))
+          .dy;
+      expect(progressBottom, lessThanOrEqualTo(opaqueBottom));
+    },
+  );
+
+  testWidgets('slow reachable latency is legible and not marked as failed', (
+    tester,
+  ) async {
+    final progressNotifier = ValueNotifier<UrlTestProgressState>(
+      const UrlTestProgressState(total: 1, working: 1),
+    );
+    addTearDown(progressNotifier.dispose);
+    await tester.pumpWidget(
+      _buildHeaderTestApp(
+        progressNotifier: progressNotifier,
+        proxyLatency: 4698,
+        proxyLatencyFresh: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final latency = find.text('4.7 s');
+    expect(latency, findsOneWidget);
+    expect(tester.widget<Text>(latency).style?.color, Colors.deepOrangeAccent);
+    expect(
+      find.byKey(const ValueKey('proxy-latency-unavailable')),
+      findsNothing,
+    );
   });
 
   testWidgets('progress line wraps instead of ellipsizing on one line', (

@@ -6754,9 +6754,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _urlTestProgressCounter.applyCoreSessionSnapshot(
           total: session.total,
           completed: session.completed,
-          available: session.available,
-          unavailable: session.unavailable,
-          terminal: session.terminal,
         );
         _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
           isRunning: session.state == 'running',
