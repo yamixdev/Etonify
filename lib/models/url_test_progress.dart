@@ -3,6 +3,7 @@ class UrlTestProgressState {
     this.isRunning = false,
     this.isCancelled = false,
     this.isPaused = false,
+    this.isOfflineSession = false,
     this.total = 0,
     this.working = 0,
     this.failed = 0,
@@ -14,6 +15,7 @@ class UrlTestProgressState {
   final bool isRunning;
   final bool isCancelled;
   final bool isPaused;
+  final bool isOfflineSession;
   final int total;
   final int working;
   final int failed;
@@ -28,6 +30,7 @@ class UrlTestProgressState {
     bool? isRunning,
     bool? isCancelled,
     bool? isPaused,
+    bool? isOfflineSession,
     int? total,
     int? working,
     int? failed,
@@ -37,6 +40,7 @@ class UrlTestProgressState {
       isRunning: isRunning ?? this.isRunning,
       isCancelled: isCancelled ?? this.isCancelled,
       isPaused: isPaused ?? this.isPaused,
+      isOfflineSession: isOfflineSession ?? this.isOfflineSession,
       total: total ?? this.total,
       working: working ?? this.working,
       failed: failed ?? this.failed,
@@ -52,6 +56,7 @@ class UrlTestProgressState {
           isRunning == other.isRunning &&
           isCancelled == other.isCancelled &&
           isPaused == other.isPaused &&
+          isOfflineSession == other.isOfflineSession &&
           total == other.total &&
           working == other.working &&
           failed == other.failed &&
@@ -62,6 +67,7 @@ class UrlTestProgressState {
     isRunning,
     isCancelled,
     isPaused,
+    isOfflineSession,
     total,
     working,
     failed,

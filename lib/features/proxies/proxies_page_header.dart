@@ -248,8 +248,10 @@ class _ProxySheetHeader extends StatelessWidget {
                           valueListenable: urlTestProgressListenable!,
                           builder: (context, progressState, _) {
                             if (!connected &&
-                                !progressState.hasResults &&
-                                !progressState.isPaused) {
+                                !(progressState.isOfflineSession &&
+                                    (progressState.isRunning ||
+                                        progressState.isPaused ||
+                                        progressState.hasResults))) {
                               if (serverCount <= 0) {
                                 return const SizedBox.shrink();
                               }

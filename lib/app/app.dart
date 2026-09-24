@@ -6061,6 +6061,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       isRunning: !session.isTerminal,
       isCancelled: session.phase == OfflineUrlTestPhase.cancelled,
       isPaused: session.phase == OfflineUrlTestPhase.pausingForVpn,
+      isOfflineSession: _offlineProbeConfig != null,
       total: session.total,
       working: session.working,
       failed: session.failed,

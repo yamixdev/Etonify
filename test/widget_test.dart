@@ -1349,6 +1349,7 @@ void main() {
                 connected: true,
                 urlTestInFlight: false,
                 urlTestInFlightListenable: inFlightNotifier,
+                serverCount: 1,
                 progressiveBlurEnabled: false,
                 onSelected: (_) {},
                 onUrlTest: () async {},

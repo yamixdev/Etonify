@@ -187,6 +187,36 @@ void main() {
     },
   );
 
+  testWidgets('completed offline check keeps its current working count', (
+    tester,
+  ) async {
+    final progressNotifier = ValueNotifier<UrlTestProgressState>(
+      const UrlTestProgressState(
+        isOfflineSession: true,
+        total: 3,
+        working: 2,
+        failed: 1,
+      ),
+    );
+    addTearDown(progressNotifier.dispose);
+
+    await tester.pumpWidget(
+      _buildHeaderTestApp(
+        progressNotifier: progressNotifier,
+        connected: false,
+        serverCount: 3,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Работают 2 / 3'), findsOneWidget);
+    expect(find.text('Всего 3'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('proxy-test-progress-bar')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a stale measurement does not masquerade as current ping', (
     tester,
   ) async {

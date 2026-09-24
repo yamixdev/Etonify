@@ -129,6 +129,7 @@ Future<String> _configFingerprint(
           input.capabilities.supportsUrlTestNetworkGeneration,
       'supportsUrlTestExhaustive': input.capabilities.supportsUrlTestExhaustive,
       'supportsUrlTestCancel': input.capabilities.supportsUrlTestCancel,
+      'supportsUrlTestHandoff': input.capabilities.supportsUrlTestHandoff,
       'supportsUrlTestUnavailableCheckInterval':
           input.capabilities.supportsUrlTestUnavailableCheckInterval,
       'supportsUrlTestMethod': input.capabilities.supportsUrlTestMethod,
