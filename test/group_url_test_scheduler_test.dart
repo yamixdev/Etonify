@@ -130,4 +130,25 @@ void main() {
     expect(calls, 0);
     expect(scheduler.hasPendingWork, isFalse);
   });
+
+  test('pending reason tracks the latest automatic trigger', () {
+    final scheduler = GroupUrlTestScheduler();
+    addTearDown(scheduler.dispose);
+    scheduler.schedule(
+      reason: 'periodic',
+      delay: const Duration(hours: 1),
+      canRun: () => true,
+      run: () async => true,
+    );
+    expect(scheduler.pendingReason, 'periodic');
+    scheduler.schedule(
+      reason: 'network_changed',
+      delay: const Duration(hours: 1),
+      canRun: () => true,
+      run: () async => true,
+    );
+    expect(scheduler.pendingReason, 'network_changed');
+    scheduler.cancel();
+    expect(scheduler.pendingReason, isNull);
+  });
 }

@@ -212,6 +212,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
   final DeferredAutomaticUrlTest _deferredAutomaticUrlTest =
       DeferredAutomaticUrlTest();
+  final PeriodicUrlTestDeadline _periodicUrlTestDeadline =
+      PeriodicUrlTestDeadline();
   final StartupLatencyDeadlineController _startupLatencyDeadline =
       StartupLatencyDeadlineController();
   final ValueNotifier<bool> _urlTestInFlightNotifier = ValueNotifier<bool>(
@@ -2119,6 +2121,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
         final fullSessionRunning = running && kind == LatencySessionKind.full;
         final startingFullSession =
             fullSessionRunning && !_fullUrlTestSessionRunning;
+        if (startingFullSession) {
+          _periodicUrlTestDeadline.clear();
+        } else if (!running &&
+            kind == LatencySessionKind.full &&
+            _autoCheckServers &&
+            _connected) {
+          _periodicUrlTestDeadline.reset(
+            now: DateTime.now(),
+            interval: Duration(seconds: max(15, _urlTestIntervalSeconds)),
+          );
+        }
         if (!running || startingFullSession) {
           _pendingUrlTestResults.clear();
         }
@@ -3207,6 +3220,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _startupGroupUrlTestNativeGeneration = 0;
       _urlTestInFlightNotifier.value = false;
       _deferredAutomaticUrlTest.clear();
+      _periodicUrlTestDeadline.clear();
     }
     if (!_connected &&
         (phase == AppConnectionPhase.idle ||
@@ -3279,9 +3293,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _activeProxyIpController.cancelPending();
     _proxyLocationCoordinator.reset();
     _appTrafficMonitor.suspendForegroundWork();
-    if (_groupUrlTestScheduler.hasPendingWork) {
-      _deferredAutomaticUrlTest.defer();
-    }
+    _deferredAutomaticUrlTest.deferPending(
+      reason: _groupUrlTestScheduler.pendingReason,
+      fullSessionRunning: _fullUrlTestSessionRunning,
+    );
     _groupUrlTestScheduler.cancel();
     // The in-flight URLTest sweep is deliberately left running. It is the
     // native core doing the work, and a full pass over a large profile takes
@@ -3357,11 +3372,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
-    if (_deferredAutomaticUrlTest.take()) {
+    if (_deferredAutomaticUrlTest.take(
+      fullSessionRunning: _fullUrlTestSessionRunning,
+    )) {
       _scheduleGroupUrlTest(
         reason: 'resume_deferred',
         delay: const Duration(milliseconds: 700),
       );
+    } else if (_autoCheckServers &&
+        !_fullUrlTestSessionRunning &&
+        !_groupUrlTestScheduler.hasPendingWork) {
+      _schedulePeriodicGroupUrlTest();
     }
     AppLogStore.debug('runtime', 'resume reconcile completed');
   }
@@ -4287,6 +4308,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'delayMs=${delay.inMilliseconds}',
     );
     _groupUrlTestScheduler.schedule(
+      reason: reason,
       delay: delay,
       canRun: () {
         if (!mounted ||
@@ -4359,7 +4381,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _scheduleGroupUrlTest(
       reason: 'periodic',
-      delay: Duration(seconds: max(15, _urlTestIntervalSeconds)),
+      delay: _periodicUrlTestDeadline.remaining(
+        now: DateTime.now(),
+        interval: Duration(seconds: max(15, _urlTestIntervalSeconds)),
+      ),
       maxRunAttempts: 1,
     );
   }
@@ -4758,6 +4783,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _setUrlTestIntervalSeconds(int value) {
     _applySettingsChange(() => _settings.setUrlTestIntervalSeconds(value));
+    _periodicUrlTestDeadline.clear();
+    if (_groupUrlTestScheduler.pendingReason == 'periodic') {
+      _schedulePeriodicGroupUrlTest();
+    }
   }
 
   void _setUrlTestTimeoutSeconds(int value) {
@@ -4776,6 +4805,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _setAutoCheckServers(bool value) {
     _applySettingsChange(() => _settings.setAutoCheckServers(value));
+    _periodicUrlTestDeadline.clear();
     if (!value) {
       _groupUrlTestScheduler.cancel();
       _latencyCoordinator.cancelAutomaticSession();

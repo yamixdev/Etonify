@@ -22,11 +22,39 @@ class DeferredAutomaticUrlTest {
 
   void defer() => _pending = true;
 
-  bool take() {
+  /// A periodic timer is not a missed event, and an active core sweep does
+  /// not need a duplicate foreground request.
+  void deferPending({
+    required String? reason,
+    required bool fullSessionRunning,
+  }) {
+    if (reason != null && reason != 'periodic' && !fullSessionRunning) {
+      defer();
+    }
+  }
+
+  bool take({bool fullSessionRunning = false}) {
     final pending = _pending;
     _pending = false;
-    return pending;
+    return pending && !fullSessionRunning;
   }
 
   void clear() => _pending = false;
+}
+
+/// Keeps the next periodic check anchored across UI lifecycle transitions.
+class PeriodicUrlTestDeadline {
+  DateTime? _dueAt;
+
+  Duration remaining({required DateTime now, required Duration interval}) {
+    final dueAt = _dueAt ??= now.add(interval);
+    final remaining = dueAt.difference(now);
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  void reset({required DateTime now, required Duration interval}) {
+    _dueAt = now.add(interval);
+  }
+
+  void clear() => _dueAt = null;
 }

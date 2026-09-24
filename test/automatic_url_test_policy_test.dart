@@ -67,4 +67,51 @@ void main() {
     deferred.clear();
     expect(deferred.take(), isFalse);
   });
+
+  test('suspending a periodic timer does not request an immediate sweep', () {
+    final deferred = DeferredAutomaticUrlTest();
+    deferred.deferPending(reason: 'periodic', fullSessionRunning: false);
+    expect(deferred.take(), isFalse);
+
+    deferred.deferPending(reason: 'network_changed', fullSessionRunning: false);
+    expect(deferred.take(), isTrue);
+  });
+
+  test('suspending an active full sweep does not queue a duplicate', () {
+    final deferred = DeferredAutomaticUrlTest();
+    deferred.deferPending(reason: 'resume_deferred', fullSessionRunning: true);
+    expect(deferred.take(), isFalse);
+  });
+
+  test('resume coalesces a deferred trigger into an already running sweep', () {
+    final deferred = DeferredAutomaticUrlTest();
+    deferred.defer();
+    expect(deferred.take(fullSessionRunning: true), isFalse);
+    expect(deferred.take(), isFalse);
+  });
+
+  test('periodic deadline survives background and resets after sweep', () {
+    final deadline = PeriodicUrlTestDeadline();
+    final started = DateTime.utc(2026, 9, 24, 10);
+    const interval = Duration(minutes: 30);
+    expect(deadline.remaining(now: started, interval: interval), interval);
+    expect(
+      deadline.remaining(
+        now: started.add(const Duration(minutes: 2)),
+        interval: interval,
+      ),
+      const Duration(minutes: 28),
+    );
+    deadline.reset(
+      now: started.add(const Duration(minutes: 25)),
+      interval: interval,
+    );
+    expect(
+      deadline.remaining(
+        now: started.add(const Duration(minutes: 26)),
+        interval: interval,
+      ),
+      const Duration(minutes: 29),
+    );
+  });
 }

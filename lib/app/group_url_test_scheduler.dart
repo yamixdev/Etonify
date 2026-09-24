@@ -14,11 +14,14 @@ class GroupUrlTestScheduler {
   int _generation = 0;
   bool _disposed = false;
   bool _hasPendingWork = false;
+  String? _pendingReason;
 
   bool get isScheduled => _timer?.isActive ?? false;
   bool get hasPendingWork => _hasPendingWork;
+  String? get pendingReason => _hasPendingWork ? _pendingReason : null;
 
   void schedule({
+    String? reason,
     required Duration delay,
     required GroupUrlTestReadiness canRun,
     required GroupUrlTestAction run,
@@ -33,6 +36,7 @@ class GroupUrlTestScheduler {
     final generation = ++_generation;
     _timer?.cancel();
     _hasPendingWork = true;
+    _pendingReason = reason;
     _arm(
       generation: generation,
       delay: delay,
@@ -138,6 +142,7 @@ class GroupUrlTestScheduler {
     if (!_isCurrent(generation)) return;
     _timer = null;
     _hasPendingWork = false;
+    _pendingReason = null;
     onSettled?.call(success);
   }
 
@@ -146,6 +151,7 @@ class GroupUrlTestScheduler {
     _timer?.cancel();
     _timer = null;
     _hasPendingWork = false;
+    _pendingReason = null;
   }
 
   void dispose() {
