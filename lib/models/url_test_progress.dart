@@ -2,6 +2,7 @@ class UrlTestProgressState {
   const UrlTestProgressState({
     this.isRunning = false,
     this.isCancelled = false,
+    this.isPaused = false,
     this.total = 0,
     this.working = 0,
     this.failed = 0,
@@ -12,6 +13,7 @@ class UrlTestProgressState {
 
   final bool isRunning;
   final bool isCancelled;
+  final bool isPaused;
   final int total;
   final int working;
   final int failed;
@@ -25,6 +27,7 @@ class UrlTestProgressState {
   UrlTestProgressState copyWith({
     bool? isRunning,
     bool? isCancelled,
+    bool? isPaused,
     int? total,
     int? working,
     int? failed,
@@ -33,6 +36,7 @@ class UrlTestProgressState {
     return UrlTestProgressState(
       isRunning: isRunning ?? this.isRunning,
       isCancelled: isCancelled ?? this.isCancelled,
+      isPaused: isPaused ?? this.isPaused,
       total: total ?? this.total,
       working: working ?? this.working,
       failed: failed ?? this.failed,
@@ -47,14 +51,22 @@ class UrlTestProgressState {
           runtimeType == other.runtimeType &&
           isRunning == other.isRunning &&
           isCancelled == other.isCancelled &&
+          isPaused == other.isPaused &&
           total == other.total &&
           working == other.working &&
           failed == other.failed &&
           completed == other.completed;
 
   @override
-  int get hashCode =>
-      Object.hash(isRunning, isCancelled, total, working, failed, completed);
+  int get hashCode => Object.hash(
+    isRunning,
+    isCancelled,
+    isPaused,
+    total,
+    working,
+    failed,
+    completed,
+  );
 }
 
 /// Keeps the proxy header totals current without rescanning a subscription for

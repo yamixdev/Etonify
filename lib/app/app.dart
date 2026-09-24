@@ -23,6 +23,7 @@ import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/app/latency_dependencies.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
+import 'package:meow_client/app/offline_url_test_session.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
@@ -222,6 +223,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       UrlTestProgressCounter();
   final PendingRuntimeUrlTestResults _pendingUrlTestResults =
       PendingRuntimeUrlTestResults();
+  OfflineUrlTestSession? _offlineUrlTestSession;
+  ProbeConfigBuildResult? _offlineProbeConfig;
+  bool _offlineProbeRunning = false;
+  int _offlineProbeRuntimeGeneration = 0;
+  int _physicalNetworkEpoch = 0;
+  String _physicalInterfaceKey = '';
+  int _offlineSessionSequence = 0;
+  int _offlineStartGeneration = 0;
   bool _fullUrlTestSessionRunning = false;
   bool _urlTestCancelled = false;
   int _startupGroupUrlTestNativeGeneration = 0;
@@ -2078,13 +2087,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
         deadlineMillis: request.deadlineMillis,
         force: request.force,
         mode: request.mode,
+        includeOutboundTags: request.includeOutboundTags,
+        logicalSessionId: request.logicalSessionId,
+        physicalNetworkEpoch: request.physicalNetworkEpoch,
       ),
       cancelTest: (groupTag, targetOutboundTag) =>
           _singboxRuntime.cancelUrlTest(
             groupTag: groupTag,
             targetOutboundTag: targetOutboundTag,
           ),
-      isConnected: () => _connected,
+      isConnected: () => _connected || _offlineProbeRunning,
       isForeground: () => _foregroundLifecycleActive,
       activeOutboundTag: () => _currentResolvedActiveOutboundTag() ?? '',
       testUrl: () => _urlTestUrl,
@@ -2097,7 +2109,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       },
       timeoutSeconds: () => _urlTestTimeoutSeconds,
       concurrency: () => _urlTestConcurrency,
-      canRunDiagnostics: () => _runtimeOperations.urlTestReady,
+      canRunDiagnostics: () =>
+          (_offlineProbeRunning && _runtimeOperations.urlTestReady) ||
+          (_connected && _runtimeOperations.urlTestReady),
       operationGeneration: () => _runtimeOperations.urlTestGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
@@ -2121,6 +2135,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           isRunning: fullSessionRunning,
           resetCounter: startingFullSession,
         );
+        if (_offlineUrlTestSession != null) {
+          _publishOfflineUrlTestProgress();
+        }
         if (!mounted) return;
         setState(_applyRuntimeStateToDerivedCaches);
         unawaited(_syncQuickSettingsTileLabel());
@@ -3074,6 +3091,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     required AppSettingsState previousState,
     required int generation,
   }) async {
+    if (_offlineUrlTestSession != null && !_offlineUrlTestSession!.isTerminal) {
+      if (!await _cancelOfflineProbeForConfigChange('settings_changed')) {
+        return;
+      }
+    }
     final reason = change.configReason ?? 'settings changed';
     final result = await _configCoordinator.emitCurrentConfigLogAsync(
       reason,
@@ -3803,6 +3825,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _showNoValidOutboundsWarning();
         return;
       }
+      final logicalSession = _offlineUrlTestSession;
+      if (logicalSession != null &&
+          !logicalSession.isTerminal &&
+          _offlineProbeRunning) {
+        final currentFingerprint = probeFingerprintForConfig(build.plan.config);
+        if (currentFingerprint != logicalSession.fingerprint) {
+          logicalSession.fail('probe_config_changed');
+          _latencyCoordinator.cancel();
+          _publishOfflineUrlTestProgress();
+          await _stopOfflineProbe();
+        } else {
+          logicalSession.pauseForVpn();
+          _publishOfflineUrlTestProgress();
+          await _latencyCoordinator.cancelAndWait();
+          try {
+            await _stopOfflineProbe(retainConfig: true);
+          } catch (error) {
+            logicalSession.runOffline();
+            _publishOfflineUrlTestProgress();
+            unawaited(
+              _runLogicalUrlTest(logicalSession, logicalSession.pendingTags),
+            );
+            _configCoordinator.discardPreparedConfigCandidate(build);
+            _runtimeIntent.clearRuntimeDesired();
+            setState(() => _setConnectionPhase(AppConnectionPhase.idle));
+            _showAppSnackBar('Не удалось остановить проверку: $error');
+            return;
+          }
+        }
+      }
       setState(() {
         _setConnectionPhase(AppConnectionPhase.starting);
       });
@@ -3823,6 +3875,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         useVpn: _vpnInboundEnabled,
         manualStartGeneration: startGeneration,
       );
+      if (logicalSession != null &&
+          logicalSession.phase == OfflineUrlTestPhase.pausingForVpn) {
+        unawaited(_resumeLogicalUrlTestAfterVpnStart(logicalSession));
+      }
     } catch (error, stackTrace) {
       if (build != null) {
         _configCoordinator.discardPreparedConfigCandidate(build);
@@ -3840,6 +3896,62 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       await _handleRuntimeError(error.toString(), false);
     }
+  }
+
+  Future<void> _resumeLogicalUrlTestAfterVpnStart(
+    OfflineUrlTestSession session,
+  ) async {
+    for (var attempt = 0; attempt < 150; attempt++) {
+      if (!mounted || _offlineUrlTestSession != session || session.isTerminal) {
+        return;
+      }
+      final status = await _singboxRuntime.status();
+      if (status['running'] == true &&
+          status['mode'] == 'vpn' &&
+          _connected &&
+          _runtimeOperations.urlTestReady) {
+        session.resumeOnVpn();
+        _offlineProbeConfig = null;
+        _publishOfflineUrlTestProgress();
+        await _runLogicalUrlTest(session, session.pendingTags);
+        return;
+      }
+      if (status['running'] == false &&
+          _connectionPhase == AppConnectionPhase.failed) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (_offlineUrlTestSession != session || session.isTerminal) return;
+    final status = await _singboxRuntime.status();
+    final probe = _offlineProbeConfig;
+    if (status['running'] != true && probe != null && mounted) {
+      try {
+        _runtimeIntent.clearRuntimeDesired();
+        await _singboxRuntime.startProbe(probe.build.configJson);
+        _offlineProbeRunning = true;
+        if (await _awaitRuntimeMode('probe', _offlineStartGeneration)) {
+          session.runOffline();
+          _publishOfflineUrlTestProgress();
+          await _runLogicalUrlTest(session, session.pendingTags);
+          return;
+        }
+      } catch (error) {
+        AppLogStore.warning('latency', 'probe restore failed: $error');
+      }
+      if (_offlineProbeRunning) {
+        try {
+          await _stopOfflineProbe();
+        } catch (error) {
+          AppLogStore.warning(
+            'latency',
+            'probe restore cleanup failed: $error',
+          );
+        }
+      }
+    }
+    session.fail('vpn_handoff_failed');
+    _publishOfflineUrlTestProgress();
   }
 
   bool _manualRuntimeStartCurrent(int generation) {
@@ -3893,6 +4005,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // every proxy summary here turns a Wi-Fi/LTE handover plus one tap into a
     // multi-thousand-row synchronous allocation burst.
     final selectedActiveOutboundTag = _currentResolvedActiveOutboundTag();
+    final logicalSession = _offlineUrlTestSession;
+    if (_offlineProbeRunning &&
+        logicalSession != null &&
+        !logicalSession.isTerminal &&
+        selectedActiveOutboundTag != null &&
+        logicalSession.pendingTags.contains(selectedActiveOutboundTag)) {
+      unawaited(() async {
+        await _latencyCoordinator.runTarget(
+          targetOutboundTag: selectedActiveOutboundTag,
+          reason: 'offline_selection_priority',
+          force: false,
+        );
+      }());
+    }
     _publishProxyRuntimeVisualStatesForTags(<String>{
       previousTag,
       tag,
@@ -3912,7 +4038,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         action: () => _persistSelectedProxySelection(
           updatedSubscription,
           generation: selectionGeneration,
-          prepareConfigSnapshot: !selectInRuntime,
+          // The probe owns the current config file until the VPN handoff.
+          // Persist selection metadata now; the VPN build below includes it.
+          prepareConfigSnapshot: !selectInRuntime && !_offlineProbeRunning,
         ),
       ),
     );
@@ -4120,6 +4248,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _updateUrlTestProgressForTags(Iterable<String> changedTags) {
+    if (_offlineUrlTestSession != null) {
+      _publishOfflineUrlTestProgress();
+      return;
+    }
     _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
       isRunning: _fullUrlTestSessionRunning,
@@ -4132,7 +4264,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     Duration delay = const Duration(milliseconds: 2500),
     int maxRunAttempts = 1,
   }) {
-    if (!mounted || (!_autoCheckServers && reason == 'periodic')) {
+    if (!mounted ||
+        (_offlineUrlTestSession != null &&
+            !_offlineUrlTestSession!.isTerminal) ||
+        (!_autoCheckServers && reason == 'periodic')) {
       return;
     }
     if (!_foregroundLifecycleActive) {
@@ -4155,6 +4290,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       delay: delay,
       canRun: () {
         if (!mounted ||
+            (_offlineUrlTestSession != null &&
+                !_offlineUrlTestSession!.isTerminal) ||
             !_connected ||
             !_foregroundLifecycleActive ||
             _runtimeTransitionInProgress ||
@@ -4707,6 +4844,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool restartRuntimeOnApply = false,
     bool urlTestAfterApply = false,
   }) async {
+    if (_offlineUrlTestSession != null && !_offlineUrlTestSession!.isTerminal) {
+      if (!await _cancelOfflineProbeForConfigChange('subscription_changed')) {
+        return;
+      }
+    }
     final resolved = await _subscriptionCoordinator.resolveMetadata(
       activeSubscriptionId: preferredSubscriptionId ?? _activeProfileId,
       selectedProxyTag: preferredProxyTag ?? _selectedProxyTag,
@@ -5707,7 +5849,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runUrlTest({bool haptic = true}) async {
-    if (!_connected || !_foregroundLifecycleActive) {
+    if (!_foregroundLifecycleActive) {
       return;
     }
     if (_urlTestInFlight) {
@@ -5719,11 +5861,24 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _urlTestInFlightNotifier.value = false;
       _urlTestCancelled = true;
       _latencyCoordinator.cancel();
+      if (!_connected) ++_offlineStartGeneration;
+      final offlineSession = _offlineUrlTestSession;
+      if (offlineSession != null && !offlineSession.isTerminal) {
+        offlineSession.cancel();
+        if (_offlineProbeRunning) {
+          unawaited(
+            _stopOfflineProbe().catchError((Object error) {
+              AppLogStore.warning('latency', 'probe cancel failed: $error');
+            }),
+          );
+        }
+      }
       _updateUrlTestProgress(
         isRunning: false,
         isCancelled: true,
         resetCounter: false,
       );
+      if (offlineSession != null) _publishOfflineUrlTestProgress();
       return;
     }
     if (haptic) {
@@ -5731,8 +5886,187 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _urlTestCancelled = false;
     _groupUrlTestScheduler.cancel();
+    if (!_connected) {
+      await _startOfflineUrlTest();
+      return;
+    }
+    if (_offlineUrlTestSession?.isTerminal == true) {
+      _offlineUrlTestSession = null;
+      _offlineProbeConfig = null;
+    }
     _updateUrlTestProgress(isRunning: true, isCancelled: false);
     await _latencyCoordinator.runFull(reason: 'manual');
+  }
+
+  Future<void> _startOfflineUrlTest() async {
+    final generation = ++_offlineStartGeneration;
+    _urlTestInFlightNotifier.value = true;
+    try {
+      if (_offlineProbeRunning && _offlineUrlTestSession?.isTerminal == true) {
+        await _stopOfflineProbe();
+      }
+      final capabilities = await _refreshCoreCapabilities();
+      if (!capabilities.supportsUrlTestHandoff) {
+        throw StateError(
+          'This libbox does not support offline URLTest handoff',
+        );
+      }
+      final probe = await _configCoordinator.buildProbeConfig(
+        validateConfig: false,
+      );
+      if (!mounted || generation != _offlineStartGeneration) return;
+      if (probe == null) {
+        throw StateError('Subscription changed during probe build');
+      }
+      final visible = _userVisibleServerTags();
+      final tags = probe.build.plan.urlTestOutboundTags
+          .where(visible.contains)
+          .toSet();
+      if (tags.isEmpty) {
+        throw StateError('No checkable servers in this profile');
+      }
+      final session = OfflineUrlTestSession(
+        id: 'manual-${DateTime.now().microsecondsSinceEpoch}-${++_offlineSessionSequence}',
+        fingerprint: probe.probeFingerprint,
+        physicalNetworkEpoch: _physicalNetworkEpoch,
+        tags: tags,
+      );
+      _offlineUrlTestSession = session;
+      _offlineProbeConfig = probe;
+      _publishOfflineUrlTestProgress();
+      await _singboxRuntime.startProbe(probe.build.configJson);
+      // The start RPC only acknowledges dispatch. From this point onward the
+      // probe owns the native service even while readiness is still pending.
+      _offlineProbeRunning = true;
+      if (!mounted || generation != _offlineStartGeneration) {
+        await _stopOfflineProbe();
+        return;
+      }
+      if (!await _awaitRuntimeMode('probe', generation)) {
+        throw StateError('Probe runtime did not become ready');
+      }
+      session.runOffline();
+      _publishOfflineUrlTestProgress();
+      await _runLogicalUrlTest(session, tags);
+    } catch (error, stackTrace) {
+      AppLogStore.error(
+        'latency',
+        'offline URLTest failed: $error\n$stackTrace',
+      );
+      final session = _offlineUrlTestSession;
+      if (session != null &&
+          !session.isTerminal &&
+          session.phase != OfflineUrlTestPhase.pausingForVpn) {
+        session.fail(error.toString());
+      }
+      _publishOfflineUrlTestProgress();
+      if (mounted && generation == _offlineStartGeneration) {
+        _showAppSnackBar('Проверка серверов не запустилась: $error');
+      }
+      if (_offlineProbeRunning) await _stopOfflineProbe();
+    } finally {
+      if (generation == _offlineStartGeneration &&
+          !_latencyCoordinator.isRunning) {
+        _urlTestInFlightNotifier.value =
+            _offlineUrlTestSession?.isTerminal == false;
+      }
+    }
+  }
+
+  Future<bool> _awaitRuntimeMode(String mode, int generation) async {
+    for (var attempt = 0; attempt < 100; attempt++) {
+      if (!mounted || generation != _offlineStartGeneration) return false;
+      final status = await _singboxRuntime.status();
+      if (status['running'] == true && status['mode'] == mode) {
+        final nativeGeneration =
+            (status['runtimeGeneration'] as num?)?.toInt() ?? 0;
+        _runtimeOperations.updateRuntimeState(
+          running: true,
+          nativeRuntimeGeneration: nativeGeneration,
+        );
+        if (mode == 'probe') {
+          _offlineProbeRuntimeGeneration = nativeGeneration;
+        }
+        if (mode != 'probe' || _runtimeOperations.urlTestReady) return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return false;
+  }
+
+  Future<void> _runLogicalUrlTest(
+    OfflineUrlTestSession session,
+    Set<String> tags,
+  ) async {
+    if (tags.isEmpty) {
+      _publishOfflineUrlTestProgress();
+      return;
+    }
+    final completed = await _latencyCoordinator.runFull(
+      reason: 'offline_manual',
+      includeOutboundTags: tags.toList(growable: false),
+      logicalSessionId: session.id,
+      physicalNetworkEpoch: session.physicalNetworkEpoch,
+    );
+    if (!mounted ||
+        _offlineUrlTestSession != session ||
+        session.phase == OfflineUrlTestPhase.pausingForVpn ||
+        session.phase == OfflineUrlTestPhase.preparing) {
+      return;
+    }
+    if (session.isTerminal) {
+      if (_offlineProbeRunning) await _stopOfflineProbe();
+      return;
+    }
+    if (session.pendingTags.isNotEmpty) {
+      session.fail(
+        completed ? 'incomplete_result_stream' : 'native_check_failed',
+      );
+    }
+    _publishOfflineUrlTestProgress();
+    if (_offlineProbeRunning) await _stopOfflineProbe();
+  }
+
+  Future<void> _stopOfflineProbe({bool retainConfig = false}) async {
+    try {
+      await _singboxRuntime.stopProbe();
+      _offlineProbeRunning = false;
+      if (!retainConfig) _offlineProbeConfig = null;
+    } catch (error) {
+      AppLogStore.warning('latency', 'probe stop not confirmed: $error');
+      rethrow;
+    }
+  }
+
+  Future<bool> _cancelOfflineProbeForConfigChange(String reason) async {
+    ++_offlineStartGeneration;
+    final session = _offlineUrlTestSession;
+    session?.fail(reason);
+    _publishOfflineUrlTestProgress();
+    await _latencyCoordinator.cancelAndWait();
+    if (!_offlineProbeRunning) return true;
+    try {
+      await _stopOfflineProbe();
+      return true;
+    } catch (error) {
+      if (mounted) _showAppSnackBar('Проверка ещё завершается: $error');
+      return false;
+    }
+  }
+
+  void _publishOfflineUrlTestProgress() {
+    final session = _offlineUrlTestSession;
+    if (session == null) return;
+    _urlTestProgressNotifier.value = UrlTestProgressState(
+      isRunning: !session.isTerminal,
+      isCancelled: session.phase == OfflineUrlTestPhase.cancelled,
+      isPaused: session.phase == OfflineUrlTestPhase.pausingForVpn,
+      total: session.total,
+      working: session.working,
+      failed: session.failed,
+      completed: session.completed,
+    );
+    _urlTestInFlightNotifier.value = !session.isTerminal;
   }
 
   Future<void> _runActiveProxyUrlTest({bool haptic = true}) async {
@@ -6095,12 +6429,26 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _handleRuntimeStateEvent(RuntimeStateEvent event) {
     final running = event.running;
+    final mode = event.raw['mode']?.toString() ?? '';
     final nativeRuntimeGeneration =
         (event.raw['runtimeGeneration'] as num?)?.toInt() ?? 0;
     _runtimeOperations.updateRuntimeState(
       running: running,
       nativeRuntimeGeneration: nativeRuntimeGeneration,
     );
+    if (mode == 'probe' ||
+        (!running &&
+            _offlineProbeRuntimeGeneration > 0 &&
+            nativeRuntimeGeneration == _offlineProbeRuntimeGeneration)) {
+      _offlineProbeRunning = running;
+      if (running) _offlineProbeRuntimeGeneration = nativeRuntimeGeneration;
+      if (!running &&
+          _offlineUrlTestSession?.phase == OfflineUrlTestPhase.runningOffline) {
+        _offlineUrlTestSession?.fail('probe_stopped');
+        _publishOfflineUrlTestProgress();
+      }
+      return;
+    }
     final error = event.error;
     final hasError = event.hasError;
     final wasRetryScheduled = _invalidOutboundRetryScheduled;
@@ -6181,6 +6529,31 @@ class _MeowClientState extends ConsumerState<MeowClient>
         interfaceName != null &&
         interfaceName.isNotEmpty &&
         interfaceIndex > 0;
+    final physicalKey = usable ? '$interfaceName:$interfaceIndex' : '';
+    final physicalChanged =
+        _physicalInterfaceKey.isNotEmpty &&
+        physicalKey != _physicalInterfaceKey;
+    if (physicalChanged) {
+      ++_physicalNetworkEpoch;
+      final logicalSession = _offlineUrlTestSession;
+      if (logicalSession != null && !logicalSession.isTerminal) {
+        logicalSession.reconcile(
+          fingerprint: logicalSession.fingerprint,
+          physicalNetworkEpoch: _physicalNetworkEpoch,
+        );
+        _publishOfflineUrlTestProgress();
+      } else if (logicalSession != null) {
+        _offlineUrlTestSession = null;
+        _offlineProbeConfig = null;
+        _urlTestProgressNotifier.value = const UrlTestProgressState();
+      }
+      final invalidated = _proxyRuntime.invalidateNetworkMeasurements(<String>{
+        ..._activeOutboundByTagLookup.keys,
+        ..._runtimeLatencies.keys,
+      });
+      if (invalidated) _publishProxyRuntimeVisualStates();
+    }
+    _physicalInterfaceKey = physicalKey;
     final diagnosticsWereReady = _runtimeOperations.diagnosticsReady;
     _runtimeOperations.updateNetwork(
       generation: networkGeneration,
@@ -6193,6 +6566,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _runtimeCommands.invalidate();
     _latencyCoordinator.cancel();
+    if (physicalChanged &&
+        usable &&
+        _offlineUrlTestSession != null &&
+        !_offlineUrlTestSession!.isTerminal) {
+      unawaited(
+        _restartLogicalUrlTestAfterNetworkChange(_offlineUrlTestSession!),
+      );
+    }
     _activeProxyIpController.cancelPending();
     _groupUrlTestScheduler.cancel();
     if (!usable) {
@@ -6255,14 +6636,60 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _networkRecovery.cancelDecision();
   }
 
+  Future<void> _restartLogicalUrlTestAfterNetworkChange(
+    OfflineUrlTestSession session,
+  ) async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted ||
+        _offlineUrlTestSession != session ||
+        session.isTerminal ||
+        session.phase == OfflineUrlTestPhase.pausingForVpn) {
+      return;
+    }
+    for (var attempt = 0; attempt < 60; attempt++) {
+      if (!mounted || _offlineUrlTestSession != session || session.isTerminal) {
+        return;
+      }
+      if ((_offlineProbeRunning || _connected) &&
+          _runtimeOperations.urlTestReady &&
+          !_latencyCoordinator.isRunning) {
+        if (_offlineProbeRunning) {
+          session.runOffline();
+        } else {
+          session.resumeOnVpn();
+        }
+        _publishOfflineUrlTestProgress();
+        await _runLogicalUrlTest(session, session.pendingTags);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    session.fail('network_not_ready');
+    _publishOfflineUrlTestProgress();
+  }
+
   void _handleRuntimeUrlTestEvent(RuntimeUrlTestEvent event) {
-    if (!mounted || !_connected || _runtimeTransitionInProgress) return;
+    if (!mounted ||
+        (!_connected && !_offlineProbeRunning) ||
+        (_runtimeTransitionInProgress &&
+            _offlineUrlTestSession?.phase != OfflineUrlTestPhase.runningVpn)) {
+      return;
+    }
     final currentRuntimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
     if (event.runtimeGeneration <= 0 ||
         event.runtimeGeneration != currentRuntimeGeneration) {
       return;
     }
     final result = event.result;
+    final logicalSession = _offlineUrlTestSession;
+    if (logicalSession != null &&
+        !logicalSession.isTerminal &&
+        result != null &&
+        (result.logicalSessionId != logicalSession.id ||
+            result.physicalNetworkEpoch !=
+                logicalSession.physicalNetworkEpoch)) {
+      return;
+    }
     if (result != null &&
         result.networkGeneration == _networkInterfaceGeneration) {
       if (_latencyCoordinator.awaitingCoreSession &&
@@ -6273,6 +6700,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
     }
     final session = event.session;
+    if (logicalSession != null &&
+        !logicalSession.isTerminal &&
+        session != null &&
+        (session.logicalSessionId != logicalSession.id ||
+            session.physicalNetworkEpoch !=
+                logicalSession.physicalNetworkEpoch)) {
+      return;
+    }
     if (session != null &&
         session.networkGeneration == _networkInterfaceGeneration) {
       final accepted = _latencyCoordinator.handleCoreSession(
@@ -6296,6 +6731,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           isRunning: session.state == 'running',
           isCancelled: session.state == 'cancelled',
         );
+        if (logicalSession != null) _publishOfflineUrlTestProgress();
       }
       if (accepted && session.state == 'running') {
         for (final pending in _pendingUrlTestResults.takeForSession(
@@ -6318,6 +6754,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
               ProxyRuntimeController.urlTestStatusUnavailable,
     );
     if (!accepted) return;
+    final logicalSession = _offlineUrlTestSession;
+    if (logicalSession != null &&
+        !logicalSession.isTerminal &&
+        !logicalSession.accept(
+          tag: result.tag,
+          delayMillis: result.delay,
+          available:
+              result.delay > 0 &&
+              result.status.toLowerCase() !=
+                  ProxyRuntimeController.urlTestStatusUnavailable,
+          logicalSessionId: result.logicalSessionId,
+          physicalNetworkEpoch: result.physicalNetworkEpoch,
+        )) {
+      return;
+    }
+    if (logicalSession != null) _publishOfflineUrlTestProgress();
     final affectedTags = _proxyRuntime.applyUrlTestResult(
       tag: result.tag,
       measuredAtMillis: result.measuredAtMillis,
@@ -6328,7 +6780,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (affectedTags.isEmpty) return;
     _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
-    _updateUrlTestProgressForTags(affectedTags);
+    if (logicalSession == null) {
+      _updateUrlTestProgressForTags(affectedTags);
+    }
     unawaited(_syncQuickSettingsTileLabel());
   }
 
@@ -6342,6 +6796,31 @@ class _MeowClientState extends ConsumerState<MeowClient>
         nativeRuntimeGeneration:
             (status['runtimeGeneration'] as num?)?.toInt() ?? 0,
       );
+      if (running && status['mode'] == 'probe') {
+        _offlineProbeRunning = true;
+        _offlineProbeRuntimeGeneration =
+            (status['runtimeGeneration'] as num?)?.toInt() ?? 0;
+        if (_offlineUrlTestSession == null) {
+          // A probe outlived its Flutter owner; it must not masquerade as VPN.
+          unawaited(
+            _stopOfflineProbe().catchError((Object error) {
+              AppLogStore.warning(
+                'latency',
+                'orphan probe stop failed: $error',
+              );
+            }),
+          );
+        }
+        return;
+      }
+      if (!running &&
+          !_connected &&
+          _offlineUrlTestSession != null &&
+          _offlineProbeRuntimeGeneration > 0 &&
+          (status['runtimeGeneration'] as num?)?.toInt() ==
+              _offlineProbeRuntimeGeneration) {
+        return;
+      }
       final recordedServiceAlive = status['recordedServiceAlive'] == true;
       final runtimeIntentFresh = status['runtimeIntentFresh'] == true;
       final activeRuntimeOwner = status['activeRuntimeOwner'] == true;

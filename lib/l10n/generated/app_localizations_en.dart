@@ -333,6 +333,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get proxiesCheckPaused => 'Check paused';
+
+  @override
   String proxiesTotal(int total) {
     return 'Total $total';
   }

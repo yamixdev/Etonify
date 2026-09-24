@@ -36,6 +36,9 @@ class LatencyTestRequest {
     this.deadlineMillis = 10000,
     this.force = true,
     this.mode = 'background',
+    this.includeOutboundTags = const <String>[],
+    this.logicalSessionId = '',
+    this.physicalNetworkEpoch = 0,
   });
 
   final String groupTag;
@@ -48,6 +51,9 @@ class LatencyTestRequest {
   final int deadlineMillis;
   final bool force;
   final String mode;
+  final List<String> includeOutboundTags;
+  final String logicalSessionId;
+  final int physicalNetworkEpoch;
 }
 
 typedef LatencyTestRunner = Future<void> Function(LatencyTestRequest request);
@@ -241,11 +247,20 @@ class LatencyCoordinator {
         timeSeconds <= (_acceptedEventTimes[tag] ?? 0);
   }
 
-  Future<bool> runFull({required String reason, String mode = 'manual'}) {
+  Future<bool> runFull({
+    required String reason,
+    String mode = 'manual',
+    List<String> includeOutboundTags = const <String>[],
+    String logicalSessionId = '',
+    int physicalNetworkEpoch = 0,
+  }) {
     return _runGroupSession(
       kind: LatencySessionKind.full,
       reason: reason,
       mode: mode,
+      includeOutboundTags: includeOutboundTags,
+      logicalSessionId: logicalSessionId,
+      physicalNetworkEpoch: physicalNetworkEpoch,
     );
   }
 
@@ -646,7 +661,12 @@ class LatencyCoordinator {
         .toInt();
   }
 
-  LatencyTestRequest _groupRequest(String mode) {
+  LatencyTestRequest _groupRequest(
+    String mode, {
+    List<String> includeOutboundTags = const <String>[],
+    String logicalSessionId = '',
+    int physicalNetworkEpoch = 0,
+  }) {
     final manual = mode == 'manual' && _capabilities.supportsUrlTestExhaustive;
     final effectiveConcurrency = _configuredConcurrency;
     return LatencyTestRequest(
@@ -659,6 +679,9 @@ class LatencyCoordinator {
           ? 0
           : _fullDeadlineMillisForConcurrency(effectiveConcurrency),
       mode: manual ? 'manual' : 'background',
+      includeOutboundTags: includeOutboundTags,
+      logicalSessionId: logicalSessionId,
+      physicalNetworkEpoch: physicalNetworkEpoch,
     );
   }
 
@@ -666,11 +689,19 @@ class LatencyCoordinator {
     required LatencySessionKind kind,
     required String reason,
     required String mode,
+    List<String> includeOutboundTags = const <String>[],
+    String logicalSessionId = '',
+    int physicalNetworkEpoch = 0,
   }) => _runSession(
     kind: kind,
     reason: reason,
     targetTag: '',
-    request: _groupRequest(mode),
+    request: _groupRequest(
+      mode,
+      includeOutboundTags: includeOutboundTags,
+      logicalSessionId: logicalSessionId,
+      physicalNetworkEpoch: physicalNetworkEpoch,
+    ),
   );
 
   Future<bool> _runSession({
@@ -700,7 +731,9 @@ class LatencyCoordinator {
     _baselineEventTimes = Map<String, int>.from(_eventBaselineTimes());
     _sessionExpectedTags = targetTag.isNotEmpty
         ? <String>{targetTag}
-        : _expectedTags()
+        : (request.includeOutboundTags.isNotEmpty
+                  ? request.includeOutboundTags
+                  : _expectedTags())
               .map((tag) => tag.trim())
               .where((tag) => tag.isNotEmpty)
               .toSet();

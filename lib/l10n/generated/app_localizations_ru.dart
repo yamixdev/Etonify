@@ -332,6 +332,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get proxiesCheckPaused => 'Проверка приостановлена';
+
+  @override
   String proxiesTotal(int total) {
     return 'Всего $total';
   }

@@ -668,6 +668,12 @@ abstract class AppLocalizations {
   /// **'Tested {tested} / {total}'**
   String proxiesProgressTested(int tested, int total);
 
+  /// No description provided for @proxiesCheckPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Check paused'**
+  String get proxiesCheckPaused;
+
   /// No description provided for @proxiesTotal.
   ///
   /// In en, this message translates to:

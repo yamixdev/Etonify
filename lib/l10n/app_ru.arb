@@ -96,6 +96,7 @@
   "autoCheckDisabledNoticeAction": "Понятно",
   "proxiesProgressWorking": "Работают {working} / {total}",
   "proxiesProgressTested": "Проверено {tested} / {total}",
+  "proxiesCheckPaused": "Проверка приостановлена",
   "@proxiesProgressTested": {
     "placeholders": {
       "tested": {"type": "int"},

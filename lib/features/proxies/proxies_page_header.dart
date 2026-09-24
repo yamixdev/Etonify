@@ -247,7 +247,9 @@ class _ProxySheetHeader extends StatelessWidget {
                         ValueListenableBuilder<UrlTestProgressState>(
                           valueListenable: urlTestProgressListenable!,
                           builder: (context, progressState, _) {
-                            if (!connected) {
+                            if (!connected &&
+                                !progressState.hasResults &&
+                                !progressState.isPaused) {
                               if (serverCount <= 0) {
                                 return const SizedBox.shrink();
                               }
@@ -295,12 +297,14 @@ class _ProxySheetHeader extends StatelessWidget {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (showTested)
+                                  if (showTested || progressState.isPaused)
                                     Text(
-                                      l10n.proxiesProgressTested(
-                                        progressState.tested,
-                                        progressState.total,
-                                      ),
+                                      progressState.isPaused
+                                          ? l10n.proxiesCheckPaused
+                                          : l10n.proxiesProgressTested(
+                                              progressState.tested,
+                                              progressState.total,
+                                            ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       textAlign: TextAlign.center,
@@ -366,7 +370,7 @@ class _ProxySheetHeader extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (connected)
+                        if (serverCount > 0)
                           urlTestInFlightListenable != null
                               ? ValueListenableBuilder<bool>(
                                   valueListenable: urlTestInFlightListenable!,

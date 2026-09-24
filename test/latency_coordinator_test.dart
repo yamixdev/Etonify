@@ -14,6 +14,34 @@ const _testPolicy = LatencyUiPolicy(
 
 void main() {
   test(
+    'resumed full test requests only pending tags with handoff identity',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        expectedTags: () => ['already-tested', 'pending'],
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final result = coordinator.runFull(
+        reason: 'vpn_handoff',
+        includeOutboundTags: ['pending'],
+        logicalSessionId: 'manual-42',
+        physicalNetworkEpoch: 7,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.includeOutboundTags, ['pending']);
+      expect(requests.single.logicalSessionId, 'manual-42');
+      expect(requests.single.physicalNetworkEpoch, 7);
+      expect(coordinator.isChecking('already-tested'), isFalse);
+      expect(coordinator.isChecking('pending'), isTrue);
+      coordinator.cancel();
+      expect(await result, isFalse);
+    },
+  );
+
+  test(
     'full session accepts partial results and executes targeted probe with force',
     () async {
       final calls = <LatencyTestRequest>[];
