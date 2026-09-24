@@ -155,6 +155,13 @@ class ProxyRuntimeController {
     runtimeLowestOutboundTag = null;
   }
 
+  /// URLTest revisions belong to one native service instance. Preserve the
+  /// last measurements when the probe hands off to VPN on the same network,
+  /// but accept revisions starting from one in the new instance.
+  void beginNewNativeRuntime() {
+    runtimeLatencyRevisions.clear();
+  }
+
   /// Marks only proxies that produced no terminal URLTest telemetry during the
   /// startup grace period. Existing latency and explicit failure results are
   /// preserved, and a later native or manual URLTest result can replace this

@@ -473,7 +473,12 @@ object SingboxController {
         }
     }
 
-    fun setRunning(value: Boolean, mode: String = serviceMode, error: String? = null) {
+    fun setRunning(
+        value: Boolean,
+        mode: String = serviceMode,
+        error: String? = null,
+        eventRuntimeGeneration: Long? = null,
+    ) {
         running = value
         serviceMode = if (value) mode else ""
         MeowDiagnostics.log(TAG, "setRunning value=$value mode=$serviceMode error=$error")
@@ -488,7 +493,7 @@ object SingboxController {
             connectionsOut = 0
             trafficAvailable = false
         }
-        emitCurrentState(error)
+        emitCurrentState(error, eventRuntimeGeneration)
         emitCurrentStatus()
         if (value) {
             // Keep the native stream alive with the foreground VPN service.
@@ -556,7 +561,9 @@ object SingboxController {
         }
         activeRuntimeGeneration = 0
         cleanupStandaloneClient()
-        setRunning(false)
+        // The stop event must still identify the probe that just ended. Dart
+        // keeps its URLTest measurements instead of clearing them like a VPN.
+        setRunning(false, eventRuntimeGeneration = currentGeneration)
         MeowDiagnostics.log(TAG, "markServiceStopped generation=$generation reason=$reason")
         notifyStopWaiters(true)
     }
@@ -565,7 +572,7 @@ object SingboxController {
         val previousGeneration = activeRuntimeGeneration
         activeRuntimeGeneration = 0
         cleanupStandaloneClient()
-        setRunning(false)
+        setRunning(false, eventRuntimeGeneration = previousGeneration)
         MeowDiagnostics.log(
             TAG,
             "forceMarkServiceStopped previousGeneration=$previousGeneration reason=$reason",
@@ -1062,6 +1069,7 @@ object SingboxController {
         interfaceName: String?,
         interfaceIndex: Int,
         networkGeneration: Long,
+        networkHandle: Long = 0L,
     ) {
         noteNetworkGeneration(networkGeneration)
         emit(
@@ -1072,6 +1080,7 @@ object SingboxController {
                 "interfaceName" to interfaceName,
                 "interfaceIndex" to interfaceIndex,
                 "networkGeneration" to networkGeneration,
+                "networkHandle" to networkHandle,
                 "uptimeMs" to SystemClock.uptimeMillis(),
             ),
         )
@@ -1144,13 +1153,13 @@ object SingboxController {
         eventSink?.success(payload)
     }
 
-    private fun emitCurrentState(error: String? = null) {
+    private fun emitCurrentState(error: String? = null, eventRuntimeGeneration: Long? = null) {
         emit(
             mapOf(
                 "type" to runtimeEventState,
                 "running" to running,
                 "mode" to serviceMode,
-                "runtimeGeneration" to activeRuntimeGeneration,
+                "runtimeGeneration" to (eventRuntimeGeneration ?: activeRuntimeGeneration),
                 "recordedServiceAlive" to MeowApplication.isRecordedServiceAlive(),
                 "activeRuntimeOwner" to MeowBoxService.hasActiveRuntimeOwner(serviceMode.takeIf { it.isNotBlank() }),
                 "error" to error,

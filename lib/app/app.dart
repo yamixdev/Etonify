@@ -24,6 +24,7 @@ import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/app/latency_dependencies.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
+import 'package:meow_client/app/physical_network_transition.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
@@ -3711,6 +3712,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final startAfterStop = _runtimeIntent.completeSuccessfulStop();
     setState(() {
       _setConnectionPhase(AppConnectionPhase.idle);
+      _offlineUrlTestSession?.cancel();
+      _offlineUrlTestSession = null;
+      _offlineProbeConfig = null;
       _resetActiveProxyIpState();
       _proxyLocationCoordinator.reset();
       _runtimeRecovery.clearExcludedOutbounds();
@@ -4286,6 +4290,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
     Duration delay = const Duration(milliseconds: 2500),
     int maxRunAttempts = 1,
   }) {
+    if (_offlineUrlTestSession?.suppressesAutomaticCheck(
+          reason: reason,
+          physicalNetworkEpoch: _physicalNetworkEpoch,
+        ) ==
+        true) {
+      AppLogStore.info(
+        'latency',
+        'automatic URLTest skipped after completed offline sweep reason=$reason',
+      );
+      if (reason == 'runtime_diagnostics_ready' && _autoCheckServers) {
+        _schedulePeriodicGroupUrlTest();
+      }
+      return;
+    }
     if (!mounted ||
         (_offlineUrlTestSession != null &&
             !_offlineUrlTestSession!.isTerminal) ||
@@ -4313,6 +4331,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       delay: delay,
       canRun: () {
         if (!mounted ||
+            _offlineUrlTestSession?.suppressesAutomaticCheck(
+                  reason: reason,
+                  physicalNetworkEpoch: _physicalNetworkEpoch,
+                ) ==
+                true ||
             (_offlineUrlTestSession != null &&
                 !_offlineUrlTestSession!.isTerminal) ||
             !_connected ||
@@ -4913,6 +4936,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _lastEmptyAfterDropInvalidWarningSubscriptionId = null;
       if (shouldResetRuntimeState) {
         if (!preserveLatencyDuringReload) {
+          _offlineUrlTestSession = null;
+          _offlineProbeConfig = null;
           _runtimeLatencies.clear();
           _unavailableLatencyTags.clear();
           _invalidatedLatencyTags.clear();
@@ -5020,6 +5045,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
             );
         if (shouldResetRuntimeState) {
           if (!preserveLatencyDuringReload) {
+            _offlineUrlTestSession = null;
+            _offlineProbeConfig = null;
             _runtimeLatencies.clear();
             _unavailableLatencyTags.clear();
             _invalidatedLatencyTags.clear();
@@ -6011,7 +6038,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (status['running'] == true && status['mode'] == mode) {
         final nativeGeneration =
             (status['runtimeGeneration'] as num?)?.toInt() ?? 0;
-        _runtimeOperations.updateRuntimeState(
+        _updateNativeRuntimeState(
           running: true,
           nativeRuntimeGeneration: nativeGeneration,
         );
@@ -6463,19 +6490,44 @@ class _MeowClientState extends ConsumerState<MeowClient>
     unawaited(_syncRuntimeState());
   }
 
+  void _updateNativeRuntimeState({
+    required bool running,
+    required int nativeRuntimeGeneration,
+  }) {
+    final previousGeneration = _runtimeOperations.nativeRuntimeGeneration;
+    _runtimeOperations.updateRuntimeState(
+      running: running,
+      nativeRuntimeGeneration: nativeRuntimeGeneration,
+    );
+    if (running &&
+        nativeRuntimeGeneration > 0 &&
+        nativeRuntimeGeneration != previousGeneration &&
+        _runtimeOperations.nativeRuntimeGeneration == nativeRuntimeGeneration) {
+      _proxyRuntime.beginNewNativeRuntime();
+    }
+  }
+
   void _handleRuntimeStateEvent(RuntimeStateEvent event) {
     final running = event.running;
     final mode = event.raw['mode']?.toString() ?? '';
     final nativeRuntimeGeneration =
         (event.raw['runtimeGeneration'] as num?)?.toInt() ?? 0;
-    _runtimeOperations.updateRuntimeState(
+    if (nativeRuntimeGeneration > 0 &&
+        _runtimeOperations.nativeRuntimeGeneration > 0 &&
+        nativeRuntimeGeneration < _runtimeOperations.nativeRuntimeGeneration) {
+      AppLogStore.debug(
+        'runtime',
+        'ignored stale state event generation=$nativeRuntimeGeneration '
+            'current=${_runtimeOperations.nativeRuntimeGeneration}',
+      );
+      return;
+    }
+    _updateNativeRuntimeState(
       running: running,
       nativeRuntimeGeneration: nativeRuntimeGeneration,
     );
     if (mode == 'probe' ||
-        (!running &&
-            _offlineProbeRuntimeGeneration > 0 &&
-            nativeRuntimeGeneration == _offlineProbeRuntimeGeneration)) {
+        event.isStoppedProbeRuntime(_offlineProbeRuntimeGeneration)) {
       _offlineProbeRunning = running;
       if (running) _offlineProbeRuntimeGeneration = nativeRuntimeGeneration;
       if (!running &&
@@ -6513,6 +6565,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (decision.clearDisconnectedState) {
         shouldCancelLatency = true;
         shouldSyncQuickSettingsTile = true;
+        _offlineUrlTestSession?.cancel();
+        _offlineUrlTestSession = null;
+        _offlineProbeConfig = null;
         _resetActiveProxyIpState();
         _proxyLocationCoordinator.reset();
         _resetTrafficDashboardData();
@@ -6550,6 +6605,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final reason = event['reason']?.toString() ?? 'network';
     final interfaceName = event['interfaceName']?.toString();
     final interfaceIndex = (event['interfaceIndex'] as num?)?.toInt() ?? 0;
+    final networkHandle = (event['networkHandle'] as num?)?.toInt() ?? 0;
     final networkGeneration =
         (event['networkGeneration'] as num?)?.toInt() ??
         ++_networkInterfaceGeneration;
@@ -6565,10 +6621,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
         interfaceName != null &&
         interfaceName.isNotEmpty &&
         interfaceIndex > 0;
-    final physicalKey = usable ? '$interfaceName:$interfaceIndex' : '';
-    final physicalChanged =
-        _physicalInterfaceKey.isNotEmpty &&
-        physicalKey != _physicalInterfaceKey;
+    final physicalKey = usable
+        ? physicalNetworkKey(
+            networkHandle: networkHandle,
+            interfaceName: interfaceName,
+            interfaceIndex: interfaceIndex,
+          )
+        : '';
+    final physicalChanged = physicalNetworkChanged(
+      _physicalInterfaceKey,
+      physicalKey,
+    );
     if (physicalChanged) {
       ++_physicalNetworkEpoch;
       final logicalSession = _offlineUrlTestSession;
@@ -6601,7 +6664,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           .updateNetwork(generation: networkGeneration, usable: usable);
     }
     _runtimeCommands.invalidate();
-    _latencyCoordinator.cancel();
+    if (physicalChanged || !usable) _latencyCoordinator.cancel();
     if (physicalChanged &&
         usable &&
         _offlineUrlTestSession != null &&
@@ -6623,23 +6686,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
 
-    // Every measurement belongs to the previous network, not only the active
-    // route. Refresh retained/visible rows lazily through the visual store.
-    final invalidatedTags = <String>{
-      ..._activeOutboundByTagLookup.keys,
-      ..._runtimeLatencies.keys,
-      ..._proxySummariesByTagCache.keys,
-    };
-    final measurementsChanged = _proxyRuntime.invalidateNetworkMeasurements(
-      invalidatedTags,
-    );
-    _resetActiveProxyIpState(rebuild: false);
-    _proxyLocationCoordinator.reset();
-    _proxyLocationCoordinator.invalidateSignature();
-    _urlTestCancelled = false;
-    _updateUrlTestProgress(isRunning: false, isCancelled: false);
-    if (measurementsChanged) {
-      _publishProxyRuntimeVisualStates();
+    // A new native runtime may report the same underlying Android Network.
+    // Keep the offline sweep's latencies; only a physical handover makes them
+    // stale. The changed-network branch above already invalidated those tags.
+    if (physicalChanged) {
+      _resetActiveProxyIpState(rebuild: false);
+      _proxyLocationCoordinator.reset();
+      _proxyLocationCoordinator.invalidateSignature();
+      _urlTestCancelled = false;
+      _updateUrlTestProgress(isRunning: false, isCancelled: false);
     }
     _replayPendingRuntimeGroups();
     _scheduleVpnNotificationSync();
@@ -6651,7 +6706,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _runtimeIntent.deferRetryUntilResume();
       return;
     }
-    if (usable) {
+    if (usable && physicalChanged) {
       // Give the new transport a moment to settle. With automatic full-list
       // checks disabled, only the selected outbound will be probed; otherwise
       // the scheduled exhaustive sweep follows the user's setting.
@@ -6824,7 +6879,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final status = await _singboxRuntime.status();
       if (!mounted || !_foregroundLifecycleActive) return;
       final running = status['running'] == true;
-      _runtimeOperations.updateRuntimeState(
+      _updateNativeRuntimeState(
         running: running,
         nativeRuntimeGeneration:
             (status['runtimeGeneration'] as num?)?.toInt() ?? 0,

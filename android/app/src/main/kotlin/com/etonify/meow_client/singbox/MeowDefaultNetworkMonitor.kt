@@ -615,6 +615,7 @@ object MeowDefaultNetworkMonitor {
                 interfaceName,
                 index,
                 nextGen,
+                effectiveNetwork.networkHandle,
             )
             // The monitor belongs to the foreground VPN service. Wake the
             // runtime here rather than waiting for Flutter to resume, so a

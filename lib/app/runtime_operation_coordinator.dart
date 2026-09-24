@@ -83,6 +83,11 @@ class RuntimeOperationCoordinator {
     required bool running,
     required int nativeRuntimeGeneration,
   }) {
+    if (nativeRuntimeGeneration > 0 &&
+        _nativeRuntimeGeneration > 0 &&
+        nativeRuntimeGeneration < _nativeRuntimeGeneration) {
+      return;
+    }
     _running = running;
     if (nativeRuntimeGeneration > 0 &&
         nativeRuntimeGeneration != _nativeRuntimeGeneration) {

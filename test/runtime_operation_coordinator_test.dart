@@ -2,6 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/runtime_operation_coordinator.dart';
 
 void main() {
+  test('late probe stop cannot mark a newer VPN runtime stopped', () {
+    final coordinator = RuntimeOperationCoordinator();
+    coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 7);
+    coordinator.updateNetwork(generation: 1, usable: true);
+    coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 8);
+
+    coordinator.updateRuntimeState(running: false, nativeRuntimeGeneration: 7);
+
+    expect(coordinator.nativeRuntimeGeneration, 8);
+    expect(coordinator.urlTestReady, isTrue);
+  });
+
   test('diagnostics wait for matching groups snapshot', () {
     final coordinator = RuntimeOperationCoordinator();
     coordinator.beginSelection('vless-2');

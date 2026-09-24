@@ -49,6 +49,17 @@ class OfflineUrlTestSession {
   Map<String, OfflineUrlTestMeasurement> get measurements =>
       Map<String, OfflineUrlTestMeasurement>.unmodifiable(_measurements);
 
+  bool suppressesAutomaticCheck({
+    required String reason,
+    required int physicalNetworkEpoch,
+  }) =>
+      phase == OfflineUrlTestPhase.completed &&
+      this.physicalNetworkEpoch == physicalNetworkEpoch &&
+      (reason == 'runtime_diagnostics_ready' ||
+          reason == 'network_changed' ||
+          reason == 'selection' ||
+          reason == 'resume_deferred');
+
   bool accept({
     required String tag,
     required int delayMillis,

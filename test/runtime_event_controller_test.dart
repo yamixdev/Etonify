@@ -5,6 +5,23 @@ import 'package:meow_client/app/runtime_event_controller.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 void main() {
+  test(
+    'probe stop is identified by its generation after native mode clears',
+    () {
+      const stoppedProbe = RuntimeStateEvent(
+        running: false,
+        raw: {'mode': '', 'runtimeGeneration': 7},
+      );
+      const stoppedVpn = RuntimeStateEvent(
+        running: false,
+        raw: {'mode': '', 'runtimeGeneration': 8},
+      );
+
+      expect(stoppedProbe.isStoppedProbeRuntime(7), isTrue);
+      expect(stoppedVpn.isStoppedProbeRuntime(7), isFalse);
+    },
+  );
+
   test('early URLTest results wait for the matching session', () {
     const oldResult = RuntimeUrlTestResult(
       tag: 'server-a',

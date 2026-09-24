@@ -15,6 +15,13 @@ class RuntimeStateEvent {
   final Map<String, dynamic> raw;
 
   bool get hasError => error != null && error!.isNotEmpty;
+
+  /// Native clears `mode` on stop, so the stopped runtime's generation is the
+  /// only reliable way to distinguish a probe stop from a VPN disconnect.
+  bool isStoppedProbeRuntime(int probeGeneration) =>
+      !running &&
+      probeGeneration > 0 &&
+      (raw['runtimeGeneration'] as num?)?.toInt() == probeGeneration;
 }
 
 class RuntimeGroupsEvent {

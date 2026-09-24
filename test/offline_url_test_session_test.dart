@@ -2,6 +2,58 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
 
 void main() {
+  test('completed offline sweep suppresses only duplicate startup checks', () {
+    final session = OfflineUrlTestSession(
+      id: 'manual-startup',
+      fingerprint: 'config-a',
+      physicalNetworkEpoch: 9,
+      tags: {'a'},
+    )..runOffline();
+    session.accept(
+      tag: 'a',
+      delayMillis: 51,
+      available: true,
+      logicalSessionId: 'manual-startup',
+      physicalNetworkEpoch: 9,
+    );
+
+    expect(
+      session.suppressesAutomaticCheck(
+        reason: 'runtime_diagnostics_ready',
+        physicalNetworkEpoch: 9,
+      ),
+      isTrue,
+    );
+    expect(
+      session.suppressesAutomaticCheck(
+        reason: 'network_changed',
+        physicalNetworkEpoch: 9,
+      ),
+      isTrue,
+    );
+    expect(
+      session.suppressesAutomaticCheck(
+        reason: 'selection',
+        physicalNetworkEpoch: 9,
+      ),
+      isTrue,
+    );
+    expect(
+      session.suppressesAutomaticCheck(
+        reason: 'periodic',
+        physicalNetworkEpoch: 9,
+      ),
+      isFalse,
+    );
+    expect(
+      session.suppressesAutomaticCheck(
+        reason: 'runtime_diagnostics_ready',
+        physicalNetworkEpoch: 10,
+      ),
+      isFalse,
+    );
+  });
+
   test('keeps completed results and resumes only pending tags', () {
     final session = OfflineUrlTestSession(
       id: 'manual-1',

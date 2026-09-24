@@ -48,6 +48,37 @@ void main() {
     },
   );
 
+  test('a new native runtime keeps ping but accepts a fresh revision', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.applyUrlTestResult(
+      tag: 'vless-1',
+      measuredAtMillis: 100100,
+      delay: 80,
+      status: 'available',
+      error: '',
+      revision: 200,
+    );
+
+    controller.beginNewNativeRuntime();
+    expect(controller.runtimeLatencies['vless-1'], 80);
+    expect(controller.runtimeLatencyTimes['vless-1'], 100);
+    expect(controller.runtimeLatencyRevisions, isEmpty);
+
+    expect(
+      controller.applyUrlTestResult(
+        tag: 'vless-1',
+        measuredAtMillis: 100900,
+        delay: 55,
+        status: 'available',
+        error: '',
+        revision: 1,
+      ),
+      {'vless-1'},
+    );
+    expect(controller.runtimeLatencies['vless-1'], 55);
+  });
+
   test(
     'network handover keeps stale display and accepts same-second result',
     () {
