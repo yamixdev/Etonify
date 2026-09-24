@@ -253,6 +253,9 @@ class UrlTestRequestMessage {
     required this.deadlineMillis,
     required this.force,
     required this.mode,
+    required this.includeOutboundTags,
+    required this.logicalSessionId,
+    required this.physicalNetworkEpoch,
   });
 
   String groupTag;
@@ -275,6 +278,12 @@ class UrlTestRequestMessage {
 
   String mode;
 
+  List<String> includeOutboundTags;
+
+  String logicalSessionId;
+
+  int physicalNetworkEpoch;
+
   List<Object?> _toList() {
     return <Object?>[
       groupTag,
@@ -287,6 +296,9 @@ class UrlTestRequestMessage {
       deadlineMillis,
       force,
       mode,
+      includeOutboundTags,
+      logicalSessionId,
+      physicalNetworkEpoch,
     ];
   }
 
@@ -306,6 +318,9 @@ class UrlTestRequestMessage {
       deadlineMillis: result[7]! as int,
       force: result[8]! as bool,
       mode: result[9]! as String,
+      includeOutboundTags: (result[10]! as List<Object?>).cast<String>(),
+      logicalSessionId: result[11]! as String,
+      physicalNetworkEpoch: result[12]! as int,
     );
   }
 
@@ -318,7 +333,7 @@ class UrlTestRequestMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode);
+    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode) && _deepEquals(includeOutboundTags, other.includeOutboundTags) && _deepEquals(logicalSessionId, other.logicalSessionId) && _deepEquals(physicalNetworkEpoch, other.physicalNetworkEpoch);
   }
 
   @override
@@ -327,7 +342,7 @@ class UrlTestRequestMessage {
 
   @override
   String toString() {
-    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force, mode: $mode)';
+    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force, mode: $mode, includeOutboundTags: $includeOutboundTags, logicalSessionId: $logicalSessionId, physicalNetworkEpoch: $physicalNetworkEpoch)';
   }
 }
 
@@ -1150,6 +1165,42 @@ class SingboxHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> startProbe(String config) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.startProbe$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> stopProbe() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.stopProbe$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

@@ -30,6 +30,7 @@ import com.etonify.meow_client.singbox.MeowDefaultNetworkMonitor
 import com.etonify.meow_client.singbox.MeowDiagnostics
 import com.etonify.meow_client.singbox.MeowLogSanitizer
 import com.etonify.meow_client.singbox.MeowProxyService
+import com.etonify.meow_client.singbox.MeowProbeService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
 import com.etonify.meow_client.singbox.OwnProcessMemory
@@ -955,16 +956,21 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun currentRuntimeModeForStop(): String {
         val controllerMode = SingboxController.serviceMode.trim().lowercase()
-        if (controllerMode == "vpn" || controllerMode == "proxy") {
+        if (controllerMode == "vpn" || controllerMode == "proxy" || controllerMode == "probe") {
             return controllerMode
         }
         val recordedMode = MeowApplication.readServiceState()?.mode?.trim()?.lowercase().orEmpty()
-        return if (recordedMode == "proxy") "proxy" else "vpn"
+        return when (recordedMode) {
+            "proxy" -> "proxy"
+            "probe" -> "probe"
+            else -> "vpn"
+        }
     }
 
     private fun runtimeStopTargetForMode(mode: String): Class<out android.app.Service> {
         return when (mode) {
             "proxy" -> MeowProxyService::class.java
+            "probe" -> MeowProbeService::class.java
             else -> MeowVpnService::class.java
         }
     }
@@ -972,12 +978,12 @@ class MainActivity : FlutterFragmentActivity() {
     private fun runtimeCleanupTargets(
         primary: Class<out android.app.Service>,
     ): List<Class<out android.app.Service>> {
-        val secondary = if (primary == MeowVpnService::class.java) {
-            MeowProxyService::class.java
-        } else {
-            MeowVpnService::class.java
-        }
-        return listOf(primary, secondary)
+        return listOf(
+            primary,
+            MeowVpnService::class.java,
+            MeowProxyService::class.java,
+            MeowProbeService::class.java,
+        ).distinct()
     }
 
     private fun cleanupStoppedRuntimeState(
@@ -1194,11 +1200,7 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
         if (SingboxController.running && SingboxController.serviceMode != targetMode) {
-            val currentService = if (SingboxController.serviceMode == "proxy") {
-                MeowProxyService::class.java
-            } else {
-                MeowVpnService::class.java
-            }
+            val currentService = runtimeStopTargetForMode(SingboxController.serviceMode)
             val stopRequestedAtMillis = System.currentTimeMillis()
             val cleanupTargets = runtimeCleanupTargets(currentService)
             MeowDiagnostics.log(
@@ -1629,6 +1631,58 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
 
+                override fun startProbe(config: String, callback: (Result<Unit>) -> Unit) {
+                    if (config.isBlank()) {
+                        callback(errorResult("empty_config", "Probe config is empty"))
+                        return
+                    }
+                    val inboundCount = runCatching {
+                        JSONObject(config).optJSONArray("inbounds")?.length() ?: 0
+                    }.getOrElse {
+                        callback(errorResult("invalid_probe_config", it.message))
+                        return
+                    }
+                    if (inboundCount != 0) {
+                        callback(errorResult("invalid_probe_config", "Probe must have no inbounds"))
+                        return
+                    }
+                    if (SingboxController.running || MeowBoxService.hasActiveRuntimeOwner()) {
+                        callback(errorResult("runtime_busy", "Another native runtime owns the service"))
+                        return
+                    }
+                    val result = unitResult(callback)
+                    writeConfigAndDispatch(config, result) {
+                        runCatching {
+                            startForegroundService(
+                                Intent(this@MainActivity, MeowProbeService::class.java)
+                                    .setAction(MeowBoxService.ACTION_START),
+                            )
+                        }.onSuccess {
+                            result.success(true)
+                        }.onFailure {
+                            result.error("probe_start_failed", it.message, null)
+                        }
+                    }
+                }
+
+                override fun stopProbe(callback: (Result<Unit>) -> Unit) {
+                    val mode = currentRuntimeModeForStop()
+                    if (mode != "probe" &&
+                        (SingboxController.running || MeowBoxService.hasActiveRuntimeOwner())
+                    ) {
+                        callback(errorResult("probe_not_owner", "A different runtime is active"))
+                        return
+                    }
+                    if (mode != "probe") {
+                        callback(Result.success(Unit))
+                        return
+                    }
+                    dispatchStopRuntime("probe_handoff") { stopped ->
+                        if (stopped) callback(Result.success(Unit))
+                        else callback(errorResult("probe_stop_timeout", "Probe runtime did not stop"))
+                    }
+                }
+
                 override fun applyConfig(
                     config: String,
                     useVpn: Boolean,
@@ -1731,6 +1785,7 @@ class MainActivity : FlutterFragmentActivity() {
                 override fun reload(callback: (Result<Unit>) -> Unit) {
                     val serviceClass = when (SingboxController.serviceMode) {
                         "proxy" -> MeowProxyService::class.java
+                        "probe" -> MeowProbeService::class.java
                         else -> MeowVpnService::class.java
                     }
                     startService(Intent(this@MainActivity, serviceClass).setAction(MeowBoxService.ACTION_RELOAD))
@@ -1776,6 +1831,9 @@ class MainActivity : FlutterFragmentActivity() {
                         deadlineMillis = request.deadlineMillis.toInt(),
                         force = request.force,
                         mode = request.mode,
+                        includeOutboundTags = request.includeOutboundTags,
+                        logicalSessionId = request.logicalSessionId,
+                        physicalNetworkEpoch = request.physicalNetworkEpoch,
                     ) { urlTestResult ->
                         urlTestResult
                             .onSuccess { callback(Result.success(Unit)) }

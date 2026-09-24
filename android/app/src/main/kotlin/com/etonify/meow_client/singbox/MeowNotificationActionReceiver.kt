@@ -76,6 +76,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
         MeowVpnService.cancelScheduledRestart(context, reason)
         context.stopService(Intent(context, MeowVpnService::class.java))
         context.stopService(Intent(context, MeowProxyService::class.java))
+        context.stopService(Intent(context, MeowProbeService::class.java))
         MeowDefaultNetworkMonitor.stop()
         if (SingboxController.running && !MeowBoxService.hasActiveRuntimeOwner()) {
             // With no foreground service in this process there is no live

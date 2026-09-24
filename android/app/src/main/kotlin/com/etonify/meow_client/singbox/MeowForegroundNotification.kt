@@ -33,6 +33,7 @@ internal class MeowForegroundNotification(
 ) {
     companion object {
         const val CHANNEL_ID = "etonify_vpn_status"
+        const val PROBE_CHANNEL_ID = "etonify_server_check"
         const val ACTION_REFRESH_LATENCY = "com.etonify.meow_client.singbox.REFRESH_LATENCY"
 
         private const val ACTION_REFRESH_REQUEST_CODE = 4201
@@ -458,11 +459,15 @@ internal class MeowForegroundNotification(
 
     private fun ensureChannel() {
         val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Etonify VPN",
+            if (service is MeowProbeService) PROBE_CHANNEL_ID else CHANNEL_ID,
+            if (service is MeowProbeService) "Etonify: проверка серверов" else "Etonify VPN",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "VPN connection status"
+            description = if (service is MeowProbeService) {
+                "Проверка доступности прокси-серверов"
+            } else {
+                "VPN connection status"
+            }
             setShowBadge(false)
             setSound(null, null)
         }
@@ -508,7 +513,8 @@ internal class MeowForegroundNotification(
             !showDetails -> presentation.connectedText
             else -> detailedContent()
         }
-        val builder = Notification.Builder(service, CHANNEL_ID)
+        val channelId = if (service is MeowProbeService) PROBE_CHANNEL_ID else CHANNEL_ID
+        val builder = Notification.Builder(service, channelId)
             .setContentTitle(title)
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_meow_status)

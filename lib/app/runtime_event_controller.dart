@@ -40,6 +40,8 @@ class RuntimeUrlTestResult {
     required this.revision,
     required this.networkGeneration,
     required this.sessionId,
+    this.logicalSessionId = '',
+    this.physicalNetworkEpoch = 0,
   });
 
   final String tag;
@@ -51,6 +53,8 @@ class RuntimeUrlTestResult {
   final int revision;
   final int networkGeneration;
   final int sessionId;
+  final String logicalSessionId;
+  final int physicalNetworkEpoch;
 }
 
 class RuntimeUrlTestSession {
@@ -66,6 +70,8 @@ class RuntimeUrlTestSession {
     required this.available,
     required this.unavailable,
     required this.networkGeneration,
+    this.logicalSessionId = '',
+    this.physicalNetworkEpoch = 0,
   });
 
   final int sessionId;
@@ -79,6 +85,8 @@ class RuntimeUrlTestSession {
   final int available;
   final int unavailable;
   final int networkGeneration;
+  final String logicalSessionId;
+  final int physicalNetworkEpoch;
 
   bool get terminal => state == 'completed' || state == 'cancelled';
 }
@@ -284,6 +292,9 @@ class RuntimeEventController {
         networkGeneration:
             (resultMap['networkGeneration'] as num?)?.toInt() ?? 0,
         sessionId: (resultMap['sessionId'] as num?)?.toInt() ?? 0,
+        logicalSessionId: resultMap['logicalSessionId']?.toString() ?? '',
+        physicalNetworkEpoch:
+            (resultMap['physicalNetworkEpoch'] as num?)?.toInt() ?? 0,
       );
     }
     if (sessionMap is Map) {
@@ -300,6 +311,9 @@ class RuntimeEventController {
         unavailable: (sessionMap['unavailable'] as num?)?.toInt() ?? 0,
         networkGeneration:
             (sessionMap['networkGeneration'] as num?)?.toInt() ?? 0,
+        logicalSessionId: sessionMap['logicalSessionId']?.toString() ?? '',
+        physicalNetworkEpoch:
+            (sessionMap['physicalNetworkEpoch'] as num?)?.toInt() ?? 0,
       );
     }
     if (result == null && session == null) return;

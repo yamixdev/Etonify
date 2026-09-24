@@ -14,6 +14,7 @@ import android.service.quicksettings.TileService
 import android.widget.Toast
 import com.etonify.meow_client.singbox.MeowBoxService
 import com.etonify.meow_client.singbox.MeowProxyService
+import com.etonify.meow_client.singbox.MeowProbeService
 import com.etonify.meow_client.singbox.MeowVpnService
 import com.etonify.meow_client.singbox.RuntimeServiceModeResolver
 import com.etonify.meow_client.singbox.SingboxController
@@ -41,6 +42,10 @@ class MeowQuickSettingsTileService : TileService() {
     override fun onClick() {
         super.onClick()
         val activeMode = activeRuntimeMode()
+        if (activeMode == RuntimeServiceModeResolver.PROBE) {
+            openApp()
+            return
+        }
         if (activeMode != null) {
             stopRuntime(activeMode)
             renderTile(isActive = false)
@@ -83,6 +88,7 @@ class MeowQuickSettingsTileService : TileService() {
         runningMode = SingboxController.serviceMode.takeIf { SingboxController.running },
         vpnRecorded = MeowApplication.isRecordedServiceAlive(RuntimeServiceModeResolver.VPN),
         proxyRecorded = MeowApplication.isRecordedServiceAlive(RuntimeServiceModeResolver.PROXY),
+        probeRecorded = MeowApplication.isRecordedServiceAlive(RuntimeServiceModeResolver.PROBE),
     )
 
     private fun stopRuntime(mode: String) {
@@ -97,6 +103,7 @@ class MeowQuickSettingsTileService : TileService() {
             if (!SingboxController.running) {
                 stopService(Intent(this, MeowVpnService::class.java))
                 stopService(Intent(this, MeowProxyService::class.java))
+                stopService(Intent(this, MeowProbeService::class.java))
                 MeowApplication.clearServiceState()
                 MeowApplication.clearRuntimeIntent()
                 requestRefresh(this)
@@ -132,10 +139,10 @@ class MeowQuickSettingsTileService : TileService() {
     }
 
     private fun serviceClass(mode: String): Class<out android.app.Service> =
-        if (mode == RuntimeServiceModeResolver.PROXY) {
-            MeowProxyService::class.java
-        } else {
-            MeowVpnService::class.java
+        when (mode) {
+            RuntimeServiceModeResolver.PROXY -> MeowProxyService::class.java
+            RuntimeServiceModeResolver.PROBE -> MeowProbeService::class.java
+            else -> MeowVpnService::class.java
         }
 
     private fun configuredMode(): String? {
@@ -182,7 +189,7 @@ class MeowQuickSettingsTileService : TileService() {
 
     private fun updateTile() {
         renderTile(
-            isActive = activeRuntimeMode() != null,
+            isActive = activeRuntimeMode()?.let { it != RuntimeServiceModeResolver.PROBE } == true,
             activeLabel = readActiveTileLabel(),
         )
     }

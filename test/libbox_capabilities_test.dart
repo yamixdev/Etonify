@@ -221,6 +221,26 @@ void main() {
       expect(capabilities.supportsUrlTestNetworkGeneration, isTrue);
       expect(capabilities.supportsUrlTestExhaustive, isTrue);
       expect(capabilities.supportsUrlTestCancel, isTrue);
+      expect(capabilities.supportsUrlTestHandoff, isFalse);
+    });
+
+    test('offline URLTest handoff needs both API v4 and an explicit flag', () {
+      final supported = LibboxCapabilities.parseOrLegacy('''
+        {"api_version":4,"supports_url_test_handoff":true}
+      ''');
+      expect(supported.supportsUrlTestHandoff, isTrue);
+      expect(
+        LibboxCapabilities.parseOrLegacy(
+          '{"api_version":3,"supports_url_test_handoff":true}',
+        ).supportsUrlTestHandoff,
+        isFalse,
+      );
+      expect(
+        LibboxCapabilities.parseOrLegacy(
+          '{"api_version":4}',
+        ).supportsUrlTestHandoff,
+        isFalse,
+      );
     });
   });
 }

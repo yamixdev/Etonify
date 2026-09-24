@@ -151,6 +151,16 @@ class SingboxRuntime {
     return _hostApi.startPrepared(useVpn);
   }
 
+  Future<void> startProbe(String config) {
+    if (!Platform.isAndroid) return Future<void>.value();
+    return _hostApi.startProbe(config);
+  }
+
+  Future<void> stopProbe() {
+    if (!Platform.isAndroid) return Future<void>.value();
+    return _hostApi.stopProbe();
+  }
+
   Future<void> applyConfig({
     required String config,
     required bool useVpn,
@@ -343,6 +353,9 @@ class SingboxRuntime {
     int deadlineMillis = 10000,
     bool force = true,
     String mode = 'background',
+    List<String> includeOutboundTags = const <String>[],
+    String logicalSessionId = '',
+    int physicalNetworkEpoch = 0,
   }) {
     if (!Platform.isAndroid) {
       return Future<void>.value();
@@ -359,6 +372,9 @@ class SingboxRuntime {
         deadlineMillis: deadlineMillis,
         force: force,
         mode: mode,
+        includeOutboundTags: includeOutboundTags,
+        logicalSessionId: logicalSessionId,
+        physicalNetworkEpoch: physicalNetworkEpoch,
       ),
     );
   }

@@ -115,14 +115,23 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name=".singbox.MeowProxyService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
+          <service
+              android:name=".singbox.MeowProxyService"
+              android:exported="false"
+              android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="user-initiated local proxy tunnel" />
-        </service>
+          </service>
+
+          <service
+              android:name=".singbox.MeowProbeService"
+              android:exported="false"
+              android:foregroundServiceType="specialUse">
+              <property
+                  android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                  android:value="user-initiated proxy server connectivity checks without a VPN" />
+          </service>
 
         <receiver
             android:name=".singbox.MeowNotificationActionReceiver"

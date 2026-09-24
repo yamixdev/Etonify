@@ -33,4 +33,22 @@ class RuntimeServiceModeResolverTest {
             RuntimeServiceModeResolver.activeMode("proxy", vpnRecorded = true, proxyRecorded = false),
         )
     }
+
+    @Test
+    fun `explicit probe mode cannot be mistaken for VPN`() {
+        assertEquals(
+            RuntimeServiceModeResolver.PROBE,
+            RuntimeServiceModeResolver.requestedMode("probe", emptyList()),
+        )
+        assertEquals(
+            RuntimeServiceModeResolver.PROBE,
+            RuntimeServiceModeResolver.activeMode(
+                "probe",
+                vpnRecorded = false,
+                proxyRecorded = false,
+                probeRecorded = true,
+            ),
+        )
+        assertNull(RuntimeServiceModeResolver.configuredMode(emptyList()))
+    }
 }

@@ -72,6 +72,9 @@ class UrlTestRequestMessage {
     required this.deadlineMillis,
     required this.force,
     required this.mode,
+    required this.includeOutboundTags,
+    required this.logicalSessionId,
+    required this.physicalNetworkEpoch,
   });
 
   String groupTag;
@@ -84,6 +87,9 @@ class UrlTestRequestMessage {
   int deadlineMillis;
   bool force;
   String mode;
+  List<String> includeOutboundTags;
+  String logicalSessionId;
+  int physicalNetworkEpoch;
 }
 
 class VpnNotificationPresentationMessage {
@@ -270,6 +276,12 @@ abstract class SingboxHostApi {
 
   @async
   void startPrepared(bool useVpn);
+
+  @async
+  void startProbe(String config);
+
+  @async
+  void stopProbe();
 
   @async
   void applyConfig(String config, bool useVpn, bool restartCore);

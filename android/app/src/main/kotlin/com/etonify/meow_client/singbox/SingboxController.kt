@@ -310,6 +310,8 @@ object SingboxController {
                     "networkGeneration" to eventNetworkGeneration,
                     "coreNetworkGeneration" to result.networkGeneration,
                     "sessionId" to result.sessionID,
+                    "logicalSessionId" to result.logicalSessionID,
+                    "physicalNetworkEpoch" to result.physicalNetworkEpoch,
                 )
                 MeowBoxService.publishNotificationUrlTestResult(
                     tag = result.tag,
@@ -338,6 +340,8 @@ object SingboxController {
                     "unavailable" to session.unavailable,
                     "networkGeneration" to eventNetworkGeneration,
                     "coreNetworkGeneration" to session.networkGeneration,
+                    "logicalSessionId" to session.logicalSessionID,
+                    "physicalNetworkEpoch" to session.physicalNetworkEpoch,
                 )
                 if (session.state == "completed" || session.state == "cancelled") {
                     urlTestSessionNetworkGenerations.remove(session.sessionID)
@@ -916,6 +920,9 @@ object SingboxController {
         deadlineMillis: Int,
         force: Boolean,
         mode: String = "background",
+        includeOutboundTags: List<String> = emptyList(),
+        logicalSessionId: String = "",
+        physicalNetworkEpoch: Long = 0L,
         callback: (Result<Unit>) -> Unit,
     ) {
         interactiveUrlTestUntilMs = maxOf(interactiveUrlTestUntilMs,
@@ -932,18 +939,30 @@ object SingboxController {
                     "stale runtime before URL test"
                 }
                 withStandaloneCommandClient { client ->
-                    client.urlTestWithMode(
-                        groupTag,
-                        targetOutboundTag,
-                        priorityOutboundTag,
-                        excludeOutboundTag,
-                        url,
-                        timeoutMillis,
-                        concurrency,
-                        deadlineMillis,
-                        force,
-                        mode,
-                    )
+                    if (includeOutboundTags.isEmpty() && logicalSessionId.isEmpty()) {
+                        client.urlTestWithMode(
+                            groupTag, targetOutboundTag, priorityOutboundTag,
+                            excludeOutboundTag, url, timeoutMillis, concurrency,
+                            deadlineMillis, force, mode,
+                        )
+                    } else {
+                        val requestJson = JSONObject()
+                            .put("outboundTag", groupTag)
+                            .put("targetOutboundTag", targetOutboundTag)
+                            .put("priorityOutboundTag", priorityOutboundTag)
+                            .put("excludeOutboundTag", excludeOutboundTag)
+                            .put("urlTestUrl", url)
+                            .put("timeoutMillis", timeoutMillis)
+                            .put("concurrency", concurrency)
+                            .put("deadlineMillis", deadlineMillis)
+                            .put("force", force)
+                            .put("mode", mode)
+                            .put("includeOutboundTags", org.json.JSONArray(includeOutboundTags))
+                            .put("logicalSessionId", logicalSessionId)
+                            .put("physicalNetworkEpoch", physicalNetworkEpoch.toString())
+                            .toString()
+                        client.urlTestWithRequestJSON(requestJson)
+                    }
                 }
             }
             if (operationGeneration != activeRuntimeGeneration) {

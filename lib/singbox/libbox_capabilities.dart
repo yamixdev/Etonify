@@ -41,6 +41,7 @@ class LibboxCapabilities {
     this.supportsUrlTestNetworkGeneration = false,
     this.supportsUrlTestExhaustive = false,
     this.supportsUrlTestCancel = false,
+    this.supportsUrlTestHandoff = false,
     this.xHttpClientOnly = false,
     this.xHttpProfile = '',
     this.xHttpModes = const <String>{},
@@ -55,7 +56,7 @@ class LibboxCapabilities {
   });
 
   static const minimumSupportedApiVersion = 2;
-  static const maximumSupportedApiVersion = 3;
+  static const maximumSupportedApiVersion = 4;
   static const expectedCoreSeries = '1.15.';
 
   static const bundledLegacy = LibboxCapabilities(
@@ -228,6 +229,8 @@ class LibboxCapabilities {
         'supports_url_test_exhaustive',
       ),
       supportsUrlTestCancel: _readBool(json, 'supports_url_test_cancel'),
+      supportsUrlTestHandoff:
+          apiVersion >= 4 && _readBool(json, 'supports_url_test_handoff'),
       supportsUrlTestUnavailableCheckInterval: _readBool(
         json,
         'supports_url_test_unavailable_check_interval',
@@ -313,6 +316,7 @@ class LibboxCapabilities {
   final bool supportsUrlTestNetworkGeneration;
   final bool supportsUrlTestExhaustive;
   final bool supportsUrlTestCancel;
+  final bool supportsUrlTestHandoff;
   final bool supportsUrlTestUnavailableCheckInterval;
   final bool supportsUrlTestMethod;
   final bool supportsUrlTestInterruptDelayThreshold;
@@ -427,6 +431,7 @@ class LibboxCapabilities {
       supportsUrlTestNetworkGeneration: supportsUrlTestNetworkGeneration,
       supportsUrlTestExhaustive: supportsUrlTestExhaustive,
       supportsUrlTestCancel: supportsUrlTestCancel,
+      supportsUrlTestHandoff: supportsUrlTestHandoff,
       supportsUrlTestUnavailableCheckInterval:
           supportsUrlTestUnavailableCheckInterval,
       supportsUrlTestMethod: supportsUrlTestMethod,

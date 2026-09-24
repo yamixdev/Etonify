@@ -323,7 +323,10 @@ data class UrlTestRequestMessage (
   val concurrency: Long,
   val deadlineMillis: Long,
   val force: Boolean,
-  val mode: String
+  val mode: String,
+  val includeOutboundTags: List<String>,
+  val logicalSessionId: String,
+  val physicalNetworkEpoch: Long
 )
  {
   companion object {
@@ -338,7 +341,10 @@ data class UrlTestRequestMessage (
       val deadlineMillis = pigeonVar_list[7] as Long
       val force = pigeonVar_list[8] as Boolean
       val mode = pigeonVar_list[9] as String
-      return UrlTestRequestMessage(groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, force, mode)
+      val includeOutboundTags = pigeonVar_list[10] as List<String>
+      val logicalSessionId = pigeonVar_list[11] as String
+      val physicalNetworkEpoch = pigeonVar_list[12] as Long
+      return UrlTestRequestMessage(groupTag, targetOutboundTag, priorityOutboundTag, excludeOutboundTag, url, timeoutMillis, concurrency, deadlineMillis, force, mode, includeOutboundTags, logicalSessionId, physicalNetworkEpoch)
     }
   }
   fun toList(): List<Any?> {
@@ -353,6 +359,9 @@ data class UrlTestRequestMessage (
       deadlineMillis,
       force,
       mode,
+      includeOutboundTags,
+      logicalSessionId,
+      physicalNetworkEpoch,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -363,7 +372,7 @@ data class UrlTestRequestMessage (
       return true
     }
     val other = other as UrlTestRequestMessage
-    return SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.force, other.force) && SingboxApiPigeonUtils.deepEquals(this.mode, other.mode)
+    return SingboxApiPigeonUtils.deepEquals(this.groupTag, other.groupTag) && SingboxApiPigeonUtils.deepEquals(this.targetOutboundTag, other.targetOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.priorityOutboundTag, other.priorityOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.excludeOutboundTag, other.excludeOutboundTag) && SingboxApiPigeonUtils.deepEquals(this.url, other.url) && SingboxApiPigeonUtils.deepEquals(this.timeoutMillis, other.timeoutMillis) && SingboxApiPigeonUtils.deepEquals(this.concurrency, other.concurrency) && SingboxApiPigeonUtils.deepEquals(this.deadlineMillis, other.deadlineMillis) && SingboxApiPigeonUtils.deepEquals(this.force, other.force) && SingboxApiPigeonUtils.deepEquals(this.mode, other.mode) && SingboxApiPigeonUtils.deepEquals(this.includeOutboundTags, other.includeOutboundTags) && SingboxApiPigeonUtils.deepEquals(this.logicalSessionId, other.logicalSessionId) && SingboxApiPigeonUtils.deepEquals(this.physicalNetworkEpoch, other.physicalNetworkEpoch)
   }
 
   override fun hashCode(): Int {
@@ -378,10 +387,13 @@ data class UrlTestRequestMessage (
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.deadlineMillis)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.force)
     result = 31 * result + SingboxApiPigeonUtils.deepHash(this.mode)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.includeOutboundTags)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.logicalSessionId)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.physicalNetworkEpoch)
     return result
   }
   override fun toString(): String {
-    return "UrlTestRequestMessage(groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, force=$force, mode=$mode)"
+    return "UrlTestRequestMessage(groupTag=$groupTag, targetOutboundTag=$targetOutboundTag, priorityOutboundTag=$priorityOutboundTag, excludeOutboundTag=$excludeOutboundTag, url=$url, timeoutMillis=$timeoutMillis, concurrency=$concurrency, deadlineMillis=$deadlineMillis, force=$force, mode=$mode, includeOutboundTags=$includeOutboundTags, logicalSessionId=$logicalSessionId, physicalNetworkEpoch=$physicalNetworkEpoch)"
   }
 }
 
@@ -1049,6 +1061,8 @@ interface SingboxHostApi {
   fun vpnPermissionStatus(callback: (Result<Map<String?, Any?>>) -> Unit)
   fun start(config: String, useVpn: Boolean, callback: (Result<Unit>) -> Unit)
   fun startPrepared(useVpn: Boolean, callback: (Result<Unit>) -> Unit)
+  fun startProbe(config: String, callback: (Result<Unit>) -> Unit)
+  fun stopProbe(callback: (Result<Unit>) -> Unit)
   fun applyConfig(config: String, useVpn: Boolean, restartCore: Boolean, callback: (Result<Unit>) -> Unit)
   fun applyPreparedConfig(useVpn: Boolean, restartCore: Boolean, callback: (Result<Unit>) -> Unit)
   fun getConfigPath(callback: (Result<String>) -> Unit)
@@ -1165,6 +1179,42 @@ interface SingboxHostApi {
             val args = message as List<Any?>
             val useVpnArg = args[0] as Boolean
             api.startPrepared(useVpnArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.startProbe$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val configArg = args[0] as String
+            api.startProbe(configArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.stopProbe$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.stopProbe{ result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))

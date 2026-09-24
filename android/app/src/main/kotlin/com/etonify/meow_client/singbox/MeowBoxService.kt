@@ -415,7 +415,11 @@ class MeowBoxService(
         SingboxController.log("debug", message ?: "")
     }
 
-    private fun currentMode(): String = if (service is MeowVpnService) "vpn" else "proxy"
+    private fun currentMode(): String = when (service) {
+        is MeowVpnService -> RuntimeServiceModeResolver.VPN
+        is MeowProbeService -> RuntimeServiceModeResolver.PROBE
+        else -> RuntimeServiceModeResolver.PROXY
+    }
 
     private fun ownsActiveRuntime(mode: String? = null): Boolean {
         if (mode != null && mode.isNotBlank() && currentMode() != mode) {
@@ -1134,7 +1138,11 @@ class MeowBoxService(
     }
 
     private fun showForeground(status: String) {
-        val notification = foregroundNotification.buildForForeground(status)
+        val notification = foregroundNotification.buildForForeground(
+            if (currentMode() == RuntimeServiceModeResolver.PROBE) {
+                if (status == "Stopping") "Остановка проверки…" else "Проверка серверов…"
+            } else status,
+        )
         service.startForeground(NOTIFICATION_ID, notification)
     }
 
