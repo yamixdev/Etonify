@@ -31,7 +31,7 @@ Etonify: VPN-клиент с открытым исходным кодом для
 | :--- | :--- |
 | Версия клиента в исходниках | `0.3.6+26` |
 | Встроенное ядро | `v1.15.0-alpha.3-etonify.5` на базе sing-box `1.15.0-alpha.3` |
-| Flutter SDK | `3.47.2` (Dart 3.13) |
+| Flutter SDK | `3.47.5` (Dart 3.13) |
 | Android | 8.0 и новее (API 26+) |
 | Архитектуры APK | `arm64-v8a`, `armeabi-v7a` |
 | Языки интерфейса | Русский и английский |
@@ -81,7 +81,7 @@ WireGuard не поддерживается начиная с Etonify 0.3.1 из
 
 ## Сборка и разработка
 
-CI клиента использует Flutter `3.47.2` и JDK `21`. Требования к Dart заданы в [pubspec.yaml](pubspec.yaml), а версии инструментов Android указаны в файлах Gradle. Для сборки ядра используется отдельный набор инструментов, указанный в [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
+CI клиента использует Flutter `3.47.5` и JDK `21`. Требования к Dart заданы в [pubspec.yaml](pubspec.yaml), а версии инструментов Android указаны в файлах Gradle. Для сборки ядра используется отдельный набор инструментов, указанный в [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
 
 ```powershell
 git clone --recurse-submodules https://github.com/yamixdev/Etonify.git

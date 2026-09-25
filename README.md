@@ -31,7 +31,7 @@ The application does not provide VPN servers. You need your own server or a subs
 | :--- | :--- |
 | Client source | `0.3.6+26` |
 | Bundled core | `v1.15.0-alpha.3-etonify.5`, based on sing-box `1.15.0-alpha.3` |
-| Flutter SDK | `3.47.2` (Dart 3.13) |
+| Flutter SDK | `3.47.5` (Dart 3.13) |
 | Android | 8.0 or later (API 26+) |
 | APK architectures | `arm64-v8a`, `armeabi-v7a` |
 | Interface languages | English and Russian |
@@ -81,7 +81,7 @@ Report vulnerabilities privately using the [security policy](SECURITY.md), not a
 
 ## Building and development
 
-The client CI uses Flutter `3.47.2` and JDK `21`. Dart constraints are defined in [pubspec.yaml](pubspec.yaml), and Android build tools are pinned in the Gradle files. Rebuilding the core uses a separate toolchain recorded in [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
+The client CI uses Flutter `3.47.5` and JDK `21`. Dart constraints are defined in [pubspec.yaml](pubspec.yaml), and Android build tools are pinned in the Gradle files. Rebuilding the core uses a separate toolchain recorded in [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
 
 ```powershell
 git clone --recurse-submodules https://github.com/yamixdev/Etonify.git

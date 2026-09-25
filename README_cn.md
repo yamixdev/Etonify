@@ -24,7 +24,7 @@ Etonify 是面向 Android 的开源 VPN 客户端，使用 Flutter 和 [etonify-
 | 组件 | 版本或要求 |
 | :--- | :--- |
 | 客户端源码版本 | `0.3.6+26` |
-| Flutter SDK | `3.47.2` (Dart `3.13`) |
+| Flutter SDK | `3.47.5` (Dart `3.13`) |
 | 内置核心 | `v1.15.0-alpha.3-etonify.5`，基于 sing-box `1.15.0-alpha.3` |
 | Android | 8.0 及以上 (API 26+) |
 | APK 架构 | `arm64-v8a`、`armeabi-v7a` |

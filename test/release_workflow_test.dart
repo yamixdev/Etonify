@@ -41,9 +41,16 @@ void main() {
       '.github/workflows/android-release.yml',
     ]) {
       final workflow = File(path).readAsStringSync();
-      expect(workflow, contains('FLUTTER_VERSION: "3.47.2"'), reason: path);
+      expect(workflow, contains('FLUTTER_VERSION: "3.47.5"'), reason: path);
       expect(workflow, isNot(contains('3.47.0')), reason: path);
     }
+  });
+
+  test('core sync workflow uses the release Go toolchain', () {
+    final workflow = File(
+      '.github/workflows/sync-etonify-core.yml',
+    ).readAsStringSync();
+    expect(workflow, contains('GO_VERSION: "1.27.1"'));
   });
 
   test('Debug-signed beta release workflow is removed', () {
