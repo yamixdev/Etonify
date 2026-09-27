@@ -626,14 +626,20 @@ class SubscriptionStore {
 
   static Future<bool> saveLatestPingsInBackground(
     String id,
-    Map<String, int> latestPings,
-  ) async {
-    return saveOutboundRuntimeInfoInBackground(id, latestPings: latestPings);
+    Map<String, int> latestPings, {
+    required Map<String, String> expectedOutboundKeys,
+  }) async {
+    return saveOutboundRuntimeInfoInBackground(
+      id,
+      latestPings: latestPings,
+      expectedOutboundKeys: expectedOutboundKeys,
+    );
   }
 
   static Future<bool> saveOutboundRuntimeInfoInBackground(
     String id, {
     Map<String, int> latestPings = const <String, int>{},
+    Map<String, String> expectedOutboundKeys = const <String, String>{},
     Map<String, Map<String, String?>> externalInfos =
         const <String, Map<String, String?>>{},
   }) async {
@@ -643,6 +649,7 @@ class SubscriptionStore {
       saved = await _saveOutboundRuntimeInfoInBackgroundUnlocked(
         id,
         latestPings: latestPings,
+        expectedOutboundKeys: expectedOutboundKeys,
         externalInfos: externalInfos,
       );
     });
@@ -652,14 +659,24 @@ class SubscriptionStore {
   static Future<bool> _saveOutboundRuntimeInfoInBackgroundUnlocked(
     String id, {
     required Map<String, int> latestPings,
+    required Map<String, String> expectedOutboundKeys,
     required Map<String, Map<String, String?>> externalInfos,
   }) async {
     if (!_metaStore.containsKey(id)) {
       return false;
     }
-    // Latency belongs to the current runtime session. Persisting it makes an
-    // old value look fresh after reconnect or process restart.
     final updates = <String, Map<String, Object?>>{};
+    for (final entry in latestPings.entries) {
+      final tag = entry.key.trim();
+      final ping = entry.value;
+      final expectedKey = expectedOutboundKeys[tag];
+      if (tag.isEmpty || ping <= 0 || expectedKey == null) {
+        continue;
+      }
+      final update = updates.putIfAbsent(tag, () => <String, Object?>{});
+      update['latest_ping'] = ping;
+      update['expected_outbound_key'] = expectedKey;
+    }
     for (final entry in externalInfos.entries) {
       final tag = entry.key.trim();
       if (tag.isEmpty) {
@@ -1870,6 +1887,10 @@ class SubscriptionStore {
     return jsonEncode(identity);
   }
 
+  /// Identity used to guard deferred runtime measurements against a refresh.
+  static String outboundIdentityKey(Map<String, dynamic> config) =>
+      _outboundKey(config);
+
   static dynamic _stableOutboundIdentityValue(dynamic value) {
     if (value is Map) {
       final result = <String, dynamic>{};
@@ -2333,7 +2354,15 @@ dynamic _rewriteOutboundRuntimeInfoPayload(
           var outboundChanged = false;
           final latestPing = update['latest_ping'];
           if (latestPing is int && latestPing > 0) {
-            if ((info['latest_ping'] as num?)?.toInt() != latestPing) {
+            final config = outbound['config'];
+            final expectedKey = update['expected_outbound_key'];
+            if (config is Map &&
+                expectedKey is String &&
+                SubscriptionStore._outboundKey(
+                      Map<String, dynamic>.from(config),
+                    ) ==
+                    expectedKey &&
+                (info['latest_ping'] as num?)?.toInt() != latestPing) {
               info['latest_ping'] = latestPing;
               outboundChanged = true;
             }

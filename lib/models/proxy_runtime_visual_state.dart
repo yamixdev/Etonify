@@ -86,6 +86,10 @@ class ProxyRuntimeVisualStore {
 
   ValueListenable<int> get revision => _revision;
 
+  void notifyRevision() {
+    _revision.value++;
+  }
+
   ValueListenable<ProxyRuntimeVisualState?> listenableFor(String tag) {
     return _notifiers.putIfAbsent(tag, () {
       final resolved = _states[tag] ?? _resolver?.call(tag);

@@ -488,15 +488,15 @@ class LatencyCoordinator {
       _activeTargetChecks.remove(normalizedTag);
       _onSessionChanged(isRunning, _kind, _targetTag);
     }
-    if (isRunning) {
-      _acceptedEventTimes[normalizedTag] = revision;
+    _acceptedEventTimes[normalizedTag] = revision;
+    if (belongsToMainSession) {
       if (available) {
         _successfulTags.add(normalizedTag);
       } else {
         _successfulTags.remove(normalizedTag);
       }
       _phase = LatencySessionPhase.collectingEvents;
-      if (belongsToMainSession && _sessionMode == 'manual') {
+      if (_sessionMode == 'manual') {
         // An exhaustive sweep can outlive the absolute UI watchdog on large
         // subscriptions. Only silence, not total elapsed time, is a stall.
         _armWatchdog(uiPolicy.hardWatchdog);

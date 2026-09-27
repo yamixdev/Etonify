@@ -57,6 +57,39 @@ void main() {
     );
   });
 
+  test(
+    'selection always targets the selected server even when auto-check is enabled',
+    () {
+      expect(
+        automaticUrlTestScope(
+          reason: 'selection',
+          autoCheckServers: true,
+          supportsTargeted: true,
+          selectedTag: 'node-a',
+        ),
+        AutomaticUrlTestScope.selected,
+      );
+      expect(
+        automaticUrlTestScope(
+          reason: 'selection',
+          autoCheckServers: true,
+          supportsTargeted: false,
+          selectedTag: 'node-a',
+        ),
+        AutomaticUrlTestScope.none,
+      );
+      expect(
+        automaticUrlTestScope(
+          reason: 'selection',
+          autoCheckServers: true,
+          supportsTargeted: true,
+          selectedTag: '',
+        ),
+        AutomaticUrlTestScope.none,
+      );
+    },
+  );
+
   test('background triggers coalesce into one check on resume', () {
     final deferred = DeferredAutomaticUrlTest();
     deferred.defer();

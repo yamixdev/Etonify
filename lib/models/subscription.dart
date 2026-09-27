@@ -169,6 +169,7 @@ class OutboundInfo {
     if (externalIp != null) 'external_ip': externalIp,
     if (country != null) 'country': country,
     if (exitCountry != null) 'exit_country': exitCountry,
+    if (latestPing != null) 'latest_ping': latestPing,
   };
 
   factory OutboundInfo.fromMap(Map<String, dynamic> map) {
@@ -178,9 +179,7 @@ class OutboundInfo {
       externalIp: map['external_ip'] as String?,
       country: map['country'] as String?,
       exitCountry: map['exit_country'] as String?,
-      // Latency is runtime-only. Persisted values are stale after reconnects
-      // and must not be presented as a fresh proxy measurement.
-      latestPing: null,
+      latestPing: (map['latest_ping'] as num?)?.toInt(),
     );
   }
 

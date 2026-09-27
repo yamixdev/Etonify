@@ -696,6 +696,24 @@ void main() {
       );
     });
 
+    test('rejects VLESS encryption padding that the core parser rejects', () {
+      const key = 'MDG42I0GTLyH5a6fuXipicFe-A_m-FHNYyJGkheQJTs';
+      for (final padding in [
+        'not-padding',
+        '99-35-35',
+        '100-1-20',
+        '100-35-35.100-0-5001',
+      ]) {
+        expect(
+          ParsedOutboundSchema.isValidVlessEncryption(
+            'mlkem768x25519plus.native.1rtt.$padding.$key',
+          ),
+          isFalse,
+          reason: padding,
+        );
+      }
+    });
+
     test('parses VMess link', () {
       final vmessJson = base64Encode(
         utf8.encode(

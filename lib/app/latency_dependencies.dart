@@ -3,21 +3,31 @@
 Set<String> latencyAffectedTags(
   Iterable<String> changed,
   Map<String, Iterable<String>> groups,
-) {
-  final parents = <String, List<String>>{};
-  for (final entry in groups.entries) {
-    for (final child in entry.value) {
-      (parents[child] ??= []).add(entry.key);
+) => LatencyDependencyIndex(groups).affectedTags(changed);
+
+/// Builds the reverse group edges once for a subscription, then resolves each
+/// URLTest result without scanning every provider and child again.
+class LatencyDependencyIndex {
+  LatencyDependencyIndex(Map<String, Iterable<String>> groups) {
+    for (final entry in groups.entries) {
+      for (final child in entry.value) {
+        (_parents[child] ??= []).add(entry.key);
+      }
     }
   }
-  final affected = changed.toSet();
-  final queue = affected.toList();
-  for (var index = 0; index < queue.length; index++) {
-    for (final parent in parents[queue[index]] ?? const <String>[]) {
-      if (affected.add(parent)) queue.add(parent);
+
+  final Map<String, List<String>> _parents = {};
+
+  Set<String> affectedTags(Iterable<String> changed) {
+    final affected = changed.toSet();
+    final queue = affected.toList();
+    for (var index = 0; index < queue.length; index++) {
+      for (final parent in _parents[queue[index]] ?? const <String>[]) {
+        if (affected.add(parent)) queue.add(parent);
+      }
     }
+    return affected;
   }
-  return affected;
 }
 
 /// Uses the actual runtime probe set when it is larger than the visible list.

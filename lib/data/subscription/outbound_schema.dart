@@ -846,9 +846,11 @@ class ParsedOutboundSchema {
     }
     var keysStarted = false;
     var keyCount = 0;
+    final padding = <String>[];
     for (final part in parts.skip(3)) {
       if (part.length < 20) {
         if (keysStarted) return false;
+        padding.add(part);
         continue;
       }
       keysStarted = true;
@@ -856,7 +858,40 @@ class ParsedOutboundSchema {
       keyCount++;
       if (keyCount > 8) return false;
     }
-    return keyCount > 0;
+    return keyCount > 0 && _isValidVlessEncryptionPadding(padding);
+  }
+
+  static bool _isValidVlessEncryptionPadding(List<String> segments) {
+    if (segments.length > 16) return false;
+    var maxLength = 0;
+    var maxGapTotal = 0;
+    for (var index = 0; index < segments.length; index++) {
+      final parts = segments[index].split('-');
+      if (parts.length != 3 || parts.any((part) => part.isEmpty)) return false;
+      final probability = int.tryParse(parts[0]);
+      final minimum = int.tryParse(parts[1]);
+      final maximum = int.tryParse(parts[2]);
+      if (probability == null ||
+          minimum == null ||
+          maximum == null ||
+          probability < 0 ||
+          probability > 100 ||
+          minimum < 0 ||
+          maximum < minimum) {
+        return false;
+      }
+      if (index == 0 && (probability != 100 || minimum < 35 || maximum < 35)) {
+        return false;
+      }
+      if (index.isEven) {
+        if (maximum > 65553 || maxLength > 65553 - maximum) return false;
+        maxLength += maximum;
+      } else {
+        if (maximum > 5000 || maxGapTotal > 10000 - maximum) return false;
+        maxGapTotal += maximum;
+      }
+    }
+    return true;
   }
 
   static bool _isValidVlessEncryptionKey(String value) {

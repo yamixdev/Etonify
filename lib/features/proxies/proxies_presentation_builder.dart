@@ -85,7 +85,8 @@ class ProxiesPresentationCallbacks {
   final ValueChanged<String> selectProxy;
   final Future<void> Function() runUrlTest;
   final Future<void> Function(String tag)? runProxyUrlTest;
-  final ValueChanged<String> resolveVisibleProxyLocation;
+  final void Function(String tag, ValueGetter<bool> isVisible)
+  resolveVisibleProxyLocation;
   final VoidCallback refreshActiveProxyIp;
   final Outbound? Function(String tag) outboundForTag;
   final Future<List<AppProfileSummary>> Function() loadProxyChainTargetSources;

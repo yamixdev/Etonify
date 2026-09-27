@@ -61,6 +61,70 @@ typedef ApplyResolvedExternalIpInfosCallback =
       required Map<String, ResolvedExternalIpInfo> resolvedByTag,
     });
 
+/// Coalesces row lookups so a quick scroll does not rebuild and persist the
+/// whole subscription once for every returned country.
+class ProxyLocationResultBatcher {
+  ProxyLocationResultBatcher({
+    required this.onApplyResolvedInfos,
+    this.delay = const Duration(milliseconds: 250),
+  });
+
+  final ApplyResolvedExternalIpInfosCallback onApplyResolvedInfos;
+  final Duration delay;
+  final Map<String, ResolvedExternalIpInfo> _pending = {};
+  Timer? _timer;
+  String? _subscriptionId;
+  bool _applying = false;
+  bool _disposed = false;
+
+  void add({
+    required String subscriptionId,
+    required String outboundTag,
+    required ResolvedExternalIpInfo info,
+  }) {
+    if (_disposed) return;
+    if (_subscriptionId != null && _subscriptionId != subscriptionId) {
+      _timer?.cancel();
+      _timer = null;
+      _pending.clear();
+    }
+    _subscriptionId = subscriptionId;
+    _pending[outboundTag] = info;
+    if (!_applying) _schedule();
+  }
+
+  void _schedule() {
+    _timer ??= Timer(delay, () => unawaited(_flush()));
+  }
+
+  Future<void> _flush() async {
+    _timer = null;
+    if (_disposed || _applying || _pending.isEmpty) return;
+    _applying = true;
+    final subscriptionId = _subscriptionId!;
+    final batch = Map<String, ResolvedExternalIpInfo>.of(_pending);
+    _pending.clear();
+    try {
+      await onApplyResolvedInfos(
+        subscriptionId: subscriptionId,
+        resolvedByTag: batch,
+      );
+    } catch (error) {
+      AppLogStore.warning('proxy', 'location batch apply failed: $error');
+    } finally {
+      _applying = false;
+      if (!_disposed && _pending.isNotEmpty) _schedule();
+    }
+  }
+
+  void dispose() {
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+    _pending.clear();
+  }
+}
+
 class ProxyLocationCoordinator {
   ProxyLocationCoordinator({
     required SingboxRuntime runtime,
@@ -285,13 +349,19 @@ class ProxyLocationCoordinator {
   Future<ResolvedExternalIpInfo?> fetchExternalIpInfo({
     required String outboundTag,
     bool highPriority = false,
+    bool Function()? shouldStart,
   }) async {
+    if (shouldStart?.call() == false) return null;
     LocationLookupSlot? slot;
     if (!highPriority) {
       slot = await _acquireLocationLookupSlot();
       if (slot == null) {
         return null;
       }
+    }
+    if (shouldStart?.call() == false) {
+      slot?.release();
+      return null;
     }
     final lookup = _sharedExternalInfoLookup(outboundTag);
     if (slot != null) {

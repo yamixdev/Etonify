@@ -217,7 +217,7 @@ void main() {
     );
   });
 
-  testWidgets('a stale measurement does not masquerade as current ping', (
+  testWidgets('a stale measurement stays muted and does not count as working', (
     tester,
   ) async {
     final progressNotifier = ValueNotifier<UrlTestProgressState>(
@@ -232,8 +232,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('45 ms'), findsNothing);
-    expect(find.text('Нет данных'), findsWidgets);
+    expect(find.text('45 ms'), findsOneWidget);
+    final latency = tester.widget<Text>(find.text('45 ms'));
+    final theme = Theme.of(tester.element(find.byType(ProxiesPage)));
+    expect(latency.style?.color, theme.colorScheme.onSurfaceVariant);
+    expect(find.textContaining('Работают'), findsNothing);
     expect(find.byType(ProxyLatencyDots), findsNothing);
   });
 

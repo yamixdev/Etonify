@@ -672,7 +672,7 @@ void main() {
                 progressiveBlurEnabled: false,
                 onSelected: (_) {},
                 onUrlTest: () async {},
-                onVisibleProxyNeedsLocation: requestedTags.add,
+                onVisibleProxyNeedsLocation: (tag, _) => requestedTags.add(tag),
                 embedded: true,
                 sheetAtMaxExtent: true,
                 sheetExtent: 1,
@@ -690,6 +690,57 @@ void main() {
       expect(requestedTags, ['unknown']);
     },
   );
+
+  testWidgets('off-screen proxy location request becomes inactive', (
+    tester,
+  ) async {
+    bool Function()? stillVisible;
+    final proxies = <AppProxySummary>[
+      _proxy(
+        'unknown',
+        'Unknown country',
+        latency: 42,
+      ).copyWith(countryCode: ''),
+      for (var i = 0; i < 40; i++)
+        _proxy('known-$i', 'Known $i', latency: i + 50),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SizedBox(
+            height: 720,
+            child: ProxiesPage(
+              proxies: proxies,
+              selectedTag: '',
+              connected: true,
+              progressiveBlurEnabled: false,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+              onVisibleProxyNeedsLocation: (tag, isVisible) {
+                if (tag == 'unknown') stillVisible = isVisible;
+              },
+              embedded: true,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(stillVisible, isNotNull);
+    expect(stillVisible!(), isTrue);
+
+    await tester.scrollUntilVisible(
+      find.text('Known 39'),
+      600,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pump();
+    expect(stillVisible!(), isFalse);
+  });
 
   testWidgets('selected proxy stays at the top when latency sorting changes', (
     tester,
@@ -1148,6 +1199,69 @@ void main() {
       );
     },
   );
+
+  testWidgets('latency updates do not move rows while the list is dragged', (
+    tester,
+  ) async {
+    final proxies = <AppProxySummary>[
+      _proxy('old-fast', 'Old fast', latency: 1),
+      _proxy('healthy', 'Healthy', latency: 50),
+      for (var i = 0; i < 12; i++)
+        _proxy('filler-$i', 'Filler $i', latency: 100 + i),
+    ];
+    final runtimeStates = ProxyRuntimeVisualStore();
+    addTearDown(runtimeStates.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SizedBox(
+            height: 720,
+            child: ProxiesPage(
+              proxies: proxies,
+              selectedTag: '',
+              connected: true,
+              initialSort: ProxySort.latency,
+              progressiveBlurEnabled: false,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+              embedded: true,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+              runtimeStates: runtimeStates,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Old fast'), findsOneWidget);
+    expect(find.text('Healthy'), findsOneWidget);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ListView).last),
+    );
+    await gesture.moveBy(const Offset(0, -40));
+    await tester.pump();
+    runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
+      'old-fast': ProxyRuntimeVisualState(
+        latencyUnavailable: true,
+        latencyError: 'i/o timeout',
+      ),
+      'healthy': ProxyRuntimeVisualState(latency: 25, latencyFresh: true),
+    });
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Old fast'), findsOneWidget);
+    expect(find.text('Healthy'), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Healthy'), findsOneWidget);
+    expect(find.text('Old fast'), findsNothing);
+  });
 
   testWidgets(
     'working-only proxy mode hides failed rows and restores recovered rows',

@@ -61,6 +61,51 @@ void main() {
 
   group('ProxyLocationCoordinator', () {
     test(
+      'queued lookup does not start after its row leaves the list',
+      () async {
+        final firstLookup = Completer<Map<String, dynamic>>();
+        final requestedTags = <String>[];
+        final runtime = _FakeSingboxRuntime((tag) {
+          requestedTags.add(tag);
+          return tag == 'first'
+              ? firstLookup.future
+              : Future.value({'ip': '2.2.2.2', 'countryCode': 'de'});
+        });
+        final coordinator = ProxyLocationCoordinator(
+          runtime: runtime,
+          getLocationLookupLimit: () => 5,
+          getLocationLookupTimeoutSeconds: () => 5,
+          getLocationLookupConcurrency: () => 1,
+          isConnected: () => true,
+          isForegroundLifecycleActive: () => true,
+          isMarkAllServersRussia: () => false,
+          isProxyPanelInteractionActive: () => false,
+          getDiagnosticGeneration: () => 1,
+          getActiveSubscription: () => null,
+          getBestOutbounds: () => const [],
+          hasResolvedExternalLocation: (_) => false,
+          getEffectiveOutboundLatency: (_) => 100,
+          onApplyResolvedInfos:
+              ({required subscriptionId, required resolvedByTag}) async {},
+        );
+
+        final first = coordinator.fetchExternalIpInfo(outboundTag: 'first');
+        var secondRowVisible = true;
+        final second = coordinator.fetchExternalIpInfo(
+          outboundTag: 'second',
+          shouldStart: () => secondRowVisible,
+        );
+        secondRowVisible = false;
+        firstLookup.complete({'ip': '1.1.1.1', 'countryCode': 'us'});
+
+        expect((await first)?.ip, '1.1.1.1');
+        expect(await second, isNull);
+        expect(requestedTags, ['first']);
+        coordinator.dispose();
+      },
+    );
+
+    test(
       'fetches external IP info and deduplicates concurrent lookups',
       () async {
         var callCount = 0;
@@ -195,5 +240,35 @@ void main() {
 
       coordinator.dispose();
     });
+  });
+
+  test('visible location results are applied together', () async {
+    final batches = <Map<String, ResolvedExternalIpInfo>>[];
+    final batcher = ProxyLocationResultBatcher(
+      delay: const Duration(milliseconds: 200),
+      onApplyResolvedInfos:
+          ({required subscriptionId, required resolvedByTag}) async {
+            expect(subscriptionId, 'profile');
+            batches.add(resolvedByTag);
+          },
+    );
+    addTearDown(batcher.dispose);
+
+    batcher.add(
+      subscriptionId: 'profile',
+      outboundTag: 'one',
+      info: const ResolvedExternalIpInfo(ip: '1.1.1.1', countryCode: 'US'),
+    );
+    batcher.add(
+      subscriptionId: 'profile',
+      outboundTag: 'two',
+      info: const ResolvedExternalIpInfo(ip: '2.2.2.2', countryCode: 'DE'),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(batches, isEmpty);
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+
+    expect(batches, hasLength(1));
+    expect(batches.single.keys, unorderedEquals(['one', 'two']));
   });
 }

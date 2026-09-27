@@ -467,7 +467,7 @@ Endpoint = wg.example.com:51820
     expect(selected, 'lowest');
   });
 
-  test('keeps latency runtime-only without clearing location fields', () async {
+  test('persists latest latency alongside location fields', () async {
     const subscription = Subscription(
       id: 'runtime-sub',
       name: 'Runtime subscription',
@@ -490,11 +490,16 @@ Endpoint = wg.example.com:51820
     await SubscriptionStore.saveOutboundRuntimeInfoInBackground(
       subscription.id,
       latestPings: const {'leaf-1': 42},
+      expectedOutboundKeys: {
+        'leaf-1': SubscriptionStore.outboundIdentityKey(
+          subscription.outbounds.single.config,
+        ),
+      },
     );
 
     var saved = await SubscriptionStore.get(subscription.id);
     expect(saved, isNotNull);
-    expect(saved!.outbounds.single.info.latestPing, isNull);
+    expect(saved!.outbounds.single.info.latestPing, 42);
     expect(saved.outbounds.single.info.externalIp, '1.1.1.1');
     expect(saved.outbounds.single.info.country, 'FI');
     expect(saved.outbounds.single.info.exitCountry, 'SE');
@@ -512,11 +517,61 @@ Endpoint = wg.example.com:51820
 
     saved = await SubscriptionStore.get(subscription.id);
     expect(saved, isNotNull);
-    expect(saved!.outbounds.single.info.latestPing, isNull);
+    expect(saved!.outbounds.single.info.latestPing, 42);
     expect(saved.outbounds.single.info.externalIp, '2.2.2.2');
     expect(saved.outbounds.single.info.country, 'FI');
     expect(saved.outbounds.single.info.exitCountry, 'DE');
   });
+
+  test(
+    'delayed latency write cannot attach to a refreshed server with the same tag',
+    () async {
+      const oldOutbound = Outbound(
+        tag: 'leaf-1',
+        name: 'Leaf 1',
+        config: {
+          'type': 'vless',
+          'tag': 'leaf-1',
+          'server': 'old.example',
+          'server_port': 443,
+          'uuid': '11111111-1111-1111-1111-111111111111',
+        },
+      );
+      const refreshedOutbound = Outbound(
+        tag: 'leaf-1',
+        name: 'Leaf 1',
+        config: {
+          'type': 'vless',
+          'tag': 'leaf-1',
+          'server': 'new.example',
+          'server_port': 443,
+          'uuid': '11111111-1111-1111-1111-111111111111',
+        },
+      );
+      const oldSubscription = Subscription(
+        id: 'refreshed-sub',
+        name: 'Refreshed subscription',
+        url: 'https://example.com/sub',
+        outbounds: [oldOutbound],
+      );
+      await SubscriptionStore.save(oldSubscription);
+      final oldKey = SubscriptionStore.outboundIdentityKey(oldOutbound.config);
+      await SubscriptionStore.save(
+        oldSubscription.copyWith(outbounds: [refreshedOutbound]),
+      );
+
+      expect(
+        await SubscriptionStore.saveLatestPingsInBackground(
+          oldSubscription.id,
+          const {'leaf-1': 42},
+          expectedOutboundKeys: {'leaf-1': oldKey},
+        ),
+        isFalse,
+      );
+      final saved = await SubscriptionStore.get(oldSubscription.id);
+      expect(saved!.outbounds.single.info.latestPing, isNull);
+    },
+  );
 
   test('preserves state across duplicate endpoints when credentials match', () {
     final oldOutbounds = [

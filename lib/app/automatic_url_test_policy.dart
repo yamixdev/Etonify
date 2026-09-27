@@ -8,6 +8,12 @@ AutomaticUrlTestScope automaticUrlTestScope({
   required bool supportsTargeted,
   required String selectedTag,
 }) {
+  if (reason == 'selection') {
+    if (!supportsTargeted || selectedTag.trim().isEmpty) {
+      return AutomaticUrlTestScope.none;
+    }
+    return AutomaticUrlTestScope.selected;
+  }
   if (autoCheckServers) return AutomaticUrlTestScope.full;
   if (reason == 'periodic' || !supportsTargeted || selectedTag.trim().isEmpty) {
     return AutomaticUrlTestScope.none;

@@ -720,16 +720,14 @@ class SingboxConfigBuilder {
     if (!capabilities.isCompatible) return false;
     final type = config['type']?.toString().trim().toLowerCase() ?? '';
     if (type == 'vless') {
-      final encryption =
-          config['encryption']?.toString().trim().toLowerCase() ?? '';
-      if (encryption.isNotEmpty &&
-          encryption != 'none' &&
-          (!_supportsCoreConfigExtension(
-                capabilities.supportsVlessEncryption,
-              ) ||
-              (capabilities.apiVersion >= 2 &&
-                  !capabilities.supportsVlessEncryptionValue(encryption)))) {
-        return false;
+      final rawEncryption = config['encryption']?.toString().trim() ?? '';
+      if (rawEncryption.isNotEmpty && rawEncryption.toLowerCase() != 'none') {
+        if (!_supportsCoreConfigExtension(
+              capabilities.supportsVlessEncryption,
+            ) ||
+            !capabilities.supportsVlessEncryptionValue(rawEncryption)) {
+          return false;
+        }
       }
     }
 

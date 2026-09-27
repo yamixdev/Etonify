@@ -635,6 +635,15 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       }
       await _maybeHandleMovedSubscription(updated);
       _reload();
+      if (mounted) {
+        AppNotice.show(
+          context,
+          AppLocalizations.of(
+            context,
+          ).activeSubscriptionRefreshComplete(updated.name),
+          tone: AppNoticeTone.success,
+        );
+      }
     } catch (e) {
       setState(() => _error = _userFacingSubscriptionError(e));
     } finally {

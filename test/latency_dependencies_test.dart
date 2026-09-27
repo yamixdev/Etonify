@@ -39,6 +39,23 @@ void main() {
     );
   });
 
+  test('reused dependency index resolves nested and visible-only parents', () {
+    final index = LatencyDependencyIndex({
+      'Germany': ['hidden-candidate'],
+      'Auto': ['Germany'],
+      'Visible group': ['visible-leaf'],
+    });
+    expect(index.affectedTags(['hidden-candidate']), {
+      'hidden-candidate',
+      'Germany',
+      'Auto',
+    });
+    expect(index.affectedTags(['visible-leaf']), {
+      'visible-leaf',
+      'Visible group',
+    });
+  });
+
   test('URLTest budget includes hidden runtime outbound targets', () {
     expect(
       latencySessionOutboundCount(
