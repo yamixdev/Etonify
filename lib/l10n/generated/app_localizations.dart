@@ -1067,7 +1067,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutSectionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'App version, core, team, and service information.'**
+  /// **'Version, contributors, help, and diagnostics.'**
   String get aboutSectionSubtitle;
 
   /// No description provided for @aboutHeroSubtitle.
@@ -1076,17 +1076,11 @@ abstract class AppLocalizations {
   /// **'An Android VPN client we are building to be fast, understandable, and reliable for everyday use.'**
   String get aboutHeroSubtitle;
 
-  /// No description provided for @aboutDevelopedBy.
+  /// No description provided for @aboutContributorsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Etonify is developed by the small independent MeowTeam.'**
-  String get aboutDevelopedBy;
-
-  /// No description provided for @aboutTeamLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Team'**
-  String get aboutTeamLabel;
+  /// **'Contributors'**
+  String get aboutContributorsTitle;
 
   /// No description provided for @aboutContactLabel.
   ///
@@ -1103,19 +1097,19 @@ abstract class AppLocalizations {
   /// No description provided for @aboutDocumentationTitle.
   ///
   /// In en, this message translates to:
-  /// **'Etonify documentation'**
+  /// **'Help'**
   String get aboutDocumentationTitle;
 
   /// No description provided for @aboutDocumentationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Set up and use Etonify.'**
+  /// **'Setup, features, and troubleshooting.'**
   String get aboutDocumentationSubtitle;
 
   /// No description provided for @documentationPageTitle.
   ///
   /// In en, this message translates to:
-  /// **'Documentation'**
+  /// **'Help'**
   String get documentationPageTitle;
 
   /// No description provided for @documentationPageSubtitle.
@@ -1622,72 +1616,6 @@ abstract class AppLocalizations {
   /// **'Measurement report is ready to save'**
   String get debugRuntimeMeasurementSaved;
 
-  /// No description provided for @teamPageTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'MeowTeam'**
-  String get teamPageTitle;
-
-  /// No description provided for @teamIntroTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'The team behind Etonify'**
-  String get teamIntroTitle;
-
-  /// No description provided for @teamIntroBody.
-  ///
-  /// In en, this message translates to:
-  /// **'MeowTeam is two developers building Etonify, its core, and networking components together as an independent open-source project.'**
-  String get teamIntroBody;
-
-  /// No description provided for @teamTimelineForkTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Early client development'**
-  String get teamTimelineForkTitle;
-
-  /// No description provided for @teamTimelineForkBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Early test versions helped define the Android runtime, subscription handling, diagnostics, and interface that Etonify now maintains.'**
-  String get teamTimelineForkBody;
-
-  /// No description provided for @teamTimelineRefactorTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Large refactor'**
-  String get teamTimelineRefactorTitle;
-
-  /// No description provided for @teamTimelineRefactorBody.
-  ///
-  /// In en, this message translates to:
-  /// **'We gradually split the large legacy code into focused components, simplified VPN control, and added checks for critical scenarios.'**
-  String get teamTimelineRefactorBody;
-
-  /// No description provided for @teamTimelineCoreTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Moving to etonify-core'**
-  String get teamTimelineCoreTitle;
-
-  /// No description provided for @teamTimelineCoreBody.
-  ///
-  /// In en, this message translates to:
-  /// **'After MeowSingBox, the client moved to a more stable sing-box base with the changes Etonify needs. Maintaining our own core makes updates and testing easier, while URLTest, server failover, and resource-cleanup improvements benefit everyday use.'**
-  String get teamTimelineCoreBody;
-
-  /// No description provided for @teamTimelineNowTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Etonify today'**
-  String get teamTimelineNowTitle;
-
-  /// No description provided for @teamTimelineNowBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Etonify is still evolving: we keep simplifying UX, improving Android stability, and cutting technical debt without losing the speed-focused VPN experience.'**
-  String get teamTimelineNowBody;
-
   /// No description provided for @teamDeveloperDdosxdRole.
   ///
   /// In en, this message translates to:
@@ -1703,14 +1631,8 @@ abstract class AppLocalizations {
   /// No description provided for @teamDeveloperVerificationInfo.
   ///
   /// In en, this message translates to:
-  /// **'Member of MeowTeam.'**
+  /// **'Etonify contributor.'**
   String get teamDeveloperVerificationInfo;
-
-  /// No description provided for @teamTelegramRole.
-  ///
-  /// In en, this message translates to:
-  /// **'Official channel and release news'**
-  String get teamTelegramRole;
 
   /// No description provided for @languageSettingTitle.
   ///

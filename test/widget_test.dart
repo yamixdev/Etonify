@@ -2055,7 +2055,9 @@ void main() {
     );
   });
 
-  testWidgets('about page opens MeowTeam timeline', (tester) async {
+  testWidgets('about page opens contributor profiles without team navigation', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
@@ -2080,38 +2082,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Etonify v0.1.1'), findsNothing);
-    expect(find.text('App version'), findsOneWidget);
     expect(find.text('0.1.1'), findsOneWidget);
     expect(find.text('MeowVPN'), findsNothing);
     expect(find.text('yamixdev/etonify-core'), findsNothing);
     expect(find.text('@etonify'), findsOneWidget);
     expect(find.text('Terms of Use'), findsNothing);
     expect(find.text('Privacy Policy'), findsNothing);
-
-    final teamAction = find.ancestor(
-      of: find.text('MeowTeam'),
-      matching: find.byType(InkWell),
-    );
-    await tester.tap(teamAction.first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('The team behind Etonify'), findsOneWidget);
-    expect(find.text('Early client development'), findsOneWidget);
-    expect(find.text('Moving to etonify-core'), findsOneWidget);
-
-    await tester.scrollUntilVisible(find.text('dudosxdev'), 500);
+    expect(find.byKey(const ValueKey('about-logo')), findsOneWidget);
+    expect(find.text('Contributors'), findsOneWidget);
     expect(find.text('dudosxdev'), findsOneWidget);
     expect(find.text('yamixdev'), findsOneWidget);
+    expect(find.text('MeowTeam'), findsNothing);
 
     await tester.tap(find.text('dudosxdev'));
     await tester.pumpAndSettle();
     expect(find.text('Telegram'), findsOneWidget);
     expect(find.text('GitHub'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('developer-github-badge')),
+      findsOneWidget,
+    );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(find.text('© 2026 MeowTeam™'), 500);
-    expect(find.text('© 2026 MeowTeam™'), findsOneWidget);
+    expect(find.text('MeowTeam'), findsNothing);
   });
 
   testWidgets('about page opens resources and diagnostics separately', (
@@ -2147,7 +2140,7 @@ void main() {
 
     expect(find.byType(SettingsDiagnosticsPage), findsNothing);
     expect(find.text('Resources & diagnostics'), findsOneWidget);
-    expect(find.text('Etonify documentation'), findsOneWidget);
+    expect(find.text('Help'), findsOneWidget);
     expect(find.text('Process memory'), findsNothing);
 
     await tester.ensureVisible(find.text('Resources & diagnostics'));

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -59,12 +60,6 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
     }
   }
 
-  void _openTeamPage() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (context) => const _MeowTeamPage()),
-    );
-  }
-
   void _openUpdatePage() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -103,6 +98,9 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final yamixdev = AppDevelopers.yamixdev(l10n);
+    final dudosxdev = AppDevelopers.dudosxdev(l10n);
+    final theme = Theme.of(context);
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.aboutSectionTitle)),
@@ -119,16 +117,31 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const _AboutBrandHero(),
-                const Gap(20),
-                _AboutInfoCard(
-                  versionLabel: widget.versionLabel,
-                  onOpenTelegram: () =>
-                      _openUri(SettingsAboutPage._telegramUri),
-                  onOpenContact: () => _openUri(SettingsAboutPage._contactUri),
-                  onOpenTeam: _openTeamPage,
+                _AboutBrandHero(versionLabel: widget.versionLabel),
+                const Gap(22),
+                Text(
+                  l10n.aboutContributorsTitle,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                const Gap(12),
+                const Gap(10),
+                Column(
+                  key: const ValueKey('about-contributors'),
+                  children: [
+                    _DeveloperCard(
+                      profile: yamixdev,
+                      onTap: () => showDeveloperProfileSheet(context, yamixdev),
+                    ),
+                    const Gap(10),
+                    _DeveloperCard(
+                      profile: dudosxdev,
+                      onTap: () =>
+                          showDeveloperProfileSheet(context, dudosxdev),
+                    ),
+                  ],
+                ),
+                const Gap(20),
                 _AboutUpdatesCard(onOpenUpdates: _openUpdatePage),
                 const Gap(12),
                 _AboutDocumentationCard(
@@ -136,6 +149,12 @@ class _SettingsAboutPageState extends State<SettingsAboutPage> {
                 ),
                 const Gap(12),
                 _AboutDiagnosticsCard(onOpenDiagnostics: _openDiagnosticsPage),
+                const Gap(12),
+                _AboutInfoCard(
+                  onOpenTelegram: () =>
+                      _openUri(SettingsAboutPage._telegramUri),
+                  onOpenContact: () => _openUri(SettingsAboutPage._contactUri),
+                ),
               ],
             ),
           ),
@@ -468,26 +487,80 @@ class _CoreIntegrationCard extends StatelessWidget {
 }
 
 class _AboutBrandHero extends StatelessWidget {
-  const _AboutBrandHero();
+  const _AboutBrandHero({required this.versionLabel});
+
+  final String versionLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final viewportHeight = MediaQuery.sizeOf(context).height;
-    final heroHeight = (viewportHeight * .28).clamp(176.0, 232.0).toDouble();
+    final cs = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
 
-    return SizedBox(
-      height: heroHeight,
-      child: Align(
-        alignment: Alignment.bottomLeft,
-        child: Text(
-          'Etonify',
-          key: const ValueKey('about-brand'),
-          maxLines: 1,
-          style: theme.textTheme.displaySmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -1.2,
-          ),
+    return Card(
+      key: const ValueKey('about-brand'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: ExcludeSemantics(
+                    child: SvgPicture.asset(
+                      'assets/images/logo.svg',
+                      key: const ValueKey('about-logo'),
+                      colorFilter: ColorFilter.mode(
+                        cs.onPrimaryContainer,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
+                ),
+                const Gap(16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Etonify',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Gap(4),
+                      Text(
+                        versionLabel,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Gap(16),
+            Text(
+              l10n.aboutHeroSubtitle,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -496,41 +569,28 @@ class _AboutBrandHero extends StatelessWidget {
 
 class _AboutInfoCard extends StatelessWidget {
   const _AboutInfoCard({
-    required this.versionLabel,
     required this.onOpenTelegram,
     required this.onOpenContact,
-    required this.onOpenTeam,
   });
 
-  final String versionLabel;
   final VoidCallback onOpenTelegram;
   final VoidCallback onOpenContact;
-  final VoidCallback onOpenTeam;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Card(
-      key: const ValueKey('about-overview-card'),
+      key: const ValueKey('about-contact-card'),
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AboutOverviewRow(label: l10n.appVersionLabel, value: versionLabel),
-          const Divider(height: 1),
           _AboutOverviewRow(
             label: l10n.telegramChannelLabel,
             value: '@etonify',
             trailingIcon: Icons.open_in_new_rounded,
             onTap: onOpenTelegram,
-          ),
-          const Divider(height: 1),
-          _AboutOverviewRow(
-            label: l10n.aboutTeamLabel,
-            value: 'MeowTeam',
-            trailingIcon: Icons.chevron_right_rounded,
-            onTap: onOpenTeam,
           ),
           const Divider(height: 1),
           _AboutOverviewRow(
@@ -610,7 +670,7 @@ class _AboutDocumentationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return _AboutNavigationCard(
-      icon: Icons.menu_book_rounded,
+      icon: Icons.help_outline_rounded,
       title: l10n.aboutDocumentationTitle,
       subtitle: l10n.aboutDocumentationSubtitle,
       onTap: onOpenDocumentation,
@@ -968,223 +1028,6 @@ class _AboutInfoRow extends StatelessWidget {
   }
 }
 
-class _AboutActionChip extends StatelessWidget {
-  const _AboutActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Material(
-      color: cs.primaryContainer.withValues(alpha: .62),
-      borderRadius: BorderRadius.circular(999),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 18, color: cs.onPrimaryContainer),
-              const Gap(6),
-              Text(
-                label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: cs.onPrimaryContainer,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MeowTeamPage extends StatelessWidget {
-  const _MeowTeamPage();
-
-  static final Uri _telegramUri = Uri.parse('https://t.me/etonify');
-  static final Uri _coreUri = Uri.parse(
-    'https://github.com/yamixdev/etonify-core/tree/etonify-dev',
-  );
-
-  Future<void> _open(BuildContext context, Uri uri) async {
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && context.mounted) {
-      AppNotice.show(context, uri.toString(), tone: AppNoticeTone.error);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final l10n = AppLocalizations.of(context);
-    final dudosxdev = AppDevelopers.dudosxdev(l10n);
-    final yamixdev = AppDevelopers.yamixdev(l10n);
-
-    return ProgressiveBlurScaffold(
-      appBar: AppBar(title: Text(l10n.teamPageTitle)),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          progressiveHeaderTopPadding(context, 20),
-          16,
-          appBottomSafePadding(context, 24),
-        ),
-        children: [
-          Text(
-            l10n.teamIntroTitle,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Gap(8),
-          Text(
-            l10n.teamIntroBody,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.4,
-            ),
-          ),
-          const Gap(18),
-          _TimelineItem(
-            icon: Icons.fork_right_rounded,
-            title: l10n.teamTimelineForkTitle,
-            body: l10n.teamTimelineForkBody,
-          ),
-          _TimelineItem(
-            icon: Icons.cleaning_services_rounded,
-            title: l10n.teamTimelineRefactorTitle,
-            body: l10n.teamTimelineRefactorBody,
-          ),
-          _TimelineItem(
-            icon: Icons.memory_rounded,
-            title: l10n.teamTimelineCoreTitle,
-            body: l10n.teamTimelineCoreBody,
-            actionLabel: 'yamixdev/etonify-core',
-            onAction: () => _open(context, _coreUri),
-          ),
-          _TimelineItem(
-            icon: Icons.auto_awesome_rounded,
-            title: l10n.teamTimelineNowTitle,
-            body: l10n.teamTimelineNowBody,
-          ),
-          const Gap(14),
-          _DeveloperCard(
-            profile: dudosxdev,
-            onTap: () => showDeveloperProfileSheet(context, dudosxdev),
-          ),
-          const Gap(10),
-          _DeveloperCard(
-            profile: yamixdev,
-            onTap: () => showDeveloperProfileSheet(context, yamixdev),
-          ),
-          const Gap(10),
-          _TeamLinkCard(
-            name: l10n.telegramChannelLabel,
-            role: l10n.teamTelegramRole,
-            avatarAsset: 'assets/images/team/telegram.png',
-            onTap: () => _open(context, _telegramUri),
-          ),
-          const Gap(28),
-          Center(
-            child: Text(
-              '© 2026 MeowTeam™',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimelineItem extends StatelessWidget {
-  const _TimelineItem({
-    required this.icon,
-    required this.title,
-    required this.body,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 20, color: cs.onPrimaryContainer),
-            ),
-            const Gap(12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const Gap(5),
-                  Text(
-                    body,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-                  ),
-                  if (actionLabel != null && onAction != null) ...[
-                    const Gap(8),
-                    _AboutActionChip(
-                      icon: Icons.open_in_new_rounded,
-                      label: actionLabel!,
-                      onTap: onAction!,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _DeveloperCard extends StatelessWidget {
   const _DeveloperCard({required this.profile, required this.onTap});
 
@@ -1226,46 +1069,6 @@ class _DeveloperCard extends StatelessWidget {
         ),
         subtitle: Text(profile.role),
         trailing: const Icon(Icons.chevron_right_rounded),
-        titleTextStyle: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
-class _TeamLinkCard extends StatelessWidget {
-  const _TeamLinkCard({
-    required this.name,
-    required this.role,
-    required this.avatarAsset,
-    required this.onTap,
-  });
-
-  final String name;
-  final String role;
-  final String avatarAsset;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          radius: 22,
-          backgroundImage: ResizeImage(
-            AssetImage(avatarAsset),
-            width: 128,
-            height: 128,
-          ),
-          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-        ),
-        title: Text(name),
-        subtitle: Text(role),
-        trailing: const Icon(Icons.open_in_new_rounded),
         titleTextStyle: theme.textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w800,
         ),

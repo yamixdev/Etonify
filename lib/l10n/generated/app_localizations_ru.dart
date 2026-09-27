@@ -547,18 +547,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get aboutSectionSubtitle =>
-      'Версия приложения, ядро, команда и служебная информация.';
+      'Версия, контрибьюторы, справка и диагностика.';
 
   @override
   String get aboutHeroSubtitle =>
       'VPN-клиент для Android: быстрый, понятный и надёжный для повседневного использования.';
 
   @override
-  String get aboutDevelopedBy =>
-      'Etonify разрабатывает небольшая независимая команда MeowTeam.';
-
-  @override
-  String get aboutTeamLabel => 'Команда';
+  String get aboutContributorsTitle => 'Контрибьюторы';
 
   @override
   String get aboutContactLabel => 'Написать разработчикам';
@@ -567,13 +563,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutCoreSourceLabel => 'исходный код ядра';
 
   @override
-  String get aboutDocumentationTitle => 'Документация Etonify';
+  String get aboutDocumentationTitle => 'Справка';
 
   @override
-  String get aboutDocumentationSubtitle => 'Настройка и использование Etonify.';
+  String get aboutDocumentationSubtitle =>
+      'Настройка, возможности и решение проблем.';
 
   @override
-  String get documentationPageTitle => 'Документация';
+  String get documentationPageTitle => 'Справка';
 
   @override
   String get documentationPageSubtitle =>
@@ -870,44 +867,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Отчёт измерения готов к сохранению';
 
   @override
-  String get teamPageTitle => 'MeowTeam';
-
-  @override
-  String get teamIntroTitle => 'Команда Etonify';
-
-  @override
-  String get teamIntroBody =>
-      'MeowTeam — два разработчика, которые вместе развивают Etonify, ядро и сетевые компоненты как независимый открытый проект.';
-
-  @override
-  String get teamTimelineForkTitle => 'Ранняя разработка клиента';
-
-  @override
-  String get teamTimelineForkBody =>
-      'Первые тестовые версии помогли определить системную часть Android, работу с подписками, диагностику и интерфейс, которые теперь поддерживает Etonify.';
-
-  @override
-  String get teamTimelineRefactorTitle => 'Переработка архитектуры';
-
-  @override
-  String get teamTimelineRefactorBody =>
-      'Мы постепенно разделили старый код на отдельные части, упростили управление VPN и добавили проверки критических сценариев.';
-
-  @override
-  String get teamTimelineCoreTitle => 'Переход на etonify-core';
-
-  @override
-  String get teamTimelineCoreBody =>
-      'После MeowSingBox клиент перешёл на более стабильную базу sing-box с изменениями, необходимыми Etonify. Собственное ядро упрощает обновления и тестирование, а доработки URLTest, переключения серверов и очистки ресурсов улучшают повседневную работу клиента.';
-
-  @override
-  String get teamTimelineNowTitle => 'Etonify сейчас';
-
-  @override
-  String get teamTimelineNowBody =>
-      'Etonify продолжает развиваться: мы упрощаем интерфейс, улучшаем стабильность Android и сокращаем технический долг, сохраняя быстрый VPN-клиент.';
-
-  @override
   String get teamDeveloperDdosxdRole => 'Ядро, сеть и собственные протоколы';
 
   @override
@@ -915,10 +874,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Android-клиент, интерфейс, ядро и релизы';
 
   @override
-  String get teamDeveloperVerificationInfo => 'Участник команды MeowTeam.';
-
-  @override
-  String get teamTelegramRole => 'Официальный канал и новости релизов';
+  String get teamDeveloperVerificationInfo => 'Участник проекта Etonify.';
 
   @override
   String get languageSettingTitle => 'Язык';

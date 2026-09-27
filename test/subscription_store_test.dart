@@ -7,6 +7,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
+import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
@@ -277,12 +278,57 @@ Endpoint = wg.example.com:51820
       ),
     );
 
+    AppLogStore.clear();
     final first = SubscriptionStore.refresh('single-flight-refresh');
     final second = SubscriptionStore.refresh('single-flight-refresh');
 
     final results = await Future.wait([first, second]);
     expect(requestCount, 1);
     expect(results[0].outbounds.single.tag, results[1].outbounds.single.tag);
+    final refreshTimings = AppLogStore.entries.value
+        .where((entry) => entry.title == 'subscription refresh timing')
+        .toList();
+    expect(refreshTimings, hasLength(1));
+    final timing = refreshTimings.single.message;
+    for (final stage in [
+      'totalMs',
+      'payloadOpenMs',
+      'metadataMs',
+      'fetchMs',
+      'buildMs',
+      'lockReadMs',
+      'preserveMs',
+      'saveMs',
+    ]) {
+      expect(timing, matches(RegExp('$stage=\\d+')));
+    }
+    expect(timing, contains('nodes=1'));
+    expect(timing, isNot(contains(url)));
+    expect(
+      AppLogStore.entries.value.any(
+        (entry) =>
+            entry.title == 'subscription fetch timing' &&
+            RegExp(r'networkMs=\d+').hasMatch(entry.message),
+      ),
+      isTrue,
+    );
+    expect(
+      AppLogStore.entries.value.any(
+        (entry) =>
+            entry.title == 'subscription parse timing' &&
+            RegExp(r'parseMs=\d+').hasMatch(entry.message),
+      ),
+      isTrue,
+    );
+    expect(
+      AppLogStore.entries.value.any(
+        (entry) =>
+            entry.title == 'subscription save timing' &&
+            RegExp(r'encodeMs=\d+').hasMatch(entry.message) &&
+            RegExp(r'payloadWriteMs=\d+').hasMatch(entry.message),
+      ),
+      isTrue,
+    );
   });
 
   test('builds Husi-style proxy chain detours from parsed links', () {

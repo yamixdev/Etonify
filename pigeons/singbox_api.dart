@@ -265,152 +265,152 @@ class InstalledAppMessage {
 
 @HostApi()
 abstract class SingboxHostApi {
-  @async
+  @asyncCallback
   bool prepareVpn(bool requiresVpn);
 
-  @async
+  @asyncCallback
   Map<String?, Object?> vpnPermissionStatus();
 
-  @async
+  @asyncCallback
   void start(String config, bool useVpn);
 
-  @async
+  @asyncCallback
   void startPrepared(bool useVpn);
 
-  @async
+  @asyncCallback
   void startProbe(String config);
 
-  @async
+  @asyncCallback
   void stopProbe();
 
-  @async
+  @asyncCallback
   void applyConfig(String config, bool useVpn, bool restartCore);
 
-  @async
+  @asyncCallback
   void applyPreparedConfig(bool useVpn, bool restartCore);
 
-  @async
+  @asyncCallback
   String getConfigPath();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getRuntimeFlags();
 
-  @async
+  @asyncCallback
   void setRuntimeFlags(RuntimeFlagsMessage flags);
 
-  @async
+  @asyncCallback
   void setRuntimeUiForeground(bool foreground);
 
-  @async
+  @asyncCallback
   bool ensureNotificationPermission();
 
-  @async
+  @asyncCallback
   void updateVpnNotificationPresentation(
     VpnNotificationPresentationMessage presentation,
   );
 
-  @async
+  @asyncCallback
   void reload();
 
-  @async
+  @asyncCallback
   void stop(String reason);
 
-  @async
+  @asyncCallback
   void selectOutbound(String groupTag, String outboundTag);
 
-  @async
+  @asyncCallback
   void urlTest(UrlTestRequestMessage request);
 
-  @async
+  @asyncCallback
   void cancelUrlTest(String groupTag, String targetOutboundTag);
 
-  @async
+  @asyncCallback
   Map<String?, Object?> status();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> lookupOutboundExternalInfo(String outboundTag);
 
-  @async
+  @asyncCallback
   NetworkInterfaceStateMessage getNetworkInterfaceState();
 
-  @async
+  @asyncCallback
   String? exportLogs(String content, String suggestedName);
 
-  @async
+  @asyncCallback
   bool canInstallApks();
 
-  @async
+  @asyncCallback
   bool openApkInstallSettings();
 
-  @async
+  @asyncCallback
   void installDownloadedApk();
 
-  @async
+  @asyncCallback
   ApkInspectionMessage inspectDownloadedApk(String path);
 
-  @async
+  @asyncCallback
   Map<String?, Object?> fetchUrlViaOutbound(
     OutboundFetchRequestMessage request,
   );
 
-  @async
+  @asyncCallback
   UnderlyingNetworkFetchResponseMessage fetchUrlOnUnderlyingNetwork(
     UnderlyingNetworkFetchRequestMessage request,
   );
 
-  @async
+  @asyncCallback
   UnderlyingNetworkDownloadResponseMessage downloadUrlOnUnderlyingNetwork(
     UnderlyingNetworkDownloadRequestMessage request,
   );
 
-  @async
+  @asyncCallback
   List<String?> resolveHostOnUnderlyingNetwork(String host);
 
-  @async
+  @asyncCallback
   String getAndroidId();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getSubscriptionRequestDeviceInfo();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getPlatformDeviceInfo();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getAppVersionInfo();
 
-  @async
+  @asyncCallback
   String getCoreVersion();
 
-  @async
+  @asyncCallback
   String getCoreCapabilities();
 
-  @async
+  @asyncCallback
   void checkConfig(String config);
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getPerformanceSnapshot();
 
-  @async
+  @asyncCallback
   void startRuntimeMeasurement(int durationSeconds);
 
-  @async
+  @asyncCallback
   void stopRuntimeMeasurement();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getRuntimeMeasurement();
 
-  @async
+  @asyncCallback
   String getRuntimeMeasurementReport();
 
-  @async
+  @asyncCallback
   Map<String?, Object?> getHappCrypt5Support();
 
-  @async
+  @asyncCallback
   List<InstalledAppMessage?> getInstalledApps();
 
-  @async
+  @asyncCallback
   Uint8List? getInstalledAppIcon(String packageName, int sizePx);
 
-  @async
+  @asyncCallback
   void setQuickSettingsTileLabel(String label);
 }

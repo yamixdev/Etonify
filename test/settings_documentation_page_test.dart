@@ -21,7 +21,7 @@ void main() {
   ) async {
     await tester.pumpWidget(_documentationApp(const Locale('ru')));
 
-    expect(find.text('Документация'), findsOneWidget);
+    expect(find.text('Справка'), findsOneWidget);
     expect(find.text('Начало работы'), findsOneWidget);
     expect(find.text('Быстрый старт'), findsOneWidget);
     expect(find.text('О Etonify'), findsOneWidget);
@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(_documentationApp(const Locale('en')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Documentation'), findsOneWidget);
+    expect(find.text('Help'), findsOneWidget);
     expect(find.text('Getting started'), findsOneWidget);
     expect(find.text('Quick start'), findsOneWidget);
     expect(find.text('About Etonify'), findsOneWidget);
@@ -76,22 +76,20 @@ void main() {
     expect(find.text('@etonify'), findsOneWidget);
 
     final updatesTop = tester.getTopLeft(find.text('App updates')).dy;
-    final documentationTop = tester
-        .getTopLeft(find.text('Etonify documentation'))
-        .dy;
+    final documentationTop = tester.getTopLeft(find.text('Help')).dy;
     final diagnosticsTop = tester
         .getTopLeft(find.text('Resources & diagnostics'))
         .dy;
     expect(updatesTop, lessThan(documentationTop));
     expect(documentationTop, lessThan(diagnosticsTop));
 
-    await tester.ensureVisible(find.text('Etonify documentation'));
+    await tester.ensureVisible(find.text('Help'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Etonify documentation'));
+    await tester.tap(find.text('Help'));
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsDocumentationPage), findsOneWidget);
-    expect(find.text('Documentation'), findsOneWidget);
+    expect(find.text('Help'), findsOneWidget);
     expect(find.text('Documents'), findsOneWidget);
     expect(find.text('Terms of Use'), findsOneWidget);
     expect(find.text('Privacy Policy'), findsOneWidget);
@@ -128,25 +126,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('App version'), findsOneWidget);
     expect(find.text('0.3.1-rc.1'), findsOneWidget);
     expect(find.text('@etonify'), findsOneWidget);
-    expect(find.text('MeowTeam'), findsOneWidget);
+    expect(find.text('MeowTeam'), findsNothing);
+    expect(find.text('Contributors'), findsOneWidget);
 
-    final overview = find.byKey(const ValueKey('about-overview-card'));
-    final overviewRight = tester.getTopRight(overview).dx;
-    expect(
-      overviewRight - tester.getTopRight(find.text('0.3.1-rc.1')).dx,
-      lessThan(24),
-    );
-    expect(
-      overviewRight - tester.getTopRight(find.text('@etonify')).dx,
-      lessThan(52),
-    );
-    expect(
-      overviewRight - tester.getTopRight(find.text('MeowTeam')).dx,
-      lessThan(52),
-    );
+    expect(find.byKey(const ValueKey('about-logo')), findsOneWidget);
+    expect(find.text('yamixdev'), findsOneWidget);
+    expect(find.text('dudosxdev'), findsOneWidget);
   });
 
   testWidgets('about page follows the compact reference hierarchy in Russian', (
@@ -168,18 +155,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('О приложении'), findsOneWidget);
-    expect(find.text('Версия приложения'), findsOneWidget);
+    expect(find.text('0.3.1'), findsOneWidget);
+    expect(find.text('Контрибьюторы'), findsOneWidget);
     expect(find.text('Телеграм-канал'), findsOneWidget);
     expect(find.text('Telegram Etonify'), findsNothing);
     expect(find.text('Обновления приложения'), findsOneWidget);
 
     final brand = find.byKey(const ValueKey('about-brand'));
-    final overview = find.byKey(const ValueKey('about-overview-card'));
+    final contributors = find.byKey(const ValueKey('about-contributors'));
     expect(brand, findsOneWidget);
-    expect(overview, findsOneWidget);
+    expect(contributors, findsOneWidget);
     expect(
       tester.getBottomLeft(brand).dy,
-      lessThan(tester.getTopLeft(overview).dy),
+      lessThan(tester.getTopLeft(contributors).dy),
     );
     expect(tester.takeException(), isNull);
   });

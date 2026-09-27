@@ -562,7 +562,10 @@ class SubscriptionStore {
   }
 
   static Future<void> _saveUnlocked(Subscription sub) async {
+    final totalStopwatch = Stopwatch()..start();
+    final payloadReadStopwatch = Stopwatch()..start();
     final existingPayload = await _payloadStore.get(sub.id);
+    payloadReadStopwatch.stop();
     final isMetadataOnly =
         sub.outbounds.isEmpty &&
         sub.rawContent.isEmpty &&
@@ -571,19 +574,36 @@ class SubscriptionStore {
       await _saveMetadataUnlocked(sub);
       return;
     }
+    final encodeStopwatch = Stopwatch()..start();
     final payloadResult = await Isolate.run(() {
       final payloadBytes = _encodeStoredPayload(jsonEncode(sub.toPayloadMap()));
       final revision = sha256.convert(payloadBytes).toString();
       return (payload: payloadBytes, revision: revision);
     }, debugName: 'meow-encode-subscription-payload');
+    encodeStopwatch.stop();
     final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
+    final metadataWriteStopwatch = Stopwatch()..start();
     await _metaStore.put(updatedSub.id, jsonEncode(updatedSub.toMetadataMap()));
+    metadataWriteStopwatch.stop();
     final payloadUnchanged =
         existingPayload is List<int> &&
         listEquals(existingPayload, payloadResult.payload);
+    final payloadWriteStopwatch = Stopwatch()..start();
     if (!payloadUnchanged) {
       await _payloadStore.put(updatedSub.id, payloadResult.payload);
     }
+    payloadWriteStopwatch.stop();
+    totalStopwatch.stop();
+    AppLogStore.debug(
+      'subscription save timing',
+      'totalMs=${totalStopwatch.elapsedMilliseconds} '
+          'payloadReadMs=${payloadReadStopwatch.elapsedMilliseconds} '
+          'encodeMs=${encodeStopwatch.elapsedMilliseconds} '
+          'metadataWriteMs=${metadataWriteStopwatch.elapsedMilliseconds} '
+          'payloadWriteMs=${payloadWriteStopwatch.elapsedMilliseconds} '
+          'payloadChanged=${!payloadUnchanged} '
+          'bytes=${payloadResult.payload.length}',
+    );
   }
 
   /// Saves only lightweight subscription metadata.
@@ -1064,8 +1084,13 @@ class SubscriptionStore {
     FetchResult? downloadedResult,
     String? expectedRevision,
   }) async {
+    final totalStopwatch = Stopwatch()..start();
+    final payloadOpenStopwatch = Stopwatch()..start();
     await ensurePayloadReady();
-    final existingBeforeFetch = await get(id);
+    payloadOpenStopwatch.stop();
+    final metadataStopwatch = Stopwatch()..start();
+    final existingBeforeFetch = getMetadata(id);
+    metadataStopwatch.stop();
     if (existingBeforeFetch == null) {
       throw StateError('Subscription $id not found');
     }
@@ -1078,6 +1103,7 @@ class SubscriptionStore {
     }
 
     final deadline = _operationDeadline(operationTimeout);
+    final fetchStopwatch = Stopwatch()..start();
     final result = await _withDeadline(
       downloadedResult != null
           ? Future.value(downloadedResult)
@@ -1091,6 +1117,8 @@ class SubscriptionStore {
       deadline,
       'subscription refresh',
     );
+    fetchStopwatch.stop();
+    final buildStopwatch = Stopwatch()..start();
     final payload = await _withDeadline(
       _buildSubscriptionPayloadAsync(
         result.parseResult,
@@ -1103,6 +1131,7 @@ class SubscriptionStore {
       deadline,
       'subscription refresh',
     );
+    buildStopwatch.stop();
     final outbounds = payload.outbounds;
     if (!_hasUsableOutbounds(outbounds)) {
       throw SubscriptionContentException(
@@ -1112,8 +1141,12 @@ class SubscriptionStore {
       );
     }
 
+    final lockWaitStopwatch = Stopwatch()..start();
     return _withSubscriptionWriteLock(id, () async {
+      lockWaitStopwatch.stop();
+      final lockReadStopwatch = Stopwatch()..start();
       final existing = await get(id);
+      lockReadStopwatch.stop();
       if (existing == null) {
         throw StateError('Subscription $id not found');
       }
@@ -1129,10 +1162,12 @@ class SubscriptionStore {
           existingMovedUrl.isNotEmpty &&
           existingMovedUrl == nextMovedUrl;
 
+      final preserveStopwatch = Stopwatch()..start();
       final preservedOutbounds = _preserveUserState(
         existing.outbounds,
         outbounds,
       );
+      preserveStopwatch.stop();
 
       final updated = existing.copyWith(
         name: existing.name,
@@ -1159,9 +1194,24 @@ class SubscriptionStore {
           customHwid: existing.info?.customHwid,
         ),
       );
-
       _logLikelyHwidWarning(updated);
+      final saveStopwatch = Stopwatch()..start();
       await _saveUnlocked(updated);
+      saveStopwatch.stop();
+      totalStopwatch.stop();
+      AppLogStore.info(
+        'subscription refresh timing',
+        'totalMs=${totalStopwatch.elapsedMilliseconds} '
+            'payloadOpenMs=${payloadOpenStopwatch.elapsedMilliseconds} '
+            'metadataMs=${metadataStopwatch.elapsedMilliseconds} '
+            'fetchMs=${fetchStopwatch.elapsedMilliseconds} '
+            'buildMs=${buildStopwatch.elapsedMilliseconds} '
+            'lockWaitMs=${lockWaitStopwatch.elapsedMilliseconds} '
+            'lockReadMs=${lockReadStopwatch.elapsedMilliseconds} '
+            'preserveMs=${preserveStopwatch.elapsedMilliseconds} '
+            'saveMs=${saveStopwatch.elapsedMilliseconds} '
+            'nodes=${preservedOutbounds.length}',
+      );
       return updated;
     });
   }

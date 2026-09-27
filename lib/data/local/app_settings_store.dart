@@ -1178,23 +1178,7 @@ class HiveAppSettingsStore extends AppSettingsStore {
   /// Rewrites the pre-0.3.7 default probe concurrency exactly once. See
   /// [migratedUrlTestConcurrency] for the decision.
   Future<void> _migrateUrlTestConcurrencyDefault() async {
-    final replacement = AppSettingsStore.migratedUrlTestConcurrency(
-      stored: _box.get(AppSettingsStore._urlTestConcurrencyKey)?.toString(),
-      alreadyMigrated: _box.containsKey(
-        AppSettingsStore._urlTestConcurrencyDefaultMigratedKey,
-      ),
-    );
-    if (replacement != null) {
-      await _box.put(AppSettingsStore._urlTestConcurrencyKey, '$replacement');
-      await _box.flush();
-      AppLogStore.info(
-        'settings storage',
-        'migrated urltest concurrency '
-            '${AppSettingsStore._legacyDefaultUrlTestConcurrency} -> '
-            '$replacement',
-      );
-    }
-    await _box.put(AppSettingsStore._urlTestConcurrencyDefaultMigratedKey, '1');
+    await migrateUrlTestConcurrencyDefault(_box);
   }
 
   @override
@@ -1223,6 +1207,48 @@ class HiveAppSettingsStore extends AppSettingsStore {
 
   @override
   Future<void> close() => _box.close();
+}
+
+final Expando<Future<void>> _urlTestMigrationInFlight = Expando<Future<void>>(
+  'urltest concurrency migration',
+);
+
+/// Applies the one-time URLTest default migration to an already opened box.
+Future<void> migrateUrlTestConcurrencyDefault(Box<dynamic> box) async {
+  final inFlight = _urlTestMigrationInFlight[box];
+  if (inFlight != null) {
+    return inFlight;
+  }
+  final operation = _applyUrlTestConcurrencyDefaultMigration(box);
+  _urlTestMigrationInFlight[box] = operation;
+  try {
+    await operation;
+  } finally {
+    if (identical(_urlTestMigrationInFlight[box], operation)) {
+      _urlTestMigrationInFlight[box] = null;
+    }
+  }
+}
+
+Future<void> _applyUrlTestConcurrencyDefaultMigration(Box<dynamic> box) async {
+  if (box.containsKey(AppSettingsStore._urlTestConcurrencyDefaultMigratedKey)) {
+    return;
+  }
+  final replacement = AppSettingsStore.migratedUrlTestConcurrency(
+    stored: box.get(AppSettingsStore._urlTestConcurrencyKey)?.toString(),
+    alreadyMigrated: false,
+  );
+  if (replacement != null) {
+    await box.put(AppSettingsStore._urlTestConcurrencyKey, '$replacement');
+    await box.flush();
+    AppLogStore.info(
+      'settings storage',
+      'migrated urltest concurrency '
+          '${AppSettingsStore._legacyDefaultUrlTestConcurrency} -> '
+          '$replacement',
+    );
+  }
+  await box.put(AppSettingsStore._urlTestConcurrencyDefaultMigratedKey, '1');
 }
 
 /// Compacts settings box when at least 25 obsolete entries have accumulated

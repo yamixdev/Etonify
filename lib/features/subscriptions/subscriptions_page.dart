@@ -604,7 +604,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     if (_refreshingIds.contains(id)) {
       return;
     }
-    final subscription = await SubscriptionStore.getInBackground(id);
+    final subscription = SubscriptionStore.getMetadata(id);
     if (subscription != null &&
         SubscriptionStore.isLocalFileImportUrl(subscription.url)) {
       setState(() {

@@ -77,7 +77,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Проверено'));
     await tester.pumpAndSettle();
-    expect(find.text('Участник команды MeowTeam.'), findsOneWidget);
+    expect(find.text('Участник проекта Etonify.'), findsOneWidget);
   });
 
   testWidgets('selected split app keeps name and package on separate rows', (

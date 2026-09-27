@@ -105,6 +105,7 @@ class SubscriptionFetcher {
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) async {
     final uri = parseRequestUri(url);
+    final fetchStopwatch = Stopwatch()..start();
 
     try {
       final headers = await _requestHeaders(requestInfo);
@@ -114,6 +115,7 @@ class SubscriptionFetcher {
           operationTimeout != null && operationTimeout > Duration.zero
           ? operationTimeout
           : _defaultOperationTimeout;
+      final networkStopwatch = Stopwatch()..start();
       if (allowInsecureTls) {
         // The trust exception must remain scoped to Dart's short-lived client.
         // The native and outbound routes intentionally keep certificate checks.
@@ -124,7 +126,15 @@ class SubscriptionFetcher {
           timeout: totalTimeout,
           allowInsecureTls: true,
         );
-        return await _buildResult(url: url, response: response);
+        networkStopwatch.stop();
+        final networkMs = networkStopwatch.elapsedMilliseconds;
+        final result = await _buildResult(url: url, response: response);
+        AppLogStore.debug(
+          'subscription fetch timing',
+          'networkMs=$networkMs totalMs=${fetchStopwatch.elapsedMilliseconds} '
+              'chars=${response.rawContent.length}',
+        );
+        return result;
       }
 
       final downloaded = await VpnAwareRemoteDownloader.instance.fetchBytes(
@@ -139,6 +149,7 @@ class SubscriptionFetcher {
           }, isFallback);
         },
       );
+      networkStopwatch.stop();
       final rawContent = decodeResponseUtf8ForTest(
         downloaded.bytes ?? Uint8List(0),
       );
@@ -151,7 +162,14 @@ class SubscriptionFetcher {
         'fetch complete path=${downloaded.route.name} '
             'bytes=${downloaded.downloadedBytes}',
       );
-      return await _buildResult(url: url, response: response);
+      final networkMs = networkStopwatch.elapsedMilliseconds;
+      final result = await _buildResult(url: url, response: response);
+      AppLogStore.debug(
+        'subscription fetch timing',
+        'networkMs=$networkMs totalMs=${fetchStopwatch.elapsedMilliseconds} '
+            'bytes=${downloaded.downloadedBytes}',
+      );
+      return result;
     } catch (error, stackTrace) {
       if (error is RemoteDownloadHttpException) {
         try {
@@ -400,8 +418,15 @@ class SubscriptionFetcher {
     required String url,
     required _FetchedSubscriptionResponse response,
   }) async {
+    final parseStopwatch = Stopwatch()..start();
     final parseResult = await SubscriptionParser.parseInBackground(
       response.rawContent,
+    );
+    parseStopwatch.stop();
+    AppLogStore.debug(
+      'subscription parse timing',
+      'parseMs=${parseStopwatch.elapsedMilliseconds} '
+          'nodes=${parseResult.outbounds.length}',
     );
     _validateProviderAccessMarker(parseResult);
     if (SubscriptionParser.looksLikeHtml(response.rawContent) &&

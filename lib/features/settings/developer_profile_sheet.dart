@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -245,7 +246,12 @@ class _DeveloperProfileSheetState extends State<_DeveloperProfileSheet> {
                   ),
                   _ProfileLinkButton(
                     label: 'GitHub',
-                    icon: const Icon(Icons.code_rounded, size: 19),
+                    icon: SvgPicture.asset(
+                      'assets/images/team/github-badge.svg',
+                      key: const ValueKey('developer-github-badge'),
+                      width: 19,
+                      height: 19,
+                    ),
                     onPressed: () => _open(profile.githubUri),
                   ),
                 ],

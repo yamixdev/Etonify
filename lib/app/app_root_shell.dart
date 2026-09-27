@@ -1,6 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:meow_client/app/dynamic_color_scheme_adapter.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/app_scroll_effects.dart';
 import 'package:meow_client/widgets/app_visual_effects.dart';
@@ -40,7 +41,10 @@ class AppRootShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        onDynamicColorSchemesChanged(lightDynamic, darkDynamic);
+        onDynamicColorSchemesChanged(
+          lightDynamic == null ? null : toFlutterColorScheme(lightDynamic),
+          darkDynamic == null ? null : toFlutterColorScheme(darkDynamic),
+        );
         return MaterialApp(
           navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
