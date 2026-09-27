@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/features/settings/backup_picked_file_reader.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/subscription.dart';
 
@@ -28,22 +28,10 @@ class SettingsBackupImportActions {
   onImportSubscriptions;
 
   Future<void> importFile(BuildContext context) async {
-    final picked = await FilePicker.pickFiles(
-      type: FileType.any,
-      withData: false,
-    );
-    if (picked == null || picked.files.isEmpty || !context.mounted) return;
-    final file = picked.files.first;
-    if (file.size > EtonifyBackupService.maxImportBytes) {
-      throw const EtonifyBackupException('Backup file is too large.');
-    }
-    final path = file.path;
-    final bytes =
-        file.bytes ?? (path == null ? null : await File(path).readAsBytes());
+    final file = await FilePicker.pickFile(type: FileType.any);
+    if (file == null || !context.mounted) return;
+    final bytes = await readBackupPickedFile(file);
     if (!context.mounted) return;
-    if (bytes == null) {
-      throw const EtonifyBackupException('Could not read selected file.');
-    }
     final decodedHead = utf8.decode(
       bytes.take(256).toList(growable: false),
       allowMalformed: true,

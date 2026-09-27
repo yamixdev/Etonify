@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -22,7 +21,7 @@ Future<String> readSubscriptionFile(
   PlatformFile file, {
   Duration timeout = _defaultReadTimeout,
 }) async {
-  if (file.size > _maxSubscriptionFileBytes) {
+  if ((file.lengthSync() ?? 0) > _maxSubscriptionFileBytes) {
     throw const SubscriptionFileReadException('file is larger than 64 MiB');
   }
 
@@ -43,23 +42,15 @@ Future<String> readSubscriptionFile(
 }
 
 Future<Uint8List> _readFileBytes(PlatformFile file) async {
-  final inMemory = file.bytes;
-  if (inMemory != null) {
-    return inMemory;
-  }
-
-  final stream = file.readStream;
-  if (stream != null) {
-    return _collectBytes(stream);
-  }
-
-  final path = file.path;
-  if (path == null || path.isEmpty) {
+  try {
+    return await _collectBytes(file.readAsByteStream());
+  } on SubscriptionFileReadException {
+    rethrow;
+  } catch (_) {
     throw const SubscriptionFileReadException(
       'the document provider returned no readable data',
     );
   }
-  return _collectBytes(File(path).openRead());
 }
 
 Future<Uint8List> _collectBytes(Stream<List<int>> stream) async {

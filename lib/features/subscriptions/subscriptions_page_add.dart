@@ -229,17 +229,13 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     FocusScope.of(context).unfocus();
     final l10n = AppLocalizations.of(context);
     try {
-      final result = await FilePicker.pickFiles(
-        withData: false,
-        withReadStream: true,
-      );
-      if (!mounted || result == null || result.files.isEmpty) return;
+      final file = await FilePicker.pickFile();
+      if (!mounted || file == null) return;
       _cancelRequested = false;
       setState(() {
         _busy = true;
         _stage = l10n.addSubscriptionReadingFile;
       });
-      final file = result.files.single;
       final content = await readSubscriptionFile(file);
       if (!mounted || _cancelRequested) return;
       if (content.contains(EtonifyBackupService.profileMagic) ||
