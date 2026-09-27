@@ -62,6 +62,15 @@ class RuntimeOperationCoordinator {
       _selectedTag.isNotEmpty;
   bool get urlTestReady => _running && !_transitioning && _networkUsable;
 
+  /// The network snapshot must be refreshed even while readiness is false;
+  /// otherwise a cold probe can never observe its first physical interface.
+  Future<bool> refreshUrlTestReadiness(
+    Future<bool> Function() refreshNetworkState,
+  ) async {
+    final networkUsable = await refreshNetworkState();
+    return networkUsable && urlTestReady;
+  }
+
   RuntimeOperationKey get currentKey => RuntimeOperationKey(
     runtimeGeneration: _runtimeGeneration,
     networkGeneration: _networkGeneration,

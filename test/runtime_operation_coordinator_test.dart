@@ -2,6 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/runtime_operation_coordinator.dart';
 
 void main() {
+  test(
+    'cold probe refreshes network before deciding URLTest readiness',
+    () async {
+      final coordinator = RuntimeOperationCoordinator();
+      coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 1);
+      expect(coordinator.urlTestReady, isFalse);
+
+      final ready = await coordinator.refreshUrlTestReadiness(() async {
+        coordinator.updateNetwork(generation: 1, usable: true);
+        return true;
+      });
+
+      expect(ready, isTrue);
+      expect(coordinator.networkStateKnown, isTrue);
+    },
+  );
+
   test('late probe stop cannot mark a newer VPN runtime stopped', () {
     final coordinator = RuntimeOperationCoordinator();
     coordinator.updateRuntimeState(running: true, nativeRuntimeGeneration: 7);

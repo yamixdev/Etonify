@@ -4003,8 +4003,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (status['running'] == true &&
           status['mode'] == 'vpn' &&
           _connected &&
-          _runtimeOperations.urlTestReady &&
-          await _networkInterfaceUsable(reason: 'offline_handoff_ready')) {
+          await _runtimeOperations.refreshUrlTestReadiness(
+            () => _networkInterfaceUsable(reason: 'offline_handoff_ready'),
+          )) {
         session.resumeOnVpn();
         _offlineProbeConfig = null;
         _publishOfflineUrlTestProgress();
@@ -6139,8 +6140,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _offlineProbeRuntimeGeneration = nativeGeneration;
         }
         if (mode != 'probe') return true;
-        if (_runtimeOperations.urlTestReady &&
-            await _networkInterfaceUsable(reason: 'offline_probe_ready')) {
+        if (await _runtimeOperations.refreshUrlTestReadiness(
+          () => _networkInterfaceUsable(reason: 'offline_probe_ready'),
+        )) {
           return true;
         }
       }
@@ -6836,8 +6838,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         return;
       }
       if ((_offlineProbeRunning || _connected) &&
-          _runtimeOperations.urlTestReady &&
-          !_latencyCoordinator.isRunning) {
+          !_latencyCoordinator.isRunning &&
+          await _runtimeOperations.refreshUrlTestReadiness(
+            () => _networkInterfaceUsable(reason: 'offline_network_restart'),
+          )) {
         if (_offlineProbeRunning) {
           session.runOffline();
         } else {
