@@ -552,6 +552,11 @@ Endpoint = wg.example.com:51820
 
     await SubscriptionStore.saveOutboundRuntimeInfoInBackground(
       subscription.id,
+      expectedOutboundKeys: {
+        'leaf-1': SubscriptionStore.outboundIdentityKey(
+          subscription.outbounds.single.config,
+        ),
+      },
       externalInfos: const {
         'leaf-1': {
           'external_ip': '2.2.2.2',
@@ -616,6 +621,60 @@ Endpoint = wg.example.com:51820
       );
       final saved = await SubscriptionStore.get(oldSubscription.id);
       expect(saved!.outbounds.single.info.latestPing, isNull);
+    },
+  );
+
+  test(
+    'delayed location write cannot attach to a refreshed server with the same tag',
+    () async {
+      const oldOutbound = Outbound(
+        tag: 'leaf-1',
+        name: 'Leaf 1',
+        config: {'type': 'vless', 'tag': 'leaf-1', 'server': 'old.example'},
+      );
+      const newOutbound = Outbound(
+        tag: 'leaf-1',
+        name: 'Leaf 1',
+        config: {'type': 'vless', 'tag': 'leaf-1', 'server': 'new.example'},
+      );
+      const stableOutbound = Outbound(
+        tag: 'leaf-2',
+        name: 'Leaf 2',
+        config: {'type': 'vless', 'tag': 'leaf-2', 'server': 'stable.example'},
+      );
+      const subscription = Subscription(
+        id: 'location-refresh-sub',
+        name: 'Location refresh',
+        url: 'https://example.com/sub',
+        outbounds: [oldOutbound, stableOutbound],
+      );
+      await SubscriptionStore.save(subscription);
+      final oldKey = SubscriptionStore.outboundIdentityKey(oldOutbound.config);
+      await SubscriptionStore.save(
+        subscription.copyWith(outbounds: [newOutbound, stableOutbound]),
+      );
+
+      expect(
+        await SubscriptionStore.saveOutboundRuntimeInfoInBackground(
+          subscription.id,
+          expectedOutboundKeys: {
+            'leaf-1': oldKey,
+            'leaf-2': SubscriptionStore.outboundIdentityKey(
+              stableOutbound.config,
+            ),
+          },
+          externalInfos: const {
+            'leaf-1': {'external_ip': '1.2.3.4', 'exit_country': 'DE'},
+            'leaf-2': {'external_ip': '5.6.7.8', 'exit_country': 'FI'},
+          },
+        ),
+        isTrue,
+      );
+      final saved = await SubscriptionStore.get(subscription.id);
+      expect(saved!.outbounds[0].info.externalIp, isNull);
+      expect(saved.outbounds[0].info.exitCountry, isNull);
+      expect(saved.outbounds[1].info.externalIp, '5.6.7.8');
+      expect(saved.outbounds[1].info.exitCountry, 'FI');
     },
   );
 

@@ -323,7 +323,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String proxiesProgressWorking(int working, int total) {
-    return 'Работают $working / $total';
+    return 'Рабочих $working / $total';
   }
 
   @override

@@ -52,6 +52,7 @@ import 'package:meow_client/features/subscriptions/subscription_refresh_report_p
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/app/subscription_profile_import_controller.dart';
 import 'package:meow_client/app/subscription_profile_flow_controller.dart';
+import 'package:meow_client/app/vpn_notification_latency.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -100,6 +101,14 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+
+typedef _PendingLatestPing = ({
+  String profileId,
+  String tag,
+  String outboundKey,
+  int ping,
+  int retries,
+});
 
 class MeowClient extends ConsumerStatefulWidget {
   const MeowClient({super.key, this.store});
@@ -227,6 +236,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ValueNotifier<UrlTestProgressState>(const UrlTestProgressState());
   final UrlTestProgressCounter _urlTestProgressCounter =
       UrlTestProgressCounter();
+  bool _partialGroupUrlTestInProgress = false;
   final PendingRuntimeUrlTestResults _pendingUrlTestResults =
       PendingRuntimeUrlTestResults();
   OfflineUrlTestSession? _offlineUrlTestSession;
@@ -820,21 +830,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (directTags.isEmpty) {
       return;
     }
+    final displayProxy = _displayProxyCache;
+    final activeOutboundTag = _connected
+        ? _currentResolvedActiveOutboundTag()
+        : null;
+    final affectsDisplay =
+        displayProxy != null &&
+        (directTags.contains(displayProxy.tag) ||
+            directTags.contains(displayProxy.selectedChildTag) ||
+            directTags.contains(activeOutboundTag));
     if (!_fullProxyListCacheReady) {
-      final displayProxy = _displayProxyCache;
       if (displayProxy == null) {
         return;
       }
-      final selectedChildTag = displayProxy.selectedChildTag;
-      final affectsDisplay =
-          directTags.contains(displayProxy.tag) ||
-          (selectedChildTag != null && directTags.contains(selectedChildTag)) ||
-          isLowestProxyTag(displayProxy.tag);
-      if (affectsDisplay) {
+      if (affectsDisplay || isLowestProxyTag(displayProxy.tag)) {
         _publishProxyRuntimeVisualStatesForTags([
           displayProxy.tag,
         ], notifyRevision: false);
         _scheduleProxyVisualRevision();
+        _scheduleVpnNotificationSync();
       }
       return;
     }
@@ -863,11 +877,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final affectedTags = _latencyDependencyIndex!.affectedTags(directTags)
       ..addAll(_lowestLatencyGroupTags);
+    if (affectsDisplay) {
+      affectedTags.add(displayProxy.tag);
+    }
     _publishProxyRuntimeVisualStatesForTags(
       affectedTags,
       notifyRevision: false,
     );
     _scheduleProxyVisualRevision();
+    if (displayProxy != null && affectedTags.contains(displayProxy.tag)) {
+      _scheduleVpnNotificationSync();
+    }
   }
 
   void _scheduleProxyVisualRevision() {
@@ -1964,14 +1984,35 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!Platform.isAndroid) {
       return;
     }
-    _vpnNotificationSyncTimer?.cancel();
+    if (_vpnNotificationSyncTimer?.isActive ?? false) {
+      return;
+    }
     _vpnNotificationSyncTimer = Timer(const Duration(milliseconds: 80), () {
       _vpnNotificationSyncTimer = null;
       unawaited(_syncVpnNotificationPresentation());
     });
   }
 
+  bool _vpnNotificationSyncInFlight = false;
+  bool _vpnNotificationSyncQueued = false;
+
   Future<void> _syncVpnNotificationPresentation() async {
+    if (_vpnNotificationSyncInFlight) {
+      _vpnNotificationSyncQueued = true;
+      return;
+    }
+    _vpnNotificationSyncInFlight = true;
+    try {
+      do {
+        _vpnNotificationSyncQueued = false;
+        await _sendVpnNotificationPresentation();
+      } while (_vpnNotificationSyncQueued && mounted);
+    } finally {
+      _vpnNotificationSyncInFlight = false;
+    }
+  }
+
+  Future<void> _sendVpnNotificationPresentation() async {
     if (!mounted || !_ready || !Platform.isAndroid) {
       return;
     }
@@ -1981,8 +2022,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final l10n = AppLocalizations.of(context);
     final proxy = _displayProxy;
-    final latency = proxy != null && !proxy.latencyUnavailable
-        ? proxy.latency
+    final latency = proxy != null
+        ? vpnNotificationLatencyMillis(
+            proxy,
+            _proxyRuntimeVisualStates.valueFor(proxy.tag),
+          )
         : null;
     final targetTag = _connected
         ? (_currentResolvedActiveOutboundTag()?.trim() ?? '')
@@ -2005,7 +2049,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (signature == _lastVpnNotificationPresentationSignature) {
       return;
     }
-    _lastVpnNotificationPresentationSignature = signature;
     try {
       await _singboxRuntime.updateVpnNotificationPresentation(
         detailed: _statusNotificationEnabled,
@@ -2028,6 +2071,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         refreshLabel: l10n.notificationRefreshPingAction,
         stopLabel: l10n.notificationStopAction,
       );
+      _lastVpnNotificationPresentationSignature = signature;
     } catch (error) {
       // A notification must never affect the VPN lifecycle. The Android
       // foreground service still supplies its minimal required notification.
@@ -2188,7 +2232,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _pendingUrlTestResults.clear();
         }
         if (!running) {
-          _flushLatestPingsForActiveSubscription();
+          _flushPendingLatestPings();
         }
         _fullUrlTestSessionRunning = fullSessionRunning;
         _urlTestInFlightNotifier.value =
@@ -2201,7 +2245,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         }
         _updateUrlTestProgress(
           isRunning: fullSessionRunning,
-          resetCounter: startingFullSession,
+          resetCounter: startingFullSession && !_partialGroupUrlTestInProgress,
         );
         if (_offlineUrlTestSession != null) {
           _publishOfflineUrlTestProgress();
@@ -2358,6 +2402,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
+    _flushPendingLatestPings();
     _persistLatestPingsDebounceTimer?.cancel();
     _persistLatestPingsDebounceTimer = null;
     final pendingStateSave = _saveStateDebounceTimer?.isActive ?? false;
@@ -2388,6 +2433,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_foregroundLifecycleActive) {
       _resumeForegroundWork();
     } else {
+      _flushPendingLatestPings();
       if (_saveStateDebounceTimer?.isActive ?? false) {
         unawaited(_persistState());
       }
@@ -3792,7 +3838,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _runtimeLowestOutboundTag = null;
       _runtimeLowestSelections.clear();
       _runtimeLatencies.clear();
-      _latestPingSources.clear();
       _unavailableLatencyTags.clear();
       _invalidatedLatencyTags.clear();
       _latencyErrors.clear();
@@ -5031,7 +5076,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _offlineUrlTestSession = null;
           _offlineProbeConfig = null;
           _runtimeLatencies.clear();
-          _latestPingSources.clear();
           _unavailableLatencyTags.clear();
           _invalidatedLatencyTags.clear();
           _latencyErrors.clear();
@@ -5141,7 +5185,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
             _offlineUrlTestSession = null;
             _offlineProbeConfig = null;
             _runtimeLatencies.clear();
-            _latestPingSources.clear();
             _unavailableLatencyTags.clear();
             _invalidatedLatencyTags.clear();
             _latencyErrors.clear();
@@ -6263,12 +6306,39 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     _ensureActiveLookupCaches();
-    // A visible provider group represents its selected concrete route.
     if (_runtimeVisualStateForTag(tag) == null) return;
-    final target = latencyTargetTag(
+    final group = _activeGroupByTagLookup[tag];
+    final groupChildren = group == null
+        ? const <String>[]
+        : latencyConcreteGroupTags(group.tag, {
+            for (final entry in _activeGroupByTagLookup.entries)
+              entry.key: entry.value.outboundTags,
+          }, _userVisibleServerTags());
+    if (groupChildren.length > 1 && !_latencyCoordinator.isRunning) {
+      _haptic();
+      _groupUrlTestScheduler.cancel();
+      _partialGroupUrlTestInProgress = true;
+      try {
+        await _latencyCoordinator.runFull(
+          reason: 'manual_group',
+          includeOutboundTags: groupChildren,
+        );
+      } finally {
+        _partialGroupUrlTestInProgress = false;
+      }
+      return;
+    }
+    // While a full run is active, checking this row only prioritizes its
+    // selected child; the existing run continues through the other children.
+    final selectedTarget = latencyTargetTag(
       isLowestProxyTag(tag) ? (_runtimeLowestOutboundTagFor(tag) ?? tag) : tag,
       _runtimeGroupSelections,
     );
+    final target = group == null
+        ? selectedTarget
+        : groupChildren.contains(selectedTarget)
+        ? selectedTarget
+        : groupChildren.firstOrNull;
     if (target == null) return;
     _haptic();
     _groupUrlTestScheduler.cancel();
@@ -6670,7 +6740,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _runtimeLowestOutboundTag = null;
         _runtimeLowestSelections.clear();
         _runtimeLatencies.clear();
-        _latestPingSources.clear();
         _unavailableLatencyTags.clear();
         _invalidatedLatencyTags.clear();
         _latencyErrors.clear();
@@ -6909,10 +6978,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
         available: session.available,
       );
       if (accepted && session.targetTag.trim().isEmpty) {
-        _urlTestProgressCounter.applyCoreSessionSnapshot(
-          total: session.total,
-          completed: session.completed,
-        );
+        if (!_partialGroupUrlTestInProgress) {
+          _urlTestProgressCounter.applyCoreSessionSnapshot(
+            total: session.total,
+            completed: session.completed,
+          );
+        }
         _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
           isRunning: session.state == 'running',
           isCancelled: session.state == 'cancelled',
@@ -6974,54 +7045,51 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _ensureActiveLookupCaches();
       final outbound = _activeOutboundByTagLookup[result.tag];
       final profileId = _activeSubscription?.id;
-      if (outbound != null && profileId != null) {
-        _latestPingSources[result.tag] = (
+      if (outbound != null &&
+          profileId != null &&
+          (outbound.info.latestPing != result.delay ||
+              _dirtyLatestPings.containsKey('$profileId\n${result.tag}'))) {
+        _dirtyLatestPings['$profileId\n${result.tag}'] = (
           profileId: profileId,
+          tag: result.tag,
           outboundKey: SubscriptionStore.outboundIdentityKey(outbound.config),
+          ping: result.delay,
+          retries: 0,
         );
+        _schedulePersistLatestPings();
       }
-      _schedulePersistLatestPings();
     }
   }
 
   Timer? _persistLatestPingsDebounceTimer;
-  final Map<String, ({String profileId, String outboundKey})>
-  _latestPingSources = {};
+  final Map<String, _PendingLatestPing> _dirtyLatestPings = {};
 
   void _schedulePersistLatestPings() {
     _persistLatestPingsDebounceTimer?.cancel();
     _persistLatestPingsDebounceTimer = Timer(const Duration(seconds: 3), () {
       _persistLatestPingsDebounceTimer = null;
-      if (mounted) {
-        _flushLatestPingsForActiveSubscription();
-      }
+      _flushPendingLatestPings();
     });
   }
 
-  void _flushLatestPingsForActiveSubscription() {
+  void _flushPendingLatestPings() {
     _persistLatestPingsDebounceTimer?.cancel();
     _persistLatestPingsDebounceTimer = null;
+    if (_dirtyLatestPings.isEmpty) return;
+    final pending = Map.of(_dirtyLatestPings);
+    _dirtyLatestPings.clear();
     final activeSubscription = _activeSubscription;
-    if (activeSubscription == null) return;
-    final latestPings = <String, int>{};
-    final expectedOutboundKeys = <String, String>{};
     var subscriptionUpdated = false;
-    final updatedOutbounds = activeSubscription.outbounds
+    final updatedOutbounds = activeSubscription?.outbounds
         .map((outbound) {
-          final runtimePing = _runtimeLatencies[outbound.tag];
-          final source = _latestPingSources[outbound.tag];
-          if (runtimePing != null &&
-              runtimePing > 0 &&
-              source != null &&
-              source.profileId == activeSubscription.id &&
-              source.outboundKey ==
+          final entry = pending['${activeSubscription.id}\n${outbound.tag}'];
+          if (entry != null &&
+              entry.outboundKey ==
                   SubscriptionStore.outboundIdentityKey(outbound.config)) {
-            latestPings[outbound.tag] = runtimePing;
-            expectedOutboundKeys[outbound.tag] = source.outboundKey;
-            if (outbound.info.latestPing != runtimePing) {
+            if (outbound.info.latestPing != entry.ping) {
               subscriptionUpdated = true;
               return outbound.copyWith(
-                info: outbound.info.copyWith(latestPing: runtimePing),
+                info: outbound.info.copyWith(latestPing: entry.ping),
               );
             }
           }
@@ -7029,21 +7097,60 @@ class _MeowClientState extends ConsumerState<MeowClient>
         })
         .toList(growable: false);
 
-    if (subscriptionUpdated) {
+    if (subscriptionUpdated &&
+        activeSubscription != null &&
+        updatedOutbounds != null) {
       final updatedSubscription = activeSubscription.copyWith(
         outbounds: updatedOutbounds,
       );
       _subscriptions = _replaceSubscription(updatedSubscription);
     }
 
-    if (latestPings.isNotEmpty) {
-      unawaited(
-        SubscriptionStore.saveLatestPingsInBackground(
-          activeSubscription.id,
-          latestPings,
-          expectedOutboundKeys: expectedOutboundKeys,
-        ),
+    final byProfile = <String, List<_PendingLatestPing>>{};
+    for (final entry in pending.values) {
+      byProfile.putIfAbsent(entry.profileId, () => []).add(entry);
+    }
+    for (final batch in byProfile.entries) {
+      unawaited(_persistLatestPingBatch(batch.key, batch.value));
+    }
+  }
+
+  Future<void> _persistLatestPingBatch(
+    String profileId,
+    List<_PendingLatestPing> entries,
+  ) async {
+    try {
+      await SubscriptionStore.saveLatestPingsInBackground(
+        profileId,
+        {for (final entry in entries) entry.tag: entry.ping},
+        expectedOutboundKeys: {
+          for (final entry in entries) entry.tag: entry.outboundKey,
+        },
       );
+    } catch (error, stackTrace) {
+      AppLogStore.warning(
+        'latency',
+        'failed to persist URLTest latency for profile=$profileId: $error\n$stackTrace',
+      );
+      var shouldRetry = false;
+      for (final entry in entries) {
+        final key = '$profileId\n${entry.tag}';
+        if (_dirtyLatestPings.containsKey(key)) continue;
+        final retries = entry.retries + 1;
+        _dirtyLatestPings[key] = (
+          profileId: profileId,
+          tag: entry.tag,
+          outboundKey: entry.outboundKey,
+          ping: entry.ping,
+          retries: retries,
+        );
+        shouldRetry = shouldRetry || retries <= 3;
+      }
+      if (shouldRetry && mounted) {
+        // Three automatic retries, then retain the dirty values for the next
+        // result or lifecycle flush instead of spinning on a broken store.
+        _schedulePersistLatestPings();
+      }
     }
   }
 
@@ -8015,6 +8122,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return ActiveProxyIpTarget(
       subscriptionId: activeSubscription.id,
       outboundTag: activeOutbound.tag,
+      outboundIdentityKey: SubscriptionStore.outboundIdentityKey(
+        activeOutbound.config,
+      ),
       cachedIp: activeOutbound.info.externalIp?.trim(),
       cachedCountryCode: _normalizeCountryCode(
         activeOutbound.info.exitCountry ?? activeOutbound.info.country,
@@ -8060,8 +8170,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<ActiveProxyIpResolveResult?> _resolveActiveProxyIp(
     String outboundTag,
   ) async {
+    final outbound = _currentResolvedActiveOutbound();
+    if (outbound == null || outbound.tag != outboundTag) return null;
     final resolved = await _proxyLocationCoordinator.fetchExternalIpInfo(
       outboundTag: outboundTag,
+      outboundIdentityKey: SubscriptionStore.outboundIdentityKey(
+        outbound.config,
+      ),
       highPriority: true,
     );
     if (resolved == null) {
@@ -8082,7 +8197,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (latestSubscription == null ||
         latestSubscription.id != target.subscriptionId ||
         latestActiveOutbound == null ||
-        latestActiveOutbound.tag != target.outboundTag) {
+        latestActiveOutbound.tag != target.outboundTag ||
+        SubscriptionStore.outboundIdentityKey(latestActiveOutbound.config) !=
+            target.outboundIdentityKey) {
       return;
     }
     await _applyResolvedExternalIpInfos(
@@ -8093,12 +8210,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
           countryCode: result.countryCode,
         ),
       },
+      expectedOutboundKeys: {target.outboundTag: target.outboundIdentityKey},
     );
   }
 
   Future<void> _applyResolvedExternalIpInfos({
     required String subscriptionId,
     required Map<String, ResolvedExternalIpInfo> resolvedByTag,
+    required Map<String, String> expectedOutboundKeys,
   }) async {
     if (resolvedByTag.isEmpty ||
         !_connected ||
@@ -8111,11 +8230,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     var subscriptionChanged = false;
+    final changedTags = <String>{};
     final updatedSubscription = latestSubscription.copyWith(
       outbounds: latestSubscription.outbounds
           .map((outbound) {
             final resolved = resolvedByTag[outbound.tag];
-            if (resolved == null) {
+            if (resolved == null ||
+                expectedOutboundKeys[outbound.tag] !=
+                    SubscriptionStore.outboundIdentityKey(outbound.config)) {
               return outbound;
             }
             final legacyLocationStoredInCountry =
@@ -8139,6 +8261,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
               return outbound;
             }
             subscriptionChanged = true;
+            changedTags.add(outbound.tag);
             return outbound.copyWith(info: nextInfo);
           })
           .toList(growable: false),
@@ -8152,18 +8275,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
     });
     final sourceCountriesByTag = <String, String?>{
       for (final outbound in updatedSubscription.outbounds)
-        outbound.tag: outbound.info.country,
+        if (changedTags.contains(outbound.tag))
+          outbound.tag: outbound.info.country,
     };
     await SubscriptionStore.saveOutboundRuntimeInfoInBackground(
       updatedSubscription.id,
       externalInfos: {
         for (final entry in resolvedByTag.entries)
-          entry.key: {
-            'external_ip': entry.value.ip,
-            'source_country': sourceCountriesByTag[entry.key],
-            'exit_country': entry.value.countryCode,
-          },
+          if (changedTags.contains(entry.key))
+            entry.key: {
+              'external_ip': entry.value.ip,
+              'source_country': sourceCountriesByTag[entry.key],
+              'exit_country': entry.value.countryCode,
+            },
       },
+      expectedOutboundKeys: expectedOutboundKeys,
     );
   }
 
@@ -8193,8 +8319,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _hasResolvedExternalLocation(outbound)) {
         return;
       }
+      final outboundIdentityKey = SubscriptionStore.outboundIdentityKey(
+        outbound.config,
+      );
       final resolved = await _proxyLocationCoordinator.fetchExternalIpInfo(
         outboundTag: tag,
+        outboundIdentityKey: outboundIdentityKey,
         shouldStart: () =>
             _connected &&
             _foregroundLifecycleActive &&
@@ -8210,6 +8340,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         subscriptionId: subscription.id,
         outboundTag: tag,
         info: resolved,
+        outboundIdentityKey: outboundIdentityKey,
       );
     } finally {
       _visibleProxyLocationLookups.remove(tag);

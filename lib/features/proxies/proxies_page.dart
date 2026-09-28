@@ -102,6 +102,10 @@ String _localizedProxyTechnicalText(
   AppProxySummary proxy,
   String value,
 ) {
+  if (proxy.isGroup && !isLowestProxyTag(proxy.tag) && proxy.childCount > 0) {
+    return '${l10n.proxyAutomaticSelectionLabel} · '
+        '${l10n.subscriptionServersCount(proxy.childCount)}';
+  }
   const urlTestPrefix = 'URLTest · ';
   if (value == 'URLTest' || value == 'URLTest · auto') {
     return l10n.proxyAutomaticSelectionLabel;

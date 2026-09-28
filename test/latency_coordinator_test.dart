@@ -13,6 +13,101 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  test('native notification probe updates only the selected server', () {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      capabilities: _v3Capabilities,
+    );
+    addTearDown(coordinator.dispose);
+
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'proxy-1',
+        sessionId: 41,
+        revision: 9,
+        available: true,
+      ),
+      isTrue,
+    );
+    expect(coordinator.isRunning, isFalse);
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'proxy-1',
+        sessionId: 41,
+        revision: 9,
+        available: true,
+      ),
+      isFalse,
+    );
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'another-proxy',
+        sessionId: 42,
+        revision: 10,
+        available: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('native notification probe is ignored after VPN disconnects', () {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      isConnected: () => false,
+      capabilities: _v3Capabilities,
+    );
+    addTearDown(coordinator.dispose);
+
+    expect(
+      coordinator.handleCoreResult(
+        tag: 'proxy-1',
+        sessionId: 41,
+        revision: 9,
+        available: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test(
+    'notification result does not advance a concurrent full sweep',
+    () async {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        expectedTags: () => const ['proxy-1', 'another-proxy'],
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      final full = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        coordinator.handleCoreSession(
+          sessionId: 10,
+          groupTag: 'select',
+          targetTag: '',
+          mode: 'manual',
+          state: 'running',
+          terminalReason: '',
+          available: 0,
+        ),
+        isTrue,
+      );
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'proxy-1',
+          sessionId: 11,
+          revision: 5,
+          available: true,
+        ),
+        isTrue,
+      );
+      expect(coordinator.isChecking('proxy-1'), isTrue);
+      coordinator.cancel();
+      expect(await full, isFalse);
+    },
+  );
+
   test(
     'resumed full test requests only pending tags with handoff identity',
     () async {

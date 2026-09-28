@@ -96,6 +96,11 @@ void main() {
       final saveRuntimeFuture =
           SubscriptionStore.saveOutboundRuntimeInfoInBackground(
             'sub-race-2',
+            expectedOutboundKeys: {
+              'proxy-1': SubscriptionStore.outboundIdentityKey(
+                sub.outbounds.single.config,
+              ),
+            },
             externalInfos: {
               'proxy-1': {'exit_country': 'US', 'external_ip': '8.8.8.8'},
             },

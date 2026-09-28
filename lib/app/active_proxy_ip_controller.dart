@@ -42,6 +42,7 @@ class ActiveProxyIpTarget {
   const ActiveProxyIpTarget({
     required this.subscriptionId,
     required this.outboundTag,
+    this.outboundIdentityKey = '',
     this.cachedIp,
     this.cachedCountryCode,
     this.endpointHost,
@@ -54,6 +55,7 @@ class ActiveProxyIpTarget {
 
   final String subscriptionId;
   final String outboundTag;
+  final String outboundIdentityKey;
   final String? cachedIp;
   final String? cachedCountryCode;
   final String? endpointHost;
@@ -64,7 +66,7 @@ class ActiveProxyIpTarget {
   final int networkGeneration;
 
   String get key =>
-      '$subscriptionId\n$outboundTag\n${endpointHost?.trim().toLowerCase() ?? ''}'
+      '$subscriptionId\n$outboundTag\n$outboundIdentityKey\n${endpointHost?.trim().toLowerCase() ?? ''}'
       '\n$operationGeneration\n$networkGeneration';
   String get endpointLookupKey =>
       '$networkGeneration\n${endpointHost?.trim().toLowerCase() ?? ''}';

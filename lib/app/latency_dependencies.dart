@@ -59,3 +59,28 @@ String? latencyTargetTag(String tag, Map<String, String> selections) {
   }
   return null;
 }
+
+/// A group-row check probes its concrete children, never synthetic group tags.
+/// The set also prevents duplicate probes and breaks malformed group cycles.
+List<String> latencyConcreteGroupTags(
+  String groupTag,
+  Map<String, Iterable<String>> groups,
+  Set<String> visibleTags,
+) {
+  final visitedGroups = <String>{};
+  final result = <String>{};
+  void visit(String tag) {
+    final children = groups[tag];
+    if (children != null) {
+      if (!visitedGroups.add(tag)) return;
+      for (final child in children) {
+        visit(child);
+      }
+    } else if (visibleTags.contains(tag)) {
+      result.add(tag);
+    }
+  }
+
+  visit(groupTag);
+  return result.toList(growable: false);
+}

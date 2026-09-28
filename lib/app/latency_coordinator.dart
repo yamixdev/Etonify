@@ -469,7 +469,19 @@ class LatencyCoordinator {
     }
     final belongsToMainSession = isRunning && sessionId == _nativeSessionId;
 
-    if (!belongsToMainSession && activeCheck == null) {
+    // The foreground notification can start a targeted URLTest directly from
+    // Android while Flutter is alive. It has no Dart-owned target check, but
+    // its fresh result must still reach the selected proxy in the client.
+    // Never add this passive result to a full sweep's progress counters.
+    final passiveSelectedResult =
+        activeCheck == null &&
+        !belongsToMainSession &&
+        _isConnected() &&
+        _canRunDiagnostics() &&
+        _activeOutboundTag().trim() == normalizedTag;
+    if (!belongsToMainSession &&
+        activeCheck == null &&
+        !passiveSelectedResult) {
       return false;
     }
     if (revision <= (_acceptedResultRevisions[normalizedTag] ?? 0)) {
@@ -488,7 +500,9 @@ class LatencyCoordinator {
       _activeTargetChecks.remove(normalizedTag);
       _onSessionChanged(isRunning, _kind, _targetTag);
     }
-    _acceptedEventTimes[normalizedTag] = revision;
+    if (belongsToMainSession || activeCheck != null) {
+      _acceptedEventTimes[normalizedTag] = revision;
+    }
     if (belongsToMainSession) {
       if (available) {
         _successfulTags.add(normalizedTag);

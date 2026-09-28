@@ -699,7 +699,8 @@ class SubscriptionStore {
     }
     for (final entry in externalInfos.entries) {
       final tag = entry.key.trim();
-      if (tag.isEmpty) {
+      final expectedKey = expectedOutboundKeys[tag];
+      if (tag.isEmpty || expectedKey == null) {
         continue;
       }
       final externalIp = entry.value['external_ip']?.trim();
@@ -714,6 +715,7 @@ class SubscriptionStore {
         continue;
       }
       final update = updates.putIfAbsent(tag, () => <String, Object?>{});
+      update['expected_outbound_key'] = expectedKey;
       if (externalIp != null && externalIp.isNotEmpty) {
         update['external_ip'] = externalIp;
       }
@@ -2402,17 +2404,19 @@ dynamic _rewriteOutboundRuntimeInfoPayload(
               ? Map<String, dynamic>.from(outbound['info'] as Map)
               : <String, dynamic>{};
           var outboundChanged = false;
+          final config = outbound['config'];
+          final expectedKey = update['expected_outbound_key'];
+          if (config is! Map ||
+              expectedKey is! String ||
+              SubscriptionStore._outboundKey(
+                    Map<String, dynamic>.from(config),
+                  ) !=
+                  expectedKey) {
+            return rawOutbound;
+          }
           final latestPing = update['latest_ping'];
           if (latestPing is int && latestPing > 0) {
-            final config = outbound['config'];
-            final expectedKey = update['expected_outbound_key'];
-            if (config is Map &&
-                expectedKey is String &&
-                SubscriptionStore._outboundKey(
-                      Map<String, dynamic>.from(config),
-                    ) ==
-                    expectedKey &&
-                (info['latest_ping'] as num?)?.toInt() != latestPing) {
+            if ((info['latest_ping'] as num?)?.toInt() != latestPing) {
               info['latest_ping'] = latestPing;
               outboundChanged = true;
             }

@@ -61,6 +61,55 @@ void main() {
 
   group('ProxyLocationCoordinator', () {
     test(
+      'new outbound identity never reuses old in-flight IP lookup',
+      () async {
+        final oldLookup = Completer<Map<String, dynamic>>();
+        final newLookup = Completer<Map<String, dynamic>>();
+        var calls = 0;
+        final coordinator = ProxyLocationCoordinator(
+          runtime: _FakeSingboxRuntime((tag) {
+            calls++;
+            return calls == 1 ? oldLookup.future : newLookup.future;
+          }),
+          getLocationLookupLimit: () => 5,
+          getLocationLookupTimeoutSeconds: () => 5,
+          getLocationLookupConcurrency: () => 2,
+          isConnected: () => true,
+          isForegroundLifecycleActive: () => true,
+          isMarkAllServersRussia: () => false,
+          isProxyPanelInteractionActive: () => false,
+          getDiagnosticGeneration: () => 1,
+          getActiveSubscription: () => null,
+          getBestOutbounds: () => const [],
+          hasResolvedExternalLocation: (_) => false,
+          getEffectiveOutboundLatency: (_) => 100,
+          onApplyResolvedInfos:
+              ({
+                required subscriptionId,
+                required resolvedByTag,
+                required expectedOutboundKeys,
+              }) async {},
+        );
+        addTearDown(coordinator.dispose);
+        final old = coordinator.fetchExternalIpInfo(
+          outboundTag: 'same-tag',
+          outboundIdentityKey: 'old-config',
+          highPriority: true,
+        );
+        final fresh = coordinator.fetchExternalIpInfo(
+          outboundTag: 'same-tag',
+          outboundIdentityKey: 'new-config',
+          highPriority: true,
+        );
+        expect(calls, 2);
+        newLookup.complete({'ip': '2.2.2.2', 'countryCode': 'DE'});
+        oldLookup.complete({'ip': '1.1.1.1', 'countryCode': 'US'});
+        expect((await fresh)?.ip, '2.2.2.2');
+        expect((await old)?.ip, '1.1.1.1');
+      },
+    );
+
+    test(
       'queued lookup does not start after its row leaves the list',
       () async {
         final firstLookup = Completer<Map<String, dynamic>>();
@@ -86,7 +135,11 @@ void main() {
           hasResolvedExternalLocation: (_) => false,
           getEffectiveOutboundLatency: (_) => 100,
           onApplyResolvedInfos:
-              ({required subscriptionId, required resolvedByTag}) async {},
+              ({
+                required subscriptionId,
+                required resolvedByTag,
+                required expectedOutboundKeys,
+              }) async {},
         );
 
         final first = coordinator.fetchExternalIpInfo(outboundTag: 'first');
@@ -131,7 +184,11 @@ void main() {
           hasResolvedExternalLocation: (_) => false,
           getEffectiveOutboundLatency: (_) => 100,
           onApplyResolvedInfos:
-              ({required subscriptionId, required resolvedByTag}) async {},
+              ({
+                required subscriptionId,
+                required resolvedByTag,
+                required expectedOutboundKeys,
+              }) async {},
         );
 
         // Start two concurrent lookups for the same tag
@@ -185,7 +242,11 @@ void main() {
         hasResolvedExternalLocation: (_) => false,
         getEffectiveOutboundLatency: (_) => 100,
         onApplyResolvedInfos:
-            ({required subscriptionId, required resolvedByTag}) async {},
+            ({
+              required subscriptionId,
+              required resolvedByTag,
+              required expectedOutboundKeys,
+            }) async {},
       );
 
       // First call acquires the single slot
@@ -225,7 +286,11 @@ void main() {
         hasResolvedExternalLocation: (_) => false,
         getEffectiveOutboundLatency: (_) => 100,
         onApplyResolvedInfos:
-            ({required subscriptionId, required resolvedByTag}) async {},
+            ({
+              required subscriptionId,
+              required resolvedByTag,
+              required expectedOutboundKeys,
+            }) async {},
       );
 
       // Acquire slot
@@ -247,8 +312,13 @@ void main() {
     final batcher = ProxyLocationResultBatcher(
       delay: const Duration(milliseconds: 200),
       onApplyResolvedInfos:
-          ({required subscriptionId, required resolvedByTag}) async {
+          ({
+            required subscriptionId,
+            required resolvedByTag,
+            required expectedOutboundKeys,
+          }) async {
             expect(subscriptionId, 'profile');
+            expect(expectedOutboundKeys, {'one': 'old-one', 'two': 'old-two'});
             batches.add(resolvedByTag);
           },
     );
@@ -257,11 +327,13 @@ void main() {
     batcher.add(
       subscriptionId: 'profile',
       outboundTag: 'one',
+      outboundIdentityKey: 'old-one',
       info: const ResolvedExternalIpInfo(ip: '1.1.1.1', countryCode: 'US'),
     );
     batcher.add(
       subscriptionId: 'profile',
       outboundTag: 'two',
+      outboundIdentityKey: 'old-two',
       info: const ResolvedExternalIpInfo(ip: '2.2.2.2', countryCode: 'DE'),
     );
     await Future<void>.delayed(const Duration(milliseconds: 50));

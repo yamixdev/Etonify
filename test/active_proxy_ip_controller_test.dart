@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
 
 void main() {
+  test(
+    'active lookup target changes when configuration changes under same tag',
+    () {
+      final before = _target(outboundIdentityKey: 'old-config');
+      final after = _target(outboundIdentityKey: 'new-config');
+      expect(before.key, isNot(after.key));
+    },
+  );
+
   test('literal endpoint IP is published before runtime diagnostics', () {
     final controller = ActiveProxyIpController();
     addTearDown(controller.dispose);
@@ -563,6 +572,7 @@ void main() {
 
 ActiveProxyIpTarget _target({
   String outboundTag = 'vless-1',
+  String outboundIdentityKey = '',
   String cachedIp = '',
   String cachedCountryCode = '',
   String endpointHost = '',
@@ -574,6 +584,7 @@ ActiveProxyIpTarget _target({
   return ActiveProxyIpTarget(
     subscriptionId: 'sub-1',
     outboundTag: outboundTag,
+    outboundIdentityKey: outboundIdentityKey,
     cachedIp: cachedIp,
     cachedCountryCode: cachedCountryCode,
     endpointHost: endpointHost,

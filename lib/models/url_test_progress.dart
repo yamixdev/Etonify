@@ -83,8 +83,10 @@ class UrlTestProgressState {
 /// every URLTest result. A full scan is needed only when the active testable
 /// server set changes.
 class UrlTestProgressCounter {
+  Set<String> _visibleTags = const <String>{};
   Set<String> _tags = const <String>{};
   final Map<String, bool> _results = <String, bool>{};
+  final Set<String> _additionalCompletedTags = <String>{};
   int _working = 0;
   int _failed = 0;
   int? _coreTotal;
@@ -95,8 +97,10 @@ class UrlTestProgressCounter {
     required Set<String> testableTags,
     required bool? Function(String tag) resultForTag,
   }) {
-    _tags = visibleTags.where(testableTags.contains).toSet();
+    _visibleTags = visibleTags.toSet();
+    _tags = _visibleTags.where(testableTags.contains).toSet();
     _results.clear();
+    _additionalCompletedTags.clear();
     _working = 0;
     _failed = 0;
     _coreTotal = null;
@@ -104,8 +108,8 @@ class UrlTestProgressCounter {
     update(_tags, resultForTag);
   }
 
-  /// The core counts concrete outbound probes. Its queue size is authoritative
-  /// for a full run; subscription rows may include groups or skipped nodes.
+  /// The core reports completed concrete probes. The header can include more
+  /// visible nodes than the queue, so skipped nodes remain pending.
   void applyCoreSessionSnapshot({required int total, required int completed}) {
     _coreTotal = total < 0 ? 0 : total;
     _coreCompleted = completed.clamp(0, _coreTotal!);
@@ -116,7 +120,11 @@ class UrlTestProgressCounter {
     bool? Function(String tag) resultForTag,
   ) {
     for (final tag in changedTags) {
-      if (!_tags.contains(tag)) continue;
+      if (!_tags.contains(tag)) {
+        if (!_visibleTags.contains(tag) || resultForTag(tag) == null) continue;
+        _tags.add(tag);
+        _additionalCompletedTags.add(tag);
+      }
       final previous = _results[tag];
       final next = resultForTag(tag);
       if (previous == next) continue;
@@ -138,12 +146,16 @@ class UrlTestProgressCounter {
   }) => UrlTestProgressState(
     isRunning: isRunning,
     isCancelled: isCancelled,
-    total: _coreTotal ?? _tags.length,
-    // The core's aggregate can lead the per-server result stream or include
-    // leaves not represented by a user-visible row. Keep this count in sync
-    // with the measurements the proxy list can actually display.
+    total: _coreTotal == null
+        ? _visibleTags.length
+        : (_coreTotal! > _visibleTags.length
+              ? _coreTotal!
+              : _visibleTags.length),
+    // Count only individually measured nodes, not synthetic group rows.
     working: _working,
     failed: _failed,
-    completed: _coreTotal == null ? null : _coreCompleted,
+    completed: _coreTotal == null
+        ? null
+        : _coreCompleted + _additionalCompletedTags.length,
   );
 }

@@ -606,6 +606,26 @@ void main() {
     expect(find.text('Автовыбор · VLESS · TLS'), findsOneWidget);
   });
 
+  testWidgets('group row says how many servers automatic selection contains', (
+    tester,
+  ) async {
+    final group = _proxy(
+      'group-auto',
+      'Автогруппа',
+    ).copyWith(isGroup: true, childCount: 12, protocolLabel: 'URLTest · VLESS');
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: ProxyTile(proxy: group, selected: false, onTap: () {}),
+        ),
+      ),
+    );
+    expect(find.text('Автовыбор · 12 прокси'), findsOneWidget);
+  });
+
   testWidgets('large proxy list exposes every server through lazy scrolling', (
     tester,
   ) async {

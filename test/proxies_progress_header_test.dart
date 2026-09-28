@@ -80,10 +80,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Работают 5 / 10'), findsOneWidget);
+      expect(find.text('Рабочих 5 / 10'), findsOneWidget);
       expect(find.text('Проверено 7 / 10'), findsOneWidget);
       expect(
-        tester.widget<Text>(find.text('Работают 5 / 10')).style?.color,
+        tester.widget<Text>(find.text('Рабочих 5 / 10')).style?.color,
         Colors.green,
       );
 
@@ -117,7 +117,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Работают 8 / 10'), findsOneWidget);
+      expect(find.text('Рабочих 8 / 10'), findsOneWidget);
     },
   );
 
@@ -132,7 +132,7 @@ void main() {
       _buildHeaderTestApp(progressNotifier: progressNotifier),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Работают 29 / 239'), findsOneWidget);
+    expect(find.text('Рабочих 29 / 239'), findsOneWidget);
     expect(find.text('Проверено 219 / 239'), findsOneWidget);
   });
 
@@ -156,7 +156,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Работают 4 / 10'), findsOneWidget);
+      expect(find.text('Рабочих 4 / 10'), findsOneWidget);
       expect(find.text('Проверено 5 / 10'), findsOneWidget);
     },
   );
@@ -179,7 +179,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Всего 141'), findsOneWidget);
-      expect(find.textContaining('Работают'), findsNothing);
+      expect(find.textContaining('Рабочих'), findsNothing);
       expect(
         find.byKey(const ValueKey('proxy-test-progress-bar')),
         findsNothing,
@@ -209,7 +209,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Работают 2 / 3'), findsOneWidget);
+    expect(find.text('Рабочих 2 / 3'), findsOneWidget);
     expect(find.text('Всего 3'), findsNothing);
     expect(
       find.byKey(const ValueKey('proxy-test-progress-bar')),
@@ -236,7 +236,7 @@ void main() {
     final latency = tester.widget<Text>(find.text('45 ms'));
     final theme = Theme.of(tester.element(find.byType(ProxiesPage)));
     expect(latency.style?.color, theme.colorScheme.onSurfaceVariant);
-    expect(find.textContaining('Работают'), findsNothing);
+    expect(find.textContaining('Рабочих'), findsNothing);
     expect(find.byType(ProxyLatencyDots), findsNothing);
   });
 
@@ -260,7 +260,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Прокси'), findsOneWidget);
-    expect(find.textContaining('Работают'), findsNothing);
+    expect(find.textContaining('Рабочих'), findsNothing);
     expect(find.text('Всего 1'), findsNothing);
   });
 
@@ -426,7 +426,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final working = find.text('Работают 38 / 57');
+    final working = find.text('Рабочих 38 / 57');
     final tested = find.text('Проверено 41 / 57');
     expect(working, findsOneWidget);
     expect(tested, findsOneWidget);

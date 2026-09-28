@@ -2,6 +2,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/latency_dependencies.dart';
 
 void main() {
+  test(
+    'group check expands nested groups into unique concrete server tags',
+    () {
+      expect(
+        latencyConcreteGroupTags(
+          'parent',
+          {
+            'parent': ['child', 'leaf-a', 'missing'],
+            'child': ['leaf-a', 'leaf-b', 'parent'],
+          },
+          const {'leaf-a', 'leaf-b'},
+        ),
+        ['leaf-a', 'leaf-b'],
+      );
+    },
+  );
   test('target follows nested selections and rejects cycles', () {
     expect(
       latencyTargetTag('LTE', {'LTE': 'region', 'region': 'cand-43'}),

@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
@@ -59,6 +60,7 @@ typedef ApplyResolvedExternalIpInfosCallback =
     Future<void> Function({
       required String subscriptionId,
       required Map<String, ResolvedExternalIpInfo> resolvedByTag,
+      required Map<String, String> expectedOutboundKeys,
     });
 
 /// Coalesces row lookups so a quick scroll does not rebuild and persist the
@@ -72,6 +74,7 @@ class ProxyLocationResultBatcher {
   final ApplyResolvedExternalIpInfosCallback onApplyResolvedInfos;
   final Duration delay;
   final Map<String, ResolvedExternalIpInfo> _pending = {};
+  final Map<String, String> _pendingOutboundKeys = {};
   Timer? _timer;
   String? _subscriptionId;
   bool _applying = false;
@@ -81,15 +84,18 @@ class ProxyLocationResultBatcher {
     required String subscriptionId,
     required String outboundTag,
     required ResolvedExternalIpInfo info,
+    required String outboundIdentityKey,
   }) {
     if (_disposed) return;
     if (_subscriptionId != null && _subscriptionId != subscriptionId) {
       _timer?.cancel();
       _timer = null;
       _pending.clear();
+      _pendingOutboundKeys.clear();
     }
     _subscriptionId = subscriptionId;
     _pending[outboundTag] = info;
+    _pendingOutboundKeys[outboundTag] = outboundIdentityKey;
     if (!_applying) _schedule();
   }
 
@@ -103,11 +109,14 @@ class ProxyLocationResultBatcher {
     _applying = true;
     final subscriptionId = _subscriptionId!;
     final batch = Map<String, ResolvedExternalIpInfo>.of(_pending);
+    final keys = Map<String, String>.of(_pendingOutboundKeys);
     _pending.clear();
+    _pendingOutboundKeys.clear();
     try {
       await onApplyResolvedInfos(
         subscriptionId: subscriptionId,
         resolvedByTag: batch,
+        expectedOutboundKeys: keys,
       );
     } catch (error) {
       AppLogStore.warning('proxy', 'location batch apply failed: $error');
@@ -122,6 +131,7 @@ class ProxyLocationResultBatcher {
     _timer?.cancel();
     _timer = null;
     _pending.clear();
+    _pendingOutboundKeys.clear();
   }
 }
 
@@ -268,6 +278,12 @@ class ProxyLocationCoordinator {
     if (targetTags.isEmpty) {
       return;
     }
+    final targetTagSet = targetTags.toSet();
+    final expectedOutboundKeys = <String, String>{
+      for (final outbound in targets)
+        if (targetTagSet.contains(outbound.tag))
+          outbound.tag: SubscriptionStore.outboundIdentityKey(outbound.config),
+    };
     final outboundsByTag = <String, Outbound>{
       for (final o in targets) o.tag: o,
     };
@@ -275,7 +291,7 @@ class ProxyLocationCoordinator {
         '${activeSubscription.id}|$limit|'
         '${targetTags.map((tag) {
           final outbound = outboundsByTag[tag];
-          return '$tag:${outbound == null ? '' : _getEffectiveOutboundLatency(outbound) ?? ''}';
+          return '$tag:${expectedOutboundKeys[tag] ?? ''}:${outbound == null ? '' : _getEffectiveOutboundLatency(outbound) ?? ''}';
         }).join('|')}';
     if (signature == _lastLocationLookupSignature) {
       return;
@@ -287,6 +303,7 @@ class ProxyLocationCoordinator {
         targetTags,
         subscriptionId: activeSubscription.id,
         generation: generation,
+        expectedOutboundKeys: expectedOutboundKeys,
       );
       if (resolvedByTag.isEmpty ||
           _disposed ||
@@ -297,6 +314,7 @@ class ProxyLocationCoordinator {
       await _onApplyResolvedInfos(
         subscriptionId: activeSubscription.id,
         resolvedByTag: resolvedByTag,
+        expectedOutboundKeys: expectedOutboundKeys,
       );
     } finally {
       final refreshRequested = _locationLookupRefreshRequested;
@@ -319,6 +337,7 @@ class ProxyLocationCoordinator {
     List<String> outboundTags, {
     required String subscriptionId,
     required int generation,
+    required Map<String, String> expectedOutboundKeys,
   }) async {
     final resolvedByTag = <String, ResolvedExternalIpInfo>{};
     var nextIndex = 0;
@@ -335,7 +354,10 @@ class ProxyLocationCoordinator {
           return;
         }
         final tag = outboundTags[index];
-        final resolved = await fetchExternalIpInfo(outboundTag: tag);
+        final resolved = await fetchExternalIpInfo(
+          outboundTag: tag,
+          outboundIdentityKey: expectedOutboundKeys[tag] ?? '',
+        );
         if (resolved != null) {
           resolvedByTag[tag] = resolved;
         }
@@ -348,6 +370,7 @@ class ProxyLocationCoordinator {
 
   Future<ResolvedExternalIpInfo?> fetchExternalIpInfo({
     required String outboundTag,
+    String outboundIdentityKey = '',
     bool highPriority = false,
     bool Function()? shouldStart,
   }) async {
@@ -363,7 +386,10 @@ class ProxyLocationCoordinator {
       slot?.release();
       return null;
     }
-    final lookup = _sharedExternalInfoLookup(outboundTag);
+    final lookup = _sharedExternalInfoLookup(
+      outboundTag,
+      outboundIdentityKey: outboundIdentityKey,
+    );
     if (slot != null) {
       unawaited(
         lookup.whenComplete(slot.release).then<void>((_) {}, onError: (_) {}),
@@ -392,9 +418,13 @@ class ProxyLocationCoordinator {
     }
   }
 
-  Future<Map<String, dynamic>> _sharedExternalInfoLookup(String outboundTag) {
+  Future<Map<String, dynamic>> _sharedExternalInfoLookup(
+    String outboundTag, {
+    required String outboundIdentityKey,
+  }) {
     final normalizedTag = outboundTag.trim();
-    final key = '${_getDiagnosticGeneration()}\n$normalizedTag';
+    final key =
+        '${_getDiagnosticGeneration()}\n$normalizedTag\n$outboundIdentityKey';
     final existing = _externalInfoLookups[key];
     if (existing != null) {
       return existing;

@@ -10,32 +10,35 @@ void main() {
     },
   );
 
-  test('progress counts only testable nodes and updates changed tags', () {
-    final counter = UrlTestProgressCounter();
-    final results = <String, bool?>{'a': true, 'b': null, 'c': true};
-    counter.reset(
-      visibleTags: const ['a', 'b', 'c'],
-      testableTags: const {'a', 'b'},
-      resultForTag: (tag) => results[tag],
-    );
-    expect(counter.state(), const UrlTestProgressState(total: 2, working: 1));
+  test(
+    'progress leaves untested visible nodes pending and updates changed tags',
+    () {
+      final counter = UrlTestProgressCounter();
+      final results = <String, bool?>{'a': true, 'b': null, 'c': true};
+      counter.reset(
+        visibleTags: const ['a', 'b', 'c'],
+        testableTags: const {'a', 'b'},
+        resultForTag: (tag) => results[tag],
+      );
+      expect(counter.state(), const UrlTestProgressState(total: 3, working: 1));
 
-    final visited = <String>[];
-    results['b'] = false;
-    counter.update(['b'], (tag) {
-      visited.add(tag);
-      return results[tag];
-    });
-    expect(visited, ['b']);
-    expect(
-      counter.state(),
-      const UrlTestProgressState(total: 2, working: 1, failed: 1),
-    );
+      final visited = <String>[];
+      results['b'] = false;
+      counter.update(['b'], (tag) {
+        visited.add(tag);
+        return results[tag];
+      });
+      expect(visited, ['b']);
+      expect(
+        counter.state(),
+        const UrlTestProgressState(total: 3, working: 1, failed: 1),
+      );
 
-    results['a'] = false;
-    counter.update(['a'], (tag) => results[tag]);
-    expect(counter.state(), const UrlTestProgressState(total: 2, failed: 2));
-  });
+      results['a'] = false;
+      counter.update(['a'], (tag) => results[tag]);
+      expect(counter.state(), const UrlTestProgressState(total: 3, failed: 2));
+    },
+  );
 
   test('reset drops measurements from the previous profile', () {
     final counter = UrlTestProgressCounter();
@@ -54,7 +57,7 @@ void main() {
     expect(counter.state(), const UrlTestProgressState(total: 1));
   });
 
-  test('core session reports its actual queue size and completed probes', () {
+  test('visible total retains skipped nodes when core queue is smaller', () {
     final counter = UrlTestProgressCounter();
     counter.reset(
       visibleTags: List.generate(239, (index) => 'node-$index'),
@@ -64,7 +67,7 @@ void main() {
     counter.applyCoreSessionSnapshot(total: 219, completed: 219);
     expect(
       counter.state(),
-      const UrlTestProgressState(total: 219, completed: 219),
+      const UrlTestProgressState(total: 239, completed: 219),
     );
 
     counter.update(['node-0'], (_) => true);
@@ -115,5 +118,23 @@ void main() {
       counter.state(),
       const UrlTestProgressState(total: 2, working: 0, failed: 2, completed: 2),
     );
+  });
+
+  test('manual check adds a previously skipped nested group child once', () {
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['regular', 'nested-child'],
+      testableTags: const {'regular'},
+      resultForTag: (tag) => tag == 'regular' ? true : null,
+    );
+    counter.applyCoreSessionSnapshot(total: 1, completed: 1);
+    counter.update(['nested-child'], (_) => true);
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 2, working: 2, completed: 2),
+    );
+    counter.update(['nested-child'], (_) => true);
+    expect(counter.state().working, 2);
+    expect(counter.state().tested, 2);
   });
 }

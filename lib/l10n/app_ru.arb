@@ -94,7 +94,7 @@
   "autoCheckDisabledNoticeTitle": "Автоматическая проверка",
   "autoCheckDisabledNoticeMessage": "Полная автоматическая проверка серверов теперь выключена. Выбранный сервер всё равно проверяется после подключения, смены сети или выбора. Проверить весь список можно кнопкой-молнией, а вернуть автопроверку — в разделе «Подписки и проверка». Режим «Самый быстрый» использует уже полученные результаты; чтобы найти лучший из всех серверов, проверьте весь список.",
   "autoCheckDisabledNoticeAction": "Понятно",
-  "proxiesProgressWorking": "Работают {working} / {total}",
+  "proxiesProgressWorking": "Рабочих {working} / {total}",
   "proxiesProgressTested": "Проверено {tested} / {total}",
   "proxiesCheckPaused": "Проверка приостановлена",
   "@proxiesProgressTested": {
