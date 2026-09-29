@@ -7,6 +7,16 @@ import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 
 void main() {
+  test('auto-connect is opt-in and changing it does not restart VPN', () {
+    final controller = AppSettingsController();
+    expect(controller.autoConnectOnLaunch, isFalse);
+
+    final change = controller.setAutoConnectOnLaunch(true);
+    expect(change.changed, isTrue);
+    expect(change.configReason, isNull);
+    expect(controller.autoConnectOnLaunch, isTrue);
+    expect(controller.setAutoConnectOnLaunch(true).changed, isFalse);
+  });
   test('HWID switch updates request policy without restarting the core', () {
     addTearDown(() => SubscriptionFetcher.configureHwidSharing(false));
     final controller = AppSettingsController();
@@ -122,6 +132,26 @@ void main() {
       'https://dns.cloudflare.com/dns-query',
     );
   });
+
+  test(
+    'switching DNS presets to custom keeps effective DNS without restart',
+    () {
+      final controller = AppSettingsController();
+
+      final directChange = controller.setDnsDirectPreset('custom');
+      final proxyChange = controller.setDnsProxyPreset('custom');
+
+      expect(directChange.changed, isTrue);
+      expect(directChange.configReason, isNull);
+      expect(proxyChange.changed, isTrue);
+      expect(proxyChange.configReason, isNull);
+      expect(controller.dnsDirectResolver, 'udp://1.1.1.1');
+      expect(
+        controller.dnsProxyResolver,
+        'https://dns.cloudflare.com/dns-query',
+      );
+    },
+  );
 
   test('plain DNS address defaults to UDP', () {
     final controller = AppSettingsController();

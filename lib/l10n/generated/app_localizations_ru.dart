@@ -17,7 +17,32 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get subscriptionBackgroundDescription =>
-      'Скачивать профили с включённым автообновлением, когда позволяют сеть и заряд батареи. Проверка и применение загрузок выполняются при следующем открытии Etonify. Неудачные попытки не повторяются непрерывно.';
+      'Только подписки с автообновлением. Изменения применятся при следующем открытии.';
+
+  @override
+  String get autoConnectOnLaunchTitle => 'Подключаться при запуске';
+
+  @override
+  String get autoConnectOnLaunchDescription =>
+      'Включать VPN с последним выбранным сервером при запуске приложения.';
+
+  @override
+  String get quickSettingsTileTitle => 'Добавить кнопку VPN в шторку';
+
+  @override
+  String get quickSettingsTileDescription =>
+      'Подключать и отключать VPN без открытия приложения.';
+
+  @override
+  String get quickSettingsTileManualHint =>
+      'Откройте редактирование быстрых настроек и перетащите плитку Etonify.';
+
+  @override
+  String get quickSettingsTileAlreadyAdded => 'Кнопка Etonify уже добавлена.';
+
+  @override
+  String get quickSettingsTileAddFailed =>
+      'Не удалось добавить кнопку. Попробуйте через редактирование быстрых настроек.';
 
   @override
   String get subscriptionReportTitle => 'Обновления подписок';
@@ -993,7 +1018,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get aboutResourceBatteryTemp => 'Температура батареи';
 
   @override
-  String get updatesTitle => 'Обновления приложения';
+  String get updatesTitle => 'Обновления';
 
   @override
   String get updatesSubtitle => 'Проверить новую версию и установить её.';

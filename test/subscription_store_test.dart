@@ -88,6 +88,120 @@ void main() {
     expect(metadata.hasRawPayload, isTrue);
   });
 
+  test('payload summary cannot replace a newer nonzero count', () async {
+    await SubscriptionStore.save(
+      const Subscription(
+        id: 'summary-race',
+        name: 'Summary race',
+        url: 'https://example.com/summary',
+        outbounds: [
+          Outbound(tag: 'proxy', name: 'Proxy', config: {'type': 'vless'}),
+        ],
+      ),
+    );
+    final current = SubscriptionStore.getMetadata('summary-race')!;
+    await SubscriptionStore.cachePayloadSummaries({
+      current.id: (
+        visibleProxyCount: 0,
+        hasRawPayload: false,
+        payloadRevision: current.payloadRevision,
+      ),
+    });
+    expect(
+      SubscriptionStore.getMetadata(current.id)!.cachedVisibleProxyCount,
+      1,
+    );
+  });
+
+  test('payload summary ignores a superseded payload revision', () async {
+    await SubscriptionStore.save(
+      const Subscription(
+        id: 'summary-revision',
+        name: 'Summary revision',
+        url: 'https://example.com/summary',
+        outbounds: [
+          Outbound(tag: 'proxy', name: 'Proxy', config: {'type': 'vless'}),
+        ],
+      ),
+    );
+    final current = SubscriptionStore.getMetadata('summary-revision')!;
+    await SubscriptionStore.cachePayloadSummaries({
+      current.id: (
+        visibleProxyCount: 0,
+        hasRawPayload: false,
+        payloadRevision: 'old-revision',
+      ),
+    });
+    expect(
+      SubscriptionStore.getMetadata(current.id)!.cachedVisibleProxyCount,
+      1,
+    );
+  });
+
+  test('payload summary repairs a stale zero count', () async {
+    await SubscriptionStore.save(
+      const Subscription(
+        id: 'summary-repair',
+        name: 'Summary repair',
+        url: 'https://example.com/summary',
+        rawContent: 'vless://uuid@example.com:443#Proxy',
+        outbounds: [
+          Outbound(tag: 'proxy', name: 'Proxy', config: {'type': 'vless'}),
+        ],
+      ),
+    );
+    final current = SubscriptionStore.getMetadata('summary-repair')!;
+    await SubscriptionStore.saveMetadata(
+      current.copyWith(cachedVisibleProxyCount: 0),
+    );
+    await SubscriptionStore.cachePayloadSummaries({
+      current.id: (
+        visibleProxyCount: 1,
+        hasRawPayload: true,
+        payloadRevision: current.payloadRevision,
+      ),
+    });
+    expect(
+      SubscriptionStore.getMetadata(current.id)!.cachedVisibleProxyCount,
+      1,
+    );
+  });
+
+  test(
+    'a changed outbound config changes the metadata payload revision',
+    () async {
+      await SubscriptionStore.save(
+        const Subscription(
+          id: 'config-revision',
+          name: 'Config revision',
+          url: 'https://example.com/config',
+          outbounds: [
+            Outbound(
+              tag: 'proxy',
+              name: 'Proxy',
+              config: {'type': 'vless', 'server': 'one.example.com'},
+            ),
+          ],
+        ),
+      );
+      final before = SubscriptionStore.getMetadata('config-revision')!;
+      final hydrated = (await SubscriptionStore.get(before.id))!;
+      await SubscriptionStore.save(
+        hydrated.copyWith(
+          outbounds: const [
+            Outbound(
+              tag: 'proxy',
+              name: 'Proxy',
+              config: {'type': 'vless', 'server': 'two.example.com'},
+            ),
+          ],
+        ),
+      );
+      final after = SubscriptionStore.getMetadata(before.id)!;
+      expect(after.payloadRevision, isNot(before.payloadRevision));
+    },
+  );
+
   test(
     'file import rejects a WireGuard-only profile with a clear reason',
     () async {
@@ -511,6 +625,40 @@ Endpoint = wg.example.com:51820
     );
 
     expect(selected, 'lowest');
+  });
+
+  test('refresh keeps selected server when its configuration changes', () async {
+    var body =
+        'vless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@old.example:443?security=tls#Chosen\n'
+        'vless://bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb@other.example:443?security=tls#Other';
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.text;
+      request.response.write(body);
+      await request.response.close();
+    });
+    final added = await SubscriptionStore.addFromUrl(
+      'http://${server.address.host}:${server.port}/sub',
+    );
+    final original = added.subscription;
+    final chosen = original.outbounds.singleWhere(
+      (outbound) => outbound.name == 'Chosen',
+    );
+    await SubscriptionStore.saveSelectedProxyMetadata(
+      original.copyWith(selectedProxyTag: chosen.tag),
+    );
+
+    body = body.replaceFirst('old.example:443', 'new.example:8443');
+    final refreshed = await SubscriptionStore.refresh(original.id);
+
+    expect(refreshed.selectedProxyTag, chosen.tag);
+    expect(
+      refreshed.outbounds
+          .singleWhere((outbound) => outbound.tag == chosen.tag)
+          .config['server'],
+      'new.example',
+    );
   });
 
   test('persists latest latency alongside location fields', () async {

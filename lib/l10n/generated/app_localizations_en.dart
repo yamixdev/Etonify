@@ -18,7 +18,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subscriptionBackgroundDescription =>
-      'Download profiles with auto-update enabled, when the network and battery allow. Downloads are checked and applied next time you open Etonify. Failed attempts are not retried continuously.';
+      'Only subscriptions with auto-update enabled. Changes apply the next time you open the app.';
+
+  @override
+  String get autoConnectOnLaunchTitle => 'Connect on launch';
+
+  @override
+  String get autoConnectOnLaunchDescription =>
+      'Start the VPN with the last selected server when the app opens.';
+
+  @override
+  String get quickSettingsTileTitle => 'Add VPN tile to Quick Settings';
+
+  @override
+  String get quickSettingsTileDescription =>
+      'Connect or disconnect without opening the app.';
+
+  @override
+  String get quickSettingsTileManualHint =>
+      'Edit Quick Settings and drag the Etonify tile into place.';
+
+  @override
+  String get quickSettingsTileAlreadyAdded =>
+      'The Etonify tile is already added.';
+
+  @override
+  String get quickSettingsTileAddFailed =>
+      'Could not add the tile. Try adding it from Quick Settings edit mode.';
 
   @override
   String get subscriptionReportTitle => 'Subscription updates';
@@ -993,7 +1019,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutResourceBatteryTemp => 'Battery temperature';
 
   @override
-  String get updatesTitle => 'App updates';
+  String get updatesTitle => 'Updates';
 
   @override
   String get updatesSubtitle => 'Check for a new version and install it.';

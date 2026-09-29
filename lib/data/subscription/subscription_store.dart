@@ -1302,32 +1302,44 @@ class SubscriptionStore {
   }
 
   static Future<void> cachePayloadSummaries(
-    Map<String, ({int visibleProxyCount, bool hasRawPayload})> summaries,
+    Map<
+      String,
+      ({int visibleProxyCount, bool hasRawPayload, String payloadRevision})
+    >
+    summaries,
   ) async {
     if (summaries.isEmpty) {
       return;
     }
-    final updates = <dynamic, String>{};
     for (final entry in summaries.entries) {
-      final raw = _metaStore.get(entry.key);
-      if (raw is! String) {
-        continue;
-      }
-      try {
-        final metadata =
-            Subscription.fromMetadataMap(
-              jsonDecode(raw) as Map<String, dynamic>,
-            ).copyWith(
-              cachedVisibleProxyCount: entry.value.visibleProxyCount,
-              hasRawPayload: entry.value.hasRawPayload,
-            );
-        updates[entry.key] = jsonEncode(metadata.toMetadataMap());
-      } catch (_) {
-        // Leave corrupt metadata untouched; getAllMetadata already skips it.
-      }
-    }
-    if (updates.isNotEmpty) {
-      await _metaStore.putAll(updates);
+      await _withSubscriptionWriteLock(entry.key, () async {
+        final raw = _metaStore.get(entry.key);
+        if (raw is! String) return;
+        late final Subscription current;
+        try {
+          current = Subscription.fromMetadataMap(
+            jsonDecode(raw) as Map<String, dynamic>,
+          );
+        } catch (_) {
+          // Leave corrupt metadata untouched; getAllMetadata already skips it.
+          return;
+        }
+        // The payload may have changed while the sheet was decoding it.
+        // Never let an old zero overwrite a newer refresh result.
+        if (current.payloadRevision != entry.value.payloadRevision ||
+            current.cachedVisibleProxyCount > 0) {
+          return;
+        }
+        if (current.cachedVisibleProxyCount == entry.value.visibleProxyCount &&
+            current.hasRawPayload == entry.value.hasRawPayload) {
+          return;
+        }
+        final updated = current.copyWith(
+          cachedVisibleProxyCount: entry.value.visibleProxyCount,
+          hasRawPayload: entry.value.hasRawPayload,
+        );
+        await _metaStore.put(entry.key, jsonEncode(updated.toMetadataMap()));
+      });
     }
   }
 

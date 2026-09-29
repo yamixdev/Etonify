@@ -113,8 +113,50 @@ abstract class AppLocalizations {
   /// No description provided for @subscriptionBackgroundDescription.
   ///
   /// In en, this message translates to:
-  /// **'Download profiles with auto-update enabled, when the network and battery allow. Downloads are checked and applied next time you open Etonify. Failed attempts are not retried continuously.'**
+  /// **'Only subscriptions with auto-update enabled. Changes apply the next time you open the app.'**
   String get subscriptionBackgroundDescription;
+
+  /// No description provided for @autoConnectOnLaunchTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect on launch'**
+  String get autoConnectOnLaunchTitle;
+
+  /// No description provided for @autoConnectOnLaunchDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Start the VPN with the last selected server when the app opens.'**
+  String get autoConnectOnLaunchDescription;
+
+  /// No description provided for @quickSettingsTileTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add VPN tile to Quick Settings'**
+  String get quickSettingsTileTitle;
+
+  /// No description provided for @quickSettingsTileDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect or disconnect without opening the app.'**
+  String get quickSettingsTileDescription;
+
+  /// No description provided for @quickSettingsTileManualHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Quick Settings and drag the Etonify tile into place.'**
+  String get quickSettingsTileManualHint;
+
+  /// No description provided for @quickSettingsTileAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'The Etonify tile is already added.'**
+  String get quickSettingsTileAlreadyAdded;
+
+  /// No description provided for @quickSettingsTileAddFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add the tile. Try adding it from Quick Settings edit mode.'**
+  String get quickSettingsTileAddFailed;
 
   /// No description provided for @subscriptionReportTitle.
   ///
@@ -1865,7 +1907,7 @@ abstract class AppLocalizations {
   /// No description provided for @updatesTitle.
   ///
   /// In en, this message translates to:
-  /// **'App updates'**
+  /// **'Updates'**
   String get updatesTitle;
 
   /// No description provided for @updatesSubtitle.

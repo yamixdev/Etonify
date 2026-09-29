@@ -1,7 +1,9 @@
 package com.etonify.meow_client
 
 import android.app.ActivityManager
+import android.app.StatusBarManager
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
@@ -10,6 +12,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -81,6 +84,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val deepLinkMethodChannelName = "meow_client/deep_links"
     private val deepLinkEventChannelName = "meow_client/deep_link_events"
     private val secureStorageMethodChannelName = "meow_client/secure_storage"
+    private val quickSettingsMethodChannelName = "meow_client/quick_settings"
     private var pendingPrepareResult: MethodChannel.Result? = null
     private var pendingExportResult: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
@@ -2234,6 +2238,43 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         setupSingboxHostApi(flutterEngine.dartExecutor.binaryMessenger)
         SubscriptionRefreshJobs.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            quickSettingsMethodChannelName,
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "requestAddTile") {
+                result.notImplemented()
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                result.success("manual")
+            } else {
+                val statusBarManager = getSystemService(StatusBarManager::class.java)
+                if (statusBarManager == null) {
+                    result.success("unavailable")
+                } else {
+                    try {
+                        statusBarManager.requestAddTileService(
+                            ComponentName(this, MeowQuickSettingsTileService::class.java),
+                            "Etonify",
+                            Icon.createWithResource(this, R.drawable.ic_meow_status),
+                            mainExecutor,
+                        ) { status ->
+                            result.success(
+                                when (status) {
+                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "added"
+                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "already_added"
+                                    StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "not_added"
+                                    else -> "unavailable"
+                                },
+                            )
+                        }
+                    } catch (error: Exception) {
+                        Log.w(TAG, "quick settings tile request failed", error)
+                        result.success("unavailable")
+                    }
+                }
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

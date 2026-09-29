@@ -82,6 +82,10 @@ String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
   return AppLocalizations.of(context).lastUpdatedDateTime(date, time);
 }
 
+bool subscriptionCountNeedsHydration(Subscription subscription) =>
+    subscription.cachedVisibleProxyCount < 0 ||
+    (subscription.cachedVisibleProxyCount == 0 && subscription.hasRawPayload);
+
 int _visibleProxyCount(Iterable<Outbound> outbounds) {
   return outbounds
       .where((outbound) => !outbound.info.deleted)
@@ -129,6 +133,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   final Set<String> _selectedIds = <String>{};
   final Set<String> _refreshingIds = <String>{};
   final Map<String, int> _subscriptionServerCounts = <String, int>{};
+  final Map<String, String> _verifiedCountRevisions = <String, String>{};
   final Set<String> _subscriptionsWithRawPayload = <String>{};
   int _countHydrationGeneration = 0;
   Timer? _countHydrationTimer;
@@ -201,8 +206,12 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       _subscriptions = subscriptions;
       for (final subscription in _subscriptions) {
         if (subscription.cachedVisibleProxyCount >= 0) {
-          _subscriptionServerCounts[subscription.id] =
-              subscription.cachedVisibleProxyCount;
+          if (_verifiedCountRevisions[subscription.id] !=
+                  subscription.payloadRevision ||
+              !_subscriptionServerCounts.containsKey(subscription.id)) {
+            _subscriptionServerCounts[subscription.id] =
+                subscription.cachedVisibleProxyCount;
+          }
           if (subscription.hasRawPayload) {
             _subscriptionsWithRawPayload.add(subscription.id);
           } else {
@@ -214,7 +223,14 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         }
       }
       final ids = _subscriptions.map((subscription) => subscription.id).toSet();
+      final revisions = {
+        for (final subscription in _subscriptions)
+          subscription.id: subscription.payloadRevision,
+      };
       _subscriptionServerCounts.removeWhere((id, _) => !ids.contains(id));
+      _verifiedCountRevisions.removeWhere(
+        (id, revision) => revisions[id] != revision,
+      );
       _subscriptionsWithRawPayload.removeWhere((id) => !ids.contains(id));
       _selectedIds.removeWhere(
         (id) => !_subscriptions.any((subscription) => subscription.id == id),
@@ -224,7 +240,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
     });
     _countHydrationTimer?.cancel();
-    if (_subscriptions.any((sub) => sub.cachedVisibleProxyCount < 0)) {
+    if (_subscriptions.any(_needsCountHydration)) {
       _countHydrationTimer = Timer(
         _kSubscriptionSummaryHydrationDelay,
         () => unawaited(_hydrateSubscriptionCounts(generation)),
@@ -234,11 +250,15 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 
   Future<void> _hydrateSubscriptionCounts(int generation) async {
     final snapshot = _subscriptions
-        .where((subscription) => subscription.cachedVisibleProxyCount < 0)
+        .where(_needsCountHydration)
         .toList(growable: false);
     final counts = <String, int>{};
     final rawPayloadIds = <String>{};
-    final summaries = <String, ({int visibleProxyCount, bool hasRawPayload})>{};
+    final summaries =
+        <
+          String,
+          ({int visibleProxyCount, bool hasRawPayload, String payloadRevision})
+        >{};
     var hasUnsupportedWireGuard = false;
     for (final subscription in snapshot) {
       if (generation != _countHydrationGeneration) {
@@ -263,6 +283,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       summaries[subscription.id] = (
         visibleProxyCount: visibleProxyCount,
         hasRawPayload: hasRawPayload,
+        payloadRevision: subscription.payloadRevision,
       );
       if (hasRawPayload) {
         rawPayloadIds.add(subscription.id);
@@ -271,11 +292,31 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     if (!mounted || generation != _countHydrationGeneration) {
       return;
     }
+    counts.removeWhere((id, _) {
+      final current = SubscriptionStore.getMetadata(id);
+      return current == null ||
+          current.payloadRevision != summaries[id]!.payloadRevision;
+    });
+    rawPayloadIds.removeWhere((id) => !counts.containsKey(id));
+    summaries.removeWhere((id, _) => !counts.containsKey(id));
     setState(() {
       _subscriptionServerCounts.addAll(counts);
       _subscriptionsWithRawPayload.addAll(rawPayloadIds);
+      for (final entry in summaries.entries) {
+        _verifiedCountRevisions[entry.key] = entry.value.payloadRevision;
+      }
     });
-    unawaited(SubscriptionStore.cachePayloadSummaries(summaries));
+    unawaited(
+      SubscriptionStore.cachePayloadSummaries(summaries).onError((
+        error,
+        stackTrace,
+      ) {
+        AppLogStore.error(
+          'subscription',
+          'Failed to save proxy count summary: $error\n$stackTrace',
+        );
+      }),
+    );
     if (hasUnsupportedWireGuard && !_wireGuardNoticeShown) {
       _wireGuardNoticeShown = true;
       AppNotice.show(
@@ -285,6 +326,10 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
     }
   }
+
+  bool _needsCountHydration(Subscription subscription) =>
+      subscriptionCountNeedsHydration(subscription) &&
+      _verifiedCountRevisions[subscription.id] != subscription.payloadRevision;
 
   Future<T> _runSubscriptionOperationWithWarning<T>(Future<T> operation) async {
     var completed = false;
@@ -1168,6 +1213,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                                     return _SubscriptionCard(
                                       subscription: sub,
                                       serverCount: serverCount,
+                                      countPending: _needsCountHydration(sub),
                                       rawLooksNonEmpty: rawLooksNonEmpty,
                                       active:
                                           sub.id == widget.activeSubscriptionId,

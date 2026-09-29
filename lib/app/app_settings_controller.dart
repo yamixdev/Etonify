@@ -159,6 +159,7 @@ class AppSettingsController {
   int urlTestUnavailableCheckIntervalSeconds =
       appSettingsStandardUrlTestUnavailableCheckIntervalSeconds;
   bool autoCheckServers = false;
+  bool autoConnectOnLaunch = false;
   bool autoCheckNoticeAcknowledged = false;
   int locationLookupLimit = appSettingsStandardLocationLookupLimit;
   int locationLookupTimeoutSeconds =
@@ -251,6 +252,7 @@ class AppSettingsController {
       urlTestUnavailableCheckIntervalSeconds:
           urlTestUnavailableCheckIntervalSeconds,
       autoCheckServers: autoCheckServers,
+      autoConnectOnLaunch: autoConnectOnLaunch,
       autoCheckNoticeAcknowledged: autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit,
       locationLookupTimeoutSeconds: locationLookupTimeoutSeconds,
@@ -337,6 +339,7 @@ class AppSettingsController {
     urlTestUnavailableCheckIntervalSeconds =
         state.urlTestUnavailableCheckIntervalSeconds;
     autoCheckServers = state.autoCheckServers;
+    autoConnectOnLaunch = state.autoConnectOnLaunch;
     autoCheckNoticeAcknowledged = state.autoCheckNoticeAcknowledged;
     locationLookupLimit = state.locationLookupLimit.clamp(0, 50).toInt();
     locationLookupTimeoutSeconds = state.locationLookupTimeoutSeconds
@@ -654,12 +657,15 @@ class AppSettingsController {
     if (dnsDirectPreset == value) {
       return const AppSettingsChange.none();
     }
+    final previousResolver = dnsDirectResolver;
     dnsDirectPreset = value;
     syncDnsPresetValue(isDirect: true);
     _enforceSecureDnsResolvers();
-    return const AppSettingsChange(
+    return AppSettingsChange(
       changed: true,
-      configReason: 'dns direct preset changed',
+      configReason: dnsDirectResolver == previousResolver
+          ? null
+          : 'dns direct preset changed',
     );
   }
 
@@ -682,12 +688,15 @@ class AppSettingsController {
     if (dnsProxyPreset == value) {
       return const AppSettingsChange.none();
     }
+    final previousResolver = dnsProxyResolver;
     dnsProxyPreset = value;
     syncDnsPresetValue(isDirect: false);
     _enforceSecureDnsResolvers();
-    return const AppSettingsChange(
+    return AppSettingsChange(
       changed: true,
-      configReason: 'dns proxy preset changed',
+      configReason: dnsProxyResolver == previousResolver
+          ? null
+          : 'dns proxy preset changed',
     );
   }
 
@@ -823,6 +832,14 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     autoCheckServers = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setAutoConnectOnLaunch(bool value) {
+    if (autoConnectOnLaunch == value) {
+      return const AppSettingsChange.none();
+    }
+    autoConnectOnLaunch = value;
     return const AppSettingsChange(changed: true);
   }
 

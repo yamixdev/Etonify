@@ -466,6 +466,24 @@ void main() {
     expect(exported.containsKey('auto_check_notice_acknowledged'), isFalse);
   });
 
+  test('auto-connect stays off by default and round-trips in settings', () {
+    final store = _TestSettingsStore();
+    final defaults = store.mapState(const <String, dynamic>{});
+    expect(defaults.autoConnectOnLaunch, isFalse);
+
+    final encoded = store.stateToMap(
+      defaults.copyWith(autoConnectOnLaunch: true),
+    );
+    expect(encoded['auto_connect_on_launch'], '1');
+    expect(store.mapState(encoded).autoConnectOnLaunch, isTrue);
+    expect(
+      store.stateToSafeExportMap(
+        store.mapState(encoded),
+      )['auto_connect_on_launch'],
+      '1',
+    );
+  });
+
   test('stale pre-0.3.7 probe concurrency is rewritten exactly once', () {
     expect(
       AppSettingsStore.migratedUrlTestConcurrency(

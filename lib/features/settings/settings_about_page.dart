@@ -901,6 +901,7 @@ class _AboutResourcesCard extends StatelessWidget {
               label: l10n.aboutResourceJavaHeap,
               value: _formatKb(data?['javaHeapUsedKb']),
             ),
+            const Gap(8),
             _AboutInfoRow(
               label: l10n.aboutResourceFlutterImageCache,
               value: _formatBytes(data?['flutterImageCacheBytes']),
@@ -995,11 +996,9 @@ class _AboutInfoRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          flex: 4,
+          flex: 6,
           child: Text(
             label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: cs.onSurfaceVariant,
             ),
@@ -1007,7 +1006,7 @@ class _AboutInfoRow extends StatelessWidget {
         ),
         const Gap(12),
         Flexible(
-          flex: 5,
+          flex: 4,
           child: Align(
             alignment: Alignment.centerRight,
             child: FittedBox(

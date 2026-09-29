@@ -69,6 +69,10 @@ class SettingsGeneralPage extends StatelessWidget {
     required this.currentHideServerIp,
     this.currentSendHwidToProviders = true,
     this.onSendHwidToProvidersChanged,
+    this.currentAutoConnectOnLaunch = false,
+    this.onAutoConnectOnLaunchChanged,
+    this.showQuickSettingsTileAction = false,
+    this.onAddQuickSettingsTile,
     required this.onLocaleChanged,
     required this.onThemePreferenceChanged,
     required this.onAccentColorChanged,
@@ -90,6 +94,10 @@ class SettingsGeneralPage extends StatelessWidget {
   final bool currentHideServerIp;
   final bool currentSendHwidToProviders;
   final ValueChanged<bool>? onSendHwidToProvidersChanged;
+  final bool currentAutoConnectOnLaunch;
+  final ValueChanged<bool>? onAutoConnectOnLaunchChanged;
+  final bool showQuickSettingsTileAction;
+  final VoidCallback? onAddQuickSettingsTile;
   final ValueChanged<String> onLocaleChanged;
   final ValueChanged<AppThemePreference> onThemePreferenceChanged;
   final ValueChanged<String> onAccentColorChanged;
@@ -255,6 +263,22 @@ class SettingsGeneralPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SettingsTileGroup(
                 children: [
+                  _AutoConnectTile(
+                    value: currentAutoConnectOnLaunch,
+                    onChanged: onAutoConnectOnLaunchChanged,
+                  ),
+                  if (showQuickSettingsTileAction)
+                    ListTile(
+                      key: const ValueKey('add-quick-settings-tile'),
+                      leading: SettingsLeadingIcon(
+                        icon: Icons.dashboard_customize_rounded,
+                        color: cs.primary,
+                      ),
+                      title: Text(l10n.quickSettingsTileTitle),
+                      subtitle: Text(l10n.quickSettingsTileDescription),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: onAddQuickSettingsTile,
+                    ),
                   SwitchListTile(
                     secondary: SettingsLeadingIcon(
                       icon: Icons.vibration_rounded,
@@ -318,6 +342,47 @@ class SettingsGeneralPage extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Section label
 // ---------------------------------------------------------------------------
+
+class _AutoConnectTile extends StatefulWidget {
+  const _AutoConnectTile({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  State<_AutoConnectTile> createState() => _AutoConnectTileState();
+}
+
+class _AutoConnectTileState extends State<_AutoConnectTile> {
+  late bool _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _AutoConnectTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return SwitchListTile(
+      key: const ValueKey('auto-connect-on-launch'),
+      secondary: SettingsLeadingIcon(
+        icon: Icons.power_settings_new_rounded,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(l10n.autoConnectOnLaunchTitle),
+      subtitle: Text(l10n.autoConnectOnLaunchDescription),
+      value: _value,
+      onChanged: widget.onChanged == null
+          ? null
+          : (value) {
+              widget.onChanged!(value);
+              setState(() => _value = value);
+            },
+    );
+  }
+}
 
 class _HwidSharingTile extends StatefulWidget {
   const _HwidSharingTile({required this.value, required this.onChanged});

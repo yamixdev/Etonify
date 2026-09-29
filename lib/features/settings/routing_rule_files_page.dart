@@ -20,10 +20,12 @@ class RoutingRuleFilesPage extends StatefulWidget {
     super.key,
     required this.currentStatus,
     required this.onRefresh,
+    this.activity,
   });
 
   final RussiaRouteDataStatus currentStatus;
   final Future<RussiaRouteDataStatus> Function() onRefresh;
+  final RussiaRouteUpdateActivity? activity;
 
   @override
   State<RoutingRuleFilesPage> createState() => _RoutingRuleFilesPageState();
@@ -40,12 +42,15 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
   DateTime? _operationStartedAt;
   Timer? _etaTicker;
   bool _busy = false;
+  bool _refreshingHere = false;
+  RussiaRouteUpdateActivity get _activity =>
+      widget.activity ?? RussiaRouteDataService.instance;
 
   @override
   void initState() {
     super.initState();
     _status = widget.currentStatus;
-    final service = RussiaRouteDataService.instance;
+    final service = _activity;
     _busy = service.isUpdating;
     _progress = service.progress.value;
     service.progress.addListener(_handleProgress);
@@ -62,6 +67,12 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
   @override
   void didUpdateWidget(covariant RoutingRuleFilesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.activity, widget.activity)) {
+      (oldWidget.activity ?? RussiaRouteDataService.instance).progress
+          .removeListener(_handleProgress);
+      _activity.progress.addListener(_handleProgress);
+      _handleProgress();
+    }
     if (!_busy && !identical(oldWidget.currentStatus, widget.currentStatus)) {
       _status = widget.currentStatus;
       unawaited(_loadFiles());
@@ -71,17 +82,24 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
   @override
   void dispose() {
     _etaTicker?.cancel();
-    RussiaRouteDataService.instance.progress.removeListener(_handleProgress);
+    _activity.progress.removeListener(_handleProgress);
     super.dispose();
   }
 
   void _handleProgress() {
     if (!mounted) return;
-    final service = RussiaRouteDataService.instance;
+    final service = _activity;
+    final wasBusy = _busy;
     setState(() {
       _progress = service.progress.value;
-      _busy = service.isUpdating || _busy;
+      _busy = _refreshingHere || service.isUpdating;
+      if (wasBusy && !_busy) {
+        _status = widget.currentStatus;
+      }
     });
+    if (wasBusy && !_busy) {
+      unawaited(_loadFiles());
+    }
   }
 
   Future<void> _loadFiles() async {
@@ -113,7 +131,10 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
         setState(() {});
       }
     });
-    setState(() => _busy = true);
+    setState(() {
+      _refreshingHere = true;
+      _busy = true;
+    });
     try {
       final status = await widget.onRefresh();
       if (!mounted) return;
@@ -133,8 +154,9 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
       _etaTicker = null;
       if (mounted) {
         setState(() {
-          _busy = false;
-          _progress = RussiaRouteDataService.instance.progress.value;
+          _refreshingHere = false;
+          _busy = _activity.isUpdating;
+          _progress = _activity.progress.value;
           _operationStartedAt = null;
         });
       }

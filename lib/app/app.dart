@@ -13,6 +13,7 @@ import 'package:meow_client/app/active_proxy_ip_controller.dart';
 import 'package:meow_client/app/automatic_url_test_policy.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
+import 'package:meow_client/app/app_launch_connection_policy.dart';
 import 'package:meow_client/app/app_root_shell.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/async_write_queue.dart';
@@ -70,7 +71,7 @@ import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/proxies/proxies_presentation_builder.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
-import 'package:meow_client/features/settings/changelog_sheet.dart';
+import 'package:meow_client/features/settings/changelog_page.dart';
 import 'package:meow_client/features/settings/settings_about_page.dart';
 import 'package:meow_client/features/settings/settings_backup_actions.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
@@ -90,6 +91,7 @@ import 'package:meow_client/features/subscriptions/subscriptions_page.dart';
 import 'package:meow_client/features/welcome/welcome_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/platform/quick_settings_tile_installer.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
@@ -154,6 +156,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _backgroundSubscriptionSyncInFlight = false;
   bool _ownsStore = false;
   bool _ready = false;
+  bool _launchAutoConnectAttempted = false;
   bool _onboardingCompleted = false;
   String _acceptedLegalVersion = '';
   int? _acceptedLegalAtMillis;
@@ -3017,6 +3020,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(_maybeShowHwidDefaultNotice());
+        unawaited(_maybeAutoConnectOnLaunch());
       }
     });
 
@@ -3031,6 +3035,26 @@ class _MeowClientState extends ConsumerState<MeowClient>
         inboundSettingsMigrated) {
       _saveStateSoon();
     }
+  }
+
+  Future<void> _maybeAutoConnectOnLaunch() async {
+    if (_launchAutoConnectAttempted || !Platform.isAndroid) return;
+    _launchAutoConnectAttempted = true;
+    if (!_settings.autoConnectOnLaunch) return;
+    await _syncRuntimeState();
+    if (!mounted ||
+        !shouldAutoConnectOnLaunch(
+          enabled: _settings.autoConnectOnLaunch,
+          onboardingCompleted: _onboardingCompleted,
+          legalAccepted: _legalAccepted,
+          hasActiveProfile: _activeProfileId.isNotEmpty,
+          vpnInboundEnabled: _vpnInboundEnabled,
+          runtimeActive: _runtimeActiveOrRequested,
+        )) {
+      return;
+    }
+    AppLogStore.info('runtime', 'auto-connect requested on app launch');
+    await _startConnection(source: 'auto_launch');
   }
 
   void _scheduleDeferredBootstrapStatuses({
@@ -4818,6 +4842,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setHapticEnabled(value));
   }
 
+  void _setAutoConnectOnLaunch(bool value) {
+    _applySettingsChange(() => _settings.setAutoConnectOnLaunch(value));
+  }
+
+  Future<void> _requestAddQuickSettingsTile() async {
+    final result = await QuickSettingsTileInstaller.requestAdd();
+    final currentContext = _navigatorKey.currentContext;
+    if (!mounted || currentContext == null || !currentContext.mounted) return;
+    final l10n = AppLocalizations.of(currentContext);
+    final message = switch (result) {
+      QuickSettingsTileAddResult.manual => l10n.quickSettingsTileManualHint,
+      QuickSettingsTileAddResult.alreadyAdded =>
+        l10n.quickSettingsTileAlreadyAdded,
+      QuickSettingsTileAddResult.unavailable => l10n.quickSettingsTileAddFailed,
+      _ => null,
+    };
+    if (message != null) _showAppSnackBar(message);
+  }
+
   void _setStatusNotificationEnabled(bool value) {
     _applySettingsChange(() => _settings.setStatusNotificationEnabled(value));
     _lastVpnNotificationPresentationSignature = '';
@@ -5314,13 +5357,26 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _showSubscriptionsPage({bool openAddOnStart = false}) async {
     if (_navigatorKey.currentContext == null) return;
 
-    final session = SubscriptionProfilePageSession(
-      activeProfileId: _activeProfileId,
-      selectedProxyTag: _selectedProxyTag,
-      metadataFingerprint: await _subscriptionCoordinator.metadataFingerprint(),
-      activeRuntimeFingerprint: await _subscriptionCoordinator
-          .runtimeFingerprintFromStore(_activeProfileId),
-    );
+    final activeProfileId = _activeProfileId;
+    final selectedProxyTag = _selectedProxyTag;
+    // The metadata loader snapshots Hive before its first await. Let it run
+    // alongside the sheet animation instead of blocking the sheet entrance.
+    final beforeMetadataFingerprint = _subscriptionCoordinator
+        .metadataFingerprint();
+    final activeAtOpen = _activeSubscription;
+    final activeMetadata = SubscriptionStore.getMetadata(activeProfileId);
+    final useHydratedRuntime =
+        activeAtOpen?.id == activeProfileId &&
+        activeMetadata?.payloadRevision == activeAtOpen?.payloadRevision &&
+        (activeAtOpen!.outbounds.isNotEmpty ||
+            (activeMetadata?.cachedVisibleProxyCount ?? 0) <= 0);
+    // A stale/unhydrated active profile is uncommon; preserve the store-based
+    // baseline in that case, before the sheet can edit the profile.
+    final beforeStoreRuntimeFingerprint = useHydratedRuntime
+        ? null
+        : await _subscriptionCoordinator.runtimeFingerprintFromStore(
+            activeProfileId,
+          );
     final context = _navigatorKey.currentContext;
     if (!mounted || context == null || !context.mounted) return;
     final subscriptionPageResult = await showModalBottomSheet<Object?>(
@@ -5341,17 +5397,41 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ? subscriptionPageResult
         : null;
 
-    if (mounted) {
-      setState(() {});
+    if (!mounted) return;
+    final metadataBefore = await beforeMetadataFingerprint;
+    final metadataAfter = await _subscriptionCoordinator.metadataFingerprint();
+    // Every sheet operation that changes a profile writes metadata (including
+    // the payload revision for config changes). Ping/location-only payload
+    // writes do not require a runtime reload. Avoid decoding thousands of
+    // outbounds just because an unchanged sheet was dismissed.
+    if (selectedProfileId == null && metadataBefore == metadataAfter) {
+      AppLogStore.info(
+        'subscription',
+        'subscriptions page closed without changes; runtime reload skipped',
+      );
+      return;
     }
 
-    final afterActiveRuntimeFingerprint = await _subscriptionCoordinator
-        .runtimeFingerprintFromStore(_activeProfileId);
+    final beforeActiveRuntimeFingerprint = selectedProfileId != null
+        ? null
+        : useHydratedRuntime
+        ? _subscriptionCoordinator.runtimeFingerprint(activeAtOpen)
+        : beforeStoreRuntimeFingerprint;
+    final afterActiveRuntimeFingerprint = selectedProfileId == null
+        ? await _subscriptionCoordinator.runtimeFingerprintFromStore(
+            activeProfileId,
+          )
+        : null;
+    final session = SubscriptionProfilePageSession(
+      activeProfileId: activeProfileId,
+      selectedProxyTag: selectedProxyTag,
+      metadataFingerprint: metadataBefore,
+      activeRuntimeFingerprint: beforeActiveRuntimeFingerprint,
+    );
     final decision = _subscriptionProfileFlow.decide(
       session: session,
       selectedProfileId: selectedProfileId,
-      afterMetadataFingerprint: await _subscriptionCoordinator
-          .metadataFingerprint(),
+      afterMetadataFingerprint: metadataAfter,
       afterActiveRuntimeFingerprint: afterActiveRuntimeFingerprint,
       // runtimeFingerprintFromStore only answers null for an id that is no
       // longer in the store, so a missing fingerprint for a profile that was
@@ -5535,6 +5615,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
           currentSendHwidToProviders: _settings.sendHwidToProviders,
+          currentAutoConnectOnLaunch: _settings.autoConnectOnLaunch,
+          onAutoConnectOnLaunchChanged: _setAutoConnectOnLaunch,
+          showQuickSettingsTileAction: Platform.isAndroid,
+          onAddQuickSettingsTile: () =>
+              unawaited(_requestAddQuickSettingsTile()),
           onSendHwidToProvidersChanged: (value) {
             _applySettingsChange(() => _settings.setSendHwidToProviders(value));
             unawaited(() async {
@@ -5666,18 +5751,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  Future<void> _showChangelogSheet() async {
+  Future<void> _showChangelogPage() async {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    await showModalBottomSheet<void>(
-      context: navigator.context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ChangelogSheet(
-        currentVersion: _clientVersionLabel,
-        currentBuildNumber: _clientVersionCode,
-        updateChannel: _updateChannel,
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (context) => ChangelogPage(
+          currentVersion: _clientVersionLabel,
+          currentBuildNumber: _clientVersionCode,
+          updateChannel: _updateChannel,
+        ),
       ),
     );
   }
@@ -8485,7 +8568,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         openSubscriptions: _showSubscriptionsPage,
         addSubscription: () => _showSubscriptionsPage(openAddOnStart: true),
         openSettings: _showSettingsPage,
-        openChangelog: () => unawaited(_showChangelogSheet()),
+        openChangelog: () => unawaited(_showChangelogPage()),
         openTrafficDashboard: () => unawaited(_showTrafficDashboard()),
         refreshActiveSubscription: canRefreshActiveSubscription
             ? _refreshActiveSubscription

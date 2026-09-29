@@ -14,11 +14,19 @@ class ReleaseNotesCard extends StatefulWidget {
     required this.body,
     this.margin = EdgeInsets.zero,
     this.onOpenLink,
+    this.showHeading = true,
+    this.useCard = true,
+    this.limitBody = true,
+    this.allowImages = false,
   });
 
   final String body;
   final EdgeInsetsGeometry margin;
   final ReleaseNotesLinkHandler? onOpenLink;
+  final bool showHeading;
+  final bool useCard;
+  final bool limitBody;
+  final bool allowImages;
 
   @override
   State<ReleaseNotesCard> createState() => _ReleaseNotesCardState();
@@ -34,14 +42,19 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
   @override
   void initState() {
     super.initState();
-    _releaseNotes = _limitedReleaseNotes(widget.body);
+    _releaseNotes = widget.limitBody
+        ? _limitedReleaseNotes(widget.body)
+        : widget.body.trim();
   }
 
   @override
   void didUpdateWidget(ReleaseNotesCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.body != oldWidget.body) {
-      _releaseNotes = _limitedReleaseNotes(widget.body);
+    if (widget.body != oldWidget.body ||
+        widget.limitBody != oldWidget.limitBody) {
+      _releaseNotes = widget.limitBody
+          ? _limitedReleaseNotes(widget.body)
+          : widget.body.trim();
     }
   }
 
@@ -123,36 +136,39 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
-    return Card(
-      margin: widget.margin,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    final content = Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showHeading) ...[
             Text(l10n.updatesReleaseNotesTitle, style: _titleStyle),
             const Gap(12),
-            if (_releaseNotes.isEmpty)
-              Text(l10n.updatesNoReleaseNotes, style: _bodyStyle)
-            else
-              RepaintBoundary(
-                child: MarkdownBody(
-                  data: _releaseNotes,
-                  // Long-press selection intercepts drag gestures in the
-                  // updater and changelog sheet, making the surrounding list
-                  // feel stuck. Links remain tappable through onTapLink.
-                  selectable: false,
-                  fitContent: true,
-                  shrinkWrap: true,
-                  onTapLink: (_, href, _) => _openLink(href),
-                  imageBuilder: _blockedImageBuilder,
-                  styleSheet: _markdownStyleSheet,
-                ),
-              ),
           ],
-        ),
+          if (_releaseNotes.isEmpty)
+            Text(l10n.updatesNoReleaseNotes, style: _bodyStyle)
+          else
+            RepaintBoundary(
+              child: MarkdownBody(
+                data: _releaseNotes,
+                // Long-press selection intercepts drag gestures in the
+                // updater and changelog sheet, making the surrounding list
+                // feel stuck. Links remain tappable through onTapLink.
+                selectable: false,
+                fitContent: true,
+                shrinkWrap: true,
+                onTapLink: (_, href, _) => _openLink(href),
+                imageBuilder: widget.allowImages
+                    ? _releaseImageBuilder
+                    : _blockedImageBuilder,
+                styleSheet: _markdownStyleSheet,
+              ),
+            ),
+        ],
       ),
     );
+    if (!widget.useCard) return content;
+    return Card(margin: widget.margin, child: content);
   }
 
   void _openLink(String? href) {
@@ -176,6 +192,32 @@ Widget _blockedImageBuilder(Uri uri, String? title, String? alt) {
   return Text(
     label == null || label.isEmpty ? '[image]' : '[$label]',
     overflow: TextOverflow.ellipsis,
+  );
+}
+
+Widget _releaseImageBuilder(Uri uri, String? title, String? alt) {
+  if (uri.scheme != 'https' || uri.host.isEmpty) {
+    return _blockedImageBuilder(uri, title, alt);
+  }
+  final fallback = _blockedImageBuilder(uri, title, alt);
+  return ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 360),
+      child: Image.network(
+        uri.toString(),
+        width: double.infinity,
+        fit: BoxFit.contain,
+        cacheWidth: 960,
+        loadingBuilder: (context, child, progress) => progress == null
+            ? child
+            : const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+        errorBuilder: (context, error, stackTrace) => fallback,
+      ),
+    ),
   );
 }
 

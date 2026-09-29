@@ -195,6 +195,7 @@ class AppSettingsState {
     required this.urlTestConcurrency,
     required this.urlTestUnavailableCheckIntervalSeconds,
     this.autoCheckServers = false,
+    this.autoConnectOnLaunch = false,
     this.autoCheckNoticeAcknowledged = false,
     required this.locationLookupLimit,
     required this.locationLookupTimeoutSeconds,
@@ -266,6 +267,7 @@ class AppSettingsState {
   final int urlTestConcurrency;
   final int urlTestUnavailableCheckIntervalSeconds;
   final bool autoCheckServers;
+  final bool autoConnectOnLaunch;
   final bool autoCheckNoticeAcknowledged;
   final int locationLookupLimit;
   final int locationLookupTimeoutSeconds;
@@ -337,6 +339,7 @@ class AppSettingsState {
     int? urlTestConcurrency,
     int? urlTestUnavailableCheckIntervalSeconds,
     bool? autoCheckServers,
+    bool? autoConnectOnLaunch,
     bool? autoCheckNoticeAcknowledged,
     int? locationLookupLimit,
     int? locationLookupTimeoutSeconds,
@@ -429,6 +432,7 @@ class AppSettingsState {
           urlTestUnavailableCheckIntervalSeconds ??
           this.urlTestUnavailableCheckIntervalSeconds,
       autoCheckServers: autoCheckServers ?? this.autoCheckServers,
+      autoConnectOnLaunch: autoConnectOnLaunch ?? this.autoConnectOnLaunch,
       autoCheckNoticeAcknowledged:
           autoCheckNoticeAcknowledged ?? this.autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit ?? this.locationLookupLimit,
@@ -557,6 +561,7 @@ abstract class AppSettingsStore {
   static const _urlTestConcurrencyDefaultMigratedKey =
       'urltest_concurrency_default_migrated';
   static const _autoCheckServersKey = 'auto_check_servers';
+  static const _autoConnectOnLaunchKey = 'auto_connect_on_launch';
   // Local acknowledgement: intentionally excluded from safeExportKeys.
   static const _autoCheckNoticeAcknowledgedKey =
       'auto_check_notice_acknowledged';
@@ -625,6 +630,7 @@ abstract class AppSettingsStore {
     _urlTestConcurrencyKey,
     _urlTestUnavailableCheckIntervalSecondsKey,
     _autoCheckServersKey,
+    _autoConnectOnLaunchKey,
     _locationLookupLimitKey,
     _locationLookupTimeoutSecondsKey,
     _locationLookupConcurrencyKey,
@@ -889,6 +895,10 @@ abstract class AppSettingsStore {
               3600,
             ),
       autoCheckServers: boolValue(_autoCheckServersKey, defaultValue: false),
+      autoConnectOnLaunch: boolValue(
+        _autoConnectOnLaunchKey,
+        defaultValue: false,
+      ),
       autoCheckNoticeAcknowledged: boolValue(
         _autoCheckNoticeAcknowledgedKey,
         defaultValue: false,
@@ -1025,6 +1035,7 @@ abstract class AppSettingsStore {
           .urlTestUnavailableCheckIntervalSeconds
           .toString(),
       _autoCheckServersKey: state.autoCheckServers ? '1' : '0',
+      _autoConnectOnLaunchKey: state.autoConnectOnLaunch ? '1' : '0',
       _autoCheckNoticeAcknowledgedKey: state.autoCheckNoticeAcknowledged
           ? '1'
           : '0',

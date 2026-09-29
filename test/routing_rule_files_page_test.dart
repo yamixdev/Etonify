@@ -6,6 +6,53 @@ import 'package:meow_client/features/settings/routing_rule_files_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  testWidgets('route page unlocks after an update started on another page', (
+    tester,
+  ) async {
+    final activity = _FakeRouteActivity();
+    addTearDown(activity.progress.dispose);
+    const status = RussiaRouteDataStatus(
+      available: true,
+      sourceName: RussiaRouteDataService.sourceName,
+      versionTag: '202609280600',
+    );
+    Widget build(RussiaRouteDataStatus currentStatus) => MaterialApp(
+      locale: const Locale('ru'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: RoutingRuleFilesPage(
+        currentStatus: currentStatus,
+        onRefresh: () async => status,
+        activity: activity,
+      ),
+    );
+    await tester.pumpWidget(build(status));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pumpWidget(
+      build(
+        const RussiaRouteDataStatus(
+          available: true,
+          sourceName: RussiaRouteDataService.sourceName,
+          versionTag: '202609290600',
+        ),
+      ),
+    );
+
+    activity.isUpdating = false;
+    activity.progress.value = null;
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('29.09.2026 06:00'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('route files use compact metadata and readable version', (
     tester,
   ) async {
@@ -58,4 +105,13 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+}
+
+class _FakeRouteActivity implements RussiaRouteUpdateActivity {
+  @override
+  bool isUpdating = true;
+  @override
+  final ValueNotifier<RussiaRouteUpdateProgress?> progress = ValueNotifier(
+    const RussiaRouteUpdateProgress(stage: RussiaRouteUpdateStage.activating),
+  );
 }

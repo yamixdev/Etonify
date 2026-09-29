@@ -269,7 +269,12 @@ class RussiaRouteUpdateProgress {
   }
 }
 
-class RussiaRouteDataService {
+abstract interface class RussiaRouteUpdateActivity {
+  bool get isUpdating;
+  ValueListenable<RussiaRouteUpdateProgress?> get progress;
+}
+
+class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   RussiaRouteDataService._();
 
   static final RussiaRouteDataService instance = RussiaRouteDataService._();
@@ -337,10 +342,12 @@ class RussiaRouteDataService {
   ];
 
   Future<RussiaRouteDataStatus>? _updateInFlight;
+  @override
   final ValueNotifier<RussiaRouteUpdateProgress?> progress = ValueNotifier(
     null,
   );
 
+  @override
   bool get isUpdating => _updateInFlight != null;
 
   void _emitProgress(

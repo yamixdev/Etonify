@@ -6,6 +6,61 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/release_notes_card.dart';
 
 void main() {
+  testWidgets('full-page notes omit duplicate heading and retain long notes', (
+    tester,
+  ) async {
+    final longBody = List.generate(
+      80,
+      (index) => 'Release item $index',
+    ).join('\n\n');
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ReleaseNotesCard(
+              body: longBody,
+              showHeading: false,
+              useCard: false,
+              limitBody: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text("What's new"), findsNothing);
+    expect(find.textContaining('Release item 79'), findsOneWidget);
+    expect(find.byType(Card), findsNothing);
+  });
+
+  testWidgets('release notes load HTTPS images and reject insecure images', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ReleaseNotesCard(
+              body:
+                  '![secure](https://example.com/image.png)\n\n'
+                  '![insecure](http://example.com/image.png)',
+              allowImages: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    final images = tester.widgetList<Image>(find.byType(Image)).toList();
+    expect(images, hasLength(1));
+    expect(
+      ((images.single.image as ResizeImage).imageProvider as NetworkImage).url,
+      'https://example.com/image.png',
+    );
+    expect(find.text('[insecure]'), findsOneWidget);
+  });
   testWidgets('renders common GitHub markdown without exposing its markers', (
     tester,
   ) async {

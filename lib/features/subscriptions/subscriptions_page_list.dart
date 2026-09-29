@@ -189,6 +189,7 @@ class _SubscriptionCard extends StatelessWidget {
   const _SubscriptionCard({
     required this.subscription,
     required this.serverCount,
+    required this.countPending,
     required this.rawLooksNonEmpty,
     required this.active,
     required this.multiSelected,
@@ -205,6 +206,7 @@ class _SubscriptionCard extends StatelessWidget {
 
   final Subscription subscription;
   final int serverCount;
+  final bool countPending;
   final bool rawLooksNonEmpty;
   final bool active;
   final bool multiSelected;
@@ -254,9 +256,10 @@ class _SubscriptionCard extends StatelessWidget {
     final lastUpdatedText = subscription.lastUpdated > 0
         ? _subscriptionLastUpdatedText(context, subscription.lastUpdated)
         : null;
-    final reparseRecommended = serverCount == 0 && rawLooksNonEmpty;
+    final reparseRecommended =
+        !countPending && serverCount == 0 && rawLooksNonEmpty;
     final summaryParts = <String>[
-      l10n.subscriptionServersCount(serverCount),
+      countPending ? l10n.loading : l10n.subscriptionServersCount(serverCount),
       ...?(usageText == null ? null : <String>[usageText]),
       if (reparseRecommended) l10n.subscriptionReparseRecommended,
     ];

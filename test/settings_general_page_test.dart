@@ -14,6 +14,9 @@ Widget _generalSettingsApp({
   ValueChanged<int>? onTrafficRefreshChanged,
   bool currentSendHwidToProviders = true,
   ValueChanged<bool>? onHwidChanged,
+  bool autoConnectOnLaunch = false,
+  ValueChanged<bool>? onAutoConnectChanged,
+  VoidCallback? onAddQuickSettingsTile,
 }) {
   return MaterialApp(
     locale: locale,
@@ -30,6 +33,10 @@ Widget _generalSettingsApp({
       currentHideServerIp: false,
       currentSendHwidToProviders: currentSendHwidToProviders,
       onSendHwidToProvidersChanged: onHwidChanged,
+      currentAutoConnectOnLaunch: autoConnectOnLaunch,
+      onAutoConnectOnLaunchChanged: onAutoConnectChanged,
+      showQuickSettingsTileAction: onAddQuickSettingsTile != null,
+      onAddQuickSettingsTile: onAddQuickSettingsTile,
       onLocaleChanged: (_) {},
       onThemePreferenceChanged: (_) {},
       onAccentColorChanged: (_) {},
@@ -53,6 +60,30 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('general settings exposes launch connect and quick tile action', (
+    tester,
+  ) async {
+    final changes = <bool>[];
+    var tileRequests = 0;
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        onAutoConnectChanged: changes.add,
+        onAddQuickSettingsTile: () => tileRequests++,
+      ),
+    );
+    final autoConnect = find.byKey(const ValueKey('auto-connect-on-launch'));
+    await tester.ensureVisible(autoConnect);
+    await tester.tap(autoConnect);
+    await tester.pump();
+    expect(changes, [true]);
+    expect(tester.widget<SwitchListTile>(autoConnect).value, isTrue);
+
+    final tileAction = find.byKey(const ValueKey('add-quick-settings-tile'));
+    await tester.ensureVisible(tileAction);
+    await tester.tap(tileAction);
+    expect(tileRequests, 1);
+  });
   testWidgets(
     'HWID switch defaults to true, updates immediately and remains readable in Russian',
     (tester) async {

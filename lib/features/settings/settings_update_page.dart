@@ -10,10 +10,10 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
+import 'package:meow_client/features/settings/changelog_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
-import 'package:meow_client/widgets/release_notes_card.dart';
 
 class SettingsUpdatePage extends StatefulWidget {
   const SettingsUpdatePage({
@@ -634,7 +634,7 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           settingsScreenPadding.left,
-          progressiveHeaderTopPadding(context, 24),
+          progressiveHeaderTopPadding(context, 8),
           settingsScreenPadding.right,
           appBottomSafePadding(context, 112),
         ),
@@ -644,7 +644,7 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
             title: _titleFor(context, result),
             subtitle: _subtitleFor(context, result),
           ),
-          const Gap(12),
+          const Gap(8),
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(
@@ -659,7 +659,7 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
               onTap: _chooseInstallMode,
             ),
           ),
-          const Gap(18),
+          const Gap(10),
           _UpdateInfoCard(
             currentVersion: _currentVersion,
             info: info,
@@ -688,8 +688,30 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
             _DownloadProgressCard(progress: _downloadProgress),
           ],
           if (info != null) ...[
-            const Gap(12),
-            ReleaseNotesCard(body: info.body),
+            const Gap(10),
+            Card(
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                key: const ValueKey('open-release-notes'),
+                leading: SettingsLeadingIcon(
+                  icon: Icons.article_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                title: Text(l10n.updatesReleaseNotesTitle),
+                subtitle: Text(info.displayVersion),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => ChangelogPage(
+                      currentVersion: _currentVersion,
+                      currentBuildNumber: _currentVersionCode,
+                      updateChannel: _updateChannel,
+                      initialInfo: info,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
           if (result?.status == AppUpdateStatus.error) ...[
             const Gap(12),
@@ -1007,48 +1029,39 @@ class _UpdateHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final compact = MediaQuery.sizeOf(context).height < 720;
     return Padding(
-      padding: EdgeInsets.fromLTRB(6, compact ? 18 : 44, 6, compact ? 18 : 34),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Etonify',
-            style: theme.textTheme.displaySmall?.copyWith(
-              color: cs.onSurface,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          ),
-          Gap(compact ? 10 : 16),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
             child: checking
-                ? SizedBox(
-                    key: const ValueKey('checking'),
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 4,
-                      color: cs.primary,
-                    ),
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(strokeWidth: 3),
                   )
-                : Text(
-                    key: ValueKey(title),
-                    title,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                : Icon(Icons.system_update_rounded, color: cs.primary),
           ),
-          Gap(compact ? 8 : 14),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.35,
+          const Gap(12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Gap(4),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1080,7 +1093,7 @@ class _UpdateInfoCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
