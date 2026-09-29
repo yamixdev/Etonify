@@ -1215,8 +1215,17 @@ class MeowBoxService(
                     }
                 }
             }
-            val includePackages = normalizePackageList(splitIncludePackages)
-            val excludePackages = normalizePackageList(splitExcludePackages)
+            val includePackages = normalizeSplitTunnelPackageList(
+                splitIncludePackages,
+                service.packageName,
+                allowed = true,
+            )
+            val excludePackages = normalizeSplitTunnelPackageList(
+                splitExcludePackages,
+                service.packageName,
+                allowed = false,
+            )
+            requireRetainedIncludedPackages(splitIncludePackages, includePackages)
             requireExclusiveSplitTunnelPackages(includePackages, excludePackages)
             if (includePackages.isNotEmpty()) {
                 overrideOptions.includePackage = ListStringIterator(includePackages)
@@ -1260,28 +1269,6 @@ class MeowBoxService(
         }
         return result
     }
-
-    private fun normalizePackageList(values: List<String>): List<String> {
-        val seen = linkedSetOf<String>()
-        for (value in values) {
-            val packageName = value.trim()
-            if (
-                packageName.isNotEmpty() &&
-                packageName != service.packageName &&
-                isAndroidPackageName(packageName)
-            ) {
-                seen += packageName
-            }
-            if (seen.size >= MAX_SPLIT_TUNNEL_PACKAGE_COUNT) {
-                break
-            }
-        }
-        return seen.toList()
-    }
-
-    private fun isAndroidPackageName(value: String): Boolean =
-        value.length <= 255 &&
-            Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$").matches(value)
 
     private fun registerRuntimeReceiver() {
         if (receiverRegistered) {

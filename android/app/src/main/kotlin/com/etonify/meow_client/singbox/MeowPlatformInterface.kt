@@ -342,6 +342,7 @@ class MeowVpnPlatformInterface(
                 MeowDiagnostics.log("MeowVpnPlatform", "openTun read DNS addresses failed", error)
                 throw error
             }
+            requireTunDnsServers(dnsAddresses)
             for (dnsAddress in dnsAddresses) {
                 builder.addDnsServer(dnsAddress)
                 MeowDiagnostics.log("MeowVpnPlatform", "openTun dns=$dnsAddress")
@@ -409,7 +410,11 @@ class MeowVpnPlatformInterface(
 
             val appliedIncludedPackages = addPackages(builder, includedPackages.iterator(), true)
             val appliedExcludedPackages = addPackages(builder, excludedPackages.iterator(), false)
-            requireAppliedIncludedPackages(includedPackages, appliedIncludedPackages)
+            requireAppliedIncludedPackages(
+                includedPackages,
+                appliedIncludedPackages,
+                service.packageName,
+            )
             lastTunPackageSummary = buildString {
                 append("autoRoute=true requestedAllowed=")
                 append(includedPackages.size)

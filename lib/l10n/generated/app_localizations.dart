@@ -2858,7 +2858,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunImplementationNativeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'sing-tun\'s own network stack. Runs faster with lower memory and battery usage. Switch to the system stack if device issues occur.'**
+  /// **'Built-in network stack for VPN traffic.'**
   String get tunImplementationNativeSubtitle;
 
   /// No description provided for @tunImplementationSystem.

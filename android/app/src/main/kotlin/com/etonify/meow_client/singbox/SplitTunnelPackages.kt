@@ -38,13 +38,25 @@ internal fun requireExclusiveSplitTunnelPackages(
     }
 }
 
+internal fun requireRetainedIncludedPackages(
+    requested: List<String>,
+    normalized: List<String>,
+) {
+    if (requested.isNotEmpty() && normalized.isEmpty()) {
+        throw SplitTunnelConfigurationException(
+            "Through VPN split routing has no valid selected application",
+        )
+    }
+}
+
 internal fun requireAppliedIncludedPackages(
     requested: List<String>,
     applied: List<String>,
+    ownerPackage: String,
 ) {
-    if (requested.isNotEmpty() && applied.isEmpty()) {
+    if (requested.isNotEmpty() && applied.none { it != ownerPackage }) {
         throw SplitTunnelConfigurationException(
-            "include_package did not contain an installed application",
+            "Through VPN split routing has no installed selected application",
         )
     }
 }
@@ -65,6 +77,28 @@ internal fun shouldApplyTunPackage(
     ownerPackage: String,
     allowed: Boolean,
 ): Boolean = allowed || packageName != ownerPackage
+
+internal fun normalizeSplitTunnelPackageList(
+    values: List<String>,
+    ownerPackage: String,
+    allowed: Boolean,
+): List<String> {
+    val seen = linkedSetOf<String>()
+    for (value in values) {
+        val packageName = value.trim()
+        if (
+            packageName.length <= 255 &&
+            Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$").matches(packageName) &&
+            (allowed || packageName != ownerPackage)
+        ) {
+            seen += packageName
+        }
+        if (seen.size >= MAX_SPLIT_TUNNEL_PACKAGE_COUNT) {
+            break
+        }
+    }
+    return seen.toList()
+}
 
 private fun readBoundedPackageIterator(
     fieldName: String,

@@ -70,6 +70,18 @@ class SplitTunnelPackagesTest {
             requireAppliedIncludedPackages(
                 requested = listOf("org.telegram.messenger"),
                 applied = emptyList(),
+                ownerPackage = "com.etonify.meow_client",
+            )
+        }
+    }
+
+    @Test
+    fun `rejects include mode when only the VPN owner was applied`() {
+        assertThrows(SplitTunnelConfigurationException::class.java) {
+            requireAppliedIncludedPackages(
+                requested = listOf("org.telegram.messenger", "com.etonify.meow_client"),
+                applied = listOf("com.etonify.meow_client"),
+                ownerPackage = "com.etonify.meow_client",
             )
         }
     }
@@ -77,9 +89,34 @@ class SplitTunnelPackagesTest {
     @Test
     fun `accepts include mode when Android applied a selected package`() {
         requireAppliedIncludedPackages(
-            requested = listOf("org.telegram.messenger", "com.example.removed"),
-            applied = listOf("org.telegram.messenger"),
+            requested = listOf("org.telegram.messenger", "com.example.removed", "com.etonify.meow_client"),
+            applied = listOf("org.telegram.messenger", "com.etonify.meow_client"),
+            ownerPackage = "com.etonify.meow_client",
         )
+    }
+
+    @Test
+    fun `normalization keeps the VPN owner only in the include list`() {
+        val packages = listOf("com.etonify.meow_client", "com.example.app", "com.example.app")
+
+        assertEquals(
+            listOf("com.etonify.meow_client", "com.example.app"),
+            normalizeSplitTunnelPackageList(packages, "com.etonify.meow_client", allowed = true),
+        )
+        assertEquals(
+            listOf("com.example.app"),
+            normalizeSplitTunnelPackageList(packages, "com.etonify.meow_client", allowed = false),
+        )
+    }
+
+    @Test
+    fun `rejects include mode if normalization discarded every package`() {
+        assertThrows(SplitTunnelConfigurationException::class.java) {
+            requireRetainedIncludedPackages(
+                requested = listOf("not a package"),
+                normalized = emptyList<String>(),
+            )
+        }
     }
 
     @Test

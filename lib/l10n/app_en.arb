@@ -630,7 +630,7 @@
   "tunImplementationTitle": "TUN network stack",
   "tunImplementationSubtitle": "Controls how the client handles TCP and UDP traffic inside the VPN",
   "tunImplementationNative": "sing-tun (recommended)",
-  "tunImplementationNativeSubtitle": "sing-tun's own network stack. Runs faster with lower memory and battery usage. Switch to the system stack if device issues occur.",
+  "tunImplementationNativeSubtitle": "Built-in network stack for VPN traffic.",
   "tunImplementationSystem": "System (Android)",
   "tunImplementationSystemSubtitle": "Uses the Android system network stack for TCP and UDP. Compatibility depends on the device and its firmware.",
   "vpnEnableIpv6Title": "IPv6 support",

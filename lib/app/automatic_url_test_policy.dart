@@ -48,14 +48,19 @@ class DeferredAutomaticUrlTest {
   void clear() => _pending = false;
 }
 
-/// Keeps the next periodic check anchored across UI lifecycle transitions.
+/// Keeps the next periodic check anchored while it is pending. A check missed
+/// while the UI was backgrounded starts a fresh interval on resume instead of
+/// immediately repeating a long full sweep.
 class PeriodicUrlTestDeadline {
   DateTime? _dueAt;
 
   Duration remaining({required DateTime now, required Duration interval}) {
-    final dueAt = _dueAt ??= now.add(interval);
-    final remaining = dueAt.difference(now);
-    return remaining.isNegative ? Duration.zero : remaining;
+    final dueAt = _dueAt;
+    if (dueAt == null || !now.isBefore(dueAt)) {
+      _dueAt = now.add(interval);
+      return interval;
+    }
+    return dueAt.difference(now);
   }
 
   void reset({required DateTime now, required Duration interval}) {

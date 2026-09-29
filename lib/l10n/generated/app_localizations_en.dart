@@ -1565,7 +1565,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tunImplementationNativeSubtitle =>
-      'sing-tun\'s own network stack. Runs faster with lower memory and battery usage. Switch to the system stack if device issues occur.';
+      'Built-in network stack for VPN traffic.';
 
   @override
   String get tunImplementationSystem => 'System (Android)';

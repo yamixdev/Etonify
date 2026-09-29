@@ -630,7 +630,7 @@
   "tunImplementationTitle": "Сетевой стек TUN",
   "tunImplementationSubtitle": "Определяет, как клиент обрабатывает TCP- и UDP-трафик внутри VPN",
   "tunImplementationNative": "sing-tun (рекомендуется)",
-  "tunImplementationNativeSubtitle": "Собственный стек sing-tun. Работает быстрее, экономнее расходует память и заряд аккумулятора. Если на устройстве возникнут проблемы, переключитесь на системный стек.",
+  "tunImplementationNativeSubtitle": "Встроенный сетевой стек для обработки VPN-трафика.",
   "tunImplementationSystem": "Системный (System)",
   "tunImplementationSystemSubtitle": "TCP и UDP обрабатывает сетевой стек Android. Совместимость зависит от устройства и прошивки.",
   "vpnEnableIpv6Title": "Поддержка IPv6",

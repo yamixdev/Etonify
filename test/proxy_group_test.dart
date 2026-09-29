@@ -2676,6 +2676,27 @@ void main() {
     );
   });
 
+  test('empty proxy-selected mode cannot become an unrestricted TUN', () {
+    const subscription = Subscription(
+      id: 'empty-split',
+      name: 'Empty split',
+      url: 'https://example.com/sub',
+      outbounds: [],
+    );
+    final config = _defaultBuilder(
+      subscription,
+      vpnInboundEnabled: true,
+      splitRoutingMode: SplitRoutingMode.proxySelected,
+      splitRoutingPackages: const [],
+    ).build();
+
+    final tunInbound = (config['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
+    expect(tunInbound['include_package'], ['com.etonify.meow_client']);
+    expect(tunInbound.containsKey('exclude_package'), isFalse);
+  });
+
   test('split, local, adblock and Russia route rules keep stable priority', () {
     const subscription = Subscription(
       id: 'route-priority',

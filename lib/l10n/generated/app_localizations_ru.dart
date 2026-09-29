@@ -1563,7 +1563,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tunImplementationNativeSubtitle =>
-      'Собственный стек sing-tun. Работает быстрее, экономнее расходует память и заряд аккумулятора. Если на устройстве возникнут проблемы, переключитесь на системный стек.';
+      'Встроенный сетевой стек для обработки VPN-трафика.';
 
   @override
   String get tunImplementationSystem => 'Системный (System)';

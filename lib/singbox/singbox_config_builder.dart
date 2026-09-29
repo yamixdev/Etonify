@@ -237,7 +237,7 @@ class SingboxConfigBuilder {
         vpnInboundEnabled &&
         splitRoutingMode == SplitRoutingMode.disabled;
     final tunIncludePackages =
-        splitRoutingMode == SplitRoutingMode.proxySelected && tunSplitActive
+        splitRoutingMode == SplitRoutingMode.proxySelected && vpnInboundEnabled
         ? <String>{
             ...normalizedSplitRoutingPackages,
             _applicationPackageName,

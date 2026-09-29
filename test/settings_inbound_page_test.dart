@@ -85,7 +85,10 @@ void main() {
     expect(changedIpv6, isTrue);
 
     expect(find.textContaining('sing-tun (рекомендуется)'), findsOneWidget);
-    expect(find.textContaining('Собственный стек sing-tun'), findsOneWidget);
+    expect(
+      find.textContaining('Встроенный сетевой стек для обработки VPN-трафика.'),
+      findsOneWidget,
+    );
 
     final nativeDescription = find.textContaining('sing-tun (рекомендуется)');
     final nativeTile = find.ancestor(

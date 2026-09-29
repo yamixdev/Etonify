@@ -147,4 +147,21 @@ void main() {
       const Duration(minutes: 29),
     );
   });
+
+  test('missed periodic check waits a full interval after resume', () {
+    final deadline = PeriodicUrlTestDeadline();
+    final started = DateTime.utc(2026, 9, 29, 10);
+    const interval = Duration(minutes: 30);
+    expect(deadline.remaining(now: started, interval: interval), interval);
+
+    final resumed = started.add(const Duration(minutes: 42));
+    expect(deadline.remaining(now: resumed, interval: interval), interval);
+    expect(
+      deadline.remaining(
+        now: resumed.add(const Duration(minutes: 8)),
+        interval: interval,
+      ),
+      const Duration(minutes: 22),
+    );
+  });
 }
