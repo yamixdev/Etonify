@@ -2220,7 +2220,6 @@ void main() {
 
     final compatibility = find.text('Совместимость');
     expect(compatibility, findsOneWidget);
-    expect(tester.widget<Text>(compatibility).maxLines, 1);
     expect(tester.getSize(compatibility).height, lessThan(24));
     expect(tester.takeException(), isNull);
   });

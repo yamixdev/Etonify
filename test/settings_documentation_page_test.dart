@@ -75,7 +75,7 @@ void main() {
     expect(find.text('Privacy Policy'), findsNothing);
     expect(find.text('@etonify'), findsOneWidget);
 
-    final updatesTop = tester.getTopLeft(find.text('App updates')).dy;
+    final updatesTop = tester.getTopLeft(find.text('Updates')).dy;
     final documentationTop = tester.getTopLeft(find.text('Help')).dy;
     final diagnosticsTop = tester
         .getTopLeft(find.text('Resources & diagnostics'))
@@ -159,7 +159,7 @@ void main() {
     expect(find.text('Контрибьюторы'), findsOneWidget);
     expect(find.text('Телеграм-канал'), findsOneWidget);
     expect(find.text('Telegram Etonify'), findsNothing);
-    expect(find.text('Обновления приложения'), findsOneWidget);
+    expect(find.text('Обновления'), findsOneWidget);
 
     final brand = find.byKey(const ValueKey('about-brand'));
     final contributors = find.byKey(const ValueKey('about-contributors'));

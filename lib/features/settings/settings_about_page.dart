@@ -996,7 +996,7 @@ class _AboutInfoRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          flex: 6,
+          flex: 7,
           child: Text(
             label,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -1006,7 +1006,7 @@ class _AboutInfoRow extends StatelessWidget {
         ),
         const Gap(12),
         Flexible(
-          flex: 4,
+          flex: 3,
           child: Align(
             alignment: Alignment.centerRight,
             child: FittedBox(
