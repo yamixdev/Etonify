@@ -328,7 +328,22 @@ object MeowDefaultNetworkMonitor {
                 TAG,
                 "listener_attached force_default_interface current=${describeCurrentState()}",
             )
-            notifyListener(immediate = true, force = true)
+            // libbox reads DefaultInterface() as soon as Start returns. Deliver
+            // the initial physical interface before returning to Go, otherwise
+            // it can mistake a still-pending Android callback for network loss.
+            val physicalNetworkAvailable = resolveBestNetwork() != null
+            val initialInterfaceApplied = physicalNetworkAvailable &&
+                reassertDefaultInterfaceAndWait("listener_attached")
+            MeowDiagnostics.log(
+                TAG,
+                "listener_initial_interface available=$physicalNetworkAvailable " +
+                    "applied=$initialInterfaceApplied",
+            )
+            if (!initialInterfaceApplied) {
+                // A transport may still be appearing (or the synchronous
+                // delivery may time out). Keep the normal callback path alive.
+                notifyListener(immediate = true, force = true)
+            }
         } else {
             MeowDiagnostics.log(TAG, "listener_detached current=${describeCurrentState()}")
         }
