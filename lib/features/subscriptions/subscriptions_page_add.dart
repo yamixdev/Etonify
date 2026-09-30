@@ -238,8 +238,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       });
       final content = await readSubscriptionFile(file);
       if (!mounted || _cancelRequested) return;
-      if (content.contains(EtonifyBackupService.profileMagic) ||
-          content.contains(EtonifyBackupService.settingsMagic)) {
+      if (content.contains(EtonifyBackupService.settingsMagic)) {
         _setError(l10n.backupUseSettingsImport);
         return;
       }

@@ -245,6 +245,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   OfflineUrlTestSession? _offlineUrlTestSession;
   ProbeConfigBuildResult? _offlineProbeConfig;
   bool _offlineProbeRunning = false;
+  bool _automaticSubscriptionApplyInFlight = false;
+  bool _manualUrlTestPreparing = false;
   int _offlineProbeRuntimeGeneration = 0;
   int _physicalNetworkEpoch = 0;
   String _physicalInterfaceKey = '';
@@ -2216,6 +2218,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       operationGeneration: () => _runtimeOperations.urlTestGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
+      onTargetCheckChanged: (tag) {
+        if (!mounted) return;
+        _publishProxyRuntimeVisualStatesForUrlTestTags([tag]);
+      },
       onSessionChanged: (running, kind, targetTag) {
         final fullSessionRunning = running && kind == LatencySessionKind.full;
         final startingFullSession =
@@ -2254,8 +2260,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _publishOfflineUrlTestProgress();
         }
         if (!mounted) return;
-        setState(_applyRuntimeStateToDerivedCaches);
+        if (kind == LatencySessionKind.targeted && targetTag.isNotEmpty) {
+          // The home ping and affected group rows listen to their own state.
+          // Starting/stopping one probe must not map every proxy or rebuild
+          // the connection control and the rest of the application shell.
+          _publishProxyRuntimeVisualStatesForUrlTestTags([targetTag]);
+        } else {
+          setState(_applyRuntimeStateToDerivedCaches);
+        }
         unawaited(_syncQuickSettingsTileLabel());
+        if (!running) {
+          // Session completion must finish before an overdue refresh can apply.
+          scheduleMicrotask(() {
+            if (mounted) _startSubscriptionAutoRefresh();
+          });
+        }
         if (!running &&
             _autoCheckServers &&
             _connected &&
@@ -3563,13 +3582,43 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  bool get _automaticSubscriptionUpdatesBlocked =>
+      _urlTestInFlight ||
+      _latencyCoordinator.isRunning ||
+      _offlineProbeRunning ||
+      _manualUrlTestPreparing ||
+      _automaticSubscriptionApplyInFlight ||
+      _runtimeTransitionInProgress;
+
+  Future<bool> _waitForAutomaticSubscriptionApply() async {
+    if (_automaticSubscriptionUpdatesBlocked) {
+      AppLogStore.info(
+        'subscription refresh',
+        'automatic apply deferred until URLTest/runtime transition completes',
+      );
+    }
+    while (mounted &&
+        (!_foregroundLifecycleActive || _automaticSubscriptionUpdatesBlocked)) {
+      if (_latencyCoordinator.isRunning) {
+        await _latencyCoordinator.waitForCurrentSession();
+      } else {
+        // Includes probe preparation/cleanup and a runtime handover. Never
+        // cancel either operation to apply an automatic subscription update.
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+    }
+    return mounted;
+  }
+
   void _startSubscriptionAutoRefresh() {
     _subscriptionAutoRefreshTimer?.cancel();
     _subscriptionAutoRefreshTimer = null;
     if (!mounted || !_foregroundLifecycleActive || !_ready) {
       return;
     }
-    unawaited(_syncBackgroundSubscriptionUpdates());
+    if (!_automaticSubscriptionUpdatesBlocked) {
+      unawaited(_syncBackgroundSubscriptionUpdates());
+    }
     if (_subscriptions.isEmpty) return;
     final delay = _subscriptionCoordinator.nextAutoRefreshDelay(_subscriptions);
     if (delay == null) {
@@ -3589,7 +3638,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _startSubscriptionAutoRefresh();
       return;
     }
-    if (!_ready || _subscriptions.isEmpty || !_foregroundLifecycleActive) {
+    if (!_ready ||
+        _subscriptions.isEmpty ||
+        !_foregroundLifecycleActive ||
+        _automaticSubscriptionUpdatesBlocked) {
       _startSubscriptionAutoRefresh();
       return;
     }
@@ -3609,11 +3661,30 @@ class _MeowClientState extends ConsumerState<MeowClient>
         await SubscriptionRefreshReports.save(result.entries);
         await _showSubscriptionRefreshReport();
       }
+      if (!await _waitForAutomaticSubscriptionApply()) return;
+      // The user may have changed profiles or selection while downloading.
+      // Do not restore the profile captured at the start of the request.
       final refreshedActiveSubscription = result.refreshedActiveSubscription;
-      final activeRuntimeChanged = result.activeRuntimeChanged;
+      final stillActive =
+          refreshedActiveSubscription?.id == _activeSubscription?.id;
+      final activeNow = _activeSubscription;
+      final activeRuntimeChanged =
+          stillActive &&
+          activeNow != null &&
+          refreshedActiveSubscription != null &&
+          _subscriptionCoordinator.runtimeFingerprint(
+                activeNow.copyWith(selectedProxyTag: _selectedProxyTag),
+              ) !=
+              _subscriptionCoordinator.runtimeFingerprint(
+                refreshedActiveSubscription.copyWith(
+                  selectedProxyTag: _selectedProxyTag,
+                ),
+              );
       await _reloadSubscriptions(
-        preferredSubscriptionId: refreshedActiveSubscription?.id,
-        preferredProxyTag: refreshedActiveSubscription == null
+        preferredSubscriptionId: stillActive
+            ? refreshedActiveSubscription?.id
+            : null,
+        preferredProxyTag: !stillActive || refreshedActiveSubscription == null
             ? null
             : _validSelectedProxyTagForSubscription(
                 refreshedActiveSubscription,
@@ -3623,8 +3694,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
         resetRuntimeState: activeRuntimeChanged,
         restartRuntimeOnApply: _connected && activeRuntimeChanged,
         urlTestAfterApply: _connected && activeRuntimeChanged,
+        automatic: true,
       );
       AppLogStore.info('subscription refresh', 'auto-refresh done');
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription refresh',
+        'Auto-refresh failed: $error',
+      );
     } finally {
       _autoRefreshInFlight = false;
       _startSubscriptionAutoRefresh();
@@ -3634,7 +3711,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _syncBackgroundSubscriptionUpdates() async {
     if (!Platform.isAndroid ||
         _backgroundSubscriptionSyncInFlight ||
-        _autoRefreshInFlight) {
+        _autoRefreshInFlight ||
+        _automaticSubscriptionUpdatesBlocked) {
       return;
     }
     _backgroundSubscriptionSyncInFlight = true;
@@ -3647,14 +3725,31 @@ class _MeowClientState extends ConsumerState<MeowClient>
             await SubscriptionRefreshReports.backoffUntil(),
           );
       if (entries.any((e) => e.succeeded)) {
-        final activeChanged = entries.any(
+        if (!await _waitForAutomaticSubscriptionApply()) return;
+        final activeBefore = _activeSubscription;
+        final activeUpdated = entries.any(
           (e) => e.succeeded && e.id == _activeSubscription?.id,
         );
+        final activeAfter = activeUpdated && activeBefore != null
+            ? await SubscriptionStore.getInBackground(activeBefore.id)
+            : null;
+        if (!await _waitForAutomaticSubscriptionApply()) return;
+        final activeChanged =
+            activeBefore != null &&
+            activeAfter != null &&
+            activeBefore.id == _activeSubscription?.id &&
+            _subscriptionCoordinator.runtimeFingerprint(
+                  activeBefore.copyWith(selectedProxyTag: _selectedProxyTag),
+                ) !=
+                _subscriptionCoordinator.runtimeFingerprint(
+                  activeAfter.copyWith(selectedProxyTag: _selectedProxyTag),
+                );
         await _reloadSubscriptions(
           applyRuntime: activeChanged,
           resetRuntimeState: activeChanged,
           restartRuntimeOnApply: _connected && activeChanged,
           urlTestAfterApply: false,
+          automatic: true,
         );
       }
       if (!mounted) return;
@@ -4347,7 +4442,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (normalizedTarget.isNotEmpty) {
       return <String>{normalizedTarget};
     }
-    return _runtimeRecovery.lastStartedUrlTestOutboundTags;
+    final runtimeTags = _runtimeRecovery.lastStartedUrlTestOutboundTags;
+    return runtimeTags.isNotEmpty ? runtimeTags : _userVisibleServerTags();
   }
 
   Set<String> _userVisibleServerTags() {
@@ -4457,6 +4553,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     if (!mounted ||
+        (_latencyCoordinator.isCurrentSessionManual && reason != 'selection') ||
         (_offlineUrlTestSession != null &&
             !_offlineUrlTestSession!.isTerminal) ||
         (!_autoCheckServers && reason == 'periodic')) {
@@ -4491,6 +4588,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       delay: delay,
       canRun: () {
         if (!mounted ||
+            _automaticSubscriptionApplyInFlight ||
+            (_latencyCoordinator.isCurrentSessionManual &&
+                reason != 'selection') ||
             _offlineUrlTestSession?.suppressesAutomaticCheck(
                   reason: reason,
                   physicalNetworkEpoch: _physicalNetworkEpoch,
@@ -5077,12 +5177,37 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool resetRuntimeState = false,
     bool restartRuntimeOnApply = false,
     bool urlTestAfterApply = false,
+    bool automatic = false,
   }) async {
-    if (_offlineUrlTestSession != null && !_offlineUrlTestSession!.isTerminal) {
-      if (!await _cancelOfflineProbeForConfigChange('subscription_changed')) {
-        return;
+    if (automatic && !await _waitForAutomaticSubscriptionApply()) return;
+    if (automatic) _automaticSubscriptionApplyInFlight = true;
+    try {
+      await _reloadSubscriptionsNow(
+        preferredSubscriptionId: preferredSubscriptionId,
+        preferredProxyTag: preferredProxyTag,
+        applyRuntime: applyRuntime,
+        resetRuntimeState: resetRuntimeState,
+        restartRuntimeOnApply: restartRuntimeOnApply,
+        urlTestAfterApply: urlTestAfterApply,
+        waitForHydration: automatic,
+      );
+    } finally {
+      if (automatic) {
+        _automaticSubscriptionApplyInFlight = false;
+        _startSubscriptionAutoRefresh();
       }
     }
+  }
+
+  Future<void> _reloadSubscriptionsNow({
+    String? preferredSubscriptionId,
+    String? preferredProxyTag,
+    required bool applyRuntime,
+    required bool resetRuntimeState,
+    required bool restartRuntimeOnApply,
+    required bool urlTestAfterApply,
+    required bool waitForHydration,
+  }) async {
     final resolved = await _subscriptionCoordinator.resolveMetadata(
       activeSubscriptionId: preferredSubscriptionId ?? _activeProfileId,
       selectedProxyTag: preferredProxyTag ?? _selectedProxyTag,
@@ -5098,6 +5223,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final nextActiveId = normalized.activeSubscriptionId;
     final activeChanged = nextActiveId != _activeProfileId;
     final shouldResetRuntimeState = activeChanged || resetRuntimeState;
+    if ((shouldResetRuntimeState || applyRuntime) &&
+        _offlineUrlTestSession != null &&
+        !_offlineUrlTestSession!.isTerminal) {
+      if (!await _cancelOfflineProbeForConfigChange('subscription_changed')) {
+        return;
+      }
+      if (!mounted) return;
+    }
     final preserveLatencyDuringReload =
         resetRuntimeState && !activeChanged && _connected;
     final previousSelectedTag = _selectedProxyTag;
@@ -5149,7 +5282,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _scheduleActiveOutboundIpRefresh();
     }
     if (subscriptions.isNotEmpty) {
-      _scheduleActiveSubscriptionHydration(
+      final hydration = _scheduleActiveSubscriptionHydration(
         activeSubscriptionId: normalized.activeSubscriptionId,
         selectedProxyTag: normalized.selectedProxyTag,
         preserveRuntimeState:
@@ -5158,6 +5291,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         restartRuntimeOnApply: restartRuntimeOnApply,
         urlTestAfterApply: urlTestAfterApply,
       );
+      if (waitForHydration) {
+        await hydration;
+      } else {
+        unawaited(hydration);
+      }
     } else if (applyRuntime) {
       _configCoordinator.emitCurrentConfigLog(
         'subscriptions reloaded',
@@ -5175,7 +5313,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  void _scheduleActiveSubscriptionHydration({
+  Future<void> _scheduleActiveSubscriptionHydration({
     required String activeSubscriptionId,
     required String selectedProxyTag,
     required bool preserveRuntimeState,
@@ -5184,7 +5322,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool urlTestAfterApply = false,
   }) {
     final generation = _subscriptionCoordinator.beginHydration();
-    unawaited(() async {
+    return (() async {
       final resolved = await _subscriptionCoordinator.resolveSubscriptions(
         activeSubscriptionId: activeSubscriptionId,
         selectedProxyTag: selectedProxyTag,
@@ -5279,7 +5417,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (activeChanged || previousSelectedTag != normalized.selectedProxyTag) {
         _saveStateSoon();
       }
-    }());
+    })();
   }
 
   SubscriptionRuntimeSnapshot _currentSubscriptionRuntimeSnapshot({
@@ -6130,7 +6268,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!_foregroundLifecycleActive) {
       return;
     }
-    if (_urlTestInFlight) {
+    if (_urlTestInFlightNotifier.value ||
+        _latencyCoordinator.kind == LatencySessionKind.full) {
       if (haptic) {
         _haptic();
       }
@@ -6165,15 +6304,65 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _urlTestCancelled = false;
     _groupUrlTestScheduler.cancel();
     if (!_connected) {
+      if (_automaticSubscriptionApplyInFlight) return;
       await _startOfflineUrlTest();
       return;
     }
+    if (!await _prepareManualUrlTest('manual')) return;
     if (_offlineUrlTestSession?.isTerminal == true) {
       _offlineUrlTestSession = null;
       _offlineProbeConfig = null;
     }
     _updateUrlTestProgress(isRunning: true, isCancelled: false);
     await _latencyCoordinator.runFull(reason: 'manual');
+  }
+
+  Future<bool> _prepareManualUrlTest(String reason) async {
+    if (!mounted ||
+        !_connected ||
+        !_foregroundLifecycleActive ||
+        _manualUrlTestPreparing ||
+        _automaticSubscriptionApplyInFlight) {
+      AppLogStore.debug('latency', 'manual URLTest deferred reason=$reason');
+      return false;
+    }
+    _manualUrlTestPreparing = true;
+    try {
+      _groupUrlTestScheduler.cancel();
+      if (_latencyCoordinator.kind == LatencySessionKind.targeted ||
+          (!_latencyCoordinator.isRunning &&
+              !_latencyCoordinator.canStartSession)) {
+        await _latencyCoordinator.cancelAndWait();
+      }
+      if (!await _ensureActiveSubscriptionHydratedForRuntime()) return false;
+      // A matching group snapshot is needed for diagnostics, not for URLTest.
+      // A no-data row can be tested before the first group snapshot arrives.
+      final ready =
+          _runtimeOperations.urlTestReady ||
+          await _runtimeOperations.refreshUrlTestReadiness(
+            () => _networkInterfaceUsable(reason: '${reason}_ready'),
+          );
+      if (!mounted || !_connected || !_foregroundLifecycleActive) return false;
+      if (!ready ||
+          _automaticSubscriptionApplyInFlight ||
+          (!_latencyCoordinator.isRunning &&
+              !_latencyCoordinator.canStartSession)) {
+        AppLogStore.warning(
+          'latency',
+          'manual URLTest unavailable reason=$reason networkReady=$ready',
+        );
+        final context = _navigatorKey.currentContext;
+        _showAppSnackBar(
+          context == null || !context.mounted
+              ? 'The connection is still getting ready. Try checking again in a few seconds.'
+              : AppLocalizations.of(context).urlTestNotReadyMessage,
+        );
+        return false;
+      }
+      return true;
+    } finally {
+      _manualUrlTestPreparing = false;
+    }
   }
 
   Future<void> _startOfflineUrlTest() async {
@@ -6315,6 +6504,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       await _singboxRuntime.stopProbe();
       _offlineProbeRunning = false;
       if (!retainConfig) _offlineProbeConfig = null;
+      if (mounted) _startSubscriptionAutoRefresh();
     } catch (error) {
       AppLogStore.warning('latency', 'probe stop not confirmed: $error');
       rethrow;
@@ -6354,9 +6544,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runActiveProxyUrlTest({bool haptic = true}) async {
-    if (!_connected || !_foregroundLifecycleActive) {
+    final pendingTarget = _currentResolvedActiveOutboundTag()?.trim() ?? '';
+    if (pendingTarget.isNotEmpty &&
+        (_latencyCoordinator.hasActiveTargetCheck(pendingTarget) ||
+            (_latencyCoordinator.kind == LatencySessionKind.targeted &&
+                _latencyCoordinator.isChecking(pendingTarget)))) {
+      // Ignore a repeated home tap before preparation can cancel the probe.
       return;
     }
+    if (!await _prepareManualUrlTest('manual_active')) return;
     final targetTag = _currentResolvedActiveOutboundTag()?.trim() ?? '';
     if (targetTag.isEmpty) {
       AppLogStore.warning(
@@ -6377,19 +6573,27 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final test = _latencyCoordinator.runTarget(
       targetOutboundTag: targetTag,
       reason: 'manual_active',
+      force:
+          _latencyCoordinator.kind != LatencySessionKind.full ||
+          _urlTestProgressResultForTag(targetTag) != null,
     );
     _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
     await test;
   }
 
   Future<void> _runProxyUrlTest(String tag) async {
-    if (!_connected ||
-        !_foregroundLifecycleActive ||
-        !_runtimeOperations.diagnosticsReady) {
+    if (!await _prepareManualUrlTest('manual_row')) return;
+    _ensureActiveLookupCaches();
+    if (!_activeOutboundByTagLookup.containsKey(tag) &&
+        !_activeGroupByTagLookup.containsKey(tag) &&
+        _proxyChainForTag(tag) == null &&
+        !isLowestProxyTag(tag)) {
+      AppLogStore.warning(
+        'latency',
+        'manual URLTest unknown outbound tag=$tag',
+      );
       return;
     }
-    _ensureActiveLookupCaches();
-    if (_runtimeVisualStateForTag(tag) == null) return;
     final group = _activeGroupByTagLookup[tag];
     final groupChildren = group == null
         ? const <String>[]
@@ -6422,12 +6626,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
         : groupChildren.contains(selectedTarget)
         ? selectedTarget
         : groupChildren.firstOrNull;
-    if (target == null) return;
+    if (target == null) {
+      AppLogStore.warning(
+        'latency',
+        'manual URLTest group has no testable children tag=$tag',
+      );
+      return;
+    }
     _haptic();
     _groupUrlTestScheduler.cancel();
     final test = _latencyCoordinator.runTarget(
       targetOutboundTag: target,
       reason: 'manual_row',
+      force:
+          _latencyCoordinator.kind != LatencySessionKind.full ||
+          _urlTestProgressResultForTag(target) != null,
     );
     _proxyRuntime.runtimeLatencyTimes.remove(target);
     await test;
@@ -8586,6 +8799,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }) {
     return ProxiesPresentationBuilder(
       data: ProxiesPresentationData(
+        profileId: _activeProfileId,
         proxies: _activeProxies,
         groupChildrenByTag: _activeGroupChildrenByTag,
         selectedTag: _selectedProxyTag,

@@ -63,11 +63,26 @@ class SettingsBackupImportActions {
   }
 
   Future<void> _importProfile(BuildContext context, List<int> bytes) async {
+    await importProfileBytes(
+      context,
+      bytes,
+      clientVersion: clientVersion,
+      onImportSubscriptions: onImportSubscriptions,
+    );
+  }
+
+  /// Shared by Settings backups and the ordinary subscription file picker.
+  static Future<bool> importProfileBytes(
+    BuildContext context,
+    List<int> bytes, {
+    required String clientVersion,
+    required Future<void> Function(List<Subscription>) onImportSubscriptions,
+  }) async {
     String? password;
     if (_service.detectProfileEncryption(bytes) ==
         EtonifyProfileEncryption.encrypted) {
       password = await _askPassword(context);
-      if (password == null || !context.mounted) return;
+      if (password == null || !context.mounted) return false;
     }
     EtonifyProfileImportResult parsed;
     try {
@@ -81,16 +96,16 @@ class SettingsBackupImportActions {
           !error.message.toLowerCase().contains('password')) {
         rethrow;
       }
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
       final retryPassword = await _askPassword(context);
-      if (retryPassword == null) return;
+      if (retryPassword == null) return false;
       parsed = await _service.parseProfileExportInBackground(
         bytes: bytes,
         currentClientVersion: clientVersion,
         password: retryPassword,
       );
     }
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     if (parsed.encryption == EtonifyProfileEncryption.plain) {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -115,18 +130,19 @@ class SettingsBackupImportActions {
           ],
         ),
       );
-      if (confirmed != true || !context.mounted) return;
+      if (confirmed != true || !context.mounted) return false;
     }
     if (!await _confirmCompatibility(context, parsed.warning) ||
         !context.mounted) {
-      return;
+      return false;
     }
     await onImportSubscriptions(parsed.subscriptions);
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     _showImported(context);
+    return true;
   }
 
-  Future<bool> _confirmCompatibility(
+  static Future<bool> _confirmCompatibility(
     BuildContext context,
     EtonifyImportWarning warning,
   ) async {
@@ -166,7 +182,7 @@ class SettingsBackupImportActions {
     return confirmed == true;
   }
 
-  Future<String?> _askPassword(BuildContext context) async {
+  static Future<String?> _askPassword(BuildContext context) async {
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
@@ -201,7 +217,7 @@ class SettingsBackupImportActions {
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
-  void _showImported(BuildContext context) {
+  static void _showImported(BuildContext context) {
     if (!context.mounted) return;
     AppNotice.show(
       context,

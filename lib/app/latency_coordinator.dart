@@ -90,6 +90,7 @@ class LatencyCoordinator {
     required LatencyIntReader timeoutSeconds,
     required LatencyIntReader concurrency,
     required LatencySessionChanged onSessionChanged,
+    void Function(String tag)? onTargetCheckChanged,
     LatencyBoolReader? canRunDiagnostics,
     LatencyIntReader? operationGeneration,
     LatencyEventTimesReader? eventBaselineTimes,
@@ -106,6 +107,7 @@ class LatencyCoordinator {
        _timeoutSeconds = timeoutSeconds,
        _concurrency = concurrency,
        _onSessionChanged = onSessionChanged,
+       _onTargetCheckChanged = onTargetCheckChanged,
        _canRunDiagnostics = canRunDiagnostics ?? _alwaysReady,
        _operationGeneration = operationGeneration ?? _zeroGeneration,
        _eventBaselineTimes = eventBaselineTimes ?? _emptyEventTimes,
@@ -129,6 +131,7 @@ class LatencyCoordinator {
   final LatencyIntReader _timeoutSeconds;
   final LatencyIntReader _concurrency;
   final LatencySessionChanged _onSessionChanged;
+  final void Function(String tag)? _onTargetCheckChanged;
   final LatencyBoolReader _canRunDiagnostics;
   final LatencyIntReader _operationGeneration;
   final LatencyEventTimesReader _eventBaselineTimes;
@@ -187,9 +190,17 @@ class LatencyCoordinator {
   bool get canStartSession =>
       !_disposed && !isRunning && _nativeSessionFinished == null;
   bool get isCurrentSessionManual =>
-      isRunning && _sessionReason.startsWith('manual');
-  bool get isCurrentSessionAutomatic =>
-      isRunning && !_sessionReason.startsWith('manual');
+      isRunning &&
+      (_sessionReason.startsWith('manual') ||
+          _sessionReason == 'offline_manual');
+  bool get isCurrentSessionAutomatic => isRunning && !isCurrentSessionManual;
+
+  /// Wait without cancelling the check before applying an automatic update.
+  /// An in-flight download can finish after a user starts a manual sweep.
+  Future<void> waitForCurrentSession() async {
+    final result = _sessionResult;
+    if (result != null) await result.future;
+  }
 
   void cancelAutomaticSession() {
     if (isCurrentSessionAutomatic) {
@@ -331,12 +342,12 @@ class LatencyCoordinator {
       () {
         if (_activeTargetChecks[targetTag] == check) {
           _activeTargetChecks.remove(targetTag);
-          _onSessionChanged(isRunning, _kind, _targetTag);
+          _notifyParallelTargetChanged(targetTag);
         }
       },
     );
     _activeTargetChecks[targetTag] = check;
-    _onSessionChanged(isRunning, _kind, _targetTag);
+    _notifyParallelTargetChanged(targetTag);
 
     try {
       await _runTest(
@@ -361,9 +372,20 @@ class LatencyCoordinator {
       check.timeoutTimer?.cancel();
       if (_activeTargetChecks[targetTag] == check) {
         _activeTargetChecks.remove(targetTag);
-        _onSessionChanged(isRunning, _kind, _targetTag);
+        _notifyParallelTargetChanged(targetTag);
       }
       return false;
+    }
+  }
+
+  void _notifyParallelTargetChanged(String tag) {
+    // A single parallel probe changes a row, not the full sweep's lifecycle.
+    // Keep the legacy callback fallback for hosts without a delta listener.
+    final notify = _onTargetCheckChanged;
+    if (notify != null) {
+      notify(tag);
+    } else {
+      _onSessionChanged(isRunning, _kind, _targetTag);
     }
   }
 
@@ -396,7 +418,7 @@ class LatencyCoordinator {
     if (activeCheck != null) {
       activeCheck.timeoutTimer?.cancel();
       _activeTargetChecks.remove(normalizedTag);
-      _onSessionChanged(isRunning, _kind, _targetTag);
+      _notifyParallelTargetChanged(normalizedTag);
     }
     if (!isRunning) {
       return activeCheck != null;
@@ -498,7 +520,7 @@ class LatencyCoordinator {
     if (activeCheck != null) {
       activeCheck.timeoutTimer?.cancel();
       _activeTargetChecks.remove(normalizedTag);
-      _onSessionChanged(isRunning, _kind, _targetTag);
+      _notifyParallelTargetChanged(normalizedTag);
     }
     if (belongsToMainSession || activeCheck != null) {
       _acceptedEventTimes[normalizedTag] = revision;
@@ -742,7 +764,10 @@ class LatencyCoordinator {
     final generation = ++_generation;
     _sessionOperationGeneration = _operationGeneration();
     _sessionStartedAtSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    _baselineEventTimes = Map<String, int>.from(_eventBaselineTimes());
+    final baselineTimes = _eventBaselineTimes();
+    _baselineEventTimes = targetTag.isNotEmpty
+        ? <String, int>{targetTag: baselineTimes[targetTag] ?? 0}
+        : Map<String, int>.from(baselineTimes);
     _sessionExpectedTags = targetTag.isNotEmpty
         ? <String>{targetTag}
         : (request.includeOutboundTags.isNotEmpty
@@ -769,7 +794,8 @@ class LatencyCoordinator {
       'latency',
       'latency session start kind=${kind.name} reason=$reason '
           'target=$targetTag '
-          'outbounds=${_outboundCount()} expected=${_sessionExpectedTags.length} '
+          'outbounds=${targetTag.isNotEmpty ? 1 : _outboundCount()} '
+          'expected=${_sessionExpectedTags.length} '
           'completion='
           '${capabilities.urlTestCompletionModel.name}',
     );

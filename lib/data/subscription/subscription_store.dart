@@ -499,6 +499,61 @@ class SubscriptionStore {
   }
 
   /// Hydrates raw content/outbounds for a metadata-only subscription.
+  /// Takes metadata and payload under the same per-profile lock as writers.
+  /// Decoding still happens outside the lock and away from the UI for large
+  /// profiles. A cached payload may be reused, but never its metadata/chains.
+  static Future<Subscription?> loadProfileSnapshotInBackground(
+    String id, {
+    Subscription? cachedPayload,
+  }) async {
+    await ensurePayloadReady();
+    final snapshot = await _withSubscriptionWriteLock(id, () async {
+      final metadata = getMetadata(id);
+      if (metadata == null) return null;
+      if (cachedPayload != null &&
+          cachedPayload.id == id &&
+          cachedPayload.payloadRevision == metadata.payloadRevision) {
+        return (metadata: metadata, raw: null, cached: cachedPayload);
+      }
+      final raw = await _payloadStore.get(id);
+      if (raw == null &&
+          (metadata.payloadRevision.isNotEmpty ||
+              metadata.hasRawPayload ||
+              metadata.cachedVisibleProxyCount > 0)) {
+        throw StateError('Subscription payload is unavailable');
+      }
+      return (metadata: metadata, raw: raw, cached: null);
+    });
+    if (snapshot == null) return null;
+    final metadata = snapshot.metadata;
+    final cached = snapshot.cached;
+    if (cached != null) {
+      return metadata.copyWith(
+        rawContent: cached.rawContent,
+        outbounds: cached.outbounds,
+        groups: cached.groups,
+      );
+    }
+    final raw = snapshot.raw;
+    if (raw == null) return metadata;
+    final large = switch (raw) {
+      List<int> bytes => bytes.length >= 32 * 1024,
+      String value => value.length >= 32 * 1024,
+      _ => false,
+    };
+    if (!large) return _withPayloadFromRaw(metadata, raw, strict: true);
+    final metadataMap = metadata.toMetadataMap();
+    return Isolate.run(
+      () => _withPayloadFromRaw(
+        Subscription.fromMetadataMap(metadataMap),
+        raw,
+        strict: true,
+      ),
+      debugName: 'meow-profile-snapshot',
+    );
+  }
+
+  /// Hydrates raw content/outbounds for a metadata-only subscription.
   static Future<Subscription> withPayload(Subscription metadata) {
     return _withPayload(metadata);
   }
@@ -613,6 +668,24 @@ class SubscriptionStore {
         return;
       }
       await _saveMetadataUnlocked(sub);
+    });
+  }
+
+  /// Applies only the requested metadata edit to the latest stored profile.
+  /// Reading inside the write lock prevents a concurrent refresh from being
+  /// overwritten by an older screen snapshot. Deleted profiles stay deleted.
+  static Future<void> updateMetadata(
+    String id,
+    Subscription Function(Subscription current) update,
+  ) async {
+    await _withSubscriptionWriteLock(id, () async {
+      final current = getMetadata(id);
+      if (current == null) return;
+      final updated = update(current);
+      if (updated.id != id) {
+        throw ArgumentError('A metadata update cannot change the profile ID');
+      }
+      await _saveMetadataUnlocked(updated);
     });
   }
 
@@ -1843,9 +1916,16 @@ class SubscriptionStore {
     return _withPayloadFromRaw(metadata, raw);
   }
 
-  static Subscription _withPayloadFromRaw(Subscription metadata, dynamic raw) {
+  static Subscription _withPayloadFromRaw(
+    Subscription metadata,
+    dynamic raw, {
+    bool strict = false,
+  }) {
     try {
       final map = jsonDecode(_decodeStoredPayload(raw)) as Map<String, dynamic>;
+      if (strict && map['outbounds'] is! List) {
+        throw const FormatException('Subscription payload has no server list');
+      }
       return metadata.copyWith(
         rawContent: map['raw_content'] as String? ?? '',
         outbounds:
@@ -1868,6 +1948,7 @@ class SubscriptionStore {
             const [],
       );
     } catch (_) {
+      if (strict) rethrow;
       return metadata;
     }
   }

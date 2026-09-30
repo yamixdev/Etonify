@@ -88,8 +88,15 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   late ProxySort _sort;
   late String _selectedTag;
   Timer? _runtimeResortTimer;
+  bool _listScrollActive = false;
+  bool _runtimeResortPending = false;
   List<AppProxySummary>? _sortedChildrenCache;
   ProxySort? _sortedChildrenSort;
+  Map<Key, int> _childIndexes = const <Key, int>{};
+
+  Key get _groupHeaderKey => ValueKey('proxy-group-header-${widget.group.tag}');
+
+  Key _childKey(AppProxySummary proxy) => ValueKey('proxy-row-${proxy.tag}');
 
   @override
   void initState() {
@@ -130,22 +137,50 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
         (_sort != ProxySort.latency && _sort != ProxySort.working)) {
       return;
     }
+    if (_listScrollActive) {
+      _runtimeResortPending = true;
+      _runtimeResortTimer?.cancel();
+      _runtimeResortTimer = null;
+      return;
+    }
     if (_runtimeResortTimer?.isActive ?? false) {
       return;
     }
     _runtimeResortTimer = Timer(
       _runtimeResortInterval(widget.children.length),
       () {
+        _runtimeResortTimer = null;
         if (!mounted ||
             (_sort != ProxySort.latency && _sort != ProxySort.working)) {
           return;
         }
-        setState(() {
-          _sortedChildrenCache = null;
-          _sortedChildrenSort = null;
-        });
+        if (_listScrollActive) {
+          _runtimeResortPending = true;
+          return;
+        }
+        _runtimeResortPending = false;
+        final previous = _sortedChildrenCache;
+        _sortedChildrenCache = null;
+        _sortedChildrenSort = null;
+        if (!listEquals(previous, _sortedChildren())) {
+          setState(() {});
+        }
       },
     );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.depth == 0) {
+      if (notification is ScrollStartNotification) {
+        _listScrollActive = true;
+      } else if (notification is ScrollEndNotification) {
+        _listScrollActive = false;
+        if (_runtimeResortPending) {
+          _onRuntimeStatesChanged();
+        }
+      }
+    }
+    return false;
   }
 
   void _setSort(ProxySort value) {
@@ -154,6 +189,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     }
     setState(() {
       _sort = value;
+      _runtimeResortPending = false;
       _sortedChildrenCache = null;
       _sortedChildrenSort = null;
     });
@@ -185,6 +221,10 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     );
     _sortedChildrenCache = children;
     _sortedChildrenSort = _sort;
+    _childIndexes = <Key, int>{
+      _groupHeaderKey: 0,
+      for (var i = 0; i < children.length; i++) _childKey(children[i]): i + 1,
+    };
     return children;
   }
 
@@ -226,9 +266,15 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     VoidCallback? onLongPress,
     required VoidCallback onTap,
   }) {
-    Widget buildTile(ProxyRuntimeVisualState? state) {
+    final identity = _ProxyTileIdentity(
+      proxy: proxy,
+      titleOverride: titleOverride,
+      subtitleOverride: subtitleOverride,
+    );
+    Widget buildTile(ProxyRuntimeVisualState? state, Widget identity) {
       return ProxyTile(
         proxy: proxy,
+        identityChild: identity,
         runtimeState: state,
         selected: selected,
         highlighted: highlighted,
@@ -247,10 +293,11 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
 
     final runtimeStates = widget.runtimeStates;
     final tile = runtimeStates == null
-        ? buildTile(null)
+        ? buildTile(null, identity)
         : ValueListenableBuilder<ProxyRuntimeVisualState?>(
             valueListenable: runtimeStates.listenableFor(proxy.tag),
-            builder: (context, state, _) => buildTile(state),
+            child: identity,
+            builder: (context, state, child) => buildTile(state, child!),
           );
     final onRequest = widget.onVisibleProxyNeedsLocation;
     if (onRequest == null ||
@@ -310,42 +357,52 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
           color: Theme.of(context).scaffoldBackgroundColor,
           child: Stack(
             children: [
-              ListView.builder(
-                physics: const ClampingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
-                ),
-                itemExtent: _kProxySheetRowExtent,
-                scrollCacheExtent: _kProxyListScrollCacheExtent,
-                addAutomaticKeepAlives: false,
-                addRepaintBoundaries: true,
-                addSemanticIndexes: false,
-                padding: EdgeInsets.only(
-                  top: _kProxyGroupSheetListTopReserve,
-                  bottom: bottomInset + 18,
-                ),
-                itemCount: children.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _runtimeTile(
-                      proxy: widget.group,
-                      selected: widget.group.tag == _selectedTag,
-                      highlighted: false,
-                      titleOverride: groupTitle,
-                      subtitleOverride: groupSubtitle,
-                      showGroupHandle: true,
-                      onTap: () => _select(widget.group.tag),
+              NotificationListener<ScrollNotification>(
+                onNotification: _handleScrollNotification,
+                child: ListView.builder(
+                  physics: const ClampingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  itemExtent: _kProxySheetRowExtent,
+                  scrollCacheExtent: _kProxyListScrollCacheExtent,
+                  addAutomaticKeepAlives: false,
+                  addRepaintBoundaries: true,
+                  addSemanticIndexes: false,
+                  findChildIndexCallback: (key) => _childIndexes[key],
+                  padding: EdgeInsets.only(
+                    top: _kProxyGroupSheetListTopReserve,
+                    bottom: bottomInset + 18,
+                  ),
+                  itemCount: children.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return KeyedSubtree(
+                        key: _groupHeaderKey,
+                        child: _runtimeTile(
+                          proxy: widget.group,
+                          selected: widget.group.tag == _selectedTag,
+                          highlighted: false,
+                          titleOverride: groupTitle,
+                          subtitleOverride: groupSubtitle,
+                          showGroupHandle: true,
+                          onTap: () => _select(widget.group.tag),
+                        ),
+                      );
+                    }
+                    final proxy = children[index - 1];
+                    return KeyedSubtree(
+                      key: _childKey(proxy),
+                      child: _runtimeTile(
+                        proxy: proxy,
+                        selected: proxy.tag == _selectedTag,
+                        highlighted:
+                            proxy.tag == activeChildTag || proxy.highlighted,
+                        onTap: () => _select(proxy.tag),
+                        onLongPress: () => _openProxyShareSheet(proxy),
+                      ),
                     );
-                  }
-                  final proxy = children[index - 1];
-                  return _runtimeTile(
-                    proxy: proxy,
-                    selected: proxy.tag == _selectedTag,
-                    highlighted:
-                        proxy.tag == activeChildTag || proxy.highlighted,
-                    onTap: () => _select(proxy.tag),
-                    onLongPress: () => _openProxyShareSheet(proxy),
-                  );
-                },
+                  },
+                ),
               ),
               Positioned(
                 left: 0,

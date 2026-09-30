@@ -98,6 +98,84 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @subscriptionExportJson.
+  ///
+  /// In en, this message translates to:
+  /// **'Export JSON'**
+  String get subscriptionExportJson;
+
+  /// No description provided for @subscriptionAllServers.
+  ///
+  /// In en, this message translates to:
+  /// **'All servers'**
+  String get subscriptionAllServers;
+
+  /// No description provided for @subscriptionAdvancedSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced settings'**
+  String get subscriptionAdvancedSettings;
+
+  /// No description provided for @subscriptionSearchServers.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by name, protocol or address'**
+  String get subscriptionSearchServers;
+
+  /// No description provided for @subscriptionClearSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get subscriptionClearSearch;
+
+  /// No description provided for @subscriptionNoServersFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No servers found'**
+  String get subscriptionNoServersFound;
+
+  /// No description provided for @subscriptionServersLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the server list. Try again.'**
+  String get subscriptionServersLoadFailed;
+
+  /// No description provided for @subscriptionExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not export the profile.'**
+  String get subscriptionExportFailed;
+
+  /// No description provided for @subscriptionServersChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'This server was removed from the profile. Reopen the list.'**
+  String get subscriptionServersChanged;
+
+  /// No description provided for @subscriptionRefreshInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh interval'**
+  String get subscriptionRefreshInterval;
+
+  /// No description provided for @subscriptionMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get subscriptionMoveUp;
+
+  /// No description provided for @subscriptionLocalFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported file'**
+  String get subscriptionLocalFile;
+
+  /// No description provided for @subscriptionCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get subscriptionCopy;
+
   /// No description provided for @subscriptionErrorOffline.
   ///
   /// In en, this message translates to:
@@ -1069,6 +1147,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server checks'**
   String get urlTestTitle;
+
+  /// No description provided for @urlTestNotReadyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection is still getting ready. Try checking again in a few seconds.'**
+  String get urlTestNotReadyMessage;
 
   /// No description provided for @urlTestSubtitle.
   ///

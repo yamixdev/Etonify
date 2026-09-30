@@ -350,7 +350,21 @@ class SubscriptionRuntimeController {
             if (!outbound.info.deleted)
               {'tag': outbound.tag, 'config': outbound.config},
         ],
-        'groups': [for (final group in subscription.groups) group.toMap()],
+        'groups': [
+          for (final group in subscription.groups)
+            {...group.toMap()}..remove('name'),
+        ],
+        'proxy_chains': [
+          for (final chain in subscription.proxyChains)
+            {
+              'tag': chain.tag,
+              'target_tag': chain.targetTag,
+              'detour_tag': chain.detourTag,
+              'target_subscription_id': chain.targetSubscriptionId,
+              'target_config': chain.targetConfig,
+            },
+        ],
+        'urltest_config': subscription.urlTestConfig.toMap(),
       }),
     );
   }

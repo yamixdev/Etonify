@@ -10,6 +10,7 @@ import 'package:meow_client/models/url_test_progress.dart';
 @immutable
 class ProxiesPresentationData {
   const ProxiesPresentationData({
+    this.profileId = '',
     required this.proxies,
     required this.groupChildrenByTag,
     required this.selectedTag,
@@ -32,6 +33,7 @@ class ProxiesPresentationData {
     this.proxyListLoading = false,
   });
 
+  final String profileId;
   final List<AppProxySummary> proxies;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
@@ -117,6 +119,7 @@ class ProxiesPresentationBuilder {
     required ProxyPanelGestures panelGestures,
   }) {
     return ProxiesPage(
+      profileId: data.profileId,
       proxies: data.proxies,
       groupChildrenByTag: data.groupChildrenByTag,
       selectedTag: data.selectedTag,

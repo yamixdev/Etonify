@@ -9,6 +9,47 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get subscriptionExportJson => 'Export JSON';
+
+  @override
+  String get subscriptionAllServers => 'All servers';
+
+  @override
+  String get subscriptionAdvancedSettings => 'Advanced settings';
+
+  @override
+  String get subscriptionSearchServers => 'Search by name, protocol or address';
+
+  @override
+  String get subscriptionClearSearch => 'Clear search';
+
+  @override
+  String get subscriptionNoServersFound => 'No servers found';
+
+  @override
+  String get subscriptionServersLoadFailed =>
+      'Could not load the server list. Try again.';
+
+  @override
+  String get subscriptionExportFailed => 'Could not export the profile.';
+
+  @override
+  String get subscriptionServersChanged =>
+      'This server was removed from the profile. Reopen the list.';
+
+  @override
+  String get subscriptionRefreshInterval => 'Refresh interval';
+
+  @override
+  String get subscriptionMoveUp => 'Move up';
+
+  @override
+  String get subscriptionLocalFile => 'Imported file';
+
+  @override
+  String get subscriptionCopy => 'Copy';
+
+  @override
   String get subscriptionErrorOffline =>
       'No network connection. Connect to Wi-Fi or mobile data and try again.';
 
@@ -550,6 +591,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get urlTestTitle => 'Server checks';
+
+  @override
+  String get urlTestNotReadyMessage =>
+      'The connection is still getting ready. Try checking again in a few seconds.';
 
   @override
   String get urlTestSubtitle => 'Latency checks and automatic server selection';

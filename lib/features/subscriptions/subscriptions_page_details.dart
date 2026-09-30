@@ -22,6 +22,256 @@ class _SubscriptionDetailsPage extends StatefulWidget {
 
 class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   bool _busy = false;
+  Subscription? _hydratedSubscription;
+  List<Outbound> _visibleOutbounds = const [];
+  Future<Subscription?>? _payloadFuture;
+  Timer? _payloadStartTimer;
+  bool _payloadLoading = true;
+  bool _payloadFailed = false;
+  bool _advancedExpanded = false;
+  bool _sharing = false;
+
+  Future<Subscription?> _readCurrentPayload() {
+    return SubscriptionStore.loadProfileSnapshotInBackground(
+      widget.subscriptionId,
+      cachedPayload: _hydratedSubscription,
+    );
+  }
+
+  Future<Subscription?> _loadPayload() {
+    final pending = _payloadFuture;
+    if (pending != null) return pending;
+    _payloadStartTimer?.cancel();
+    final future = _hydratePayload();
+    _payloadFuture = future;
+    return future;
+  }
+
+  Future<Subscription?> _hydratePayload() async {
+    try {
+      Subscription? full;
+      Subscription? latest;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        full = await _readCurrentPayload();
+        if (!mounted) return null;
+        latest = SubscriptionStore.getMetadata(widget.subscriptionId);
+        if (full == null || latest == null) {
+          full = null;
+          break;
+        }
+        if (full.payloadRevision == latest.payloadRevision) {
+          full = latest.copyWith(
+            rawContent: full.rawContent,
+            outbounds: full.outbounds,
+            groups: full.groups,
+          );
+          break;
+        }
+        _hydratedSubscription = null;
+        if (attempt == 2) throw StateError('Profile changed during loading');
+      }
+      setState(() {
+        _currentSubscription = latest;
+        if (!identical(full?.outbounds, _hydratedSubscription?.outbounds)) {
+          _visibleOutbounds = full == null
+              ? const []
+              : [
+                  for (final outbound in full.outbounds)
+                    if (!outbound.info.deleted &&
+                        outbound.config['_group_only'] != true &&
+                        isSupportedOutboundConfig(outbound.config))
+                      outbound,
+                ];
+        }
+        _hydratedSubscription = full;
+        _payloadLoading = false;
+        _payloadFailed = false;
+      });
+      return full;
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'Profile details could not load: ${error.runtimeType}',
+      );
+      if (mounted) {
+        setState(() {
+          _payloadLoading = false;
+          _payloadFailed = true;
+        });
+      }
+      return null;
+    } finally {
+      _payloadFuture = null;
+    }
+  }
+
+  Future<void> _shareOutbound(String tag) async {
+    if (_sharing || _busy) return;
+    _sharing = true;
+    _haptic();
+    try {
+      final full = await _loadPayload();
+      if (!mounted || full == null) return;
+      final matching = full.outbounds.where(
+        (outbound) => outbound.tag == tag && !outbound.info.deleted,
+      );
+      if (matching.isEmpty) {
+        AppNotice.show(
+          context,
+          AppLocalizations.of(context).subscriptionServersChanged,
+        );
+        return;
+      }
+      final outbound = matching.first;
+      final summary = AppProxySummary(
+        tag: outbound.tag,
+        displayName: outbound.name,
+        countryCode: outboundDisplayCountryCode(
+          outbound,
+          markAllServersRussia: false,
+        ),
+        type: outbound.type,
+        server: outbound.server,
+        port: outbound.port,
+        detailText: '',
+        ip: outbound.server,
+        latency: null,
+        latencyFresh: false,
+        latencyChecking: false,
+        latencyUnavailable: false,
+        latencyError: null,
+        protocolLabel: outbound.type.toUpperCase(),
+        endpointLabel: _endpointWithPath(outbound),
+      );
+      Map<String, dynamic>? groupConfig;
+      if (outbound.type == 'selector' || outbound.type == 'urltest') {
+        final byTag = {for (final node in full.outbounds) node.tag: node};
+        final included = <String>{};
+        final configs = <Map<String, dynamic>>[];
+        void include(Outbound node) {
+          if (!included.add(node.tag)) return;
+          final config = Map<String, dynamic>.from(node.config)
+            ..removeWhere((key, _) => key.startsWith('_'));
+          config['tag'] = node.tag;
+          configs.add(config);
+          final children = config['outbounds'];
+          if (children is List) {
+            for (final child in children) {
+              final member = byTag[child];
+              if (member != null) include(member);
+            }
+          }
+        }
+
+        include(outbound);
+        groupConfig = {'outbounds': configs};
+      }
+      await showProxyShareSheet(
+        context,
+        proxy: summary,
+        outbound: outbound,
+        singboxConfig: groupConfig,
+      );
+    } finally {
+      _sharing = false;
+    }
+  }
+
+  Future<void> _exportProfile() async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext);
+        return AlertDialog(
+          title: Text(l10n.backupPlainWarningTitle),
+          content: Text(l10n.backupPlainWarningMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(l10n.continueAction),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final full = await _loadPayload();
+      if (!mounted || full == null) return;
+      final bytes = await const EtonifyBackupService()
+          .buildProfileExportBytesInBackground(
+            subscriptions: [full],
+            clientVersion: SubscriptionFetcher.currentAppVersion,
+            encryption: EtonifyProfileEncryption.plain,
+          );
+      if (!mounted) return;
+      final filename = full.name.replaceAll(
+        RegExp(r'[^\p{L}\p{N}._-]+', unicode: true),
+        '-',
+      );
+      final result = await FilePicker.saveFile(
+        dialogTitle: AppLocalizations.of(context).subscriptionExportJson,
+        fileName:
+            '${filename.isEmpty ? 'etonify-profile' : filename}.etonify-profile.json',
+        bytes: bytes,
+        mimeType: 'application/json',
+      );
+      if (result != null && mounted) {
+        AppNotice.show(
+          context,
+          AppLocalizations.of(context).backupSaved,
+          tone: AppNoticeTone.success,
+        );
+      }
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'Profile export failed: ${error.runtimeType}',
+      );
+      if (mounted) {
+        AppNotice.show(
+          context,
+          AppLocalizations.of(context).subscriptionExportFailed,
+          tone: AppNoticeTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _chooseRefreshInterval(Subscription subscription) async {
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final value in _kAutoRefreshOptions.where(
+              (value) => value > 0,
+            ))
+              ListTile(
+                title: Text(_formatRefreshInterval(sheetContext, value)),
+                trailing: subscription.autoRefreshMinutes == value
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.pop(sheetContext, value),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || minutes == null) return;
+    await _saveAutoRefreshInterval(_subscription ?? subscription, minutes);
+  }
+
   Subscription? _currentSubscription;
   late final TextEditingController _nameController;
   late final TextEditingController _customUserAgentController;
@@ -29,6 +279,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   late final TextEditingController _customHeadersController;
   late bool _sendHwid;
   late bool _useCustomHwid;
+  late SubscriptionInfo _requestSettingsBaseline;
 
   void _haptic() {
     if (widget.hapticEnabled) {
@@ -42,6 +293,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     _currentSubscription = SubscriptionStore.getMetadata(widget.subscriptionId);
     final initialSubscription = _subscription;
     final initialInfo = initialSubscription?.info;
+    _requestSettingsBaseline = initialInfo ?? const SubscriptionInfo();
     _nameController = TextEditingController(
       text: initialSubscription?.name ?? '',
     );
@@ -56,10 +308,15 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     );
     _sendHwid = initialInfo?.requireHwid ?? false;
     _useCustomHwid = (initialInfo?.customHwid?.trim().isNotEmpty ?? false);
+    // Keep the route transition free of payload decoding and flag preparation.
+    _payloadStartTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) unawaited(_loadPayload());
+    });
   }
 
   @override
   void dispose() {
+    _payloadStartTimer?.cancel();
     _nameController.dispose();
     _customUserAgentController.dispose();
     _customHwidController.dispose();
@@ -73,6 +330,14 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
 
   void _reloadCurrentSubscription() {
     _currentSubscription = SubscriptionStore.getMetadata(widget.subscriptionId);
+    if (mounted &&
+        _currentSubscription?.payloadRevision !=
+            _hydratedSubscription?.payloadRevision) {
+      _hydratedSubscription = null;
+      _visibleOutbounds = const [];
+      _payloadLoading = true;
+      unawaited(_loadPayload());
+    }
   }
 
   bool _hasPendingName(Subscription subscription) {
@@ -86,7 +351,10 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     if (nextName == subscription.name) {
       return;
     }
-    await SubscriptionStore.save(subscription.copyWith(name: nextName));
+    await SubscriptionStore.updateMetadata(
+      subscription.id,
+      (current) => current.copyWith(name: nextName),
+    );
     _reloadCurrentSubscription();
   }
 
@@ -98,7 +366,10 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.save(subscription.copyWith(name: nextName));
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.copyWith(name: nextName),
+      );
       _reloadCurrentSubscription();
     } finally {
       if (mounted) {
@@ -116,8 +387,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.save(
-        subscription.copyWith(disableAutoUpdate: disabled),
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.copyWith(disableAutoUpdate: disabled),
       );
       _reloadCurrentSubscription();
     } finally {
@@ -138,12 +410,11 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.save(
-        subscription.copyWith(
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.copyWith(
           disableAutoUpdate: disabled,
-          autoRefreshMinutes: disabled
-              ? subscription.autoRefreshMinutes
-              : minutes,
+          autoRefreshMinutes: disabled ? current.autoRefreshMinutes : minutes,
         ),
       );
       _reloadCurrentSubscription();
@@ -155,35 +426,38 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   }
 
   Future<void> _saveRequestSettings(Subscription subscription) async {
-    final baseInfo = subscription.info ?? const SubscriptionInfo();
+    if (_busy) return;
     final customHwid = _useCustomHwid ? _customHwidController.text.trim() : '';
     final customUserAgent = _customUserAgentController.text.trim();
     final customHeaders = _customHeadersController.text.trim();
+    // Only fields edited in this form may overwrite the latest stored Info.
+    // Toggling HWID must not restore stale headers/UA from the other controls.
+    final edits = <String, dynamic>{
+      if (_requestSettingsBaseline.customHwid !=
+          (customHwid.isEmpty ? null : customHwid))
+        'custom_hwid': customHwid.isEmpty ? null : customHwid,
+      if (_requestSettingsBaseline.customUserAgent !=
+          (customUserAgent.isEmpty ? null : customUserAgent))
+        'custom_user_agent': customUserAgent.isEmpty ? null : customUserAgent,
+      if (_requestSettingsBaseline.customRequestHeader !=
+          (customHeaders.isEmpty ? null : customHeaders))
+        'custom_request_header': customHeaders.isEmpty ? null : customHeaders,
+      if (_requestSettingsBaseline.requireHwid != _sendHwid)
+        'require_hwid': _sendHwid,
+    };
+    if (edits.isEmpty) return;
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.save(
-        subscription.copyWith(
-          info: SubscriptionInfo(
-            title: baseInfo.title,
-            upload: baseInfo.upload,
-            download: baseInfo.download,
-            total: baseInfo.total,
-            expire: baseInfo.expire,
-            happCryptoLink: baseInfo.happCryptoLink,
-            supportUrl: baseInfo.supportUrl,
-            webPageUrl: baseInfo.webPageUrl,
-            newUrl: baseInfo.newUrl,
-            ignoreSubscriptionMoved: baseInfo.ignoreSubscriptionMoved,
-            updateIntervalHours: baseInfo.updateIntervalHours,
-            perAppProxyMode: baseInfo.perAppProxyMode,
-            perAppProxyList: baseInfo.perAppProxyList,
-            customUserAgent: customUserAgent.isEmpty ? null : customUserAgent,
-            customRequestHeader: customHeaders.isEmpty ? null : customHeaders,
-            requireHwid: _sendHwid,
-            customHwid: customHwid.isEmpty ? null : customHwid,
-          ),
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.copyWith(
+          info: SubscriptionInfo.fromMap({...?current.info?.toMap(), ...edits}),
         ),
       );
+      _requestSettingsBaseline = SubscriptionInfo.fromMap({
+        ..._requestSettingsBaseline.toMap(),
+        ...edits,
+      });
       _reloadCurrentSubscription();
     } finally {
       if (mounted) {
@@ -199,14 +473,18 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.save(
-        subscription.copyWith(
-          url: newUrl,
-          info: subscription.info?.copyWith(
-            newUrl: null,
-            ignoreSubscriptionMoved: false,
-          ),
-        ),
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.info?.newUrl != newUrl
+            ? current
+            : current.copyWith(
+                url: newUrl,
+                info: SubscriptionInfo.fromMap({
+                  ...?current.info?.toMap(),
+                  'new_url': null,
+                  'ignore_subscription_moved': false,
+                }),
+              ),
       );
       _reloadCurrentSubscription();
     } finally {
@@ -259,11 +537,12 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     }
     setState(() => _busy = true);
     try {
-      await SubscriptionStore.saveMetadata(
-        subscription.copyWith(
+      await SubscriptionStore.updateMetadata(
+        subscription.id,
+        (current) => current.copyWith(
           url: editedUrl,
           lastUpdated: 0,
-          info: subscription.info?.copyWith(ignoreSubscriptionMoved: false),
+          info: current.info?.copyWith(ignoreSubscriptionMoved: false),
         ),
       );
       _reloadCurrentSubscription();
@@ -346,76 +625,18 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     return l10n.refreshIntervalMinutesShort(minutes);
   }
 
-  String _summarizeHappCryptoLink(String value) {
-    final trimmed = value.trim();
-    if (trimmed.length <= 32) {
-      return trimmed;
-    }
-    return '${trimmed.substring(0, 32)}...';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     final subscription = _subscription;
-    if (subscription == null) {
-      return const SizedBox.shrink();
-    }
-    final isLocalFileImport = SubscriptionStore.isLocalFileImportUrl(
-      subscription.url,
-    );
-    final localFileImportName = SubscriptionStore.localFileImportDisplayName(
-      subscription.url,
-    );
-
-    Future<void> refresh() async {
-      setState(() => _busy = true);
-      try {
-        await widget.onRefresh();
-        _reloadCurrentSubscription();
-      } finally {
-        if (mounted) {
-          setState(() => _busy = false);
-        }
-      }
-    }
-
-    Future<void> delete() async {
-      final navigator = Navigator.of(context);
-      var popped = false;
-      setState(() => _busy = true);
-      try {
-        await widget.onDelete();
-        if (mounted) {
-          navigator.pop();
-          popped = true;
-        }
-      } finally {
-        if (mounted && !popped) {
-          setState(() => _busy = false);
-        }
-      }
-    }
-
+    if (subscription == null) return const SizedBox.shrink();
+    final local = SubscriptionStore.isLocalFileImportUrl(subscription.url);
     final info = subscription.info;
-    final expireSeconds = info?.expire;
-    final hasUnlimitedExpire =
-        info != null && (expireSeconds == null || expireSeconds <= 0);
-    final supportUrl = info?.supportUrl;
-    final webPageUrl = info?.webPageUrl;
-    final happCryptoLink = info?.happCryptoLink;
-    final migratedUrl = info?.newUrl;
-    final movedIgnored = info?.ignoreSubscriptionMoved == true;
-    final userVisibleOutbounds = subscription.outbounds
-        .where((outbound) => outbound.config['_group_only'] != true)
-        .toList(growable: false);
-    final visibleOutbounds = userVisibleOutbounds
-        .take(_kSubscriptionProxyPreviewLimit)
-        .toList(growable: false);
-    final hiddenOutboundsCount =
-        userVisibleOutbounds.length - visibleOutbounds.length;
-    final usageText = switch ((info?.consumed, info?.total)) {
+    final count = _hydratedSubscription != null
+        ? _visibleOutbounds.length
+        : subscription.cachedVisibleProxyCount;
+    final usage = switch ((info?.consumed, info?.total)) {
       (final consumed?, final total?) when total > 0 => l10n.trafficUsage(
         formatBytes(consumed.toDouble()),
         formatBytes(total.toDouble()),
@@ -424,37 +645,82 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         formatBytes(consumed.toDouble()),
         l10n.unlimitedSymbol,
       ),
-      (_, _) when info != null => l10n.trafficUsage(
-        '0 B',
-        l10n.unlimitedSymbol,
-      ),
       _ => null,
     };
-    final untilText = switch (expireSeconds) {
-      final seconds? when seconds > 0 => MaterialLocalizations.of(
-        context,
-      ).formatCompactDate(DateTime.fromMillisecondsSinceEpoch(seconds * 1000)),
-      _ => null,
-    };
-    final untilLabel = untilText != null
-        ? l10n.untilDate(untilText)
-        : hasUnlimitedExpire
+    final expire = info?.expire;
+    final until = expire != null && expire > 0
+        ? l10n.untilDate(
+            MaterialLocalizations.of(context).formatCompactDate(
+              DateTime.fromMillisecondsSinceEpoch(expire * 1000),
+            ),
+          )
+        : info != null
         ? l10n.daysLeftUnlimited
         : null;
+    final movedUrl = info?.newUrl;
+    Future<void> refresh() async {
+      setState(() => _busy = true);
+      try {
+        await widget.onRefresh();
+        _reloadCurrentSubscription();
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+    }
 
     return PopScope(
       canPop: !_busy,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop || _busy || !_hasPendingName(subscription)) {
-          return;
+        if (didPop && !_busy && _hasPendingName(subscription)) {
+          unawaited(
+            _saveNameSilently(subscription).catchError((Object error) {
+              AppLogStore.warning(
+                'subscription',
+                'Profile name save failed: ${error.runtimeType}',
+              );
+            }),
+          );
         }
-        unawaited(_saveNameSilently(subscription));
       },
       child: ProgressiveBlurScaffold(
         appBar: AppBar(
           title: Text(l10n.subscriptionDetailsTitle),
+          actions: [
+            PopupMenuButton<String>(
+              enabled: !_busy,
+              onSelected: (value) async {
+                _haptic();
+                if (value == 'reparse') {
+                  await _reparseSubscription(subscription);
+                } else if (value == 'move') {
+                  await widget.onMoveUp?.call();
+                } else if (value == 'delete') {
+                  setState(() => _busy = true);
+                  try {
+                    await widget.onDelete();
+                    if (mounted) Navigator.of(this.context).pop();
+                  } finally {
+                    if (mounted) setState(() => _busy = false);
+                  }
+                }
+              },
+              itemBuilder: (_) => [
+                if (subscription.hasRawPayload)
+                  PopupMenuItem(
+                    value: 'reparse',
+                    child: Text(l10n.reparseProxies),
+                  ),
+                if (widget.onMoveUp != null)
+                  PopupMenuItem(
+                    value: 'move',
+                    child: Text(l10n.subscriptionMoveUp),
+                  ),
+                PopupMenuItem(value: 'delete', child: Text(l10n.delete)),
+              ],
+            ),
+          ],
           flexibleSpace: _busy
-              ? Align(
+              ? const Align(
                   alignment: Alignment.bottomCenter,
                   child: LinearProgressIndicator(
                     minHeight: 2,
@@ -463,654 +729,404 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                 )
               : null,
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  12,
-                  progressiveHeaderTopPadding(context, 8),
-                  12,
-                  appBottomSafePadding(context, 24),
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              key: const PageStorageKey('subscription_details_scroll'),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                progressiveHeaderTopPadding(context, 12),
+                16,
+                appBottomSafePadding(context, 24),
+              ),
+              children: [
+                TextField(
+                  controller: _nameController,
+                  enabled: !_busy,
+                  inputFormatters: [noNewlineInputFormatter],
+                  maxLines: 2,
+                  textInputAction: TextInputAction.done,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: l10n.subscriptionName,
+                    border: InputBorder.none,
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onSubmitted: (_) => _saveName(subscription),
+                  onTapOutside: (_) {
+                    FocusScope.of(context).unfocus();
+                    if (!_busy) unawaited(_saveName(subscription));
+                  },
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                if (usage != null)
+                  Text(
+                    l10n.spentTraffic(usage),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                if (until != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      until,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                if (subscription.lastUpdated > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      _subscriptionLastUpdatedText(
+                        context,
+                        subscription.lastUpdated,
+                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                const Gap(12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (widget.onMoveUp != null)
-                            FilledButton.tonal(
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      _haptic();
-                                      await widget.onMoveUp!();
-                                    },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: const Icon(
-                                Icons.arrow_upward_rounded,
-                                size: 18,
-                              ),
-                            ),
-                          if (!isLocalFileImport)
-                            FilledButton.tonal(
-                              onPressed: _busy
-                                  ? null
-                                  : () {
-                                      _haptic();
-                                      refresh();
-                                    },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: Text(l10n.refresh),
-                            ),
-                          if (!isLocalFileImport)
-                            FilledButton.tonal(
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      _haptic();
-                                      await _reparseSubscription(subscription);
-                                    },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: Text(l10n.reparseProxies),
-                            ),
-                          FilledButton.tonal(
-                            onPressed: _busy
-                                ? null
-                                : () {
-                                    _haptic();
-                                    delete();
-                                  },
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: Text(l10n.delete),
-                          ),
-                        ],
+                    if (!local)
+                      FilledButton.tonalIcon(
+                        onPressed: _busy ? null : refresh,
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(l10n.refresh),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 420),
-                          child: Stack(
-                            alignment: Alignment.centerRight,
-                            children: [
-                              TextField(
-                                controller: _nameController,
-                                onTapOutside: (_) async {
-                                  FocusScope.of(context).unfocus();
-                                  if (_hasPendingName(subscription)) {
-                                    await _saveName(subscription);
-                                  }
-                                },
-                                onSubmitted: (_) => _saveName(subscription),
-                                onEditingComplete: () async {
-                                  FocusScope.of(context).unfocus();
-                                  await _saveName(subscription);
-                                },
-                                textInputAction: TextInputAction.done,
-                                inputFormatters: [noNewlineInputFormatter],
-                                minLines: 1,
-                                maxLines: 3,
-                                keyboardType: TextInputType.text,
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: l10n.subscriptionName,
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  disabledBorder: InputBorder.none,
-                                  isDense: true,
-                                  filled: true,
-                                  fillColor: theme.scaffoldBackgroundColor,
-                                  contentPadding: const EdgeInsets.only(
-                                    right: 16,
-                                  ),
-                                ),
-                              ),
-                              IgnorePointer(
-                                child: Opacity(
-                                  opacity: 0.38,
-                                  child: Text(
-                                    '|',
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    _DetailsBlock(
-                      title: isLocalFileImport ? l10n.sourceLabel : 'URL',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!isLocalFileImport) ...[
-                            IconButton(
-                              key: const ValueKey(
-                                'edit_subscription_url_button',
-                              ),
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      _haptic();
-                                      await _editSubscriptionUrl(subscription);
-                                    },
-                              tooltip: l10n.editSubscriptionUrlAction,
-                              icon: const Icon(Icons.edit_rounded),
-                            ),
-                            FilledButton.tonal(
-                              onPressed: () async {
-                                _haptic();
-                                await _showSubscriptionQr(
-                                  _qrShareValue(subscription),
-                                  title: subscription.name,
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                l10n.showQrCode,
-                                style: theme.textTheme.labelMedium,
-                              ),
-                            ),
-                            const Gap(4),
-                            FilledButton.tonal(
-                              onPressed: () async {
-                                _haptic();
-                                await SensitiveClipboard.copy(subscription.url);
-                              },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: Text(
-                                MaterialLocalizations.of(
-                                  context,
-                                ).copyButtonLabel,
-                                style: theme.textTheme.labelMedium,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (isLocalFileImport)
-                            Text(
-                              l10n.importedFromFileLabel(
-                                localFileImportName ?? subscription.name,
-                              ),
-                              style: theme.textTheme.bodyMedium,
-                            )
-                          else
-                            SelectableText(
-                              subscription.url,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          if (happCryptoLink != null &&
-                              happCryptoLink.isNotEmpty) ...[
-                            Divider(
-                              height: 24,
-                              color: theme.colorScheme.outlineVariant
-                                  .withValues(alpha: .45),
-                            ),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        l10n.happCryptoLinkImportedLabel,
-                                        style: theme.textTheme.labelMedium
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                      ),
-                                      const Gap(4),
-                                      Text(
-                                        _summarizeHappCryptoLink(
-                                          happCryptoLink,
-                                        ),
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Gap(12),
-                                FilledButton.tonal(
-                                  onPressed: () async {
-                                    _haptic();
-                                    await SensitiveClipboard.copy(
-                                      happCryptoLink,
-                                    );
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    MaterialLocalizations.of(
-                                      context,
-                                    ).copyButtonLabel,
-                                    style: theme.textTheme.labelMedium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (movedIgnored &&
-                        migratedUrl != null &&
-                        migratedUrl.isNotEmpty &&
-                        migratedUrl != subscription.url)
-                      _DetailsBlock(
-                        title: l10n.newUrlTitle,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.movedSubscriptionPrompt,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                            const Gap(6),
-                            Text(
-                              migratedUrl,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const Gap(10),
-                            FilledButton.tonal(
-                              onPressed: _busy
-                                  ? null
-                                  : () async {
-                                      _haptic();
-                                      await _applyMigratedUrl(subscription);
-                                    },
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: Text(l10n.updateUrlAction),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (!isLocalFileImport)
-                      _DetailsBlock(
-                        title: l10n.autoUpdateTitle,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    l10n.disableAutoUpdateTitle,
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ),
-                                Switch.adaptive(
-                                  value: subscription.disableAutoUpdate,
-                                  onChanged: _busy
-                                      ? null
-                                      : (value) async {
-                                          _haptic();
-                                          await _saveAutoUpdate(
-                                            subscription,
-                                            disabled: value,
-                                          );
-                                        },
-                                ),
-                              ],
-                            ),
-                            if (subscription.lastUpdated > 0) ...[
-                              const Gap(6),
-                              Text(
-                                _subscriptionLastUpdatedText(
-                                  context,
-                                  subscription.lastUpdated,
-                                ),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                            const Gap(6),
-                            Text(
-                              subscription.disableAutoUpdate
-                                  ? l10n.refreshesEvery(l10n.disabledLabel)
-                                  : l10n.refreshesEvery(
-                                      _formatRefreshInterval(
-                                        context,
-                                        subscription.autoRefreshMinutes,
-                                      ),
-                                    ),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const Gap(10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final minutes in _kAutoRefreshOptions)
-                                  ChoiceChip(
-                                    label: Text(
-                                      minutes <= 0
-                                          ? l10n.disabledLabel
-                                          : _formatRefreshInterval(
-                                              context,
-                                              minutes,
-                                            ),
-                                    ),
-                                    selected: minutes <= 0
-                                        ? subscription.disableAutoUpdate
-                                        : !subscription.disableAutoUpdate &&
-                                              subscription.autoRefreshMinutes ==
-                                                  minutes,
-                                    onSelected: _busy
-                                        ? null
-                                        : (_) async {
-                                            _haptic();
-                                            await _saveAutoRefreshInterval(
-                                              subscription,
-                                              minutes,
-                                            );
-                                          },
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (!isLocalFileImport)
-                      _DetailsBlock(
-                        title: l10n.serverRequestTitle,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(l10n.sendHwidTitle),
-                              subtitle: Text(l10n.sendHwidSubtitle),
-                              value:
-                                  _sendHwid ||
-                                  SubscriptionFetcher.sendHwidToProviders,
-                              onChanged:
-                                  _busy ||
-                                      SubscriptionFetcher.sendHwidToProviders
-                                  ? null
-                                  : (value) async {
-                                      _haptic();
-                                      setState(() {
-                                        _sendHwid = value;
-                                        if (!value) {
-                                          _useCustomHwid = false;
-                                        }
-                                      });
-                                      await _saveRequestSettings(subscription);
-                                    },
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(l10n.useCustomHwidTitle),
-                              subtitle: Text(l10n.useCustomHwidSubtitle),
-                              value:
-                                  (_sendHwid ||
-                                      SubscriptionFetcher
-                                          .sendHwidToProviders) &&
-                                  _useCustomHwid,
-                              onChanged:
-                                  (!_sendHwid &&
-                                          !SubscriptionFetcher
-                                              .sendHwidToProviders) ||
-                                      _busy
-                                  ? null
-                                  : (value) async {
-                                      _haptic();
-                                      setState(() => _useCustomHwid = value);
-                                      await _saveRequestSettings(subscription);
-                                    },
-                            ),
-                            const Gap(6),
-                            if ((_sendHwid ||
-                                    SubscriptionFetcher.sendHwidToProviders) &&
-                                _useCustomHwid) ...[
-                              TextField(
-                                controller: _customHwidController,
-                                onTapOutside: (_) async {
-                                  FocusScope.of(context).unfocus();
-                                  await _saveRequestSettings(subscription);
-                                },
-                                onSubmitted: (_) =>
-                                    _saveRequestSettings(subscription),
-                                onEditingComplete: () async {
-                                  FocusScope.of(context).unfocus();
-                                  await _saveRequestSettings(subscription);
-                                },
-                                inputFormatters: [noNewlineInputFormatter],
-                                decoration: InputDecoration(
-                                  labelText: l10n.customHwidTitle,
-                                  helperText: l10n.customHwidSubtitle,
-                                ),
-                              ),
-                              const Gap(6),
-                            ],
-                            TextField(
-                              controller: _customUserAgentController,
-                              onTapOutside: (_) async {
-                                FocusScope.of(context).unfocus();
-                                await _saveRequestSettings(subscription);
-                              },
-                              onSubmitted: (_) =>
-                                  _saveRequestSettings(subscription),
-                              onEditingComplete: () async {
-                                FocusScope.of(context).unfocus();
-                                await _saveRequestSettings(subscription);
-                              },
-                              inputFormatters: [noNewlineInputFormatter],
-                              decoration: InputDecoration(
-                                labelText: l10n.customUserAgentTitle,
-                                helperText: l10n.customUserAgentSubtitle,
-                                helperMaxLines: 3,
-                                hintText: SubscriptionFetcher.defaultUserAgent,
-                              ),
-                            ),
-                            const Gap(12),
-                            TextField(
-                              controller: _customHeadersController,
-                              minLines: 3,
-                              maxLines: 8,
-                              onTapOutside: (_) async {
-                                FocusScope.of(context).unfocus();
-                                await _saveRequestSettings(subscription);
-                              },
-                              onSubmitted: (_) =>
-                                  _saveRequestSettings(subscription),
-                              onEditingComplete: () async {
-                                FocusScope.of(context).unfocus();
-                                await _saveRequestSettings(subscription);
-                              },
-                              decoration: InputDecoration(
-                                labelText: l10n.customRequestHeadersTitle,
-                                helperText: l10n.customRequestHeadersSubtitle,
-                                helperMaxLines: 3,
-                                hintText:
-                                    'Authorization: Bearer ...\nX-Token: ...',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (usageText != null || untilLabel != null)
-                      _DetailsBlock(
-                        title: l10n.usageTitle,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (usageText != null)
-                              Text(
-                                l10n.spentTraffic(usageText),
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            if (untilLabel != null) ...[
-                              if (usageText != null) const Gap(6),
-                              Text(
-                                untilLabel,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    if (supportUrl != null || webPageUrl != null)
-                      _DetailsBlock(
-                        title: l10n.infoTitle,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (supportUrl != null) ...[
-                              Text(
-                                l10n.supportUrlLabel,
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const Gap(4),
-                              _LinkText(
-                                label: supportUrl,
-                                onTap: () => _openUrl(supportUrl),
-                              ),
-                            ],
-                            if (webPageUrl != null) ...[
-                              if (supportUrl != null) const Gap(12),
-                              Text(
-                                l10n.websiteLabel,
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const Gap(4),
-                              _LinkText(
-                                label: webPageUrl,
-                                onTap: () => _openUrl(webPageUrl),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    _DetailsBlock(
-                      title: l10n.proxiesTitle,
-                      trailing: _CountBadge(
-                        label: l10n.outboundsCount(userVisibleOutbounds.length),
-                      ),
-                      child: Column(
-                        children: [
-                          for (var i = 0; i < visibleOutbounds.length; i++) ...[
-                            _OutboundRow(outbound: visibleOutbounds[i]),
-                            if (i != visibleOutbounds.length - 1 ||
-                                hiddenOutboundsCount > 0)
-                              Divider(
-                                height: 20,
-                                color: theme.colorScheme.outlineVariant
-                                    .withValues(alpha: .45),
-                              ),
-                          ],
-                          if (hiddenOutboundsCount > 0)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                l10n.moreProxies(hiddenOutboundsCount),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('subscription_export_json'),
+                      onPressed: _busy ? null : _exportProfile,
+                      icon: const Icon(Icons.file_upload_outlined, size: 18),
+                      label: Text(l10n.subscriptionExportJson),
                     ),
                   ],
                 ),
-              ),
+                const Gap(20),
+                _DetailsBlock(
+                  title: local
+                      ? l10n.subscriptionLocalFile
+                      : l10n.subscriptionUrl,
+                  trailing: local
+                      ? null
+                      : IconButton(
+                          key: const ValueKey('edit_subscription_url_button'),
+                          tooltip: l10n.editSubscriptionUrlAction,
+                          onPressed: _busy
+                              ? null
+                              : () => _editSubscriptionUrl(subscription),
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectableText(
+                        local
+                            ? SubscriptionStore.localFileImportDisplayName(
+                                    subscription.url,
+                                  ) ??
+                                  l10n.subscriptionLocalFile
+                            : subscription.url,
+                        maxLines: 3,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (!local) ...[
+                        const Gap(8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () =>
+                                  SensitiveClipboard.copy(subscription.url),
+                              icon: const Icon(Icons.copy_outlined, size: 18),
+                              label: Text(l10n.subscriptionCopy),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _showSubscriptionQr(
+                                _qrShareValue(subscription),
+                                title: subscription.name,
+                              ),
+                              icon: const Icon(Icons.qr_code_rounded, size: 18),
+                              label: Text(l10n.showQrCode),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (movedUrl != null &&
+                    movedUrl.isNotEmpty &&
+                    movedUrl != subscription.url &&
+                    info?.ignoreSubscriptionMoved != true)
+                  _DetailsBlock(
+                    title: l10n.infoTitle,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.movedSubscriptionPrompt),
+                        const Gap(8),
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => _applyMigratedUrl(subscription),
+                          child: Text(l10n.updateUrlAction),
+                        ),
+                      ],
+                    ),
+                  ),
+                _DetailsBlock(
+                  key: const ValueKey('subscription_details_proxies'),
+                  title: l10n.proxiesTitle,
+                  trailing: _CountBadge(
+                    label: count >= 0
+                        ? l10n.outboundsCount(count)
+                        : l10n.loading,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_payloadLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_payloadFailed) ...[
+                        Text(l10n.subscriptionServersLoadFailed),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _payloadLoading = true;
+                              _payloadFailed = false;
+                            });
+                            unawaited(_loadPayload());
+                          },
+                          child: Text(l10n.refresh),
+                        ),
+                      ],
+                      for (final outbound in _visibleOutbounds.take(
+                        _kSubscriptionProxyPreviewLimit,
+                      ))
+                        _OutboundRow(
+                          key: ValueKey('subscription_preview_${outbound.tag}'),
+                          outbound: outbound,
+                          onTap: () => _shareOutbound(outbound.tag),
+                        ),
+                      if (_visibleOutbounds.isNotEmpty)
+                        TextButton.icon(
+                          key: const ValueKey('subscription_all_servers'),
+                          onPressed: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute(
+                              builder: (_) => _SubscriptionServersPage(
+                                subscriptionName: subscription.name,
+                                outbounds: _visibleOutbounds,
+                                onShare: _shareOutbound,
+                              ),
+                            ),
+                          ),
+                          icon: const Icon(Icons.list_rounded, size: 18),
+                          label: Text(l10n.subscriptionAllServers),
+                        ),
+                    ],
+                  ),
+                ),
+                if (!local)
+                  _DetailsBlock(
+                    title: l10n.autoUpdateTitle,
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(l10n.autoUpdateTitle),
+                          subtitle: Text(
+                            subscription.disableAutoUpdate
+                                ? l10n.disabledLabel
+                                : l10n.refreshesEvery(
+                                    _formatRefreshInterval(
+                                      context,
+                                      subscription.autoRefreshMinutes,
+                                    ),
+                                  ),
+                          ),
+                          value: !subscription.disableAutoUpdate,
+                          onChanged: _busy
+                              ? null
+                              : (value) => _saveAutoUpdate(
+                                  subscription,
+                                  disabled: !value,
+                                ),
+                        ),
+                        if (!subscription.disableAutoUpdate)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(l10n.subscriptionRefreshInterval),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: _busy
+                                ? null
+                                : () => _chooseRefreshInterval(subscription),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (!local)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ExpansionTile(
+                      key: PageStorageKey(
+                        'subscription_request_settings_${widget.subscriptionId}',
+                      ),
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      collapsedShape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: Text(l10n.subscriptionAdvancedSettings),
+                      subtitle: Text(
+                        l10n.serverRequestTitle,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      onExpansionChanged: (value) =>
+                          setState(() => _advancedExpanded = value),
+                      children: _advancedExpanded
+                          ? [
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(l10n.sendHwidTitle),
+                                subtitle: Text(l10n.sendHwidSubtitle),
+                                value:
+                                    _sendHwid ||
+                                    SubscriptionFetcher.sendHwidToProviders,
+                                onChanged:
+                                    _busy ||
+                                        SubscriptionFetcher.sendHwidToProviders
+                                    ? null
+                                    : (value) {
+                                        setState(() => _sendHwid = value);
+                                        unawaited(
+                                          _saveRequestSettings(subscription),
+                                        );
+                                      },
+                              ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(l10n.useCustomHwidTitle),
+                                value: _useCustomHwid,
+                                onChanged: _busy
+                                    ? null
+                                    : (value) {
+                                        setState(() => _useCustomHwid = value);
+                                        unawaited(
+                                          _saveRequestSettings(subscription),
+                                        );
+                                      },
+                              ),
+                              if (_useCustomHwid)
+                                TextField(
+                                  key: const PageStorageKey(
+                                    'subscription_custom_hwid',
+                                  ),
+                                  controller: _customHwidController,
+                                  enabled: !_busy,
+                                  decoration: InputDecoration(
+                                    labelText: l10n.useCustomHwidTitle,
+                                  ),
+                                  inputFormatters: [noNewlineInputFormatter],
+                                  onSubmitted: (_) =>
+                                      _saveRequestSettings(subscription),
+                                ),
+                              const Gap(12),
+                              TextField(
+                                key: const PageStorageKey(
+                                  'subscription_custom_user_agent',
+                                ),
+                                controller: _customUserAgentController,
+                                enabled: !_busy,
+                                decoration: InputDecoration(
+                                  labelText: l10n.customUserAgentTitle,
+                                  hintText:
+                                      SubscriptionFetcher.defaultUserAgent,
+                                ),
+                                inputFormatters: [noNewlineInputFormatter],
+                                onSubmitted: (_) =>
+                                    _saveRequestSettings(subscription),
+                              ),
+                              const Gap(12),
+                              TextField(
+                                key: const PageStorageKey(
+                                  'subscription_custom_headers',
+                                ),
+                                controller: _customHeadersController,
+                                enabled: !_busy,
+                                minLines: 2,
+                                maxLines: 6,
+                                decoration: InputDecoration(
+                                  labelText: l10n.customRequestHeadersTitle,
+                                  helperText: l10n.customRequestHeadersSubtitle,
+                                  helperMaxLines: 3,
+                                ),
+                              ),
+                              const Gap(12),
+                              Align(
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () =>
+                                            _saveRequestSettings(subscription),
+                                  child: Text(l10n.saveAction),
+                                ),
+                              ),
+                            ]
+                          : const [],
+                    ),
+                  ),
+                if (info?.supportUrl != null || info?.webPageUrl != null)
+                  _DetailsBlock(
+                    title: l10n.infoTitle,
+                    child: Column(
+                      children: [
+                        if (info?.supportUrl case final url?)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.support_agent_rounded),
+                            title: Text(l10n.supportUrlLabel),
+                            trailing: const Icon(
+                              Icons.open_in_new_rounded,
+                              size: 18,
+                            ),
+                            onTap: () => _openUrl(url),
+                          ),
+                        if (info?.webPageUrl case final url?)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.language_rounded),
+                            title: Text(l10n.websiteLabel),
+                            trailing: const Icon(
+                              Icons.open_in_new_rounded,
+                              size: 18,
+                            ),
+                            onTap: () => _openUrl(url),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

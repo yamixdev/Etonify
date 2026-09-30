@@ -70,6 +70,8 @@ class SubscriptionFetcher {
   static bool shouldSendHwid(SubscriptionInfo? requestInfo) =>
       _sendHwidToProviders || requestInfo?.requireHwid == true;
   static String get defaultUserAgent => 'Happ/3.24.1 Etonify/$_appVersion';
+
+  static String get currentAppVersion => _appVersion;
   static const _maxSubscriptionResponseBytes = 16 * 1024 * 1024;
   static const _maxRedirects = 5;
   static const _redirectStatusCodes = <int>{301, 302, 303, 307, 308};

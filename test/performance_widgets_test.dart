@@ -5,9 +5,305 @@ import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
+  testWidgets('ping updates retain the static flag and labels of a row', (
+    tester,
+  ) async {
+    final runtime = ProxyRuntimeVisualStore();
+    addTearDown(runtime.dispose);
+    final proxy = _performanceProxy(0);
+    runtime.replaceAll({proxy.tag: const ProxyRuntimeVisualState(latency: 10)});
+    await tester.pumpWidget(_scrollTestPage([proxy], runtime: runtime));
+    await tester.pumpAndSettle();
+    final before = tester.widget<CountryFlagBadge>(
+      find.byType(CountryFlagBadge),
+    );
+    runtime.updateTags({
+      proxy.tag: const ProxyRuntimeVisualState(
+        latency: 135,
+        latencyFresh: true,
+      ),
+    });
+    await tester.pump();
+    expect(find.text('135 ms'), findsOneWidget);
+    expect(tester.binding.transientCallbackCount, 0);
+    expect(
+      identical(
+        tester.widget<CountryFlagBadge>(find.byType(CountryFlagBadge)),
+        before,
+      ),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'runtime sorting moves existing row elements instead of replacing them',
+    (tester) async {
+      final runtime = ProxyRuntimeVisualStore();
+      addTearDown(runtime.dispose);
+      final proxies = List.generate(3, _performanceProxy);
+      await tester.pumpWidget(
+        _scrollTestPage(proxies, runtime: runtime, sort: ProxySort.latency),
+      );
+      await tester.pumpAndSettle();
+      Finder row(String tag) => find.byWidgetPredicate(
+        (widget) => widget is ProxyTile && widget.proxy.tag == tag,
+      );
+      final firstElement = tester.element(row(proxies.first.tag));
+      runtime.updateTags({
+        proxies.first.tag: const ProxyRuntimeVisualState(
+          latency: 100,
+          latencyFresh: true,
+        ),
+      });
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        tester.getTopLeft(row(proxies[1].tag)).dy,
+        lessThan(tester.getTopLeft(row(proxies.first.tag)).dy),
+      );
+      expect(
+        identical(tester.element(row(proxies.first.tag)), firstElement),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('parent data refresh cannot reorder rows during a drag', (
+    tester,
+  ) async {
+    var proxies = List.generate(20, _performanceProxy);
+    var profile = 'same';
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          rebuild = setState;
+          return _scrollTestPage(
+            proxies,
+            sort: ProxySort.latency,
+            profileId: profile,
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ListView)),
+    );
+    await gesture.moveBy(const Offset(0, -30));
+    await tester.pump();
+    rebuild(() {
+      proxies = [proxies.first.copyWith(latency: 1000), ...proxies.skip(1)];
+    });
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      tester.widgetList<ProxyTile>(find.byType(ProxyTile)).first.proxy.tag,
+      'proxy-0',
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widgetList<ProxyTile>(find.byType(ProxyTile)).first.proxy.tag,
+      'proxy-1',
+    );
+
+    final nextDrag = await tester.startGesture(
+      tester.getCenter(find.byType(ListView)),
+    );
+    await nextDrag.moveBy(const Offset(0, -30));
+    await tester.pump();
+    rebuild(() {
+      profile = 'next';
+      proxies = [
+        for (final proxy in proxies)
+          proxy.copyWith(displayName: 'New ${proxy.tag}'),
+      ];
+    });
+    await tester.pump();
+    expect(find.text('Proxy 1'), findsNothing);
+    expect(find.text('New proxy-1'), findsOneWidget);
+    await nextDrag.up();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('source-sorted rows receive parent data after scrolling stops', (
+    tester,
+  ) async {
+    var proxies = List.generate(20, _performanceProxy);
+    late StateSetter rebuild;
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          rebuild = setState;
+          return _scrollTestPage(proxies);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(ListView)),
+    );
+    await gesture.moveBy(const Offset(0, -30));
+    await tester.pump();
+    rebuild(() {
+      proxies = [
+        proxies.first.copyWith(displayName: 'Updated proxy', countryCode: 'FI'),
+        ...proxies.skip(1),
+      ];
+    });
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Proxy 0'), findsOneWidget);
+    expect(find.text('Updated proxy'), findsNothing);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Updated proxy'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<CountryFlagBadge>(find.byType(CountryFlagBadge))
+          .first
+          .countryCode,
+      'FI',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('group sorting waits for the child list to stop scrolling', (
+    tester,
+  ) async {
+    final runtime = ProxyRuntimeVisualStore();
+    addTearDown(runtime.dispose);
+    final children = List.generate(20, _performanceProxy);
+    final group = _performanceProxy(30).copyWith(
+      tag: 'group',
+      isGroup: true,
+      childTags: [for (final child in children) child.tag],
+      childCount: children.length,
+    );
+    await tester.pumpWidget(
+      _scrollTestPage(
+        [group],
+        runtime: runtime,
+        sort: ProxySort.latency,
+        groupChildren: {'group': children},
+      ),
+    );
+    await tester.pumpAndSettle();
+    tester.widget<ProxyTile>(find.byType(ProxyTile)).onOpenGroup!(Rect.zero);
+    await tester.pumpAndSettle();
+    final surface = find.byKey(const ValueKey('proxy-group-sheet-surface'));
+    final list = find.descendant(of: surface, matching: find.byType(ListView));
+    final rows = find.descendant(of: surface, matching: find.byType(ProxyTile));
+    final nextChild = find.descendant(
+      of: surface,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is ProxyTile && widget.proxy.tag == 'proxy-1',
+      ),
+    );
+    final nextChildElement = tester.element(nextChild);
+    final gesture = await tester.startGesture(tester.getCenter(list));
+    await gesture.moveBy(const Offset(0, -30));
+    await tester.pump();
+    runtime.updateTags({
+      children.first.tag: const ProxyRuntimeVisualState(
+        latency: 1000,
+        latencyFresh: true,
+      ),
+    });
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      find.descendant(of: surface, matching: find.text('1.0 s')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widgetList<ProxyTile>(rows)
+          .where((row) => !row.proxy.isGroup)
+          .first
+          .proxy
+          .tag,
+      'proxy-0',
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<ProxyTile>(rows)
+          .where((row) => !row.proxy.isGroup)
+          .first
+          .proxy
+          .tag,
+      'proxy-1',
+    );
+    expect(identical(tester.element(nextChild), nextChildElement), isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('no-data rows and provider groups keep a tappable test action', (
+    tester,
+  ) async {
+    final runtime = ProxyRuntimeVisualStore();
+    addTearDown(runtime.dispose);
+    final proxies = [
+      _performanceProxy(0),
+      _performanceProxy(1).copyWith(
+        isGroup: true,
+        membersSelectable: false,
+        childTags: ['child-a', 'child-b'],
+        childCount: 2,
+      ),
+    ];
+    runtime.replaceAll({
+      for (final proxy in proxies)
+        proxy.tag: const ProxyRuntimeVisualState(latencyFresh: false),
+    });
+    final tested = <String>[];
+    final selected = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ProxiesPage(
+            proxies: proxies,
+            connected: true,
+            selectedTag: '',
+            runtimeStates: runtime,
+            progressiveBlurEnabled: false,
+            onSelected: selected.add,
+            onUrlTest: () async {},
+            onProxyUrlTest: (tag) async => tested.add(tag),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Нет данных'), findsNWidgets(2));
+    for (final proxy in proxies) {
+      final button = find.byKey(ValueKey('proxy-latency-action-${proxy.tag}'));
+      await tester.tap(button);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(button);
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(tested, [
+      proxies[0].tag,
+      proxies[0].tag,
+      proxies[1].tag,
+      proxies[1].tag,
+    ]);
+    expect(selected, isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('individual result renders while another proxy is still queued', (
     tester,
   ) async {
@@ -470,6 +766,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+
+Widget _scrollTestPage(
+  List<AppProxySummary> proxies, {
+  ProxyRuntimeVisualStore? runtime,
+  ProxySort sort = ProxySort.source,
+  String profileId = '',
+  Map<String, List<AppProxySummary>> groupChildren = const {},
+}) => MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  home: Scaffold(
+    body: ProxiesPage(
+      profileId: profileId,
+      proxies: proxies,
+      selectedTag: '',
+      connected: true,
+      runtimeStates: runtime,
+      initialSort: sort,
+      groupChildrenByTag: groupChildren,
+      progressiveBlurEnabled: false,
+      embedded: true,
+      sheetAtMaxExtent: true,
+      sheetExtent: 1,
+      onSelected: (_) {},
+      onUrlTest: () async {},
+    ),
+  ),
+);
 
 AppProxySummary _performanceProxy(int index) {
   return AppProxySummary(

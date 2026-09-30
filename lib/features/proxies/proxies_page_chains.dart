@@ -299,4 +299,10 @@ class _ProxyListEntry {
 
   final _ProxyListEntryType type;
   final AppProxySummary? proxy;
+
+  Key get key => switch (type) {
+    _ProxyListEntryType.tile => ValueKey('proxy-row-${proxy!.tag}'),
+    _ProxyListEntryType.addChain => const ValueKey('proxy-add-chain-row'),
+    _ProxyListEntryType.divider => const ValueKey('proxy-divider-row'),
+  };
 }

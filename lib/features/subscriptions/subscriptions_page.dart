@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/app/bounded_task_runner.dart';
+import 'package:meow_client/app/subscription_profile_import_controller.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/core/security/sensitive_clipboard.dart';
@@ -18,11 +20,14 @@ import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
+import 'package:meow_client/features/settings/settings_backup_import_actions.dart';
+import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 import 'package:meow_client/features/subscriptions/subscription_file_reader.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/app_view_models.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
@@ -35,8 +40,9 @@ part 'subscriptions_page_detail_widgets.dart';
 part 'subscriptions_page_details.dart';
 part 'subscriptions_page_list.dart';
 part 'subscriptions_page_qr.dart';
+part 'subscriptions_page_servers.dart';
 
-const _kSubscriptionProxyPreviewLimit = 50;
+const _kSubscriptionProxyPreviewLimit = 5;
 const _kSubscriptionOperationSoftWarningDelay = Duration(seconds: 15);
 const _kSubscriptionOperationTimeout = Duration(seconds: 30);
 const _kSubscriptionSheetListExtent = .38;
@@ -477,6 +483,29 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
 
   Future<bool> _importAddResult(_AddResult result) async {
     try {
+      final content = result.fileContent;
+      if (content != null &&
+          content
+              .substring(0, content.length.clamp(0, 4096))
+              .contains(EtonifyBackupService.profileMagic)) {
+        return await SettingsBackupImportActions.importProfileBytes(
+          context,
+          utf8.encode(content),
+          clientVersion: SubscriptionFetcher.currentAppVersion,
+          onImportSubscriptions: (subscriptions) async {
+            if (result.isCancelled?.call() == true) {
+              throw const SubscriptionImportCancelledException();
+            }
+            await SubscriptionProfileImportController(
+              loadExisting: SubscriptionStore.getAllMetadataInBackground,
+              save: SubscriptionStore.save,
+              onApplied: () async {
+                if (mounted) _reload();
+              },
+            ).apply(subscriptions);
+          },
+        );
+      }
       final prepared = await _prepareSubscriptionImport(result);
       if (prepared == null) {
         return false;

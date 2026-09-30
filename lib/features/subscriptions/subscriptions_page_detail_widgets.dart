@@ -27,6 +27,7 @@ class _CountBadge extends StatelessWidget {
 
 class _DetailsBlock extends StatelessWidget {
   const _DetailsBlock({
+    super.key,
     required this.title,
     required this.child,
     this.trailing,
@@ -164,110 +165,52 @@ class _SubscriptionUrlEditDialogState
   }
 }
 
-class _LinkText extends StatelessWidget {
-  const _LinkText({required this.label, required this.onTap});
+class _OutboundRow extends StatelessWidget {
+  const _OutboundRow({super.key, required this.outbound, required this.onTap});
 
-  final String label;
+  final Outbound outbound;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Text(
-          label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.primary,
-            decoration: TextDecoration.underline,
-            decorationColor: theme.colorScheme.primary.withValues(alpha: .75),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OutboundRow extends StatelessWidget {
-  const _OutboundRow({required this.outbound});
-
-  final Outbound outbound;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final latency = outbound.info.latestPing;
-    final primaryMeta = [
-      outbound.type.toLowerCase(),
+    final meta = [
+      outbound.type.toUpperCase(),
       ...[
         _securityLabel(outbound),
         _transportLabel(outbound),
-      ].whereType<String>(),
-    ];
-    final secondaryMeta = [
-      _endpointWithPath(outbound),
-      if (_transportLabel(outbound) case final transport?) 'stream/$transport',
-    ];
-    final sniLabel = _sniLabel(outbound);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: outbound.info.checked
-            ? theme.colorScheme.secondaryContainer.withValues(alpha: .22)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          CountryFlagBadge(
-            countryCode: outboundDisplayCountryCode(
-              outbound,
-              markAllServersRussia: false,
+      ].whereType<String>().map((value) => value.toUpperCase()),
+    ].join(' · ');
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+        child: Row(
+          children: [
+            CountryFlagBadge(
+              countryCode: outboundDisplayCountryCode(
+                outbound,
+                markAllServersRussia: false,
+              ),
+              size: 34,
             ),
-            size: 34,
-          ),
-          const Gap(10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  outbound.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Gap(4),
-                Text(
-                  primaryMeta.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const Gap(2),
-                Text(
-                  secondaryMeta.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                if (sniLabel != null) ...[
-                  const Gap(2),
+            const Gap(12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'sni = $sniLabel',
+                    outbound.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Gap(3),
+                  Text(
+                    meta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -275,31 +218,16 @@ class _OutboundRow extends StatelessWidget {
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          const Gap(10),
-          Text(
-            latency == null ? '...' : '$latency ms',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: latency == null
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.primary,
-              fontWeight: FontWeight.w700,
+            const Gap(8),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const Gap(10),
-          Container(
-            width: 4,
-            height: 46,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: outbound.info.checked
-                  ? theme.colorScheme.primary
-                  : Colors.transparent,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -353,22 +281,6 @@ String _endpointWithPath(Outbound outbound) {
     buffer.write(path.startsWith('/') ? path : '/$path');
   }
   return buffer.toString();
-}
-
-String? _sniLabel(Outbound outbound) {
-  final tls = outbound.config['tls'];
-  if (tls is! Map) {
-    return null;
-  }
-  final value = (tls['server_name'] as String?)?.trim();
-  if (value != null && value.isNotEmpty) {
-    return value;
-  }
-  final fallback = (tls['sni'] as String?)?.trim();
-  if (fallback != null && fallback.isNotEmpty) {
-    return fallback;
-  }
-  return null;
 }
 
 class _AddResult {

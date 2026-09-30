@@ -9,6 +9,47 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get subscriptionExportJson => 'Экспорт JSON';
+
+  @override
+  String get subscriptionAllServers => 'Все серверы';
+
+  @override
+  String get subscriptionAdvancedSettings => 'Дополнительные настройки';
+
+  @override
+  String get subscriptionSearchServers => 'Название, протокол или адрес';
+
+  @override
+  String get subscriptionClearSearch => 'Очистить поиск';
+
+  @override
+  String get subscriptionNoServersFound => 'Серверы не найдены';
+
+  @override
+  String get subscriptionServersLoadFailed =>
+      'Не удалось загрузить список серверов. Попробуйте ещё раз.';
+
+  @override
+  String get subscriptionExportFailed => 'Не удалось экспортировать профиль.';
+
+  @override
+  String get subscriptionServersChanged =>
+      'Этот сервер удалён из профиля. Откройте список заново.';
+
+  @override
+  String get subscriptionRefreshInterval => 'Интервал обновления';
+
+  @override
+  String get subscriptionMoveUp => 'Переместить выше';
+
+  @override
+  String get subscriptionLocalFile => 'Импортированный файл';
+
+  @override
+  String get subscriptionCopy => 'Копировать';
+
+  @override
   String get subscriptionErrorOffline =>
       'Нет подключения к сети. Подключитесь к Wi-Fi или мобильной сети и повторите попытку.';
 
@@ -550,6 +591,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get urlTestTitle => 'Проверка серверов';
+
+  @override
+  String get urlTestNotReadyMessage =>
+      'Подключение ещё готовится. Повторите проверку через несколько секунд.';
 
   @override
   String get urlTestSubtitle =>

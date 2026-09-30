@@ -6,6 +6,60 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test('group labels do not invalidate the running configuration', () {
+    final controller = SubscriptionRuntimeController();
+    const group = SubscriptionGroup(
+      tag: 'auto',
+      name: 'Before refresh',
+      country: 'NL',
+      outboundTags: ['vless-1'],
+    );
+    final before = _subscription(id: 'sub-1').copyWith(groups: [group]);
+    final renamed = before.copyWith(
+      groups: [group.copyWith(name: 'New label')],
+    );
+    expect(
+      controller.subscriptionRuntimeFingerprint(renamed),
+      controller.subscriptionRuntimeFingerprint(before),
+    );
+    for (final changed in [
+      group.copyWith(country: 'DE'),
+      group.copyWith(outboundTags: ['vless-2']),
+      group.copyWith(type: 'selector'),
+    ]) {
+      expect(
+        controller.subscriptionRuntimeFingerprint(
+          before.copyWith(groups: [changed]),
+        ),
+        isNot(controller.subscriptionRuntimeFingerprint(before)),
+      );
+    }
+  });
+
+  test('proxy chain route changes invalidate the running configuration', () {
+    final controller = SubscriptionRuntimeController();
+    const chain = SubscriptionProxyChain(
+      tag: 'chain',
+      name: 'Chain',
+      targetTag: 'vless-1',
+      detourTag: 'vless-2',
+    );
+    final before = _subscription(id: 'sub-1').copyWith(proxyChains: [chain]);
+    final changed = before.copyWith(
+      proxyChains: [chain.copyWith(detourTag: 'vless-3')],
+    );
+    expect(
+      controller.subscriptionRuntimeFingerprint(changed),
+      isNot(controller.subscriptionRuntimeFingerprint(before)),
+    );
+    expect(
+      controller.subscriptionRuntimeFingerprint(
+        before.copyWith(proxyChains: [chain.copyWith(name: 'Renamed')]),
+      ),
+      controller.subscriptionRuntimeFingerprint(before),
+    );
+  });
+
   test(
     'resolveMetadata chooses requested active subscription and preferred tag',
     () {

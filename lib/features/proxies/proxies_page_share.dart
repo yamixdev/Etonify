@@ -1,5 +1,25 @@
 part of 'proxies_page.dart';
 
+/// Builds sharing data only when a user opens the sheet, not for every row.
+Future<void> showProxyShareSheet(
+  BuildContext context, {
+  required AppProxySummary proxy,
+  required Outbound outbound,
+  Map<String, dynamic>? singboxConfig,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: false,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _ProxyShareSheet(
+      proxy: proxy,
+      outbound: outbound,
+      singboxConfig: singboxConfig,
+    ),
+  );
+}
+
 String _prettyJson(Map<String, dynamic> value) {
   return const JsonEncoder.withIndent('  ').convert(value);
 }
@@ -481,10 +501,15 @@ int? _intValue(Object? value) {
 }
 
 class _ProxyShareSheet extends StatelessWidget {
-  const _ProxyShareSheet({required this.proxy, required this.outbound});
+  const _ProxyShareSheet({
+    required this.proxy,
+    required this.outbound,
+    this.singboxConfig,
+  });
 
   final AppProxySummary proxy;
   final Outbound outbound;
+  final Map<String, dynamic>? singboxConfig;
 
   Future<void> _copy(
     BuildContext context, {
@@ -510,7 +535,9 @@ class _ProxyShareSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final bottomInset = appSystemNavigationBarInset(context);
     final shareLink = _outboundShareLink(outbound);
-    final singboxJson = _prettyJson(_singboxOutboundJson(outbound));
+    final singboxJson = _prettyJson(
+      singboxConfig ?? _singboxOutboundJson(outbound),
+    );
     final l10n = AppLocalizations.of(context);
     return DraggableScrollableSheet(
       expand: false,

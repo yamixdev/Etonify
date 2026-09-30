@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
@@ -13,6 +14,172 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  test(
+    'targeted check reads only its own baseline in a large profile',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final times = _ObservedEventTimes({
+        for (var i = 0; i < 3000; i++) 'proxy-$i': now - 1,
+      });
+      var countReads = 0;
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        eventBaselineTimes: () => times,
+        outboundCount: () {
+          countReads++;
+          return 3000;
+        },
+        capabilities: LibboxCapabilities.parseOrLegacy(
+          '{"api_version":1,"supports_targeted_url_test":true}',
+        ),
+      );
+      addTearDown(coordinator.dispose);
+      final result = coordinator.runTarget(
+        targetOutboundTag: 'proxy-2',
+        reason: 'manual_active',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.single.targetOutboundTag, 'proxy-2');
+      expect(times.bulkReads, 0);
+      expect(countReads, 0);
+      // The captured target timestamp must still be a snapshot, not a live map.
+      times['proxy-2'] = now + 10;
+      expect(
+        coordinator.handleGroupEvent(
+          tag: 'proxy-2',
+          timeSeconds: now,
+          available: true,
+        ),
+        isTrue,
+      );
+      expect(await result, isTrue);
+    },
+  );
+
+  test(
+    'parallel target publishes a local change without rebuilding a full sweep',
+    () async {
+      final changes = <String>[];
+      final sessionChanges = <bool>[];
+      final coordinator = LatencyCoordinator(
+        runTest: (_) async {},
+        isConnected: () => true,
+        isForeground: () => true,
+        activeOutboundTag: () => 'active',
+        testUrl: () => 'https://example.com/generate_204',
+        outboundCount: () => 3000,
+        timeoutSeconds: () => 15,
+        concurrency: () => 8,
+        expectedTags: () => const ['active', 'other'],
+        capabilities: _v3Capabilities,
+        onSessionChanged: (running, _, _) => sessionChanges.add(running),
+        onTargetCheckChanged: changes.add,
+      );
+      addTearDown(coordinator.dispose);
+      final full = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      coordinator.handleCoreSession(
+        sessionId: 10,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      );
+      await coordinator.runTarget(
+        targetOutboundTag: 'active',
+        reason: 'manual_active',
+      );
+      expect(sessionChanges, [true]);
+      expect(changes, ['active']);
+      expect(coordinator.hasActiveTargetCheck('active'), isTrue);
+      coordinator.handleCoreResult(
+        tag: 'active',
+        sessionId: 11,
+        revision: 1,
+        available: true,
+      );
+      expect(changes, ['active', 'active']);
+      expect(sessionChanges, [true]);
+      expect(coordinator.hasActiveTargetCheck('active'), isFalse);
+      expect(coordinator.isRunning, isTrue);
+      coordinator.cancel();
+      expect(await full, isFalse);
+      expect(sessionChanges, [true, false]);
+    },
+  );
+
+  test('offline manual sweep is not cancelled with automatic checks', () async {
+    final coordinator = _coordinator(
+      runTest: (_) async {},
+      capabilities: _v3Capabilities,
+    );
+    addTearDown(coordinator.dispose);
+    final sweep = coordinator.runFull(reason: 'offline_manual');
+    await Future<void>.delayed(Duration.zero);
+
+    coordinator.cancelAutomaticSession();
+
+    expect(coordinator.isRunning, isTrue);
+    expect(coordinator.isCurrentSessionManual, isTrue);
+    coordinator.cancel();
+    expect(await sweep, isFalse);
+  });
+
+  test(
+    'subscription apply waits for the full sweep even in background',
+    () async {
+      var foreground = true;
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        capabilities: _v3Capabilities,
+        isForeground: () => foreground,
+        expectedTags: () => const ['a', 'b'],
+      );
+      addTearDown(coordinator.dispose);
+      final sweep = coordinator.runFull(reason: 'manual');
+      await Future<void>.delayed(Duration.zero);
+      coordinator.handleCoreSession(
+        sessionId: 7,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      );
+      var applyAllowed = false;
+      final wait = coordinator.waitForCurrentSession().then((_) {
+        applyAllowed = true;
+      });
+      foreground = false;
+      coordinator.handleCoreResult(
+        tag: 'a',
+        sessionId: 7,
+        revision: 1,
+        available: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(coordinator.isRunning, isTrue);
+      expect(applyAllowed, isFalse);
+
+      coordinator.handleCoreSession(
+        sessionId: 7,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: 1,
+      );
+      expect(await sweep, isTrue);
+      await wait;
+      expect(applyAllowed, isTrue);
+    },
+  );
+
   test('native notification probe updates only the selected server', () {
     final coordinator = _coordinator(
       runTest: (_) async {},
@@ -1456,6 +1623,24 @@ void main() {
       expect(settled, contains('received=2'));
     },
   );
+}
+
+class _ObservedEventTimes extends MapView<String, int> {
+  _ObservedEventTimes(super.map);
+
+  int bulkReads = 0;
+
+  @override
+  Iterable<String> get keys {
+    bulkReads++;
+    return super.keys;
+  }
+
+  @override
+  void forEach(void Function(String, int) action) {
+    bulkReads++;
+    super.forEach(action);
+  }
 }
 
 final _v3Capabilities = LibboxCapabilities.parseOrLegacy('''

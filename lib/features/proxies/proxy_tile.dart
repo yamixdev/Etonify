@@ -13,6 +13,7 @@ class ProxyTile extends StatelessWidget {
     this.showGroupHandle = false,
     this.animate = true,
     this.runtimeState,
+    this.identityChild,
     this.onOpenGroup,
     this.onLongPress,
     this.onTestLatency,
@@ -27,6 +28,7 @@ class ProxyTile extends StatelessWidget {
   final bool showGroupHandle;
   final bool animate;
   final ProxyRuntimeVisualState? runtimeState;
+  final Widget? identityChild;
   final VoidCallback onTap;
   final ValueChanged<Rect>? onOpenGroup;
   final VoidCallback? onLongPress;
@@ -85,6 +87,7 @@ class ProxyTile extends StatelessWidget {
       unavailableLabel: l10n.proxyUnavailable,
       emphasized:
           selecting || latencyFresh || latencyUnavailable || hasLatencyError,
+      animate: animate,
       tooltip: hasLatencyError
           ? _latencyErrorTooltip(latencyError)
           : hasNoLatencyResult
@@ -135,35 +138,14 @@ class ProxyTile extends StatelessWidget {
                   decoration: indicatorDecoration,
                 ),
           const SizedBox(width: 10),
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: CountryFlagBadge(countryCode: proxy.countryCode, size: 36),
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titleOverride ?? _localizedProxyTitle(l10n, proxy),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+            child:
+                identityChild ??
+                _ProxyTileIdentity(
+                  proxy: proxy,
+                  titleOverride: titleOverride,
+                  subtitleOverride: subtitleOverride,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
           ),
           const SizedBox(width: 10),
           SizedBox(
@@ -224,6 +206,60 @@ class ProxyTile extends StatelessWidget {
       margin: EdgeInsets.fromLTRB(horizontalInset, 1, 6, 1),
       decoration: decoration,
       child: child,
+    );
+  }
+}
+
+// Passed as ValueListenableBuilder.child so ping-only updates do not rebuild
+// the flag, localized labels, and text layout of every visible row.
+class _ProxyTileIdentity extends StatelessWidget {
+  const _ProxyTileIdentity({
+    required this.proxy,
+    this.titleOverride,
+    this.subtitleOverride,
+  });
+
+  final AppProxySummary proxy;
+  final String? titleOverride;
+  final String? subtitleOverride;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    return Row(
+      children: [
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: CountryFlagBadge(countryCode: proxy.countryCode, size: 36),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                titleOverride ?? _localizedProxyTitle(l10n, proxy),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
