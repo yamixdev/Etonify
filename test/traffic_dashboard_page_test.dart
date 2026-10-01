@@ -11,6 +11,7 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 
 TrafficDashboardSnapshot snapshot({
   int speed = 2048,
+  int elapsed = 1,
   bool available = true,
   bool connected = true,
   bool hideIp = false,
@@ -60,7 +61,7 @@ TrafficDashboardSnapshot snapshot({
         totalBytes: 0,
       ),
       TrafficSample(
-        timestamp: DateTime(2026).add(const Duration(seconds: 1)),
+        timestamp: DateTime(2026).add(Duration(seconds: elapsed)),
         downlinkBps: speed,
         uplinkBps: 1024,
         totalBytes: 12288,
@@ -103,6 +104,75 @@ void useTallViewport(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'an expiring left-edge sample scrolls out rather than disappearing',
+    (tester) async {
+      final notifier = ValueNotifier(snapshot(elapsed: 90));
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier));
+      notifier.value = snapshot(elapsed: 91);
+      await tester.pump();
+      final dynamic painter = tester
+          .widget<CustomPaint>(
+            find.byKey(const ValueKey('traffic-dashboard-graph')),
+          )
+          .painter;
+      expect(
+        (painter.download as List<Offset>).first.dx,
+        closeTo(-1 / 90, .00001),
+      );
+      expect((painter.previousDownload as List<Offset>).first.dx, 0);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull);
+      await tester.pumpAndSettle();
+    },
+  );
+  testWidgets('graph keeps a fixed time scale instead of compressing history', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier, reducedMotion: true));
+    final dynamic painter = tester
+        .widget<CustomPaint>(
+          find.byKey(const ValueKey('traffic-dashboard-graph')),
+        )
+        .painter;
+    final points = painter.download as List<Offset>;
+    expect(points.last.dx, 1);
+    expect(points.last.dx - points.first.dx, closeTo(1 / 90, .00001));
+  });
+
+  testWidgets(
+    'public IP title aligns with its icon and panel clips rounded top',
+    (tester) async {
+      useTallViewport(tester);
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier));
+      final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
+      final title = find.descendant(of: card, matching: find.text('Ваш IP'));
+      expect(
+        tester.getTopLeft(title).dy - tester.getTopLeft(card).dy,
+        lessThan(22),
+      );
+      final materials = tester.widgetList<Material>(
+        find.ancestor(
+          of: find.byKey(const ValueKey('traffic-dashboard')),
+          matching: find.byType(Material),
+        ),
+      );
+      expect(
+        materials.any(
+          (m) =>
+              m.borderRadius ==
+                  const BorderRadius.vertical(top: Radius.circular(28)) &&
+              m.clipBehavior != Clip.none,
+        ),
+        isTrue,
+      );
+    },
+  );
   testWidgets('public IP has its own card alongside server IP', (tester) async {
     useTallViewport(tester);
     final notifier = ValueNotifier(snapshot());

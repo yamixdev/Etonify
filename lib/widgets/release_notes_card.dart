@@ -5,6 +5,9 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'release_image_loader.dart';
+import 'release_notes_image.dart';
+import 'release_notes_images.dart';
 
 typedef ReleaseNotesLinkHandler = void Function(Uri uri);
 
@@ -18,6 +21,7 @@ class ReleaseNotesCard extends StatefulWidget {
     this.useCard = true,
     this.limitBody = true,
     this.allowImages = false,
+    this.imageLoader,
   });
 
   final String body;
@@ -27,6 +31,7 @@ class ReleaseNotesCard extends StatefulWidget {
   final bool useCard;
   final bool limitBody;
   final bool allowImages;
+  final ReleaseImageLoader? imageLoader;
 
   @override
   State<ReleaseNotesCard> createState() => _ReleaseNotesCardState();
@@ -42,9 +47,9 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
   @override
   void initState() {
     super.initState();
-    _releaseNotes = widget.limitBody
-        ? _limitedReleaseNotes(widget.body)
-        : widget.body.trim();
+    _releaseNotes = normalizeReleaseNotesImages(
+      widget.limitBody ? _limitedReleaseNotes(widget.body) : widget.body.trim(),
+    );
   }
 
   @override
@@ -52,9 +57,11 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
     super.didUpdateWidget(oldWidget);
     if (widget.body != oldWidget.body ||
         widget.limitBody != oldWidget.limitBody) {
-      _releaseNotes = widget.limitBody
-          ? _limitedReleaseNotes(widget.body)
-          : widget.body.trim();
+      _releaseNotes = normalizeReleaseNotesImages(
+        widget.limitBody
+            ? _limitedReleaseNotes(widget.body)
+            : widget.body.trim(),
+      );
     }
   }
 
@@ -159,7 +166,15 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
                 shrinkWrap: true,
                 onTapLink: (_, href, _) => _openLink(href),
                 imageBuilder: widget.allowImages
-                    ? _releaseImageBuilder
+                    ? (uri, title, alt) => isTrustedReleaseImageUri(uri)
+                          ? ReleaseNotesImage(
+                              uri: uri,
+                              alt: alt,
+                              loader:
+                                  widget.imageLoader ??
+                                  ReleaseImageLoader.shared,
+                            )
+                          : _blockedImageBuilder(uri, title, alt)
                     : _blockedImageBuilder,
                 styleSheet: _markdownStyleSheet,
               ),
@@ -192,32 +207,6 @@ Widget _blockedImageBuilder(Uri uri, String? title, String? alt) {
   return Text(
     label == null || label.isEmpty ? '[image]' : '[$label]',
     overflow: TextOverflow.ellipsis,
-  );
-}
-
-Widget _releaseImageBuilder(Uri uri, String? title, String? alt) {
-  if (uri.scheme != 'https' || uri.host.isEmpty) {
-    return _blockedImageBuilder(uri, title, alt);
-  }
-  final fallback = _blockedImageBuilder(uri, title, alt);
-  return ClipRRect(
-    borderRadius: BorderRadius.circular(12),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 360),
-      child: Image.network(
-        uri.toString(),
-        width: double.infinity,
-        fit: BoxFit.contain,
-        cacheWidth: 960,
-        loadingBuilder: (context, child, progress) => progress == null
-            ? child
-            : const SizedBox(
-                height: 120,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-        errorBuilder: (context, error, stackTrace) => fallback,
-      ),
-    ),
   );
 }
 

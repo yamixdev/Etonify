@@ -3,6 +3,35 @@ import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
   test(
+    'reconciliation retains current server plus three unique group children',
+    () {
+      final counter = UrlTestProgressCounter();
+      final results = <String, bool?>{
+        'sweden': true,
+        'a': true,
+        'b': true,
+        'c': true,
+      };
+      counter.reset(
+        visibleTags: const ['sweden', 'a', 'b', 'c', 'untested'],
+        testableTags: const {'a', 'b', 'c'},
+        includeKnownVisibleResults: true,
+        resultForTag: (tag) => results[tag],
+      );
+      counter.update([
+        'auto',
+        'sweden',
+        'a',
+        'b',
+        'c',
+        'a',
+      ], (tag) => results[tag]);
+      expect(counter.state().working, 4);
+      expect(counter.state().tested, 4);
+      expect(counter.state().total, 5);
+    },
+  );
+  test(
     'checked count never trails visible successes when status event lags',
     () {
       const progress = UrlTestProgressState(total: 3, working: 2, completed: 1);

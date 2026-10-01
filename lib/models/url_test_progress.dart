@@ -96,6 +96,7 @@ class UrlTestProgressCounter {
     required Iterable<String> visibleTags,
     required Set<String> testableTags,
     required bool? Function(String tag) resultForTag,
+    bool includeKnownVisibleResults = false,
   }) {
     _visibleTags = visibleTags.toSet();
     _tags = _visibleTags.where(testableTags.contains).toSet();
@@ -106,6 +107,9 @@ class UrlTestProgressCounter {
     _coreTotal = null;
     _coreCompleted = 0;
     update(_tags, resultForTag);
+    if (includeKnownVisibleResults) {
+      update(_visibleTags, resultForTag);
+    }
   }
 
   /// The core reports completed concrete probes. The header can include more

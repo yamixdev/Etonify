@@ -4,6 +4,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/release_notes_card.dart';
+import 'package:meow_client/widgets/release_image_loader.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'release_image_loader_test.dart' show pixel, imageUri;
 
 void main() {
   testWidgets('full-page notes omit duplicate heading and retain long notes', (
@@ -34,33 +38,63 @@ void main() {
     expect(find.byType(Card), findsNothing);
   });
 
-  testWidgets('release notes load HTTPS images and reject insecure images', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ReleaseNotesCard(
-              body:
-                  '![secure](https://example.com/image.png)\n\n'
-                  '![insecure](http://example.com/image.png)',
-              allowImages: true,
+  testWidgets(
+    'GitHub photo loads inline and expands inside client, unsafe images stay blocked',
+    (tester) async {
+      final loader = ReleaseImageLoader(
+        clientFactory: () => MockClient(
+          (_) async => http.Response.bytes(
+            pixel,
+            200,
+            headers: {'content-type': 'image/png'},
+          ),
+        ),
+      );
+      final image = await tester.runAsync(() => loader.load(imageUri));
+      await tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ReleaseNotesCard(
+                body:
+                    'Photo <img src="$imageUri" alt="secure" />\n\n'
+                    '![insecure](http://example.com/image.png)',
+                allowImages: true,
+                imageLoader: loader,
+              ),
             ),
           ),
         ),
-      ),
-    );
-    final images = tester.widgetList<Image>(find.byType(Image)).toList();
-    expect(images, hasLength(1));
-    expect(
-      ((images.single.image as ResizeImage).imageProvider as NetworkImage).url,
-      'https://example.com/image.png',
-    );
-    expect(find.text('[insecure]'), findsOneWidget);
-  });
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => precacheImage(
+          MemoryImage(image!.bytes),
+          tester.element(find.byType(ReleaseNotesCard)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('release-image-preview')),
+        findsOneWidget,
+      );
+      expect(find.text('[insecure]'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('release-image-preview')));
+      await tester.pumpAndSettle();
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(
+        tester
+            .widgetList<Image>(find.byType(Image))
+            .any((image) => image.image is NetworkImage),
+        isFalse,
+      );
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(find.byType(InteractiveViewer), findsNothing);
+    },
+  );
   testWidgets('renders common GitHub markdown without exposing its markers', (
     tester,
   ) async {

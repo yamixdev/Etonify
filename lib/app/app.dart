@@ -245,6 +245,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final PendingRuntimeUrlTestResults _pendingUrlTestResults =
       PendingRuntimeUrlTestResults();
   OfflineUrlTestSession? _offlineUrlTestSession;
+  bool _offlineProgressPublished = false;
   ProbeConfigBuildResult? _offlineProbeConfig;
   bool _offlineProbeRunning = false;
   bool _automaticSubscriptionApplyInFlight = false;
@@ -4489,6 +4490,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         resultForTag: isRunning == true
             ? (_) => null
             : _urlTestProgressResultForTag,
+        includeKnownVisibleResults: isRunning != true,
       );
     }
     final nextState = _urlTestProgressCounter.state(
@@ -4526,9 +4528,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _updateUrlTestProgressForTags(Iterable<String> changedTags) {
-    if (_offlineUrlTestSession != null) {
+    final logicalSession = _offlineUrlTestSession;
+    if (logicalSession != null && (!logicalSession.isTerminal || !_connected)) {
       _publishOfflineUrlTestProgress();
       return;
+    }
+    if (logicalSession != null && _offlineProgressPublished) {
+      _publishOfflineUrlTestProgress();
     }
     _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
@@ -6534,6 +6540,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _publishOfflineUrlTestProgress() {
     final session = _offlineUrlTestSession;
     if (session == null) return;
+    // Retain the logical session for automatic-check suppression, but it must
+    // not overwrite newer VPN/targeted measurements after completion.
+    if (session.isTerminal && _connected) {
+      if (_offlineProgressPublished) {
+        _offlineProgressPublished = false;
+        _updateUrlTestProgress(isRunning: false, isCancelled: false);
+      }
+      return;
+    }
+    _offlineProgressPublished = true;
     _urlTestProgressNotifier.value = UrlTestProgressState(
       isRunning: !session.isTerminal,
       isCancelled: session.phase == OfflineUrlTestPhase.cancelled,
@@ -7337,7 +7353,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (affectedTags.isEmpty) return;
     _publishProxyRuntimeVisualStatesForUrlTestTags(affectedTags);
-    if (logicalSession == null) {
+    if (logicalSession == null || (logicalSession.isTerminal && _connected)) {
       _updateUrlTestProgressForTags(affectedTags);
     }
     unawaited(_syncQuickSettingsTileLabel());
@@ -8156,6 +8172,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ),
     );
     _forwardLatencyEvents(result.latencyEvents);
+    // Group snapshots also carry individual measurements (including checks
+    // initiated by the notification). They use the same freshness gate.
+    _updateUrlTestProgressForTags(result.affectedProxyTags);
     if (!result.changed) {
       if (diagnosticsBecameReady) {
         _onRuntimeDiagnosticsReady();

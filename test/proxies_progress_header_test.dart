@@ -61,6 +61,29 @@ Widget _buildHeaderTestApp({
 
 void main() {
   testWidgets(
+    'idle header adds unique group children to the current working server',
+    (tester) async {
+      final counter = UrlTestProgressCounter();
+      final results = <String, bool?>{'sweden': true};
+      counter.reset(
+        visibleTags: const ['sweden', 'a', 'b', 'c', 'pending'],
+        testableTags: const {'sweden', 'a', 'b', 'c', 'pending'},
+        resultForTag: (tag) => results[tag],
+      );
+      final progress = ValueNotifier(counter.state());
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
+      await tester.pumpAndSettle();
+      expect(find.text('Рабочих 1 / 5'), findsOneWidget);
+      results.addAll({'a': true, 'b': true, 'c': true, 'auto': true});
+      counter.update(['a', 'b', 'c', 'auto', 'a'], (tag) => results[tag]);
+      progress.value = counter.state();
+      await tester.pump();
+      expect(find.text('Рабочих 4 / 5'), findsOneWidget);
+      expect(find.text('Проверено 4 / 5'), findsOneWidget);
+    },
+  );
+  testWidgets(
     'progress bar and counter display testing status during active run in Russian',
     (tester) async {
       final progressNotifier = ValueNotifier<UrlTestProgressState>(

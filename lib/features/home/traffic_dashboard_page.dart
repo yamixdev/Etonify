@@ -61,6 +61,8 @@ class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
       top: false,
       child: Material(
         color: theme.scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        clipBehavior: Clip.antiAlias,
         child: LayoutBuilder(
           builder: (context, constraints) => ListView(
             key: const ValueKey('traffic-dashboard'),
@@ -280,6 +282,7 @@ class _SpeedCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final visible = _recentSamples(samples);
+    final graphSamples = _recentSamples(samples, includeBoundary: true);
     var peak = 0;
     for (final sample in visible) {
       peak = math.max(peak, math.max(sample.downlinkBps, sample.uplinkBps));
@@ -310,7 +313,7 @@ class _SpeedCard extends StatelessWidget {
           ),
         ),
         const Gap(12),
-        if (visible.length < 2)
+        if (graphSamples.length < 2)
           SizedBox(
             height: 112,
             child: Center(
@@ -325,7 +328,7 @@ class _SpeedCard extends StatelessWidget {
           )
         else
           _TrafficGraph(
-            samples: visible,
+            samples: graphSamples,
             maxBps: _roundedGraphScale(math.max(1, peak)),
           ),
         if (available && visible.length >= 2) ...[
@@ -533,6 +536,7 @@ class _PublicIpSection extends StatelessWidget {
       key: const ValueKey('traffic-dashboard-public-ip'),
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _SectionTitle(
@@ -542,6 +546,8 @@ class _PublicIpSection extends StatelessWidget {
             ),
             IconButton(
               key: const ValueKey('public-ip-refresh'),
+              alignment: Alignment.topCenter,
+              padding: EdgeInsets.zero,
               tooltip: controller?.canRefresh == true
                   ? l10n.trafficDashboardPublicIpRefresh
                   : l10n.trafficDashboardPublicIpCooldown,
@@ -702,13 +708,18 @@ class _InfoRow extends StatelessWidget {
 
 const _graphWindow = Duration(seconds: 90);
 
-List<TrafficSample> _recentSamples(List<TrafficSample> samples) {
+List<TrafficSample> _recentSamples(
+  List<TrafficSample> samples, {
+  bool includeBoundary = false,
+}) {
   if (samples.isEmpty) return samples;
   final cutoff = samples.last.timestamp.subtract(_graphWindow);
   final firstVisible = samples.indexWhere(
     (sample) => !sample.timestamp.isBefore(cutoff),
   );
-  return firstVisible <= 0 ? samples : samples.sublist(firstVisible);
+  return firstVisible <= 0
+      ? samples
+      : samples.sublist(firstVisible - (includeBoundary ? 1 : 0));
 }
 
 int _roundedGraphScale(int value) {
@@ -737,7 +748,7 @@ class _TrafficGraphState extends State<_TrafficGraph>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animation = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 240),
+    duration: const Duration(seconds: 1),
     value: 1,
   );
   List<Offset> _download = const [];
@@ -762,22 +773,19 @@ class _TrafficGraphState extends State<_TrafficGraph>
   }
 
   void _updatePoints() {
-    final first = widget.samples.first.timestamp;
-    final elapsed = math.max(
-      1,
-      widget.samples.last.timestamp.difference(first).inMicroseconds,
-    );
+    final latest = widget.samples.last.timestamp;
+    final elapsed = _graphWindow.inMicroseconds;
     _download = [
       for (final sample in widget.samples)
         Offset(
-          sample.timestamp.difference(first).inMicroseconds / elapsed,
+          1 - latest.difference(sample.timestamp).inMicroseconds / elapsed,
           sample.downlinkBps.clamp(0, widget.maxBps) / widget.maxBps,
         ),
     ];
     _upload = [
       for (final sample in widget.samples)
         Offset(
-          sample.timestamp.difference(first).inMicroseconds / elapsed,
+          1 - latest.difference(sample.timestamp).inMicroseconds / elapsed,
           sample.uplinkBps.clamp(0, widget.maxBps) / widget.maxBps,
         ),
     ];
@@ -790,10 +798,30 @@ class _TrafficGraphState extends State<_TrafficGraph>
         listEquals(oldWidget.samples, widget.samples)) {
       return;
     }
-    final progress = Curves.easeOutCubic.transform(_animation.value);
-    _previousDownload = _blendPoints(_previousDownload, _download, progress);
-    _previousUpload = _blendPoints(_previousUpload, _upload, progress);
+    final progress = _animation.value;
+    final oldDownload = _blendPoints(_previousDownload, _download, progress);
+    final oldUpload = _blendPoints(_previousUpload, _upload, progress);
     _updatePoints();
+    // Match samples by timestamp, not their index: appending or expiring a
+    // sample must move the same point left rather than morph another into it.
+    final oldIndices = {
+      for (var i = 0; i < oldWidget.samples.length; i++)
+        oldWidget.samples[i].timestamp: i,
+    };
+    final advance =
+        widget.samples.last.timestamp
+            .difference(oldWidget.samples.last.timestamp)
+            .inMicroseconds /
+        _graphWindow.inMicroseconds;
+    List<Offset> align(List<Offset> old, List<Offset> next) => [
+      for (var i = 0; i < next.length; i++)
+        if (oldIndices[widget.samples[i].timestamp] case final int index)
+          old[index]
+        else
+          Offset(next[i].dx + math.max(0, advance), next[i].dy),
+    ];
+    _previousDownload = align(oldDownload, _download);
+    _previousUpload = align(oldUpload, _upload);
     if (_reduceMotion) {
       _animation.value = 1;
     } else {
@@ -844,14 +872,7 @@ List<Offset> _blendPoints(
   if (previous.isEmpty || progress == 1) return next;
   return [
     for (var i = 0; i < next.length; i++)
-      Offset.lerp(
-        previous[(i + previous.length - next.length).clamp(
-          0,
-          previous.length - 1,
-        )],
-        next[i],
-        progress,
-      )!,
+      Offset.lerp(previous[i], next[i], progress)!,
   ];
 }
 
@@ -879,7 +900,7 @@ class _TrafficChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(0, 4, size.width, math.max(1, size.height - 8));
-    final progress = Curves.easeOutCubic.transform(animation.value);
+    final progress = animation.value;
     final gridPaint = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
@@ -922,12 +943,7 @@ class _TrafficChartPainter extends CustomPainter {
     if (next.isEmpty) return;
     Offset point(int i) {
       final target = next[i];
-      final old = previous.isEmpty
-          ? target
-          : previous[(i + previous.length - next.length).clamp(
-              0,
-              previous.length - 1,
-            )];
+      final old = previous.isEmpty ? target : previous[i];
       final x = lerpDouble(old.dx, target.dx, progress)!;
       final y = lerpDouble(old.dy, target.dy, progress)!;
       return Offset(rect.left + rect.width * x, rect.bottom - rect.height * y);
