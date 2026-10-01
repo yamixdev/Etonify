@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
+/// The sheet itself is static. Each section listens only to its displayed data,
+/// so traffic samples never rebuild the heading or connection information.
 class TrafficDashboardPage extends StatelessWidget {
   const TrafficDashboardPage({
     super.key,
@@ -20,332 +23,552 @@ class TrafficDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<TrafficDashboardSnapshot>(
-      valueListenable: snapshotListenable,
-      builder: (context, snapshot, _) {
-        return _TrafficDashboardContent(
-          snapshot: snapshot,
-          scrollController: scrollController,
-        );
-      },
-    );
-  }
-}
-
-class _TrafficDashboardContent extends StatelessWidget {
-  const _TrafficDashboardContent({
-    required this.snapshot,
-    required this.scrollController,
-  });
-
-  final TrafficDashboardSnapshot snapshot;
-  final ScrollController? scrollController;
-
-  String _maskIp(String ip) {
-    final parts = ip.split('.');
-    if (parts.length == 4) {
-      return '${parts[0]}.${parts[1]}.*.*';
-    }
-    if (ip.length > 8) {
-      return '${ip.substring(0, ip.length ~/ 2)}****';
-    }
-    return ip;
-  }
-
-  String _uptimeText(AppLocalizations l10n) {
-    final connectedSince = snapshot.connectedSince;
-    if (!snapshot.connected || connectedSince == null) {
-      return l10n.notAvailableShort;
-    }
-    final elapsed = DateTime.now().difference(connectedSince);
-    final hours = elapsed.inHours;
-    final minutes = elapsed.inMinutes.remainder(60);
-    final seconds = elapsed.inSeconds.remainder(60);
-    if (hours > 0) {
-      return l10n.trafficDashboardUptimeHours(hours, minutes);
-    }
-    if (minutes > 0) {
-      return l10n.trafficDashboardUptimeMinutes(minutes, seconds);
-    }
-    return l10n.trafficDashboardUptimeSeconds(seconds);
-  }
-
-  String _connectionState(AppLocalizations l10n) {
-    if (snapshot.connected) {
-      return l10n.trafficDashboardStateConnected;
-    }
-    if (snapshot.connecting) {
-      return l10n.trafficDashboardStateConnecting;
-    }
-    return l10n.trafficDashboardStateDisconnected;
-  }
-
-  @override
-  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final proxy = snapshot.activeProxy;
-    final profile = snapshot.activeProfile;
-    final ip = proxy?.ip.trim() ?? '';
-    final displayIp = ip.isEmpty
-        ? l10n.notAvailableShort
-        : snapshot.hideServerIp
-        ? _maskIp(ip)
-        : ip;
-
     return SafeArea(
       top: false,
       child: Material(
         color: theme.scaffoldBackgroundColor,
-        child: ListView(
-          key: const ValueKey('traffic-dashboard'),
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: .32,
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListView(
+            key: const ValueKey('traffic-dashboard'),
+            controller: scrollController,
+            padding: EdgeInsets.fromLTRB(
+              math.max(16, (constraints.maxWidth - 720) / 2),
+              8,
+              math.max(16, (constraints.maxWidth - 720) / 2),
+              24,
+            ),
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant.withValues(
+                      alpha: .32,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
-            ),
-            const Gap(16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.trafficDashboardTitle,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              const Gap(16),
+              Text(
+                l10n.trafficDashboardTitle,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                const Gap(4),
-                Text(
-                  l10n.trafficDashboardSubtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              ),
+              const Gap(16),
+              _SnapshotSection(
+                listenable: snapshotListenable,
+                select: (s) => (
+                  available: s.connected && s.trafficAvailable,
+                  download: s.downlinkBps,
+                  upload: s.uplinkBps,
+                  samples: s.samples,
                 ),
-              ],
-            ),
-            const Gap(18),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: l10n.trafficDashboardDownload,
-                    value: formatSpeed(snapshot.downlinkBps.toDouble()),
-                    icon: Icons.arrow_downward_rounded,
-                  ),
+                builder: (context, data) => _SpeedCard(
+                  available: data.available,
+                  download: data.download,
+                  upload: data.upload,
+                  samples: data.available ? data.samples : const [],
                 ),
-                const Gap(10),
-                Expanded(
-                  child: _MetricCard(
-                    label: l10n.trafficDashboardUpload,
-                    value: formatSpeed(snapshot.uplinkBps.toDouble()),
-                    icon: Icons.arrow_upward_rounded,
-                  ),
+              ),
+              const Gap(12),
+              _SnapshotSection(
+                listenable: snapshotListenable,
+                select: (s) => (
+                  available: s.connected && s.trafficAvailable,
+                  download: s.downlinkTotalBytes,
+                  upload: s.uplinkTotalBytes,
+                  seconds: s.connected && s.connectedSince != null
+                      ? math.max(
+                          0,
+                          DateTime.now()
+                              .difference(s.connectedSince!)
+                              .inSeconds,
+                        )
+                      : null,
                 ),
-              ],
-            ),
-            const Gap(10),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: l10n.trafficDashboardSessionTraffic,
-                    value: formatBytes(snapshot.totalBytes.toDouble()),
-                    icon: Icons.swap_vert_rounded,
-                  ),
+                builder: (context, data) => _SessionCard(
+                  available: data.available,
+                  download: data.download,
+                  upload: data.upload,
+                  seconds: data.seconds,
                 ),
-                const Gap(10),
-                Expanded(
-                  child: _MetricCard(
-                    label: l10n.trafficDashboardConnectedFor,
-                    value: _uptimeText(l10n),
-                    icon: Icons.timer_rounded,
-                  ),
+              ),
+              const Gap(12),
+              _SnapshotSection(
+                listenable: snapshotListenable,
+                select: (s) => (
+                  connected: s.connected,
+                  connecting: s.connecting,
+                  profile: s.activeProfile?.name,
+                  proxy: s.activeProxy?.displayName,
+                  country: s.activeProxy?.countryCode,
+                  ip: s.activeProxy?.ip.trim() ?? '',
+                  hideIp: s.hideServerIp,
                 ),
-              ],
-            ),
-            const Gap(16),
-            _TrafficGraphCard(samples: snapshot.samples),
-            const Gap(16),
-            _InfoSection(
-              children: [
-                _InfoRow(
-                  label: l10n.trafficDashboardConnectionState,
-                  value: _connectionState(l10n),
+                builder: (context, data) => _ConnectionCard(
+                  connected: data.connected,
+                  connecting: data.connecting,
+                  profile: data.profile,
+                  proxy: data.proxy,
+                  country: data.country,
+                  ip: data.ip,
+                  hideIp: data.hideIp,
                 ),
-                _InfoRow(
-                  label: l10n.trafficDashboardCurrentProfile,
-                  value: profile?.name ?? l10n.notAvailableShort,
-                ),
-                _InfoRow(
-                  label: l10n.trafficDashboardActiveProxy,
-                  value: proxy?.displayName ?? l10n.notAvailableShort,
-                  leading: proxy == null
-                      ? null
-                      : CountryFlagBadge(
-                          countryCode: proxy.countryCode,
-                          size: 22,
-                        ),
-                ),
-                _InfoRow(
-                  label: l10n.trafficDashboardServerIp,
-                  value: displayIp,
-                ),
-                _InfoRow(
-                  label: l10n.trafficDashboardDownloadTotal,
-                  value: formatBytes(snapshot.downlinkTotalBytes.toDouble()),
-                ),
-                _InfoRow(
-                  label: l10n.trafficDashboardUploadTotal,
-                  value: formatBytes(snapshot.uplinkTotalBytes.toDouble()),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.icon,
+class _SnapshotSection<T> extends StatefulWidget {
+  const _SnapshotSection({
+    required this.listenable,
+    required this.select,
+    required this.builder,
   });
 
-  final String label;
-  final String value;
+  final ValueListenable<TrafficDashboardSnapshot> listenable;
+  final T Function(TrafficDashboardSnapshot) select;
+  final Widget Function(BuildContext, T) builder;
+
+  @override
+  State<_SnapshotSection<T>> createState() => _SnapshotSectionState<T>();
+}
+
+class _SnapshotSectionState<T> extends State<_SnapshotSection<T>> {
+  late T _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _data = widget.select(widget.listenable.value);
+    widget.listenable.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SnapshotSection<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.listenable != widget.listenable) {
+      oldWidget.listenable.removeListener(_changed);
+      widget.listenable.addListener(_changed);
+    }
+    _data = widget.select(widget.listenable.value);
+  }
+
+  void _changed() {
+    final next = widget.select(widget.listenable.value);
+    if (_data != next) setState(() => _data = next);
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _data);
+}
+
+class _DashboardCard extends StatelessWidget {
+  const _DashboardCard({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    elevation: 0,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    ),
+  );
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.label});
   final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: theme.colorScheme.primary),
-            const Gap(10),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+        const Gap(8),
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-            const Gap(2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _TrafficGraphCard extends StatelessWidget {
-  const _TrafficGraphCard({required this.samples});
+class _SpeedCard extends StatelessWidget {
+  const _SpeedCard({
+    required this.available,
+    required this.download,
+    required this.upload,
+    required this.samples,
+  });
 
+  final bool available;
+  final int download;
+  final int upload;
   final List<TrafficSample> samples;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final visibleSamples = _recentSamples(samples);
-    var maxDownload = 0;
-    var maxUpload = 0;
-    for (final sample in visibleSamples) {
-      maxDownload = math.max(maxDownload, sample.downlinkBps);
-      maxUpload = math.max(maxUpload, sample.uplinkBps);
+    final theme = Theme.of(context);
+    final visible = _recentSamples(samples);
+    var peak = 0;
+    for (final sample in visible) {
+      peak = math.max(peak, math.max(sample.downlinkBps, sample.uplinkBps));
     }
-    final maxBps = _roundedGraphScale(
-      math.max(1, math.max(maxDownload, maxUpload)),
-    );
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.trafficDashboardGraphTitle,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
+    return _DashboardCard(
+      children: [
+        _SectionTitle(
+          icon: Icons.speed_rounded,
+          label: l10n.trafficDashboardGraphTitle,
+        ),
+        const Gap(12),
+        _AdaptivePair(
+          first: _Metric(
+            icon: Icons.arrow_downward_rounded,
+            label: l10n.trafficDashboardDownload,
+            value: available
+                ? formatSpeed(download.toDouble())
+                : l10n.notAvailableShort,
+            color: theme.colorScheme.primary,
+          ),
+          second: _Metric(
+            icon: Icons.arrow_upward_rounded,
+            label: l10n.trafficDashboardUpload,
+            value: available
+                ? formatSpeed(upload.toDouble())
+                : l10n.notAvailableShort,
+            color: theme.colorScheme.tertiary,
+          ),
+        ),
+        const Gap(12),
+        if (visible.length < 2)
+          SizedBox(
+            height: 112,
+            child: Center(
+              child: Text(
+                l10n.trafficDashboardNoSamples,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
-            const Gap(6),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              children: [
-                _GraphLegendItem(
-                  color: theme.colorScheme.primary,
-                  label: l10n.trafficDashboardDownload,
-                  value: formatSpeed(maxDownload.toDouble()),
-                ),
-                _GraphLegendItem(
-                  color: theme.colorScheme.tertiary,
-                  label: l10n.trafficDashboardUpload,
-                  value: formatSpeed(maxUpload.toDouble()),
-                ),
-                Text(
-                  l10n.trafficDashboardGraphMax(formatSpeed(maxBps.toDouble())),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+          )
+        else
+          _TrafficGraph(
+            samples: visible,
+            maxBps: _roundedGraphScale(math.max(1, peak)),
+          ),
+        if (available && visible.length >= 2) ...[
+          const Gap(8),
+          Text(
+            l10n.trafficDashboardGraphMax(formatSpeed(peak.toDouble())),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const Gap(12),
-            SizedBox(
-              height: 128,
-              width: double.infinity,
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  key: const ValueKey('traffic-dashboard-graph'),
-                  painter: _TrafficChartPainter(
-                    samples: visibleSamples,
-                    downloadColor: theme.colorScheme.primary,
-                    uploadColor: theme.colorScheme.tertiary,
-                    gridColor: theme.colorScheme.outlineVariant.withValues(
-                      alpha: .45,
-                    ),
-                    maxBps: maxBps,
-                    emptyTextColor: theme.colorScheme.onSurfaceVariant,
-                    emptyText: l10n.trafficDashboardNoSamples,
-                    textStyle: theme.textTheme.bodySmall,
-                  ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Two columns while both metrics fit, stacked for narrow/large-text layouts.
+class _AdaptivePair extends StatelessWidget {
+  const _AdaptivePair({required this.first, required this.second});
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      if (constraints.maxWidth < 260 * textScale) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [first, const Gap(12), second],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: first),
+          const Gap(16),
+          Expanded(child: second),
+        ],
+      );
+    },
+  );
+}
+
+class _Metric extends StatelessWidget {
+  const _Metric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 20, color: color),
+        ),
+        const Gap(8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Gap(2),
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({
+    required this.available,
+    required this.download,
+    required this.upload,
+    required this.seconds,
+  });
+  final bool available;
+  final int download;
+  final int upload;
+  final int? seconds;
+
+  String _uptime(AppLocalizations l10n) {
+    final value = seconds;
+    if (value == null) return l10n.notAvailableShort;
+    if (value >= 3600) {
+      return l10n.trafficDashboardUptimeHours(value ~/ 3600, value ~/ 60 % 60);
+    }
+    if (value >= 60) {
+      return l10n.trafficDashboardUptimeMinutes(value ~/ 60, value % 60);
+    }
+    return l10n.trafficDashboardUptimeSeconds(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    return _DashboardCard(
+      children: [
+        _SectionTitle(
+          icon: Icons.data_usage_rounded,
+          label: l10n.trafficDashboardSessionTraffic,
+        ),
+        const Gap(12),
+        Text(
+          available
+              ? formatBytes((download + upload).toDouble())
+              : l10n.notAvailableShort,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const Gap(12),
+        _AdaptivePair(
+          first: _Metric(
+            icon: Icons.arrow_downward_rounded,
+            label: l10n.trafficDashboardDownloadTotal,
+            value: available
+                ? formatBytes(download.toDouble())
+                : l10n.notAvailableShort,
+            color: theme.colorScheme.primary,
+          ),
+          second: _Metric(
+            icon: Icons.arrow_upward_rounded,
+            label: l10n.trafficDashboardUploadTotal,
+            value: available
+                ? formatBytes(upload.toDouble())
+                : l10n.notAvailableShort,
+            color: theme.colorScheme.tertiary,
+          ),
+        ),
+        const Gap(12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.timer_outlined,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const Gap(8),
+            Expanded(
+              child: Text(
+                '${l10n.trafficDashboardConnectedFor} · ${_uptime(l10n)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
           ],
         ),
-      ),
+      ],
+    );
+  }
+}
+
+class _ConnectionCard extends StatelessWidget {
+  const _ConnectionCard({
+    required this.connected,
+    required this.connecting,
+    required this.profile,
+    required this.proxy,
+    required this.country,
+    required this.ip,
+    required this.hideIp,
+  });
+  final bool connected;
+  final bool connecting;
+  final String? profile;
+  final String? proxy;
+  final String? country;
+  final String ip;
+  final bool hideIp;
+
+  String _displayIp(AppLocalizations l10n) {
+    if (ip.isEmpty) return l10n.notAvailableShort;
+    if (!hideIp) return ip;
+    final parts = ip.split('.');
+    if (parts.length == 4) return '${parts[0]}.${parts[1]}.*.*';
+    return ip.length > 8 ? '${ip.substring(0, ip.length ~/ 2)}****' : '****';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final state = connected
+        ? l10n.trafficDashboardStateConnected
+        : connecting
+        ? l10n.trafficDashboardStateConnecting
+        : l10n.trafficDashboardStateDisconnected;
+    return _DashboardCard(
+      children: [
+        _SectionTitle(
+          icon: Icons.hub_outlined,
+          label: l10n.trafficDashboardConnectionState,
+        ),
+        const Gap(8),
+        Text(
+          state,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: connected || connecting
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const Gap(16),
+        _InfoRow(
+          label: l10n.trafficDashboardCurrentProfile,
+          value: profile ?? l10n.notAvailableShort,
+        ),
+        const Gap(12),
+        _InfoRow(
+          label: l10n.trafficDashboardActiveProxy,
+          value: proxy ?? l10n.notAvailableShort,
+          leading: proxy == null
+              ? null
+              : CountryFlagBadge(countryCode: country ?? '', size: 22),
+        ),
+        const Gap(12),
+        _InfoRow(label: l10n.trafficDashboardServerIp, value: _displayIp(l10n)),
+      ],
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.label, required this.value, this.leading});
+  final String label;
+  final String value;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const Gap(4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (leading != null) ...[leading!, const Gap(8)],
+            Expanded(
+              child: Text(
+                value,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -373,247 +596,267 @@ int _roundedGraphScale(int value) {
   return magnitude * 10;
 }
 
-class _GraphLegendItem extends StatelessWidget {
-  const _GraphLegendItem({
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  final Color color;
-  final String label;
-  final String value;
+/// Animation drives only the painter, not a widget rebuild on every frame.
+class _TrafficGraph extends StatefulWidget {
+  const _TrafficGraph({required this.samples, required this.maxBps});
+  final List<TrafficSample> samples;
+  final int maxBps;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const Gap(5),
-        Text(
-          '$label $value',
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
+  State<_TrafficGraph> createState() => _TrafficGraphState();
 }
 
-class _InfoSection extends StatelessWidget {
-  const _InfoSection({required this.children});
+class _TrafficGraphState extends State<_TrafficGraph>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+    value: 1,
+  );
+  List<Offset> _download = const [];
+  List<Offset> _upload = const [];
+  List<Offset> _previousDownload = const [];
+  List<Offset> _previousUpload = const [];
+  bool _reduceMotion = false;
 
-  final List<Widget> children;
+  @override
+  void initState() {
+    super.initState();
+    _updatePoints();
+    _previousDownload = _download;
+    _previousUpload = _upload;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion) _animation.value = 1;
+  }
+
+  void _updatePoints() {
+    final first = widget.samples.first.timestamp;
+    final elapsed = math.max(
+      1,
+      widget.samples.last.timestamp.difference(first).inMicroseconds,
+    );
+    _download = [
+      for (final sample in widget.samples)
+        Offset(
+          sample.timestamp.difference(first).inMicroseconds / elapsed,
+          sample.downlinkBps.clamp(0, widget.maxBps) / widget.maxBps,
+        ),
+    ];
+    _upload = [
+      for (final sample in widget.samples)
+        Offset(
+          sample.timestamp.difference(first).inMicroseconds / elapsed,
+          sample.uplinkBps.clamp(0, widget.maxBps) / widget.maxBps,
+        ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant _TrafficGraph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.maxBps == widget.maxBps &&
+        listEquals(oldWidget.samples, widget.samples)) {
+      return;
+    }
+    final progress = Curves.easeOutCubic.transform(_animation.value);
+    _previousDownload = _blendPoints(_previousDownload, _download, progress);
+    _previousUpload = _blendPoints(_previousUpload, _upload, progress);
+    _updatePoints();
+    if (_reduceMotion) {
+      _animation.value = 1;
+    } else {
+      _animation.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Column(children: children),
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      image: true,
+      label: AppLocalizations.of(context).trafficDashboardGraphTitle,
+      child: SizedBox(
+        height: 112,
+        width: double.infinity,
+        child: RepaintBoundary(
+          child: CustomPaint(
+            key: const ValueKey('traffic-dashboard-graph'),
+            painter: _TrafficChartPainter(
+              animation: _animation,
+              previousDownload: _previousDownload,
+              previousUpload: _previousUpload,
+              download: _download,
+              upload: _upload,
+              downloadColor: scheme.primary,
+              uploadColor: scheme.tertiary,
+              gridColor: scheme.outlineVariant.withValues(alpha: .35),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.leading});
-
-  final String label;
-  final String value;
-  final Widget? leading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const Gap(12),
-          if (leading != null) ...[leading!, const Gap(8)],
-          Flexible(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+List<Offset> _blendPoints(
+  List<Offset> previous,
+  List<Offset> next,
+  double progress,
+) {
+  if (previous.isEmpty || progress == 1) return next;
+  return [
+    for (var i = 0; i < next.length; i++)
+      Offset.lerp(
+        previous[(i + previous.length - next.length).clamp(
+          0,
+          previous.length - 1,
+        )],
+        next[i],
+        progress,
+      )!,
+  ];
 }
 
 class _TrafficChartPainter extends CustomPainter {
-  const _TrafficChartPainter({
-    required this.samples,
+  _TrafficChartPainter({
+    required this.animation,
+    required this.previousDownload,
+    required this.previousUpload,
+    required this.download,
+    required this.upload,
     required this.downloadColor,
     required this.uploadColor,
     required this.gridColor,
-    required this.maxBps,
-    required this.emptyTextColor,
-    required this.emptyText,
-    required this.textStyle,
-  });
+  }) : super(repaint: animation);
 
-  final List<TrafficSample> samples;
+  final Animation<double> animation;
+  final List<Offset> previousDownload;
+  final List<Offset> previousUpload;
+  final List<Offset> download;
+  final List<Offset> upload;
   final Color downloadColor;
   final Color uploadColor;
   final Color gridColor;
-  final int maxBps;
-  final Color emptyTextColor;
-  final String emptyText;
-  final TextStyle? textStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const axisGutter = 58.0;
-    final chartRect = Rect.fromLTWH(
-      axisGutter,
-      0,
-      math.max(1, size.width - axisGutter),
-      size.height,
-    );
+    final rect = Rect.fromLTWH(0, 4, size.width, math.max(1, size.height - 8));
+    final progress = Curves.easeOutCubic.transform(animation.value);
     final gridPaint = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
-    for (var i = 0; i < 4; i++) {
-      final y = chartRect.top + chartRect.height * i / 3;
-      canvas.drawLine(
-        Offset(chartRect.left, y),
-        Offset(chartRect.right, y),
-        gridPaint,
-      );
-      _paintAxisLabel(
-        canvas,
-        value: ((maxBps * (3 - i)) / 3).round(),
-        y: y,
-        maxWidth: axisGutter - 8,
-        maxHeight: chartRect.height,
-      );
+    for (var i = 0; i < 3; i++) {
+      final y = rect.top + rect.height * i / 2;
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), gridPaint);
     }
-
-    if (samples.length < 2) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: emptyText,
-          style: (textStyle ?? const TextStyle()).copyWith(
-            color: emptyTextColor,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-      )..layout(maxWidth: chartRect.width);
-      painter.paint(
-        canvas,
-        Offset(
-          chartRect.left + (chartRect.width - painter.width) / 2,
-          chartRect.top + (chartRect.height - painter.height) / 2,
-        ),
-      );
-      painter.dispose();
-      return;
-    }
-
-    Path lineFor(int Function(TrafficSample sample) selector) {
-      final path = Path();
-      for (var i = 0; i < samples.length; i++) {
-        final sample = samples[i];
-        final x = samples.length == 1
-            ? chartRect.left
-            : chartRect.left + chartRect.width * i / (samples.length - 1);
-        final value = selector(sample).clamp(0, maxBps);
-        final y = chartRect.bottom - chartRect.height * value / maxBps;
-        if (i == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-      return path;
-    }
-
-    canvas.drawPath(
-      lineFor((sample) => sample.downlinkBps),
-      Paint()
-        ..color = downloadColor
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    _drawSeries(
+      canvas,
+      rect,
+      previousDownload,
+      download,
+      progress,
+      downloadColor,
+      fill: true,
     );
-    canvas.drawPath(
-      lineFor((sample) => sample.uplinkBps),
-      Paint()
-        ..color = uploadColor
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
+    _drawSeries(
+      canvas,
+      rect,
+      previousUpload,
+      upload,
+      progress,
+      uploadColor,
+      fill: false,
     );
+    canvas.restore();
   }
 
-  void _paintAxisLabel(
-    Canvas canvas, {
-    required int value,
-    required double y,
-    required double maxWidth,
-    required double maxHeight,
+  void _drawSeries(
+    Canvas canvas,
+    Rect rect,
+    List<Offset> previous,
+    List<Offset> next,
+    double progress,
+    Color color, {
+    required bool fill,
   }) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: formatSpeed(value.toDouble()),
-        style: (textStyle ?? const TextStyle()).copyWith(
-          color: emptyTextColor,
-          fontSize: (textStyle?.fontSize ?? 12) * .82,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      textAlign: TextAlign.right,
-    )..layout(maxWidth: maxWidth);
-    painter.paint(
-      canvas,
-      Offset(
-        maxWidth - painter.width,
-        (y - painter.height / 2)
-            .clamp(0.0, maxHeight - painter.height)
-            .toDouble(),
-      ),
+    if (next.isEmpty) return;
+    Offset point(int i) {
+      final target = next[i];
+      final old = previous.isEmpty
+          ? target
+          : previous[(i + previous.length - next.length).clamp(
+              0,
+              previous.length - 1,
+            )];
+      final x = lerpDouble(old.dx, target.dx, progress)!;
+      final y = lerpDouble(old.dy, target.dy, progress)!;
+      return Offset(rect.left + rect.width * x, rect.bottom - rect.height * y);
+    }
+
+    final first = point(0);
+    final path = Path()..moveTo(first.dx, first.dy);
+    for (var i = 1; i < next.length - 1; i++) {
+      final current = point(i);
+      final following = point(i + 1);
+      path.quadraticBezierTo(
+        current.dx,
+        current.dy,
+        (current.dx + following.dx) / 2,
+        (current.dy + following.dy) / 2,
+      );
+    }
+    final last = point(next.length - 1);
+    path.lineTo(last.dx, last.dy);
+    if (fill) {
+      final area = Path.from(path)
+        ..lineTo(last.dx, rect.bottom)
+        ..lineTo(first.dx, rect.bottom)
+        ..close();
+      canvas.drawPath(
+        area,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: .18),
+              color.withValues(alpha: .015),
+            ],
+          ).createShader(rect),
+      );
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = fill ? 2.5 : 2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
     );
-    painter.dispose();
   }
 
   @override
-  bool shouldRepaint(covariant _TrafficChartPainter oldDelegate) {
-    return oldDelegate.downloadColor != downloadColor ||
-        oldDelegate.uploadColor != uploadColor ||
-        oldDelegate.gridColor != gridColor ||
-        oldDelegate.maxBps != maxBps ||
-        oldDelegate.emptyTextColor != emptyTextColor ||
-        oldDelegate.emptyText != emptyText ||
-        !listEquals(oldDelegate.samples, samples);
-  }
+  bool shouldRepaint(covariant _TrafficChartPainter oldDelegate) =>
+      oldDelegate.downloadColor != downloadColor ||
+      oldDelegate.uploadColor != uploadColor ||
+      oldDelegate.gridColor != gridColor ||
+      oldDelegate.download != download ||
+      oldDelegate.upload != upload ||
+      oldDelegate.previousDownload != previousDownload ||
+      oldDelegate.previousUpload != previousUpload ||
+      oldDelegate.animation != animation;
 }

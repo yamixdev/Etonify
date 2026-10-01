@@ -2648,7 +2648,7 @@ abstract class AppLocalizations {
   /// No description provided for @trafficDashboardGraphTitle.
   ///
   /// In en, this message translates to:
-  /// **'Live traffic'**
+  /// **'Network speed'**
   String get trafficDashboardGraphTitle;
 
   /// No description provided for @trafficDashboardGraphMax.

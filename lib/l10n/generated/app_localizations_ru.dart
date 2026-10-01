@@ -1442,7 +1442,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficDashboardConnectedFor => 'Время работы';
 
   @override
-  String get trafficDashboardGraphTitle => 'Трафик в реальном времени';
+  String get trafficDashboardGraphTitle => 'Скорость сети';
 
   @override
   String trafficDashboardGraphMax(String speed) {

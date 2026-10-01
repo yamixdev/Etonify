@@ -1445,7 +1445,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficDashboardConnectedFor => 'Connected for';
 
   @override
-  String get trafficDashboardGraphTitle => 'Live traffic';
+  String get trafficDashboardGraphTitle => 'Network speed';
 
   @override
   String trafficDashboardGraphMax(String speed) {

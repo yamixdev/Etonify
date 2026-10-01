@@ -549,7 +549,7 @@
   "trafficDashboardUpload": "Отдача",
   "trafficDashboardSessionTraffic": "Трафик сессии",
   "trafficDashboardConnectedFor": "Время работы",
-  "trafficDashboardGraphTitle": "Трафик в реальном времени",
+  "trafficDashboardGraphTitle": "Скорость сети",
   "trafficDashboardGraphMax": "Пик {speed}",
   "@trafficDashboardGraphMax": {
     "placeholders": {

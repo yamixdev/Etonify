@@ -1,0 +1,251 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/features/home/traffic_dashboard_page.dart';
+import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/theme/app_theme.dart';
+
+TrafficDashboardSnapshot snapshot({
+  int speed = 2048,
+  bool available = true,
+  bool connected = true,
+  bool hideIp = false,
+  String ip = '31.22.93.6',
+}) {
+  return TrafficDashboardSnapshot(
+    connected: connected,
+    connecting: false,
+    trafficAvailable: available,
+    hideServerIp: hideIp,
+    downlinkBps: speed,
+    uplinkBps: 1024,
+    uplinkTotalBytes: 4096,
+    downlinkTotalBytes: 8192,
+    connectedSince: DateTime(2026),
+    activeProfile: const AppProfileSummary(
+      id: 'profile',
+      name: 'Main subscription',
+      consumed: 0,
+      total: 0,
+      remainingDays: null,
+      outboundsCount: 226,
+      sourceLabel: '',
+    ),
+    activeProxy: AppProxySummary(
+      tag: 'server',
+      displayName: 'A long automatic proxy server name for testing',
+      countryCode: 'SE',
+      type: 'vless',
+      server: '31.22.93.6',
+      port: 443,
+      detailText: '',
+      ip: ip,
+      latency: 118,
+      latencyFresh: true,
+      latencyChecking: false,
+      latencyUnavailable: false,
+      latencyError: null,
+      protocolLabel: 'VLESS',
+      endpointLabel: '31.22.93.6:443',
+    ),
+    samples: [
+      TrafficSample(
+        timestamp: DateTime(2026),
+        downlinkBps: 8192,
+        uplinkBps: 2048,
+        totalBytes: 0,
+      ),
+      TrafficSample(
+        timestamp: DateTime(2026).add(const Duration(seconds: 1)),
+        downlinkBps: speed,
+        uplinkBps: 1024,
+        totalBytes: 12288,
+      ),
+    ],
+  );
+}
+
+Widget app(
+  ValueNotifier<TrafficDashboardSnapshot> notifier, {
+  Color seed = Colors.blue,
+  double textScale = 1,
+  bool reducedMotion = false,
+}) => MaterialApp(
+  locale: const Locale('ru'),
+  supportedLocales: AppLocalizations.supportedLocales,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  theme: buildAppTheme(
+    Brightness.light,
+    dynamicLightScheme: ColorScheme.fromSeed(seedColor: seed),
+  ),
+  home: MediaQuery(
+    data: MediaQueryData(
+      textScaler: TextScaler.linear(textScale),
+      disableAnimations: reducedMotion,
+    ),
+    child: TrafficDashboardPage(snapshotListenable: notifier),
+  ),
+);
+
+void main() {
+  testWidgets(
+    'current speeds and actual peak live together above session totals',
+    (tester) async {
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier));
+      expect(find.text('Пик 8.00 KB/s'), findsOneWidget);
+      final graph = find.byKey(const ValueKey('traffic-dashboard-graph'));
+      expect(
+        tester.getTopLeft(graph).dy,
+        lessThan(tester.getTopLeft(find.text('Трафик сессии')).dy),
+      );
+      expect(find.text('2.00 KB/s'), findsOneWidget);
+      expect(find.text('1.00 KB/s'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'traffic ticks do not rebuild the heading or connection details',
+    (tester) async {
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier));
+      final heading = tester.widget(find.text('Мониторинг трафика'));
+      final connection = tester.widget(find.text('Main subscription'));
+      notifier.value = snapshot(speed: 3072);
+      await tester.pump();
+      expect(find.text('3.00 KB/s'), findsOneWidget);
+      expect(tester.widget(find.text('Мониторинг трафика')), same(heading));
+      expect(tester.widget(find.text('Main subscription')), same(connection));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('unavailable traffic is not presented as measured zero speed', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot(available: false));
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier));
+    expect(find.text('Ждём данные трафика'), findsOneWidget);
+    expect(find.text('2.00 KB/s'), findsNothing);
+    expect(find.text('1.00 KB/s'), findsNothing);
+  });
+
+  testWidgets('graph animation does not rebuild metrics and stops on close', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier));
+    notifier.value = snapshot(speed: 4096);
+    await tester.pump();
+    final metric = tester.widget(find.text('4.00 KB/s'));
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.widget(find.text('4.00 KB/s')), same(metric));
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.binding.transientCallbackCount, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reduced motion updates graph without scheduling animation', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier, reducedMotion: true));
+    notifier.value = snapshot(speed: 4096);
+    await tester.pump();
+    expect(find.text('4.00 KB/s'), findsOneWidget);
+    expect(tester.binding.transientCallbackCount, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('disconnect clears graph and honors server IP privacy', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier));
+    notifier.value = snapshot(connected: false, hideIp: true);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('traffic-dashboard-graph')), findsNothing);
+    expect(find.text('Отключено'), findsOneWidget);
+    expect(find.text('31.22.*.*'), findsOneWidget);
+    expect(find.text('31.22.93.6'), findsNothing);
+    expect(find.text('2.00 KB/s'), findsNothing);
+    expect(tester.binding.transientCallbackCount, 0);
+  });
+
+  testWidgets('IP privacy also masks a short compressed IPv6 address', (
+    tester,
+  ) async {
+    final notifier = ValueNotifier(snapshot(hideIp: true, ip: '2606::1'));
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier));
+    expect(find.text('2606::1'), findsNothing);
+    expect(find.text('****'), findsOneWidget);
+  });
+
+  testWidgets(
+    'new samples interrupt animation and reduced motion snaps to latest values',
+    (tester) async {
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      final reducedMotion = ValueNotifier(false);
+      addTearDown(reducedMotion.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: ValueListenableBuilder<bool>(
+            valueListenable: reducedMotion,
+            builder: (context, reduced, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+              child: TrafficDashboardPage(snapshotListenable: notifier),
+            ),
+          ),
+        ),
+      );
+      notifier.value = snapshot(speed: 4096);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      notifier.value = snapshot(speed: 6144);
+      await tester.pump();
+      expect(find.text('6.00 KB/s'), findsOneWidget);
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+      reducedMotion.value = true;
+      await tester.pump();
+      expect(tester.binding.transientCallbackCount, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'narrow Russian layout supports large text and updates theme colors',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier, textScale: 2));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(find.text('31.22.93.6'), 200);
+      expect(tester.takeException(), isNull);
+      expect(find.text('31.22.93.6'), findsOneWidget);
+      await tester.pumpWidget(
+        app(notifier, seed: Colors.green, reducedMotion: true),
+      );
+      await tester.pumpAndSettle();
+      final icon = tester.widget<Icon>(
+        find.byIcon(Icons.arrow_downward_rounded).first,
+      );
+      expect(icon.color, ColorScheme.fromSeed(seedColor: Colors.green).primary);
+      expect(tester.takeException(), isNull);
+    },
+  );
+}

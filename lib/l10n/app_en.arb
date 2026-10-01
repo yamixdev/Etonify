@@ -549,7 +549,7 @@
   "trafficDashboardUpload": "Upload",
   "trafficDashboardSessionTraffic": "Session traffic",
   "trafficDashboardConnectedFor": "Connected for",
-  "trafficDashboardGraphTitle": "Live traffic",
+  "trafficDashboardGraphTitle": "Network speed",
   "trafficDashboardGraphMax": "Peak {speed}",
   "@trafficDashboardGraphMax": {
     "placeholders": {
