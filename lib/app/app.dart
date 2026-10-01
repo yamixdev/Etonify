@@ -7374,39 +7374,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_dirtyLatestPings.isEmpty) return;
     final pending = Map.of(_dirtyLatestPings);
     _dirtyLatestPings.clear();
-    final activeSubscription = _activeSubscription;
-    var subscriptionUpdated = false;
-    final updatedOutbounds = activeSubscription?.outbounds
-        .map((outbound) {
-          final entry = pending['${activeSubscription.id}\n${outbound.tag}'];
-          if (entry != null &&
-              entry.outboundKey ==
-                  SubscriptionStore.outboundIdentityKey(outbound.config)) {
-            if (outbound.info.latestPing != entry.ping) {
-              subscriptionUpdated = true;
-              return outbound.copyWith(
-                info: outbound.info.copyWith(latestPing: entry.ping),
-              );
-            }
-          }
-          return outbound;
-        })
-        .toList(growable: false);
-
-    if (subscriptionUpdated &&
-        activeSubscription != null &&
-        updatedOutbounds != null) {
-      final updatedSubscription = activeSubscription.copyWith(
-        outbounds: updatedOutbounds,
-      );
-      _subscriptions = _replaceSubscription(updatedSubscription);
-    }
-
     final byProfile = <String, List<_PendingLatestPing>>{};
     for (final entry in pending.values) {
       byProfile.putIfAbsent(entry.profileId, () => []).add(entry);
     }
     for (final batch in byProfile.entries) {
+      ref
+          .read(subscriptionCatalogProvider.notifier)
+          .updateLatestPings(
+            batch.key,
+            {for (final entry in batch.value) entry.tag: entry.ping},
+            expectedOutboundKeys: {
+              for (final entry in batch.value) entry.tag: entry.outboundKey,
+            },
+          );
       unawaited(_persistLatestPingBatch(batch.key, batch.value));
     }
   }
@@ -8956,7 +8937,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ),
     );
     ref.watch(
-      subscriptionCatalogProvider.select((state) => state.subscriptions),
+      subscriptionCatalogProvider.select((state) => state.catalogRevision),
     );
     ref.watch(
       subscriptionCatalogProvider.select((state) => state.activeProfileId),
