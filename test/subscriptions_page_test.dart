@@ -229,12 +229,137 @@ void main() {
   });
 
   _testSubscriptionWidgets(
+    'automatic candidates are nested and remain shareable',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('subscription_details_proxies')),
+        180,
+        scrollable: _detailsScrollable(),
+      );
+      await _pumpUntilFound(tester, find.text('Automatic group'));
+      expect(find.text('Server 0'), findsNothing);
+      await tester.tap(find.text('Automatic group'));
+      await _pumpUi(tester);
+      expect(find.text('Server 0'), findsOneWidget);
+      expect(find.text('Server 299'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('subscription_share_group')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Server 299'));
+      await _pumpUi(tester);
+      expect(find.text('Share link'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets('profile actions use equal widths and heights', (
+    tester,
+  ) async {
+    await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+    await _openDetails(tester, 'large-profile', 'Large profile');
+    final refresh = find.widgetWithText(FilledButton, 'Refresh');
+    final export = find.byKey(const ValueKey('subscription_export_json'));
+    expect(tester.getSize(refresh), tester.getSize(export));
+    final copy = find.widgetWithText(OutlinedButton, 'Copy');
+    final qr = find.widgetWithText(OutlinedButton, 'Show QR');
+    expect(copy, findsOneWidget);
+    expect(qr, findsOneWidget);
+    expect(tester.getSize(copy), tester.getSize(qr));
+    expect(tester.takeException(), isNull);
+  });
+
+  _testSubscriptionWidgets(
+    'custom refresh interval validates input and persists two days',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      await tester.scrollUntilVisible(
+        find.text('Refresh interval'),
+        180,
+        scrollable: _detailsScrollable(),
+      );
+      await tester.tap(find.text('Refresh interval'));
+      await _pumpUi(tester);
+      await tester.tap(find.text('Custom interval'));
+      await _pumpUi(tester);
+      final input = find.byKey(const ValueKey('subscription_interval_value'));
+      await tester.enterText(input, '0');
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+      expect(input, findsOneWidget);
+      await tester.enterText(input, '2');
+      await tester.tap(find.text('Days'));
+      await tester.pump();
+      await tester.enterText(input, '366');
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+      expect(input, findsOneWidget);
+      await tester.enterText(input, '2');
+      await tester.tap(find.text('Save'));
+      await _pumpUntilFound(tester, find.text('Refreshes every: 2 d'));
+      expect(
+        SubscriptionStore.getMetadata('large-profile')?.autoRefreshMinutes,
+        2880,
+      );
+      expect(
+        SubscriptionStore.getMetadata(
+          'large-profile',
+        )?.toMetadataMap()['auto_refresh_overridden'],
+        true,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'group-only candidates count as servers and keep the full list accessible',
+    (tester) async {
+      await tester.runAsync(
+        () => SubscriptionStore.save(
+          _largeProfile().copyWith(
+            outbounds: const [
+              Outbound(
+                tag: 'internal',
+                name: 'cand-01',
+                config: {'type': 'vless', '_group_only': true},
+              ),
+            ],
+            groups: const [
+              SubscriptionGroup(
+                tag: 'auto',
+                name: 'Automatic group',
+                outboundTags: ['internal'],
+              ),
+            ],
+          ),
+        ),
+      );
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('subscription_details_proxies')),
+        180,
+        scrollable: _detailsScrollable(),
+      );
+      await _pumpUntilFound(tester, find.text('Automatic group'));
+      expect(find.text('1 proxies'), findsWidgets);
+      expect(
+        find.byKey(const ValueKey('subscription_all_servers')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
     'details hydrate servers instead of showing a metadata-only zero',
     (tester) async {
       await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
       await _openDetails(tester, 'large-profile', 'Large profile');
       await _showServerPreview(tester);
-      await _pumpUntilFound(tester, find.text('Server 0'));
+      await _pumpUntilFound(tester, find.text('Server 1'));
       expect(find.text('300 proxies'), findsWidgets);
       expect(find.text('0 proxies'), findsNothing);
       expect(find.text('Server 299'), findsNothing);
@@ -245,12 +370,70 @@ void main() {
   );
 
   _testSubscriptionWidgets(
+    'advanced settings retain their height during the closing animation',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      final tile = find.byType(ExpansionTile);
+      await tester.scrollUntilVisible(
+        tile,
+        180,
+        scrollable: _detailsScrollable(),
+      );
+      final closedHeight = tester.getSize(tile).height;
+      await tester.tap(find.text('Advanced settings'));
+      await _pumpUi(tester);
+      expect(tester.getSize(tile).height, greaterThan(closedHeight));
+      await tester.ensureVisible(find.text('Advanced settings'));
+      await tester.pump();
+      await tester.tap(find.text('Advanced settings'));
+      await tester.pump();
+      expect(tester.getSize(tile).height, greaterThan(closedHeight));
+      await _pumpUi(tester);
+      expect(tester.getSize(tile).height, closeTo(closedHeight, .1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'subscription actions remain reachable on a narrow Russian large-text screen',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openSheet(
+        tester,
+        activeSubscriptionId: 'large-profile',
+        locale: const Locale('ru'),
+        textScale: 1.6,
+      );
+      await _pumpUntilFound(tester, find.text('Large profile'));
+      await tester.binding.setSurfaceSize(const Size(320, 860));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
+      await tester.pump();
+      await tester.tap(find.text('Подписка'));
+      await _pumpUi(tester);
+      expect(tester.takeException(), isNull);
+      final export = find.byKey(const ValueKey('subscription_export_json'));
+      await tester.ensureVisible(export);
+      await tester.pump();
+      expect(export.hitTestable(), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Показать QR'),
+        150,
+        scrollable: _detailsScrollable(),
+      );
+      expect(find.text('Показать QR').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
     'all servers are lazy, searchable and open sharing on a row tap',
     (tester) async {
       await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
       await _openDetails(tester, 'large-profile', 'Large profile');
       await _showServerPreview(tester);
-      await _pumpUntilFound(tester, find.text('Server 0'));
+      await _pumpUntilFound(tester, find.text('Server 1'));
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('subscription_all_servers')),
         200,
@@ -268,11 +451,11 @@ void main() {
       expect(find.text('Server 299'), findsNothing);
       await tester.enterText(
         find.byKey(const ValueKey('subscription_server_search')),
-        'Server 299',
+        'Server 298',
       );
       await tester.pump(const Duration(milliseconds: 250));
-      expect(find.byKey(const ValueKey('server-299')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('server-299')));
+      expect(find.byKey(const ValueKey('server-298')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('server-298')));
       await _pumpUi(tester);
       expect(find.text('Share link'), findsOneWidget);
       expect(find.text('sing-box outbound'), findsOneWidget);
@@ -313,6 +496,12 @@ void main() {
       expect(decoded.subscriptions.single.name, 'Large profile');
       expect(decoded.subscriptions.single.outbounds, hasLength(301));
       expect(decoded.subscriptions.single.selectedProxyTag, 'server-299');
+      expect(decoded.subscriptions.single.groups.single.urlTestConfig.toMap(), {
+        'url': 'https://example.com/check',
+        'interval': 60,
+        'timeout': 5,
+        'concurrency': 2,
+      });
       await tester.pumpWidget(const SizedBox.shrink());
       var cleared = false;
       final clearing = SubscriptionStore.clear().then((_) => cleared = true);
@@ -920,6 +1109,12 @@ Subscription _largeProfile() => Subscription(
       name: 'Automatic group',
       type: 'urltest',
       outboundTags: ['server-0', 'server-299'],
+      urlTestConfig: UrlTestConfig(
+        url: 'https://example.com/check',
+        intervalSeconds: 60,
+        timeoutSeconds: 5,
+        concurrency: 2,
+      ),
     ),
   ],
 );
@@ -1036,20 +1231,34 @@ Future<void> _showServerPreview(WidgetTester tester) async {
         )
         .first,
   );
-  await _pumpUntilFound(tester, find.text('Server 0'));
-  expect(find.text('Server 0'), findsOneWidget);
+  await _pumpUntilFound(tester, find.text('Server 1'));
+  expect(find.text('Server 1'), findsOneWidget);
 }
+
+Finder _detailsScrollable() => find
+    .descendant(
+      of: find.byKey(const PageStorageKey('subscription_details_scroll')),
+      matching: find.byType(Scrollable),
+    )
+    .first;
 
 Future<void> _openSheet(
   WidgetTester tester, {
   bool openAddOnStart = false,
   String? activeSubscriptionId,
   Locale locale = const Locale('en'),
+  double textScale = 1,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [

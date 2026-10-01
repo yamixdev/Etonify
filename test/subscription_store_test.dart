@@ -661,6 +661,34 @@ Endpoint = wg.example.com:51820
     );
   });
 
+  test(
+    'refresh respects a user interval instead of the provider header',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      server.listen((request) async {
+        request.response.headers.set('profile-update-interval', '3');
+        request.response.write(
+          'vless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@example.com:443?security=tls#Node',
+        );
+        await request.response.close();
+      });
+      final added = await SubscriptionStore.addFromUrl(
+        'http://${server.address.host}:${server.port}/sub',
+      );
+      expect(added.subscription.autoRefreshMinutes, 180);
+      final metadata = added.subscription.toMetadataMap()
+        ..['auto_refresh_minutes'] = 2880
+        ..['auto_refresh_overridden'] = true;
+      await SubscriptionStore.saveMetadata(
+        Subscription.fromMetadataMap(metadata),
+      );
+      final refreshed = await SubscriptionStore.refresh(added.subscription.id);
+      expect(refreshed.autoRefreshMinutes, 2880);
+      expect(refreshed.toMetadataMap()['auto_refresh_overridden'], true);
+    },
+  );
+
   test('persists latest latency alongside location fields', () async {
     const subscription = Subscription(
       id: 'runtime-sub',

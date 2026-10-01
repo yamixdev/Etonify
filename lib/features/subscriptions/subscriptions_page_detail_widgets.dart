@@ -25,6 +25,183 @@ class _CountBadge extends StatelessWidget {
   }
 }
 
+class _SubscriptionActionPair extends StatelessWidget {
+  const _SubscriptionActionPair({required this.children, required this.labels});
+  final List<Widget> children;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stacked =
+          constraints.maxWidth < 300 ||
+          MediaQuery.textScalerOf(context).scale(14) > 21;
+      if (stacked) {
+        var height = 52.0;
+        for (final label in labels) {
+          final painter =
+              TextPainter(
+                text: TextSpan(
+                  text: label,
+                  style: _subscriptionActionTextStyle(context),
+                ),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout(
+                maxWidth: (constraints.maxWidth - 52).clamp(1, double.infinity),
+              );
+          final candidate = painter.height + 24;
+          if (candidate > height) height = candidate;
+          painter.dispose();
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const Gap(10),
+              SizedBox(height: height, child: children[i]),
+            ],
+          ],
+        );
+      }
+      // Only two controls: intrinsic height makes both match a wrapping label.
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const Gap(10),
+              Expanded(child: children[i]),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+}
+
+TextStyle? _subscriptionActionTextStyle(BuildContext context) => Theme.of(
+  context,
+).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700);
+
+ButtonStyle _subscriptionActionStyle(BuildContext context) => ButtonStyle(
+  textStyle: WidgetStatePropertyAll(_subscriptionActionTextStyle(context)),
+  minimumSize: const WidgetStatePropertyAll(Size(0, 52)),
+  padding: const WidgetStatePropertyAll(
+    EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  ),
+  shape: WidgetStatePropertyAll(
+    RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  ),
+);
+
+class _SubscriptionIntervalDialog extends StatefulWidget {
+  const _SubscriptionIntervalDialog({required this.initialMinutes});
+  final int initialMinutes;
+  @override
+  State<_SubscriptionIntervalDialog> createState() =>
+      _SubscriptionIntervalDialogState();
+}
+
+class _SubscriptionIntervalDialogState
+    extends State<_SubscriptionIntervalDialog> {
+  late final TextEditingController _value;
+  late bool _days;
+  bool _invalid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _days = widget.initialMinutes > 0 && widget.initialMinutes % 1440 == 0;
+    _value = TextEditingController(
+      text:
+          '${(widget.initialMinutes / (_days ? 1440 : 60)).ceil().clamp(1, 8760)}',
+    );
+  }
+
+  @override
+  void dispose() {
+    _value.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final amount = int.tryParse(_value.text.trim());
+    final minutes = amount == null ? 0 : amount * (_days ? 1440 : 60);
+    if (minutes < 60 || minutes > 365 * 1440) {
+      setState(() => _invalid = true);
+      return;
+    }
+    Navigator.pop(context, minutes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(l10n.subscriptionCustomInterval),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              key: const ValueKey('subscription_interval_value'),
+              controller: _value,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(5),
+              ],
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              onChanged: (_) {
+                if (_invalid) setState(() => _invalid = false);
+              },
+              decoration: InputDecoration(
+                labelText: l10n.subscriptionIntervalValue,
+                errorText: _invalid ? l10n.subscriptionIntervalError : null,
+                errorMaxLines: 3,
+              ),
+            ),
+            const Gap(16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: Text(l10n.subscriptionIntervalHours),
+                  selected: !_days,
+                  onSelected: (_) => setState(() {
+                    _days = false;
+                    _invalid = false;
+                  }),
+                ),
+                ChoiceChip(
+                  label: Text(l10n.subscriptionIntervalDays),
+                  selected: _days,
+                  onSelected: (_) => setState(() {
+                    _days = true;
+                    _invalid = false;
+                  }),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(onPressed: _save, child: Text(l10n.saveAction)),
+      ],
+    );
+  }
+}
+
 class _DetailsBlock extends StatelessWidget {
   const _DetailsBlock({
     super.key,
@@ -166,21 +343,30 @@ class _SubscriptionUrlEditDialogState
 }
 
 class _OutboundRow extends StatelessWidget {
-  const _OutboundRow({super.key, required this.outbound, required this.onTap});
+  const _OutboundRow({
+    super.key,
+    required this.outbound,
+    required this.onTap,
+    this.memberCount,
+  });
 
   final Outbound outbound;
   final VoidCallback onTap;
+  final int? memberCount;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final meta = [
-      outbound.type.toUpperCase(),
-      ...[
-        _securityLabel(outbound),
-        _transportLabel(outbound),
-      ].whereType<String>().map((value) => value.toUpperCase()),
-    ].join(' · ');
+    final l10n = AppLocalizations.of(context);
+    final meta = memberCount != null
+        ? '${outbound.type == 'urltest' ? l10n.subscriptionGroupAutomatic : l10n.subscriptionGroupSelector} · ${l10n.outboundsCount(memberCount!)}'
+        : [
+            outbound.type.toUpperCase(),
+            ...[
+              _securityLabel(outbound),
+              _transportLabel(outbound),
+            ].whereType<String>().map((value) => value.toUpperCase()),
+          ].join(' · ');
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),

@@ -1,4 +1,13 @@
 {
+  "subscriptionCustomInterval": "Свой интервал",
+  "subscriptionIntervalValue": "Интервал",
+  "subscriptionIntervalHours": "Часы",
+  "subscriptionIntervalDays": "Дни",
+  "subscriptionIntervalError": "Введите целое число: от 1 часа до 365 дней.",
+  "subscriptionShareGroup": "Поделиться группой",
+  "subscriptionShareFailed": "Не удалось поделиться сервером или группой. Возможно, отсутствует нужный промежуточный прокси. Обновите профиль и попробуйте снова.",
+  "subscriptionGroupAutomatic": "Автовыбор",
+  "subscriptionGroupSelector": "Группа серверов",
   "subscriptionExportJson": "Экспорт JSON",
   "subscriptionAllServers": "Все серверы",
   "subscriptionAdvancedSettings": "Дополнительные настройки",

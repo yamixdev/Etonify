@@ -5,11 +5,17 @@ class _SubscriptionServersPage extends StatefulWidget {
     required this.subscriptionName,
     required this.outbounds,
     required this.onShare,
+    required this.catalog,
+    this.groupTag,
+    this.ancestorTags = const {},
   });
 
   final String subscriptionName;
   final List<Outbound> outbounds;
   final Future<void> Function(String tag) onShare;
+  final SubscriptionServerCatalog catalog;
+  final String? groupTag;
+  final Set<String> ancestorTags;
 
   @override
   State<_SubscriptionServersPage> createState() =>
@@ -25,11 +31,37 @@ class _SubscriptionServersPageState extends State<_SubscriptionServersPage> {
   @override
   void initState() {
     super.initState();
-    _filtered = widget.outbounds;
+    _filtered = _items;
     _searchIndex = [
-      for (final outbound in widget.outbounds)
-        '${outbound.name} ${outbound.type} ${outbound.server}'.toLowerCase(),
+      for (final outbound in _items) widget.catalog.searchText(outbound),
     ];
+  }
+
+  List<Outbound> get _items =>
+      widget.groupTag == null ? widget.catalog.roots : widget.outbounds;
+
+  void _open(Outbound node) {
+    if (!SubscriptionServerCatalog.isGroup(node)) {
+      unawaited(widget.onShare(node.tag));
+      return;
+    }
+    final ancestors = {
+      ...widget.ancestorTags,
+      if (widget.groupTag != null) widget.groupTag!,
+    };
+    if (ancestors.contains(node.tag)) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => _SubscriptionServersPage(
+          subscriptionName: node.name,
+          outbounds: widget.catalog.members(node.tag),
+          catalog: widget.catalog,
+          groupTag: node.tag,
+          ancestorTags: ancestors,
+          onShare: widget.onShare,
+        ),
+      ),
+    );
   }
 
   @override
@@ -46,11 +78,10 @@ class _SubscriptionServersPageState extends State<_SubscriptionServersPage> {
       final query = value.trim().toLowerCase();
       setState(() {
         _filtered = query.isEmpty
-            ? widget.outbounds
+            ? _items
             : [
                 for (var index = 0; index < _searchIndex.length; index++)
-                  if (_searchIndex[index].contains(query))
-                    widget.outbounds[index],
+                  if (_searchIndex[index].contains(query)) _items[index],
               ];
       });
     });
@@ -83,6 +114,19 @@ class _SubscriptionServersPageState extends State<_SubscriptionServersPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const Gap(8),
+                    if (widget.groupTag case final tag?) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('subscription_share_group'),
+                          style: _subscriptionActionStyle(context),
+                          onPressed: () => widget.onShare(tag),
+                          icon: const Icon(Icons.share_outlined, size: 18),
+                          label: Text(l10n.subscriptionShareGroup),
+                        ),
+                      ),
+                      const Gap(12),
+                    ],
                     TextField(
                       key: const ValueKey('subscription_server_search'),
                       controller: _search,
@@ -121,7 +165,11 @@ class _SubscriptionServersPageState extends State<_SubscriptionServersPage> {
                           return _OutboundRow(
                             key: ValueKey(outbound.tag),
                             outbound: outbound,
-                            onTap: () => widget.onShare(outbound.tag),
+                            memberCount:
+                                SubscriptionServerCatalog.isGroup(outbound)
+                                ? widget.catalog.memberCount(outbound.tag)
+                                : null,
+                            onTap: () => _open(outbound),
                           );
                         },
                       ),

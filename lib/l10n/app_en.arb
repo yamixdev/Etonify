@@ -1,4 +1,13 @@
 {
+  "subscriptionCustomInterval": "Custom interval",
+  "subscriptionIntervalValue": "Interval",
+  "subscriptionIntervalHours": "Hours",
+  "subscriptionIntervalDays": "Days",
+  "subscriptionIntervalError": "Enter a whole number from 1 hour to 365 days.",
+  "subscriptionShareGroup": "Share group",
+  "subscriptionShareFailed": "Could not share the server or group. A required proxy may be unavailable. Refresh the profile and try again.",
+  "subscriptionGroupAutomatic": "Auto-select",
+  "subscriptionGroupSelector": "Server group",
   "subscriptionExportJson": "Export JSON",
   "subscriptionAllServers": "All servers",
   "subscriptionAdvancedSettings": "Advanced settings",

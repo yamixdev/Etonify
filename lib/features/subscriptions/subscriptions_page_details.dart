@@ -23,12 +23,12 @@ class _SubscriptionDetailsPage extends StatefulWidget {
 class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   bool _busy = false;
   Subscription? _hydratedSubscription;
-  List<Outbound> _visibleOutbounds = const [];
   Future<Subscription?>? _payloadFuture;
   Timer? _payloadStartTimer;
   bool _payloadLoading = true;
   bool _payloadFailed = false;
   bool _advancedExpanded = false;
+  SubscriptionServerCatalog? _serverCatalog;
   bool _sharing = false;
 
   Future<Subscription?> _readCurrentPayload() {
@@ -72,16 +72,11 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
       }
       setState(() {
         _currentSubscription = latest;
-        if (!identical(full?.outbounds, _hydratedSubscription?.outbounds)) {
-          _visibleOutbounds = full == null
-              ? const []
-              : [
-                  for (final outbound in full.outbounds)
-                    if (!outbound.info.deleted &&
-                        outbound.config['_group_only'] != true &&
-                        isSupportedOutboundConfig(outbound.config))
-                      outbound,
-                ];
+        if (!identical(full?.outbounds, _hydratedSubscription?.outbounds) ||
+            !identical(full?.groups, _hydratedSubscription?.groups)) {
+          _serverCatalog = full == null
+              ? null
+              : SubscriptionServerCatalog(full);
         }
         _hydratedSubscription = full;
         _payloadLoading = false;
@@ -112,17 +107,15 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     try {
       final full = await _loadPayload();
       if (!mounted || full == null) return;
-      final matching = full.outbounds.where(
-        (outbound) => outbound.tag == tag && !outbound.info.deleted,
-      );
-      if (matching.isEmpty) {
+      final catalog = _serverCatalog!;
+      final outbound = catalog.node(tag);
+      if (outbound == null) {
         AppNotice.show(
           context,
           AppLocalizations.of(context).subscriptionServersChanged,
         );
         return;
       }
-      final outbound = matching.first;
       final summary = AppProxySummary(
         tag: outbound.tag,
         displayName: outbound.name,
@@ -145,26 +138,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
       );
       Map<String, dynamic>? groupConfig;
       if (outbound.type == 'selector' || outbound.type == 'urltest') {
-        final byTag = {for (final node in full.outbounds) node.tag: node};
-        final included = <String>{};
-        final configs = <Map<String, dynamic>>[];
-        void include(Outbound node) {
-          if (!included.add(node.tag)) return;
-          final config = Map<String, dynamic>.from(node.config)
-            ..removeWhere((key, _) => key.startsWith('_'));
-          config['tag'] = node.tag;
-          configs.add(config);
-          final children = config['outbounds'];
-          if (children is List) {
-            for (final child in children) {
-              final member = byTag[child];
-              if (member != null) include(member);
-            }
-          }
-        }
-
-        include(outbound);
-        groupConfig = {'outbounds': configs};
+        groupConfig = catalog.exportGroup(tag);
       }
       await showProxyShareSheet(
         context,
@@ -172,9 +146,41 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         outbound: outbound,
         singboxConfig: groupConfig,
       );
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'Server sharing failed: ${error.runtimeType}',
+      );
+      if (mounted) {
+        AppNotice.show(
+          context,
+          AppLocalizations.of(context).subscriptionShareFailed,
+          tone: AppNoticeTone.error,
+        );
+      }
     } finally {
       _sharing = false;
     }
+  }
+
+  void _openServer(Outbound outbound) {
+    final catalog = _serverCatalog;
+    if (catalog == null) return;
+    if (!SubscriptionServerCatalog.isGroup(outbound)) {
+      unawaited(_shareOutbound(outbound.tag));
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => _SubscriptionServersPage(
+          subscriptionName: outbound.name,
+          outbounds: catalog.members(outbound.tag),
+          catalog: catalog,
+          groupTag: outbound.tag,
+          onShare: _shareOutbound,
+        ),
+      ),
+    );
   }
 
   Future<void> _exportProfile() async {
@@ -251,25 +257,51 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final value in _kAutoRefreshOptions.where(
-              (value) => value > 0,
-            ))
-              ListTile(
-                title: Text(_formatRefreshInterval(sheetContext, value)),
-                trailing: subscription.autoRefreshMinutes == value
-                    ? const Icon(Icons.check_rounded)
-                    : null,
-                onTap: () => Navigator.pop(sheetContext, value),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  AppLocalizations.of(sheetContext).subscriptionRefreshInterval,
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
               ),
-          ],
+              for (final value in _kAutoRefreshOptions.where(
+                (value) => value > 0,
+              ))
+                ListTile(
+                  title: Text(_formatRefreshInterval(sheetContext, value)),
+                  trailing: subscription.autoRefreshMinutes == value
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, value),
+                ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(
+                  AppLocalizations.of(sheetContext).subscriptionCustomInterval,
+                ),
+                onTap: () => Navigator.pop(sheetContext, -1),
+              ),
+            ],
+          ),
         ),
       ),
     );
     if (!mounted || minutes == null) return;
-    await _saveAutoRefreshInterval(_subscription ?? subscription, minutes);
+    final value = minutes == -1
+        ? await showDialog<int>(
+            context: context,
+            builder: (_) => _SubscriptionIntervalDialog(
+              initialMinutes:
+                  (_subscription ?? subscription).autoRefreshMinutes,
+            ),
+          )
+        : minutes;
+    if (!mounted || value == null) return;
+    await _saveAutoRefreshInterval(_subscription ?? subscription, value);
   }
 
   Subscription? _currentSubscription;
@@ -334,7 +366,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         _currentSubscription?.payloadRevision !=
             _hydratedSubscription?.payloadRevision) {
       _hydratedSubscription = null;
-      _visibleOutbounds = const [];
+      _serverCatalog = null;
       _payloadLoading = true;
       unawaited(_loadPayload());
     }
@@ -405,7 +437,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
   ) async {
     final disabled = minutes <= 0;
     if (subscription.disableAutoUpdate == disabled &&
-        (disabled || subscription.autoRefreshMinutes == minutes)) {
+        (disabled ||
+            (subscription.autoRefreshMinutes == minutes &&
+                subscription.autoRefreshOverridden))) {
       return;
     }
     setState(() => _busy = true);
@@ -415,6 +449,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         (current) => current.copyWith(
           disableAutoUpdate: disabled,
           autoRefreshMinutes: disabled ? current.autoRefreshMinutes : minutes,
+          autoRefreshOverridden: disabled
+              ? current.autoRefreshOverridden
+              : true,
         ),
       );
       _reloadCurrentSubscription();
@@ -634,7 +671,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     final local = SubscriptionStore.isLocalFileImportUrl(subscription.url);
     final info = subscription.info;
     final count = _hydratedSubscription != null
-        ? _visibleOutbounds.length
+        ? _serverCatalog?.visibleProxyCount ?? 0
         : subscription.cachedVisibleProxyCount;
     final usage = switch ((info?.consumed, info?.total)) {
       (final consumed?, final total?) when total > 0 => l10n.trafficUsage(
@@ -742,67 +779,96 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                 appBottomSafePadding(context, 24),
               ),
               children: [
-                TextField(
-                  controller: _nameController,
-                  enabled: !_busy,
-                  inputFormatters: [noNewlineInputFormatter],
-                  maxLines: 2,
-                  textInputAction: TextInputAction.done,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                Material(
+                  color: theme.colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: theme.colorScheme.outlineVariant.withValues(
+                        alpha: .42,
+                      ),
+                    ),
                   ),
-                  decoration: InputDecoration(
-                    hintText: l10n.subscriptionName,
-                    border: InputBorder.none,
-                    filled: false,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          key: const ValueKey('subscription_profile_name'),
+                          controller: _nameController,
+                          enabled: !_busy,
+                          inputFormatters: [noNewlineInputFormatter],
+                          maxLines: 2,
+                          minLines: 1,
+                          textInputAction: TextInputAction.done,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: l10n.subscriptionName,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            filled: false,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.only(bottom: 10),
+                          ),
+                          onSubmitted: (_) => _saveName(subscription),
+                          onTapOutside: (_) {
+                            FocusScope.of(context).unfocus();
+                            if (!_busy) unawaited(_saveName(subscription));
+                          },
+                        ),
+                        if (usage != null)
+                          Text(
+                            l10n.spentTraffic(usage),
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        if (until != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              until,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        if (subscription.lastUpdated > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              _subscriptionLastUpdatedText(
+                                context,
+                                subscription.lastUpdated,
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  onSubmitted: (_) => _saveName(subscription),
-                  onTapOutside: (_) {
-                    FocusScope.of(context).unfocus();
-                    if (!_busy) unawaited(_saveName(subscription));
-                  },
                 ),
-                if (usage != null)
-                  Text(
-                    l10n.spentTraffic(usage),
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                if (until != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      until,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                if (subscription.lastUpdated > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      _subscriptionLastUpdatedText(
-                        context,
-                        subscription.lastUpdated,
-                      ),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
                 const Gap(12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                _SubscriptionActionPair(
+                  labels: [
+                    if (!local) l10n.refresh,
+                    l10n.subscriptionExportJson,
+                  ],
                   children: [
                     if (!local)
                       FilledButton.tonalIcon(
+                        style: _subscriptionActionStyle(context),
                         onPressed: _busy ? null : refresh,
                         icon: const Icon(Icons.refresh_rounded, size: 18),
                         label: Text(l10n.refresh),
                       ),
                     OutlinedButton.icon(
+                      style: _subscriptionActionStyle(context),
                       key: const ValueKey('subscription_export_json'),
                       onPressed: _busy ? null : _exportProfile,
                       icon: const Icon(Icons.file_upload_outlined, size: 18),
@@ -828,31 +894,40 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SelectableText(
-                        local
-                            ? SubscriptionStore.localFileImportDisplayName(
-                                    subscription.url,
-                                  ) ??
-                                  l10n.subscriptionLocalFile
-                            : subscription.url,
-                        maxLines: 3,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: .45),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: SelectableText(
+                          local
+                              ? SubscriptionStore.localFileImportDisplayName(
+                                      subscription.url,
+                                    ) ??
+                                    l10n.subscriptionLocalFile
+                              : subscription.url,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
                         ),
                       ),
                       if (!local) ...[
-                        const Gap(8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
+                        const Gap(12),
+                        _SubscriptionActionPair(
+                          labels: [l10n.subscriptionCopy, l10n.showQrCode],
                           children: [
-                            TextButton.icon(
+                            OutlinedButton.icon(
+                              style: _subscriptionActionStyle(context),
                               onPressed: () =>
                                   SensitiveClipboard.copy(subscription.url),
                               icon: const Icon(Icons.copy_outlined, size: 18),
                               label: Text(l10n.subscriptionCopy),
                             ),
-                            TextButton.icon(
+                            OutlinedButton.icon(
+                              style: _subscriptionActionStyle(context),
                               onPressed: () => _showSubscriptionQr(
                                 _qrShareValue(subscription),
                                 title: subscription.name,
@@ -915,22 +990,28 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                           child: Text(l10n.refresh),
                         ),
                       ],
-                      for (final outbound in _visibleOutbounds.take(
-                        _kSubscriptionProxyPreviewLimit,
-                      ))
+                      for (final outbound
+                          in (_serverCatalog?.roots ?? const <Outbound>[]).take(
+                            _kSubscriptionProxyPreviewLimit,
+                          ))
                         _OutboundRow(
                           key: ValueKey('subscription_preview_${outbound.tag}'),
                           outbound: outbound,
-                          onTap: () => _shareOutbound(outbound.tag),
+                          memberCount:
+                              SubscriptionServerCatalog.isGroup(outbound)
+                              ? _serverCatalog!.memberCount(outbound.tag)
+                              : null,
+                          onTap: () => _openServer(outbound),
                         ),
-                      if (_visibleOutbounds.isNotEmpty)
+                      if (_serverCatalog?.roots.isNotEmpty == true)
                         TextButton.icon(
                           key: const ValueKey('subscription_all_servers'),
                           onPressed: () => Navigator.of(context).push<void>(
                             MaterialPageRoute(
                               builder: (_) => _SubscriptionServersPage(
                                 subscriptionName: subscription.name,
-                                outbounds: _visibleOutbounds,
+                                outbounds: _serverCatalog!.roots,
+                                catalog: _serverCatalog!,
                                 onShare: _shareOutbound,
                               ),
                             ),
@@ -990,17 +1071,34 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant.withValues(
+                            alpha: .42,
+                          ),
+                        ),
                       ),
                       collapsedShape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant.withValues(
+                            alpha: .42,
+                          ),
+                        ),
                       ),
+                      backgroundColor: theme.colorScheme.surface,
+                      collapsedBackgroundColor: theme.colorScheme.surface,
+                      maintainState: true,
                       title: Text(l10n.subscriptionAdvancedSettings),
                       subtitle: Text(
                         l10n.serverRequestTitle,
                         style: theme.textTheme.bodySmall,
                       ),
-                      onExpansionChanged: (value) =>
-                          setState(() => _advancedExpanded = value),
+                      onExpansionChanged: (value) {
+                        // Build once on first opening, keep children through closing.
+                        if (value && !_advancedExpanded) {
+                          setState(() => _advancedExpanded = true);
+                        }
+                      },
                       children: _advancedExpanded
                           ? [
                               SwitchListTile(

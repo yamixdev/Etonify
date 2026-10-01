@@ -505,6 +505,7 @@ class Subscription {
     this.disableAutoUpdate = false,
     this.markAllServersRussia = false,
     this.autoRefreshMinutes = 360,
+    this.autoRefreshOverridden = false,
     this.cachedVisibleProxyCount = -1,
     this.hasRawPayload = false,
     this.payloadRevision = '',
@@ -525,6 +526,8 @@ class Subscription {
   final bool disableAutoUpdate;
   final bool markAllServersRussia;
   final int autoRefreshMinutes; // 0 = disabled
+  /// A user-selected interval takes precedence over provider response headers.
+  final bool autoRefreshOverridden;
   final int cachedVisibleProxyCount; // -1 = summary not cached yet
   final bool hasRawPayload;
   final String payloadRevision;
@@ -560,6 +563,7 @@ class Subscription {
       'disable_auto_update': disableAutoUpdate,
       if (markAllServersRussia) 'mark_all_servers_russia': true,
       'auto_refresh_minutes': autoRefreshMinutes,
+      if (autoRefreshOverridden) 'auto_refresh_overridden': true,
       if (visibleProxyCount >= 0) 'visible_proxy_count': visibleProxyCount,
       if (rawPayloadAvailable) 'has_raw_payload': true,
       if (payloadRevision.isNotEmpty) 'payload_revision': payloadRevision,
@@ -605,6 +609,7 @@ class Subscription {
       disableAutoUpdate: map['disable_auto_update'] == true,
       markAllServersRussia: map['mark_all_servers_russia'] == true,
       autoRefreshMinutes: map['auto_refresh_minutes'] as int? ?? 360,
+      autoRefreshOverridden: map['auto_refresh_overridden'] == true,
       cachedVisibleProxyCount: map['visible_proxy_count'] as int? ?? -1,
       hasRawPayload: map['has_raw_payload'] == true,
       payloadRevision: map['payload_revision'] as String? ?? '',
@@ -670,6 +675,7 @@ class Subscription {
     bool? disableAutoUpdate,
     bool? markAllServersRussia,
     int? autoRefreshMinutes,
+    bool? autoRefreshOverridden,
     int? cachedVisibleProxyCount,
     bool? hasRawPayload,
     String? payloadRevision,
@@ -690,6 +696,8 @@ class Subscription {
       disableAutoUpdate: disableAutoUpdate ?? this.disableAutoUpdate,
       markAllServersRussia: markAllServersRussia ?? this.markAllServersRussia,
       autoRefreshMinutes: autoRefreshMinutes ?? this.autoRefreshMinutes,
+      autoRefreshOverridden:
+          autoRefreshOverridden ?? this.autoRefreshOverridden,
       cachedVisibleProxyCount:
           cachedVisibleProxyCount ?? this.cachedVisibleProxyCount,
       hasRawPayload: hasRawPayload ?? this.hasRawPayload,

@@ -24,6 +24,7 @@ import 'package:meow_client/features/settings/settings_backup_import_actions.dar
 import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 import 'package:meow_client/features/subscriptions/subscription_file_reader.dart';
+import 'package:meow_client/features/subscriptions/subscription_server_catalog.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';

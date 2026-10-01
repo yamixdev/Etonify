@@ -98,6 +98,60 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @subscriptionCustomInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom interval'**
+  String get subscriptionCustomInterval;
+
+  /// No description provided for @subscriptionIntervalValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Interval'**
+  String get subscriptionIntervalValue;
+
+  /// No description provided for @subscriptionIntervalHours.
+  ///
+  /// In en, this message translates to:
+  /// **'Hours'**
+  String get subscriptionIntervalHours;
+
+  /// No description provided for @subscriptionIntervalDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Days'**
+  String get subscriptionIntervalDays;
+
+  /// No description provided for @subscriptionIntervalError.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number from 1 hour to 365 days.'**
+  String get subscriptionIntervalError;
+
+  /// No description provided for @subscriptionShareGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Share group'**
+  String get subscriptionShareGroup;
+
+  /// No description provided for @subscriptionShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not share the server or group. A required proxy may be unavailable. Refresh the profile and try again.'**
+  String get subscriptionShareFailed;
+
+  /// No description provided for @subscriptionGroupAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-select'**
+  String get subscriptionGroupAutomatic;
+
+  /// No description provided for @subscriptionGroupSelector.
+  ///
+  /// In en, this message translates to:
+  /// **'Server group'**
+  String get subscriptionGroupSelector;
+
   /// No description provided for @subscriptionExportJson.
   ///
   /// In en, this message translates to:

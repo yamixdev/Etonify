@@ -1257,7 +1257,9 @@ class SubscriptionStore {
         rawContent: result.rawContent,
         outbounds: preservedOutbounds,
         groups: payload.groups,
-        autoRefreshMinutes: result.headerInfo.updateIntervalHours != null
+        autoRefreshMinutes:
+            !existing.autoRefreshOverridden &&
+                result.headerInfo.updateIntervalHours != null
             ? result.headerInfo.updateIntervalHours! * 60
             : existing.autoRefreshMinutes,
         info: result.headerInfo.copyWith(

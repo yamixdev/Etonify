@@ -9,6 +9,35 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get subscriptionCustomInterval => 'Свой интервал';
+
+  @override
+  String get subscriptionIntervalValue => 'Интервал';
+
+  @override
+  String get subscriptionIntervalHours => 'Часы';
+
+  @override
+  String get subscriptionIntervalDays => 'Дни';
+
+  @override
+  String get subscriptionIntervalError =>
+      'Введите целое число: от 1 часа до 365 дней.';
+
+  @override
+  String get subscriptionShareGroup => 'Поделиться группой';
+
+  @override
+  String get subscriptionShareFailed =>
+      'Не удалось поделиться сервером или группой. Возможно, отсутствует нужный промежуточный прокси. Обновите профиль и попробуйте снова.';
+
+  @override
+  String get subscriptionGroupAutomatic => 'Автовыбор';
+
+  @override
+  String get subscriptionGroupSelector => 'Группа серверов';
+
+  @override
   String get subscriptionExportJson => 'Экспорт JSON';
 
   @override

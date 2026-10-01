@@ -9,6 +9,35 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get subscriptionCustomInterval => 'Custom interval';
+
+  @override
+  String get subscriptionIntervalValue => 'Interval';
+
+  @override
+  String get subscriptionIntervalHours => 'Hours';
+
+  @override
+  String get subscriptionIntervalDays => 'Days';
+
+  @override
+  String get subscriptionIntervalError =>
+      'Enter a whole number from 1 hour to 365 days.';
+
+  @override
+  String get subscriptionShareGroup => 'Share group';
+
+  @override
+  String get subscriptionShareFailed =>
+      'Could not share the server or group. A required proxy may be unavailable. Refresh the profile and try again.';
+
+  @override
+  String get subscriptionGroupAutomatic => 'Auto-select';
+
+  @override
+  String get subscriptionGroupSelector => 'Server group';
+
+  @override
   String get subscriptionExportJson => 'Export JSON';
 
   @override

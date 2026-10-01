@@ -1,0 +1,194 @@
+import 'package:meow_client/data/subscription/outbound_support.dart';
+import 'package:meow_client/models/subscription.dart';
+
+/// Presentation-only hierarchy. Never rewrites the profile or infers ownership
+/// from names such as `cand-01`: only explicit provider references are used.
+class SubscriptionServerCatalog {
+  SubscriptionServerCatalog(Subscription subscription) {
+    for (final node in subscription.outbounds) {
+      if (!node.info.deleted && isSupportedOutboundConfig(node.config)) {
+        _nodes[node.tag] = node;
+      }
+    }
+    for (final group in subscription.groups) {
+      _fallbacks[group.tag] = group.fallbackOutboundTags;
+      if (_nodes.containsKey(group.tag)) continue;
+      final tuning = group.urlTestConfig;
+      _nodes[group.tag] = Outbound(
+        tag: group.tag,
+        name: group.name,
+        info: OutboundInfo(country: group.country),
+        config: {
+          'tag': group.tag,
+          'type': group.type,
+          'outbounds': group.outboundTags,
+          if (group.type == 'urltest') ...{
+            if (tuning.url != null) 'url': tuning.url,
+            if (tuning.intervalSeconds != null)
+              'interval': '${tuning.intervalSeconds}s',
+          },
+        },
+      );
+    }
+    final owned = <String>{};
+    for (final node in _nodes.values) {
+      if (!isGroup(node)) continue;
+      final tags = <String>{
+        ..._references(node),
+        ...?_fallbacks[node.tag],
+      }.where((tag) => tag != node.tag && _nodes.containsKey(tag)).toList();
+      _children[node.tag] = tags;
+      owned.addAll(tags);
+    }
+    roots = [
+      for (final node in _nodes.values)
+        if (isGroup(node) &&
+            !owned.contains(node.tag) &&
+            members(node.tag).isNotEmpty)
+          node,
+      for (final node in _nodes.values)
+        if (!isGroup(node) &&
+            !owned.contains(node.tag) &&
+            _isProxyLeaf(node) &&
+            node.config['_group_only'] != true)
+          node,
+    ];
+    // A malformed cycle must neither recurse forever nor hide the entire group.
+    final reachable = <String>{};
+    void mark(String tag) {
+      final pending = <String>[tag];
+      while (pending.isNotEmpty) {
+        final next = pending.removeLast();
+        if (!reachable.add(next)) continue;
+        pending.addAll(_children[next] ?? const []);
+      }
+    }
+
+    for (final node in roots) {
+      mark(node.tag);
+    }
+    for (final node in _nodes.values) {
+      if (isGroup(node) &&
+          !reachable.contains(node.tag) &&
+          members(node.tag).isNotEmpty) {
+        roots.add(node);
+        mark(node.tag);
+      }
+    }
+  }
+
+  final _nodes = <String, Outbound>{};
+  final _children = <String, List<String>>{};
+  final _fallbacks = <String, List<String>>{};
+  final _memberCounts = <String, int>{};
+  late final List<Outbound> roots;
+
+  static bool isGroup(Outbound node) =>
+      node.type == 'urltest' || node.type == 'selector';
+
+  Outbound? node(String tag) => _nodes[tag];
+
+  List<Outbound> members(String tag) => [
+    for (final child in _children[tag] ?? const <String>[]) ?_nodes[child],
+  ];
+
+  int memberCount(String tag) {
+    return _memberCounts.putIfAbsent(tag, () => _countLeaves([tag]));
+  }
+
+  late final int visibleProxyCount = _countLeaves(
+    roots.map((node) => node.tag),
+  );
+
+  int _countLeaves(Iterable<String> tags) {
+    final leaves = <String>{};
+    final seen = <String>{};
+    final pending = [...tags];
+    while (pending.isNotEmpty) {
+      final next = pending.removeLast();
+      if (!seen.add(next)) continue;
+      final node = _nodes[next];
+      if (node == null) continue;
+      if (isGroup(node)) {
+        pending.addAll(_children[next] ?? const []);
+      } else if (_isProxyLeaf(node)) {
+        leaves.add(next);
+      }
+    }
+    return leaves.length;
+  }
+
+  String searchText(Outbound node) {
+    final parts = <String>[];
+    final seen = <String>{};
+    final pending = <String>[node.tag];
+    while (pending.isNotEmpty) {
+      final tag = pending.removeLast();
+      if (!seen.add(tag)) continue;
+      final current = _nodes[tag];
+      if (current == null) continue;
+      parts.add('${current.name} ${current.type} ${current.server}');
+      pending.addAll(_children[tag] ?? const []);
+    }
+    return parts.join(' ').toLowerCase();
+  }
+
+  Map<String, dynamic> exportGroup(String tag) {
+    if (!_nodes.containsKey(tag)) {
+      throw const SubscriptionServerExportException();
+    }
+    final seen = <String>{};
+    final pending = <String>[tag];
+    final configs = <Map<String, dynamic>>[];
+    while (pending.isNotEmpty) {
+      final next = pending.removeLast();
+      if (!seen.add(next)) continue;
+      final current = _nodes[next];
+      if (current == null) continue;
+      final config = Map<String, dynamic>.from(current.config)
+        ..removeWhere((key, _) => key.startsWith('_'))
+        ..['tag'] = current.tag;
+      if (isGroup(current)) {
+        final children = _references(
+          current,
+        ).where(_nodes.containsKey).toSet().toList();
+        if (children.isEmpty) throw const SubscriptionServerExportException();
+        config['outbounds'] = children;
+        if (current.type == 'urltest') {
+          // Current core accepts these URLTest JSON fields. Custom tuning is
+          // retained in full-profile exports, not legacy sing-box extensions.
+          config.remove('method');
+          config.remove('timeout');
+          config.remove('concurrency');
+          config.remove('unavailable_check_interval');
+        }
+        if (config['default'] != null &&
+            !children.contains(config['default'])) {
+          config.remove('default');
+        }
+      }
+      configs.add(config);
+      pending.addAll(_references(current));
+      final detour = config['detour'];
+      if (detour is String) {
+        if (!_nodes.containsKey(detour)) {
+          throw const SubscriptionServerExportException();
+        }
+        pending.add(detour);
+      }
+    }
+    return {'outbounds': configs};
+  }
+
+  static Iterable<String> _references(Outbound node) {
+    final references = node.config['outbounds'];
+    return references is List ? references.whereType<String>() : const [];
+  }
+
+  static bool _isProxyLeaf(Outbound node) =>
+      node.type != 'direct' && node.type != 'block' && node.type != 'dns';
+}
+
+class SubscriptionServerExportException implements Exception {
+  const SubscriptionServerExportException();
+}
