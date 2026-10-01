@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/theme/app_theme.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 TrafficDashboardSnapshot snapshot({
   int speed = 2048,
@@ -70,6 +74,7 @@ Widget app(
   Color seed = Colors.blue,
   double textScale = 1,
   bool reducedMotion = false,
+  PublicIpController? publicIpController,
 }) => MaterialApp(
   locale: const Locale('ru'),
   supportedLocales: AppLocalizations.supportedLocales,
@@ -83,11 +88,134 @@ Widget app(
       textScaler: TextScaler.linear(textScale),
       disableAnimations: reducedMotion,
     ),
-    child: TrafficDashboardPage(snapshotListenable: notifier),
+    child: TrafficDashboardPage(
+      snapshotListenable: notifier,
+      publicIpController: publicIpController,
+    ),
   ),
 );
 
+void useTallViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 1600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
+  testWidgets('public IP has its own card alongside server IP', (tester) async {
+    useTallViewport(tester);
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier));
+    expect(find.text('Ваш IP'), findsOneWidget);
+    expect(find.text('IP сервера'), findsOneWidget);
+  });
+
+  testWidgets(
+    'opening fetches once, updates preserve IP and country on failure',
+    (tester) async {
+      useTallViewport(tester);
+      var calls = 0;
+      final controller = PublicIpController(
+        load: () async {
+          if (++calls > 1) throw StateError('network unavailable');
+          return PublicIpInfo.fromTrace('ip=203.0.113.8\nloc=SE');
+        },
+      );
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      await tester.pumpWidget(app(notifier, publicIpController: controller));
+      await tester.pump();
+      final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
+      expect(
+        find.descendant(of: card, matching: find.text('203.0.113.8')),
+        findsOneWidget,
+      );
+      final flag = tester.widget<CountryFlagBadge>(
+        find.descendant(of: card, matching: find.byType(CountryFlagBadge)),
+      );
+      expect(flag.countryCode, 'SE');
+      final refresh = find.byKey(const ValueKey('public-ip-refresh'));
+      expect(tester.widget<IconButton>(refresh).onPressed, isNull);
+      notifier.value = snapshot(speed: 4096);
+      await tester.pump();
+      expect(calls, 1);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.tap(refresh);
+      await tester.pump();
+      expect(
+        find.descendant(of: card, matching: find.text('203.0.113.8')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Не удалось обновить IP. Попробуйте ещё раз.'),
+        findsOneWidget,
+      );
+      expect(calls, 2);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    },
+  );
+
+  testWidgets('closing cancels lookup and quick reopening does not spam', (
+    tester,
+  ) async {
+    final pending = Completer<PublicIpInfo>();
+    var calls = 0;
+    var cancellations = 0;
+    final controller = PublicIpController(
+      load: () {
+        calls++;
+        return pending.future;
+      },
+      cancel: () {
+        cancellations++;
+      },
+    );
+    final notifier = ValueNotifier(snapshot());
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(app(notifier, publicIpController: controller));
+    await tester.pumpWidget(const SizedBox());
+    expect(cancellations, 1);
+    await tester.pumpWidget(app(notifier, publicIpController: controller));
+    expect(calls, 1);
+    pending.complete(PublicIpInfo.fromTrace('ip=203.0.113.8\nloc=SE'));
+    await tester.pump();
+    expect(controller.info, isNull);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
+  testWidgets('public IPv6 respects privacy and fits narrow large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = PublicIpController(
+      load: () async =>
+          PublicIpInfo.fromTrace('ip=2001:db8:abcd:1234::1\nloc=SE'),
+    );
+    final notifier = ValueNotifier(snapshot(hideIp: true));
+    addTearDown(notifier.dispose);
+    await tester.pumpWidget(
+      app(notifier, publicIpController: controller, textScale: 2),
+    );
+    await tester.pump();
+    final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
+    await tester.scrollUntilVisible(card, 200);
+    expect(find.text('2001:db8:abcd:1234::1'), findsNothing);
+    expect(
+      find.descendant(of: card, matching: find.textContaining('****')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
   testWidgets(
     'current speeds and actual peak live together above session totals',
     (tester) async {
@@ -108,6 +236,7 @@ void main() {
   testWidgets(
     'traffic ticks do not rebuild the heading or connection details',
     (tester) async {
+      useTallViewport(tester);
       final notifier = ValueNotifier(snapshot());
       addTearDown(notifier.dispose);
       await tester.pumpWidget(app(notifier));
@@ -166,6 +295,7 @@ void main() {
   testWidgets('disconnect clears graph and honors server IP privacy', (
     tester,
   ) async {
+    useTallViewport(tester);
     final notifier = ValueNotifier(snapshot());
     addTearDown(notifier.dispose);
     await tester.pumpWidget(app(notifier));
@@ -182,6 +312,7 @@ void main() {
   testWidgets('IP privacy also masks a short compressed IPv6 address', (
     tester,
   ) async {
+    useTallViewport(tester);
     final notifier = ValueNotifier(snapshot(hideIp: true, ip: '2606::1'));
     addTearDown(notifier.dispose);
     await tester.pumpWidget(app(notifier));

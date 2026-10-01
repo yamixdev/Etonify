@@ -1465,6 +1465,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficDashboardServerIp => 'IP сервера';
 
   @override
+  String get trafficDashboardPublicIp => 'Ваш IP';
+
+  @override
+  String get trafficDashboardPublicIpHint =>
+      'Внешний адрес текущего подключения';
+
+  @override
+  String get trafficDashboardPublicIpRefresh => 'Обновить ваш IP';
+
+  @override
+  String get trafficDashboardPublicIpError =>
+      'Не удалось обновить IP. Попробуйте ещё раз.';
+
+  @override
+  String get trafficDashboardPublicIpCooldown =>
+      'Обновление доступно раз в 4 секунды';
+
+  @override
   String get trafficDashboardDownloadTotal => 'Скачано';
 
   @override

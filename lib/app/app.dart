@@ -68,6 +68,7 @@ import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/features/home/home_presentation_builder.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
+import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/proxies/proxies_presentation_builder.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
@@ -186,6 +187,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final Map<String, List<ValueGetter<bool>>> _visibleProxyLocationInterests =
       {};
   late final AppTrafficMonitor _appTrafficMonitor;
+  final _publicIpController = PublicIpController();
   late final DeepLinkImportCoordinator _deepLinkImportCoordinator;
   AdBlockRuleSetStatus _adBlockStatus =
       const AdBlockRuleSetStatus.unavailable();
@@ -2443,6 +2445,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _proxyRuntime.dispose();
     _appTrafficMonitor.dispose();
+    _publicIpController.dispose();
     super.dispose();
   }
 
@@ -2790,6 +2793,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
             snapshotListenable:
                 _appTrafficMonitor.trafficDashboardSnapshotNotifier,
             scrollController: scrollController,
+            publicIpController: _publicIpController,
           ),
         ),
       );

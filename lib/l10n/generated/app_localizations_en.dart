@@ -1468,6 +1468,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficDashboardServerIp => 'Server IP';
 
   @override
+  String get trafficDashboardPublicIp => 'Your IP';
+
+  @override
+  String get trafficDashboardPublicIpHint =>
+      'Public address of your current connection';
+
+  @override
+  String get trafficDashboardPublicIpRefresh => 'Refresh your IP';
+
+  @override
+  String get trafficDashboardPublicIpError =>
+      'Could not refresh your IP. Try again.';
+
+  @override
+  String get trafficDashboardPublicIpCooldown =>
+      'Refresh available every 4 seconds';
+
+  @override
   String get trafficDashboardDownloadTotal => 'Downloaded';
 
   @override

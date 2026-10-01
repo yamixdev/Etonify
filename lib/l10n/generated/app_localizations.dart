@@ -2687,6 +2687,36 @@ abstract class AppLocalizations {
   /// **'Server IP'**
   String get trafficDashboardServerIp;
 
+  /// No description provided for @trafficDashboardPublicIp.
+  ///
+  /// In en, this message translates to:
+  /// **'Your IP'**
+  String get trafficDashboardPublicIp;
+
+  /// No description provided for @trafficDashboardPublicIpHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Public address of your current connection'**
+  String get trafficDashboardPublicIpHint;
+
+  /// No description provided for @trafficDashboardPublicIpRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh your IP'**
+  String get trafficDashboardPublicIpRefresh;
+
+  /// No description provided for @trafficDashboardPublicIpError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not refresh your IP. Try again.'**
+  String get trafficDashboardPublicIpError;
+
+  /// No description provided for @trafficDashboardPublicIpCooldown.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh available every 4 seconds'**
+  String get trafficDashboardPublicIpCooldown;
+
   /// No description provided for @trafficDashboardDownloadTotal.
   ///
   /// In en, this message translates to:

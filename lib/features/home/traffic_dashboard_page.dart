@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
@@ -5,21 +6,52 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/formatting.dart';
+import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 /// The sheet itself is static. Each section listens only to its displayed data,
 /// so traffic samples never rebuild the heading or connection information.
-class TrafficDashboardPage extends StatelessWidget {
+class TrafficDashboardPage extends StatefulWidget {
   const TrafficDashboardPage({
     super.key,
     required this.snapshotListenable,
     this.scrollController,
+    this.publicIpController,
   });
 
   final ValueListenable<TrafficDashboardSnapshot> snapshotListenable;
   final ScrollController? scrollController;
+  final PublicIpController? publicIpController;
+
+  @override
+  State<TrafficDashboardPage> createState() => _TrafficDashboardPageState();
+}
+
+class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
+  @override
+  void initState() {
+    super.initState();
+    final controller = widget.publicIpController;
+    if (controller != null) unawaited(controller.refresh());
+  }
+
+  @override
+  void didUpdateWidget(TrafficDashboardPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.publicIpController != widget.publicIpController) {
+      oldWidget.publicIpController?.cancel();
+      final controller = widget.publicIpController;
+      if (controller != null) unawaited(controller.refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.publicIpController?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +64,7 @@ class TrafficDashboardPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) => ListView(
             key: const ValueKey('traffic-dashboard'),
-            controller: scrollController,
+            controller: widget.scrollController,
             padding: EdgeInsets.fromLTRB(
               math.max(16, (constraints.maxWidth - 720) / 2),
               8,
@@ -61,7 +93,7 @@ class TrafficDashboardPage extends StatelessWidget {
               ),
               const Gap(16),
               _SnapshotSection(
-                listenable: snapshotListenable,
+                listenable: widget.snapshotListenable,
                 select: (s) => (
                   available: s.connected && s.trafficAvailable,
                   download: s.downlinkBps,
@@ -77,7 +109,7 @@ class TrafficDashboardPage extends StatelessWidget {
               ),
               const Gap(12),
               _SnapshotSection(
-                listenable: snapshotListenable,
+                listenable: widget.snapshotListenable,
                 select: (s) => (
                   available: s.connected && s.trafficAvailable,
                   download: s.downlinkTotalBytes,
@@ -100,7 +132,16 @@ class TrafficDashboardPage extends StatelessWidget {
               ),
               const Gap(12),
               _SnapshotSection(
-                listenable: snapshotListenable,
+                listenable: widget.snapshotListenable,
+                select: (s) => s.hideServerIp,
+                builder: (context, hideIp) => _PublicIpSection(
+                  controller: widget.publicIpController,
+                  hideIp: hideIp,
+                ),
+              ),
+              const Gap(12),
+              _SnapshotSection(
+                listenable: widget.snapshotListenable,
                 select: (s) => (
                   connected: s.connected,
                   connecting: s.connecting,
@@ -179,7 +220,7 @@ class _SnapshotSectionState<T> extends State<_SnapshotSection<T>> {
 }
 
 class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({required this.children});
+  const _DashboardCard({super.key, required this.children});
   final List<Widget> children;
 
   @override
@@ -464,6 +505,97 @@ class _SessionCard extends StatelessWidget {
   }
 }
 
+class _PublicIpSection extends StatelessWidget {
+  const _PublicIpSection({required this.controller, required this.hideIp});
+
+  final PublicIpController? controller;
+  final bool hideIp;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = this.controller;
+    return controller == null
+        ? _card(context)
+        : ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => _card(context),
+          );
+  }
+
+  Widget _card(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final controller = this.controller;
+    final info = controller?.info;
+    final loading = controller?.loading ?? false;
+    final failed = controller?.failed ?? false;
+    return _DashboardCard(
+      key: const ValueKey('traffic-dashboard-public-ip'),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _SectionTitle(
+                icon: Icons.public_rounded,
+                label: l10n.trafficDashboardPublicIp,
+              ),
+            ),
+            IconButton(
+              key: const ValueKey('public-ip-refresh'),
+              tooltip: controller?.canRefresh == true
+                  ? l10n.trafficDashboardPublicIpRefresh
+                  : l10n.trafficDashboardPublicIpCooldown,
+              onPressed: controller?.canRefresh == true
+                  ? () => unawaited(controller!.refresh())
+                  : null,
+              icon: loading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ),
+        const Gap(4),
+        Row(
+          children: [
+            CountryFlagBadge(countryCode: info?.countryCode ?? '', size: 28),
+            const Gap(10),
+            Expanded(
+              child: Text(
+                _displayIp(info?.ip ?? '', hideIp, l10n),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const Gap(8),
+        Text(
+          failed
+              ? l10n.trafficDashboardPublicIpError
+              : l10n.trafficDashboardPublicIpHint,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: failed
+                ? theme.colorScheme.error
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _displayIp(String ip, bool hideIp, AppLocalizations l10n) {
+  if (ip.isEmpty) return l10n.notAvailableShort;
+  if (!hideIp) return ip;
+  final parts = ip.split('.');
+  if (parts.length == 4) return '${parts[0]}.${parts[1]}.*.*';
+  return ip.length > 8 ? '${ip.substring(0, ip.length ~/ 2)}****' : '****';
+}
+
 class _ConnectionCard extends StatelessWidget {
   const _ConnectionCard({
     required this.connected,
@@ -481,14 +613,6 @@ class _ConnectionCard extends StatelessWidget {
   final String? country;
   final String ip;
   final bool hideIp;
-
-  String _displayIp(AppLocalizations l10n) {
-    if (ip.isEmpty) return l10n.notAvailableShort;
-    if (!hideIp) return ip;
-    final parts = ip.split('.');
-    if (parts.length == 4) return '${parts[0]}.${parts[1]}.*.*';
-    return ip.length > 8 ? '${ip.substring(0, ip.length ~/ 2)}****' : '****';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -529,7 +653,10 @@ class _ConnectionCard extends StatelessWidget {
               : CountryFlagBadge(countryCode: country ?? '', size: 22),
         ),
         const Gap(12),
-        _InfoRow(label: l10n.trafficDashboardServerIp, value: _displayIp(l10n)),
+        _InfoRow(
+          label: l10n.trafficDashboardServerIp,
+          value: _displayIp(ip, hideIp, l10n),
+        ),
       ],
     );
   }
