@@ -354,6 +354,7 @@ class SubscriptionGroup {
     this.type = 'urltest',
     this.country,
     this.urlTestConfig = const UrlTestConfig(),
+    this.config = const {},
   });
 
   final String tag;
@@ -367,6 +368,10 @@ class SubscriptionGroup {
   final List<String> fallbackOutboundTags;
   final UrlTestConfig urlTestConfig;
 
+  /// Original supported group options and presentation order. Runtime members
+  /// stay resolved to leaves; this preserves the provider's nested hierarchy.
+  final Map<String, dynamic> config;
+
   Map<String, dynamic> toMap() => {
     'tag': tag,
     'name': name,
@@ -376,6 +381,7 @@ class SubscriptionGroup {
     if (fallbackOutboundTags.isNotEmpty)
       'fallback_outbounds': fallbackOutboundTags,
     'urltest_config': urlTestConfig.toMap(),
+    if (config.isNotEmpty) 'config': config,
   };
 
   factory SubscriptionGroup.fromMap(Map<String, dynamic> map) {
@@ -397,6 +403,9 @@ class SubscriptionGroup {
               Map<String, dynamic>.from(map['urltest_config'] as Map),
             )
           : const UrlTestConfig(),
+      config: map['config'] is Map
+          ? Map<String, dynamic>.from(map['config'] as Map)
+          : const {},
     );
   }
 
@@ -408,6 +417,7 @@ class SubscriptionGroup {
     List<String>? outboundTags,
     List<String>? fallbackOutboundTags,
     UrlTestConfig? urlTestConfig,
+    Map<String, dynamic>? config,
   }) {
     return SubscriptionGroup(
       tag: tag ?? this.tag,
@@ -417,6 +427,7 @@ class SubscriptionGroup {
       outboundTags: outboundTags ?? this.outboundTags,
       fallbackOutboundTags: fallbackOutboundTags ?? this.fallbackOutboundTags,
       urlTestConfig: urlTestConfig ?? this.urlTestConfig,
+      config: config ?? this.config,
     );
   }
 }

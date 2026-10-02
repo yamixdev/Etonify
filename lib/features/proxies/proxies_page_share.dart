@@ -26,13 +26,16 @@ String _prettyJson(Map<String, dynamic> value) {
 
 Map<String, dynamic> _singboxOutboundJson(Outbound outbound) {
   final config = Map<String, dynamic>.from(outbound.config);
-  config.remove('_name');
+  config.removeWhere((key, _) => key.startsWith('_'));
   config['tag'] = outbound.name.isNotEmpty ? outbound.name : outbound.tag;
   return config;
 }
 
 String? _outboundShareLink(Outbound outbound) {
   final config = outbound.config;
+  // A protocol URI cannot represent the dependent chain. Offer complete JSON
+  // instead of silently changing the route when the recipient imports it.
+  if (config['detour'] is String) return null;
   final type = (config['type'] as String? ?? '').toLowerCase();
   return switch (type) {
     'vless' => _vlessShareLink(outbound),

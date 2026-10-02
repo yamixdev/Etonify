@@ -3,6 +3,43 @@ import 'package:meow_client/features/subscriptions/subscription_server_catalog.d
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  for (final strategy in ['leastping', 'leastload', 'random']) {
+    test(
+      'provider $strategy group owns its candidates and exports as URLTest',
+      () {
+        final catalog = SubscriptionServerCatalog(
+          Subscription(
+            id: 'test',
+            name: 'Test',
+            url: '',
+            outbounds: const [
+              Outbound(tag: 'one', name: 'cand-01', config: {'type': 'vless'}),
+              Outbound(
+                tag: 'two',
+                name: 'ordinary name',
+                config: {'type': 'vless'},
+              ),
+            ],
+            groups: [
+              SubscriptionGroup(
+                tag: 'auto',
+                name: 'LTE Netherlands',
+                type: strategy,
+                outboundTags: const ['one', 'two'],
+              ),
+            ],
+          ),
+        );
+        expect(catalog.roots.map((node) => node.tag), ['auto']);
+        expect(SubscriptionServerCatalog.isGroup(catalog.roots.single), isTrue);
+        expect(catalog.members('auto').map((node) => node.tag), ['one', 'two']);
+        expect(catalog.memberCount('auto'), 2);
+        final exported = (catalog.exportGroup('auto')['outbounds'] as List);
+        expect(exported.first['type'], 'urltest');
+        expect(exported.first['outbounds'], ['one', 'two']);
+      },
+    );
+  }
   test('explicit ownership nests shared candidates without name guessing', () {
     final catalog = SubscriptionServerCatalog(
       const Subscription(
@@ -63,7 +100,10 @@ void main() {
     );
     expect(catalog.roots.map((node) => node.tag), ['a']);
     expect(catalog.memberCount('a'), 1);
-    expect((catalog.exportGroup('a')['outbounds'] as List).length, 3);
+    expect(
+      () => catalog.exportGroup('a'),
+      throwsA(isA<SubscriptionServerExportException>()),
+    );
   });
 
   test(

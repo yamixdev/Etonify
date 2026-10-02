@@ -137,7 +137,8 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         endpointLabel: _endpointWithPath(outbound),
       );
       Map<String, dynamic>? groupConfig;
-      if (outbound.type == 'selector' || outbound.type == 'urltest') {
+      if (SubscriptionServerCatalog.isGroup(outbound) ||
+          outbound.config['detour'] is String) {
         groupConfig = catalog.exportGroup(tag);
       }
       await showProxyShareSheet(

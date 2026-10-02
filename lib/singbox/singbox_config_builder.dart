@@ -144,15 +144,16 @@ class SingboxConfigBuilder {
             !isValidProxyPassword(proxyPassword))) {
       throw StateError('Local proxy requires valid access credentials');
     }
-    final outbounds = _visibleOutbounds();
+    final visible = filterProxyDependencies(
+      _visibleOutbounds(),
+      activeSubscription?.groups ?? const [],
+    );
+    final outbounds = visible.outbounds;
     final outboundTags = outbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);
-    final visibleGroups = _visibleGroups(outboundTags.toSet());
-    final selectionCatalog = ProxySelectionCatalog(
-      outbounds,
-      activeSubscription?.groups ?? const [],
-    );
+    final visibleGroups = visible.groups;
+    final selectionCatalog = ProxySelectionCatalog(outbounds, visibleGroups);
     final selectableOutboundTags = selectionCatalog.standaloneOutbounds
         .map((outbound) => outbound.tag)
         .toList(growable: false);
@@ -192,7 +193,7 @@ class SingboxConfigBuilder {
     final defaultLowestOutboundTags = _lowestOutboundTagsFor(
       lowestProxyTag,
       outbounds,
-      visibleGroups,
+      selectionCatalog.groups,
     );
     final urlTestAvailable = selectionCatalog.hasLowest;
     final lowestOutboundTags =
@@ -202,7 +203,7 @@ class SingboxConfigBuilder {
     final availableLowestTags = lowestProxyTags
         .where(lowestOutboundTags.containsKey)
         .toList(growable: false);
-    final groupTags = visibleGroups
+    final groupTags = selectionCatalog.groups
         .map((group) => group.tag)
         .toList(growable: false);
     final chainOutbounds = _visibleProxyChainOutbounds(
@@ -477,6 +478,7 @@ class SingboxConfigBuilder {
             ),
           ...chainOutbounds,
           ...outbounds.map(_buildProxyOutbound),
+          ...providerDirectOutbounds(visibleGroups).values,
           {
             'type': 'direct',
             'tag': 'direct',
@@ -689,10 +691,14 @@ class SingboxConfigBuilder {
     if (subscription == null || visibleOutboundTags.isEmpty) {
       return const [];
     }
+    final available = {
+      ...visibleOutboundTags,
+      ...providerDirectOutbounds(subscription.groups).keys,
+    };
     return subscription.groups
         .map((group) {
           final memberTags = group.outboundTags
-              .where(visibleOutboundTags.contains)
+              .where(available.contains)
               .toList(growable: false);
           if (memberTags.isEmpty) {
             return null;
@@ -811,7 +817,7 @@ class SingboxConfigBuilder {
 
   Map<String, dynamic> _buildProxyOutbound(Outbound outbound) {
     final config = Map<String, dynamic>.from(outbound.config);
-    config.remove('_group_only');
+    config.removeWhere((key, _) => key.startsWith('_'));
     _normalizeStableOutboundSchema(config);
     _normalizeServerAddress(config);
     _ensureRealityUtls(
@@ -1045,6 +1051,25 @@ class SingboxConfigBuilder {
     SubscriptionGroup group,
     Set<String> visibleOutboundTags,
   ) {
+    if (group.config['type'] == 'selector' ||
+        group.config['type'] == 'urltest') {
+      final available = {
+        ...visibleOutboundTags,
+        ...providerDirectOutbounds(activeSubscription?.groups ?? const []).keys,
+        ..._visibleGroups(visibleOutboundTags).map((group) => group.tag),
+      };
+      final config = Map<String, dynamic>.from(group.config)
+        ..removeWhere((key, _) => key.startsWith('_'))
+        ..['tag'] = group.tag;
+      config['outbounds'] = (config['outbounds'] as List)
+          .whereType<String>()
+          .where(available.contains)
+          .toList();
+      if (!(config['outbounds'] as List).contains(config['default'])) {
+        config.remove('default');
+      }
+      return config;
+    }
     final memberTags = group.outboundTags
         .where(visibleOutboundTags.contains)
         .toList(growable: false);

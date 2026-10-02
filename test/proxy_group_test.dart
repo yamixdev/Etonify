@@ -6,14 +6,505 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/features/subscriptions/subscription_server_catalog.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  test(
+    'import removes transitive detours to missing or unsupported-only groups',
+    () {
+      for (final target in ['missing', 'empty-auto']) {
+        final payload = SubscriptionStore.buildSubscriptionPayloadForTest(
+          SubscriptionParser.parse(
+            jsonEncode({
+              'outbounds': [
+                {
+                  'type': 'vless',
+                  'tag': 'outer',
+                  'server': 'outer.example',
+                  'server_port': 443,
+                  'uuid': 'test-uuid',
+                  'detour': 'hop',
+                },
+                {
+                  'type': 'socks',
+                  'tag': 'hop',
+                  'server': 'hop.example',
+                  'server_port': 1080,
+                  'detour': target,
+                },
+                {
+                  'type': 'urltest',
+                  'tag': 'empty-auto',
+                  'outbounds': ['unsupported'],
+                },
+                {
+                  'type': 'wireguard',
+                  'tag': 'unsupported',
+                  'private_key': 'test',
+                },
+              ],
+            }),
+          ),
+        );
+        expect(payload.outbounds, isEmpty);
+        expect(payload.groups, isEmpty);
+      }
+    },
+  );
+
+  test('runtime excludes detours when their nested dependency is deleted', () {
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(
+      SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            {
+              'type': 'vless',
+              'tag': 'outer',
+              'server': 'outer.example',
+              'server_port': 443,
+              'uuid': 'test-uuid',
+              'detour': 'hop',
+            },
+            {
+              'type': 'urltest',
+              'tag': 'hop',
+              'outbounds': ['leaf'],
+            },
+            {
+              'type': 'socks',
+              'tag': 'leaf',
+              'server': 'hop.example',
+              'server_port': 1080,
+            },
+          ],
+        }),
+      ),
+    );
+    final nodes = payload.outbounds.map(Outbound.fromMap).toList();
+    final groups = payload.groups.map(SubscriptionGroup.fromMap).toList();
+    final catalog = SubscriptionServerCatalog(
+      Subscription(
+        id: 'sub',
+        name: 'Sub',
+        url: '',
+        outbounds: nodes,
+        groups: groups,
+      ),
+    );
+    expect(catalog.roots.map((node) => node.tag), ['outer']);
+    final subscription = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: '',
+      groups: groups,
+      outbounds: nodes
+          .map(
+            (node) => node.tag == 'leaf'
+                ? node.copyWith(info: const OutboundInfo(deleted: true))
+                : node,
+          )
+          .toList(),
+    );
+    final runtime = (_defaultBuilder(subscription).build()['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    expect(runtime.where((node) => node['tag'] == 'outer'), isEmpty);
+    expect(runtime.where((node) => node['tag'] == groups.single.tag), isEmpty);
+  });
+  test(
+    'native selectors preserve direct defaults without counting direct as a proxy',
+    () {
+      for (final entrySelector in [false, true]) {
+        final payload = SubscriptionStore.buildSubscriptionPayloadForTest(
+          SubscriptionParser.parse(
+            jsonEncode({
+              if (entrySelector) 'route': {'final': 'choice'},
+              'outbounds': [
+                {'type': 'direct', 'tag': 'bypass'},
+                {
+                  'type': 'vless',
+                  'tag': 'proxy',
+                  'server': 'one.example',
+                  'server_port': 443,
+                  'uuid': 'test-uuid',
+                },
+                {
+                  'type': 'selector',
+                  'tag': 'choice',
+                  'outbounds': ['bypass', 'proxy'],
+                  'default': 'bypass',
+                },
+              ],
+            }),
+          ),
+        );
+        final subscription = Subscription(
+          id: 'sub',
+          name: 'Sub',
+          url: '',
+          outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+          groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+        );
+        final catalog = SubscriptionServerCatalog(subscription);
+        final groupTag = subscription.groups.single.tag;
+        expect(catalog.roots.map((node) => node.tag), [
+          entrySelector ? 'proxy' : groupTag,
+        ]);
+        final config = (catalog.exportGroup(groupTag)['outbounds'] as List)
+            .cast<Map<String, dynamic>>();
+        expect(config.map((node) => node['type']), [
+          'selector',
+          'direct',
+          'vless',
+        ]);
+        expect(config.first['default'], config[1]['tag']);
+        expect(catalog.visibleProxyCount, 1);
+        final runtime =
+            (_defaultBuilder(subscription).build()['outbounds'] as List)
+                .cast<Map<String, dynamic>>();
+        final selector = runtime.singleWhere((node) => node['tag'] == groupTag);
+        expect(selector['default'], config[1]['tag']);
+        expect(
+          runtime.singleWhere(
+            (node) => node['tag'] == selector['default'],
+          )['type'],
+          'direct',
+        );
+      }
+    },
+  );
+  test('nested export prunes an empty branch after a leaf is deleted', () {
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(
+      SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            for (final tag in ['one', 'two']) ...[
+              {
+                'type': 'socks',
+                'tag': tag,
+                'server': '$tag.example',
+                'server_port': 1080,
+              },
+              {
+                'type': 'urltest',
+                'tag': 'inner-$tag',
+                'outbounds': [tag],
+              },
+            ],
+            {
+              'type': 'selector',
+              'tag': 'outer',
+              'outbounds': ['inner-one', 'inner-two'],
+            },
+          ],
+        }),
+      ),
+    );
+    final profile = Subscription(
+      id: 'sub',
+      name: 'Sub',
+      url: '',
+      outbounds: payload.outbounds
+          .map(Outbound.fromMap)
+          .map(
+            (node) => node.tag == 'one'
+                ? node.copyWith(info: const OutboundInfo(deleted: true))
+                : node,
+          )
+          .toList(),
+      groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+    );
+    final catalog = SubscriptionServerCatalog(profile);
+    final outer = catalog.roots.single;
+    expect(catalog.members(outer.tag).map((node) => node.name), ['inner-two']);
+    final exported = (catalog.exportGroup(outer.tag)['outbounds'] as List)
+        .cast<Map<String, dynamic>>();
+    expect(exported.map((node) => node['type']), [
+      'selector',
+      'urltest',
+      'socks',
+    ]);
+    expect(exported.last['server'], 'two.example');
+  });
+  test(
+    'native forward detours keep scoped dependencies after tag normalization',
+    () {
+      final payload = SubscriptionStore.buildSubscriptionPayloadForTest(
+        SubscriptionParser.parse(
+          jsonEncode([
+            for (final scope in ['first', 'second'])
+              {
+                'outbounds': [
+                  {
+                    'type': 'vless',
+                    'tag': 'outer proxy',
+                    'server': '$scope.example',
+                    'server_port': 443,
+                    'uuid': 'test-uuid',
+                    'detour': 'inner proxy',
+                  },
+                  {
+                    'type': 'socks',
+                    'tag': 'inner proxy',
+                    'server': 'hop-$scope.example',
+                    'server_port': 1080,
+                  },
+                  {
+                    'type': 'urltest',
+                    'tag': 'auto',
+                    'outbounds': ['outer proxy'],
+                  },
+                ],
+              },
+          ]),
+        ),
+      );
+      final catalog = SubscriptionServerCatalog(
+        Subscription(
+          id: 'sub',
+          name: 'Sub',
+          url: '',
+          outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+          groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+        ),
+      );
+      final exported =
+          (catalog.exportGroup(catalog.roots.first.tag)['outbounds'] as List)
+              .cast<Map<String, dynamic>>();
+      expect(exported, hasLength(3));
+      expect(exported[1]['detour'], exported[2]['tag']);
+      expect(exported[2]['server'], 'hop-first.example');
+      expect(catalog.roots.map((node) => node.name), ['auto', 'auto']);
+    },
+  );
+  test(
+    'sing-box nested groups survive import, export and repeated source tags',
+    () {
+      final parsed = SubscriptionParser.parse(
+        jsonEncode([
+          for (final country in ['Netherlands', 'Sweden'])
+            {
+              'outbounds': [
+                {
+                  'type': 'vless',
+                  'tag': 'candidate',
+                  'server': '$country.example',
+                  'server_port': 443,
+                  'uuid': 'test-uuid',
+                },
+                {
+                  'type': 'urltest',
+                  'tag': 'inner',
+                  'outbounds': ['candidate'],
+                  'url': 'https://example.com/test',
+                  'interval': '30s',
+                  'tolerance': 20,
+                },
+                {
+                  'type': 'selector',
+                  'tag': country,
+                  'outbounds': ['inner'],
+                  'default': 'inner',
+                  'interrupt_exist_connections': true,
+                },
+              ],
+              'route': {'final': country},
+            },
+        ]),
+      );
+      final payload = SubscriptionStore.buildSubscriptionPayloadForTest(parsed);
+      final subscription = Subscription(
+        id: 'sub',
+        name: 'Sub',
+        url: '',
+        outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+        groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+      );
+      final catalog = SubscriptionServerCatalog(subscription);
+      expect(catalog.roots.map((node) => node.name), ['inner', 'inner']);
+      final profileJson = const EtonifyBackupService().buildProfileExport(
+        subscriptions: [subscription],
+        clientVersion: '0.3.7',
+        encryption: EtonifyProfileEncryption.plain,
+      );
+      final restored = const EtonifyBackupService()
+          .parseProfileExport(
+            bytes: utf8.encode(profileJson),
+            currentClientVersion: '0.3.7',
+          )
+          .subscriptions
+          .single;
+      expect(
+        restored.groups.map((group) => group.toMap()).toList(),
+        subscription.groups.map((group) => group.toMap()).toList(),
+      );
+      expect(catalog.visibleProxyCount, 2);
+      expect(
+        ProxySelectionCatalog(
+          subscription.outbounds,
+          subscription.groups,
+        ).candidateTags,
+        catalog.roots.map((node) => node.tag).toList(),
+      );
+      final root = subscription.groups.firstWhere(
+        (group) => group.name == 'Netherlands',
+      );
+      final exported = catalog.exportGroup(root.tag);
+      final configs = (exported['outbounds'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(configs.map((config) => config['type']), [
+        'selector',
+        'urltest',
+        'vless',
+      ]);
+      expect(configs.first['default'], configs[1]['tag']);
+      expect(configs.first['interrupt_exist_connections'], true);
+      expect(configs[1]['tolerance'], 20);
+      expect(configs.last['server'], 'Netherlands.example');
+      final input = ProxyCacheBuildInput(
+        subscription: subscription.copyWith(
+          outbounds: subscription.outbounds
+              .map(
+                (node) => node.copyWith(
+                  info: const OutboundInfo(externalIp: '203.0.113.1'),
+                ),
+              )
+              .toList(),
+        ),
+        selectedProxyTag: root.tag,
+        lowestLatency: null,
+        runtimeLowestOutboundTag: null,
+        runtimeLowestSelections: const {},
+        urlTestInFlight: false,
+        runtimeLatencies: {configs.last['tag'] as String: 144},
+        unavailableLatencyTags: const {},
+        latencyErrors: const {},
+        runtimeGroupSelections: {
+          root.tag: configs[1]['tag'] as String,
+          configs[1]['tag'] as String: configs.last['tag'] as String,
+        },
+        markAllServersRussia: false,
+      );
+      for (final cache in [
+        buildProxyCache(input),
+        buildHomeProxyCache(input),
+      ]) {
+        expect(cache.displayProxy?.latency, 144);
+        expect(cache.displayProxy?.ip, '203.0.113.1');
+      }
+      expect(buildProxyCache(input).activeProxies.map((node) => node.tag), [
+        'lowest',
+        ...catalog.roots.map((node) => node.tag),
+      ]);
+      final lowestInput = ProxyCacheBuildInput(
+        subscription: input.subscription!.copyWith(
+          groups: input.subscription!.groups.reversed
+              .map(
+                (group) => group.copyWith(
+                  config: Map<String, dynamic>.from(group.config)
+                    ..remove('_provider_root'),
+                ),
+              )
+              .toList(),
+        ),
+        selectedProxyTag: lowestProxyTag,
+        lowestLatency: null,
+        runtimeLowestOutboundTag: root.tag,
+        runtimeLowestSelections: {lowestProxyTag: root.tag},
+        urlTestInFlight: false,
+        runtimeLatencies: input.runtimeLatencies,
+        unavailableLatencyTags: const {},
+        latencyErrors: const {},
+        runtimeGroupSelections: input.runtimeGroupSelections,
+        markAllServersRussia: false,
+      );
+      for (final cache in [
+        buildProxyCache(lowestInput),
+        buildHomeProxyCache(lowestInput),
+      ]) {
+        expect(cache.displayProxy?.latency, 144);
+        expect(cache.displayProxy?.ip, '203.0.113.1');
+      }
+      expect(
+        buildProxyCache(
+          lowestInput,
+        ).groupChildrenByTag[root.tag]!.map((node) => node.tag),
+        [configs.last['tag']],
+      );
+      expect(
+        buildProxyCache(
+          lowestInput,
+        ).groupChildrenByTag[root.tag]!.single.highlighted,
+        isTrue,
+      );
+      final roundtrip = SubscriptionStore.buildSubscriptionPayloadForTest(
+        SubscriptionParser.parse(jsonEncode(exported)),
+      );
+      expect(roundtrip.groups, hasLength(2));
+      expect(roundtrip.outbounds, hasLength(1));
+      final runtime =
+          (_defaultBuilder(subscription).build()['outbounds'] as List)
+              .cast<Map<String, dynamic>>();
+      for (final group in subscription.groups) {
+        final config = runtime.singleWhere(
+          (config) => config['tag'] == group.tag,
+        );
+        expect(config['type'], group.type);
+        for (final tag in config['outbounds'] as List) {
+          expect(runtime.where((config) => config['tag'] == tag), hasLength(1));
+        }
+      }
+    },
+  );
+
+  test('provider order interleaves standalone profiles and auto groups', () {
+    final parsed = SubscriptionParser.parse(
+      jsonEncode([
+        {
+          'remarks': 'First standalone',
+          'outbounds': [_xrayVlessOutbound('proxy', 'first.example')],
+        },
+        {
+          'remarks': 'Auto group',
+          'routing': {
+            'balancers': [
+              {
+                'tag': 'auto',
+                'selector': ['member'],
+                'strategy': {'type': 'leastPing'},
+              },
+            ],
+          },
+          'outbounds': [_xrayVlessOutbound('member', 'middle.example')],
+        },
+        {
+          'remarks': 'Last standalone',
+          'outbounds': [_xrayVlessOutbound('proxy', 'last.example')],
+        },
+      ]),
+    );
+    final payload = SubscriptionStore.buildSubscriptionPayloadForTest(parsed);
+    final catalog = SubscriptionServerCatalog(
+      Subscription(
+        id: 'sub',
+        name: 'Sub',
+        url: '',
+        outbounds: payload.outbounds.map(Outbound.fromMap).toList(),
+        groups: payload.groups.map(SubscriptionGroup.fromMap).toList(),
+      ),
+    );
+    expect(catalog.roots.map((node) => node.name), [
+      'First standalone',
+      'Auto group',
+      'Last standalone',
+    ]);
+  });
   final schema114Corpus =
       jsonDecode(
             File('test/fixtures/etonify_schema114.json').readAsStringSync(),

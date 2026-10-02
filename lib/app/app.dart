@@ -485,7 +485,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final selectedGroup = _activeGroupByTagLookup[runtimeSelectedTag];
       final effectiveTag = selectedGroup == null
           ? runtimeSelectedTag
-          : _runtimeGroupSelections[selectedGroup.tag]?.trim();
+          : resolveRuntimeGroupLeaf(
+              _activeGroupByTagLookup,
+              selectedGroup.tag,
+              _runtimeGroupSelections,
+            );
       if (effectiveTag != null &&
           effectiveTag.isNotEmpty &&
           !_unavailableLatencyTags.contains(effectiveTag) &&
@@ -1627,7 +1631,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
           : null;
       final selectedLeafTag = selectedGroupTag == null
           ? selectedTag
-          : _runtimeGroupSelections[selectedGroupTag];
+          : resolveRuntimeGroupLeaf(
+              _activeGroupByTagLookup,
+              selectedGroupTag,
+              _runtimeGroupSelections,
+            );
       final selected =
           selectedLeafTag == null ||
               _unavailableLatencyTags.contains(selectedLeafTag) ||
@@ -1792,7 +1800,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final parentGroupTag = proxy.parentGroupTag;
     final highlightedByGroupUrlTest =
         parentGroupTag != null &&
-        _runtimeGroupSelections[parentGroupTag] == proxy.tag;
+        resolveRuntimeGroupLeaf(
+              _activeGroupByTagLookup,
+              parentGroupTag,
+              _runtimeGroupSelections,
+            ) ==
+            proxy.tag;
     final highlightedByLowest =
         isLowestProxyTag(_selectedProxyTag) &&
         _activeRuntimeLowestOutboundTag() == proxy.tag;
@@ -8355,7 +8368,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Outbound? _selectedGroupOutbound(SubscriptionGroup group) {
-    final runtimeSelectedTag = _runtimeGroupSelections[group.tag];
+    final runtimeSelectedTag = resolveRuntimeGroupLeaf(
+      _activeGroupByTagLookup,
+      group.tag,
+      _runtimeGroupSelections,
+    );
     if (runtimeSelectedTag != null &&
         group.outboundTags.contains(runtimeSelectedTag)) {
       final outbound = _activeOutboundByTagLookup[runtimeSelectedTag];

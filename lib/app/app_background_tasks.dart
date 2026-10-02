@@ -506,7 +506,11 @@ AppProxySummary _buildHomeDisplayProxy(
       _buildProxySummary(input, outbound);
 
   AppProxySummary? selectedGroupChild(SubscriptionGroup group) {
-    final runtimeSelected = input.runtimeGroupSelections[group.tag]?.trim();
+    final runtimeSelected = resolveRuntimeGroupLeaf(
+      groupByTag,
+      group.tag,
+      input.runtimeGroupSelections,
+    );
     if (runtimeSelected != null &&
         group.outboundTags.contains(runtimeSelected)) {
       final selected = outboundByTag[runtimeSelected];
@@ -697,7 +701,6 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     proxySummariesByTag[summary.tag] = summary;
   }
   final groupedOutboundTags = <String>{...catalog.memberTags};
-  final groupTagByChildTag = <String, String>{};
   final groupSummaries = <AppProxySummary>[];
   final lowestCandidateGroupSummaries = <AppProxySummary>[];
   final lowestCandidateGroupChildTags = <String>{};
@@ -709,9 +712,6 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
       continue;
     }
     groupedOutboundTags.addAll(visibleChildTags);
-    for (final tag in visibleChildTags) {
-      groupTagByChildTag[tag] = group.tag;
-    }
     final groupSummary = _buildGroupProxySummary(
       input,
       group,
@@ -720,8 +720,10 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     );
     groupSummaries.add(groupSummary);
     proxySummariesByTag[groupSummary.tag] = groupSummary;
-    lowestCandidateGroupSummaries.add(groupSummary);
-    lowestCandidateGroupChildTags.addAll(visibleChildTags);
+    if (catalog.candidateTags.contains(group.tag)) {
+      lowestCandidateGroupSummaries.add(groupSummary);
+      lowestCandidateGroupChildTags.addAll(visibleChildTags);
+    }
   }
 
   final lowestProxies = <AppProxySummary>[];
@@ -771,7 +773,9 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
       .toList(growable: false);
   final topLevelSummaries = <AppProxySummary>[
     ...lowestProxies,
-    ...groupSummaries,
+    ...groupSummaries.where(
+      (group) => catalog.candidateTags.contains(group.tag),
+    ),
     ...chainSummaries,
     ...standaloneProxySummaries,
   ];
@@ -779,10 +783,13 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     for (final group in groupSummaries)
       group.tag: [
         for (final tag in group.childTags)
-          if (groupedOutboundTags.contains(tag) &&
-              groupTagByChildTag[tag] == group.tag &&
-              proxySummariesByTag[tag] != null)
-            _withParentGroup(input, proxySummariesByTag[tag]!, group.tag),
+          if (proxySummariesByTag[tag] != null)
+            _withParentGroup(
+              input,
+              proxySummariesByTag[tag]!,
+              group.tag,
+              group.selectedChildTag,
+            ),
       ],
   };
 
@@ -1219,7 +1226,7 @@ AppProxySummary? _lowestSelectedSummary(
     for (final candidate in candidates) {
       if (candidate.tag == runtimeSelectedTag) {
         final selectedLeafTag = candidate.isGroup
-            ? input.runtimeGroupSelections[candidate.tag]?.trim()
+            ? candidate.selectedChildTag
             : candidate.tag;
         final isUnavailable =
             selectedLeafTag == null ||
@@ -1399,7 +1406,15 @@ AppProxySummary _buildGroupProxySummary(
   List<String> visibleChildTags,
   Map<String, AppProxySummary> childSummariesByTag,
 ) {
-  final runtimeSelectedTag = input.runtimeGroupSelections[group.tag];
+  final runtimeSelectedTag = resolveRuntimeGroupLeaf(
+    {
+      for (final entry
+          in input.subscription?.groups ?? const <SubscriptionGroup>[])
+        entry.tag: entry,
+    },
+    group.tag,
+    input.runtimeGroupSelections,
+  );
   final selectedChildTag =
       runtimeSelectedTag != null &&
           visibleChildTags.contains(runtimeSelectedTag)
@@ -1467,10 +1482,10 @@ AppProxySummary _withParentGroup(
   ProxyCacheBuildInput input,
   AppProxySummary summary,
   String? parentTag,
+  String? selectedLeafTag,
 ) {
   final highlightedByGroupUrlTest =
-      parentTag != null &&
-      input.runtimeGroupSelections[parentTag] == summary.tag;
+      parentTag != null && selectedLeafTag == summary.tag;
   final runtimeLowestTag = _activeRuntimeLowestOutboundTag(input);
   final highlightedByLowest =
       isLowestProxyTag(input.selectedProxyTag) &&

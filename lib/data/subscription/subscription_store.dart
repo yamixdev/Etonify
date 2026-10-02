@@ -1521,6 +1521,7 @@ class SubscriptionStore {
     final warnings = <String>[];
     final usedTags = <String>{};
     final sourceScopeToTagToTags = <String, Map<String, List<String>>>{};
+    final nativeDetours = <String, ({String scope, String target})>{};
 
     for (var i = 0; i < buildConfigs.length; i++) {
       final config = Map<String, dynamic>.from(buildConfigs[i]);
@@ -1576,6 +1577,12 @@ class SubscriptionStore {
 
       // Set the tag in the config
       config['tag'] = tag;
+      if (sourceScope.startsWith('singbox-') && config['detour'] is String) {
+        nativeDetours[tag] = (
+          scope: sourceScope,
+          target: config['detour'] as String,
+        );
+      }
 
       outbounds.add(
         Outbound(
@@ -1589,8 +1596,80 @@ class SubscriptionStore {
       );
     }
 
-    for (var i = 0; i < buildGroups.length; i++) {
-      final group = ParsedOutboundGroup.fromMap(buildGroups[i]);
+    final parsedGroupModels = buildGroups
+        .map(ParsedOutboundGroup.fromMap)
+        .toList();
+    final groupTags = <String>[];
+    final sourceGroups = <String, Map<String, ParsedOutboundGroup>>{};
+    final sourceGroupTags = <String, Map<String, String>>{};
+    final directByScope = <String, Map<String, Map<String, dynamic>>>{};
+    for (final group in parsedGroupModels) {
+      final direct = group.config['_direct_outbounds'];
+      if (direct is! Map) continue;
+      final scoped = directByScope.putIfAbsent(group.sourceScope, () => {});
+      for (final entry in direct.entries) {
+        final source = entry.key.toString();
+        if (scoped.containsKey(source) || entry.value is! Map) continue;
+        final tag = _uniqueTag(
+          'provider-${group.sourceScope}-$source',
+          usedTags,
+        );
+        usedTags.add(tag);
+        scoped[source] = Map<String, dynamic>.from(entry.value as Map)
+          ..['tag'] = tag;
+        sourceScopeToTagToTags.putIfAbsent(
+          group.sourceScope,
+          () => {},
+        )[source] = [
+          tag,
+        ];
+      }
+    }
+    for (final group in parsedGroupModels) {
+      var tag = _uniqueTag(
+        lagomProfile &&
+                group.sourceTag.trim().toLowerCase() == _lagomWhitelistDetourTag
+            ? _lagomWhitelistDetourTag
+            : _groupTagSeed(group.sourceTag, group.name, groupTags.length),
+        usedTags,
+      );
+      if (isReservedProxyTag(tag)) {
+        tag = _uniqueTag('group-${groupTags.length + 1}', usedTags);
+      }
+      usedTags.add(tag);
+      groupTags.add(tag);
+      sourceGroups.putIfAbsent(group.sourceScope, () => {})[group.sourceTag] =
+          group;
+      sourceGroupTags.putIfAbsent(
+        group.sourceScope,
+        () => {},
+      )[group.sourceTag] = tag;
+    }
+    for (var i = 0; i < outbounds.length; i++) {
+      final outbound = outbounds[i];
+      final detour = nativeDetours[outbound.tag];
+      if (detour == null) continue;
+      final resolved =
+          sourceGroupTags[detour.scope]?[detour.target] ??
+          sourceScopeToTagToTags[detour.scope]?[detour.target]?.firstOrNull;
+      if (resolved == null) {
+        warnings.add(
+          'Skipping outbound "${outbound.name}": missing chain detour',
+        );
+        outbounds.removeAt(i--);
+        for (final tags
+            in sourceScopeToTagToTags[detour.scope]?.values ??
+                const <List<String>>[]) {
+          tags.remove(outbound.tag);
+        }
+        continue;
+      }
+      outbounds[i] = outbound.copyWith(
+        config: {...outbound.config, 'detour': resolved},
+      );
+    }
+    for (var i = 0; i < parsedGroupModels.length; i++) {
+      final group = parsedGroupModels[i];
       final sourceTagToTags =
           sourceScopeToTagToTags[group.sourceScope] ??
           (group.sourceScope.isEmpty
@@ -1598,7 +1677,18 @@ class SubscriptionStore {
               : const <String, List<String>>{});
       final memberTags = <String>[];
       final seenMembers = <String>{};
-      for (final sourceTag in group.sourceOutboundTags) {
+      // Resolve leaves for existing runtime checks, while preserving the direct
+      // hierarchy separately for presentation and native sing-box export.
+      final pending = group.sourceOutboundTags.reversed.toList();
+      final visited = <String>{};
+      while (pending.isNotEmpty) {
+        final sourceTag = pending.removeLast();
+        if (!visited.add(sourceTag)) continue;
+        final nested = sourceGroups[group.sourceScope]?[sourceTag];
+        if (nested != null) {
+          pending.addAll(nested.sourceOutboundTags.reversed);
+          continue;
+        }
         final resolvedTags = sourceTagToTags[sourceTag] ?? const <String>[];
         for (final resolvedTag in resolvedTags) {
           if (seenMembers.add(resolvedTag)) {
@@ -1620,17 +1710,36 @@ class SubscriptionStore {
       final groupCountry =
           _normalizeCountryCode(group.countryCode) ??
           parsedGroupName.countryCode;
-      var tag = _uniqueTag(
-        lagomProfile &&
-                group.sourceTag.trim().toLowerCase() == _lagomWhitelistDetourTag
-            ? _lagomWhitelistDetourTag
-            : _groupTagSeed(group.sourceTag, groupName, groups.length),
-        usedTags,
-      );
-      if (isReservedProxyTag(tag)) {
-        tag = _uniqueTag('group-${groups.length + 1}', usedTags);
+      final tag = groupTags[i];
+      final config = Map<String, dynamic>.from(group.config);
+      if (directByScope[group.sourceScope]?.isNotEmpty == true) {
+        config['_direct_outbounds'] = {
+          for (final direct in directByScope[group.sourceScope]!.values)
+            direct['tag']: direct,
+        };
       }
-      usedTags.add(tag);
+      if (config['type'] == 'selector' || config['type'] == 'urltest') {
+        List<String> resolve(String sourceTag) {
+          final nested = sourceGroupTags[group.sourceScope]?[sourceTag];
+          return nested != null
+              ? [nested]
+              : sourceTagToTags[sourceTag] ?? const [];
+        }
+
+        config['outbounds'] = group.sourceOutboundTags
+            .expand(resolve)
+            .toSet()
+            .toList();
+        final preferred = config['default'];
+        if (preferred is String) {
+          final choices = resolve(preferred);
+          if (choices.isEmpty) {
+            config.remove('default');
+          } else {
+            config['default'] = choices.first;
+          }
+        }
+      }
       groups.add(
         SubscriptionGroup(
           tag: tag,
@@ -1640,6 +1749,7 @@ class SubscriptionStore {
           outboundTags: memberTags,
           fallbackOutboundTags:
               sourceTagToTags[group.sourceFallbackTag] ?? const <String>[],
+          config: config,
           urlTestConfig: UrlTestConfig(
             url: group.url,
             method: group.method,
@@ -1653,7 +1763,15 @@ class SubscriptionStore {
       );
     }
 
-    return (outbounds: outbounds, groups: groups, warnings: warnings);
+    final usable = filterProxyDependencies(outbounds, groups);
+    if (usable.outbounds.length != outbounds.length) {
+      warnings.add('Skipping outbounds with unavailable detour dependencies');
+    }
+    return (
+      outbounds: usable.outbounds,
+      groups: usable.groups,
+      warnings: warnings,
+    );
   }
 
   static Map<String, List<String>> _mergeSourceTagScopes(

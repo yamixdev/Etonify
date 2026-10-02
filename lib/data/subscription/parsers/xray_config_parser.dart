@@ -123,6 +123,7 @@ class XrayConfigParser {
       if (converted != null) {
         converted['_source_tag'] = sourceTag;
         converted['_source_scope'] = sourceScope;
+        converted['_source_order'] = int.tryParse(sourceScope.substring(5));
         if (remarks != null && remarks.isNotEmpty) {
           converted['_source_profile_name'] = remarks;
         }
@@ -200,6 +201,7 @@ class XrayConfigParser {
         'name': parsedName.name,
         'type': strategyType.isEmpty ? 'urltest' : strategyType,
         'source_scope': sourceScope,
+        'config': {'_source_order': int.tryParse(sourceScope.substring(5))},
         if (parsedName.countryCode != null) 'country': parsedName.countryCode,
         'outbounds': memberTags,
         // Keep the exact fallback reference separate: it is not a selector

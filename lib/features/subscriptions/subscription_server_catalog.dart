@@ -1,28 +1,52 @@
 import 'package:meow_client/data/subscription/outbound_support.dart';
+import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/models/subscription.dart';
 
 /// Presentation-only hierarchy. Never rewrites the profile or infers ownership
 /// from names such as `cand-01`: only explicit provider references are used.
 class SubscriptionServerCatalog {
   SubscriptionServerCatalog(Subscription subscription) {
-    for (final node in subscription.outbounds) {
-      if (!node.info.deleted && isSupportedOutboundConfig(node.config)) {
-        _nodes[node.tag] = node;
-      }
+    final visible = filterProxyDependencies(
+      subscription.outbounds
+          .where((node) => isSupportedOutboundConfig(node.config))
+          .toList(),
+      subscription.groups,
+    );
+    for (final node in visible.outbounds) {
+      _nodes[node.tag] = node;
     }
-    for (final group in subscription.groups) {
+    for (final group in visible.groups) {
+      final direct = group.config['_direct_outbounds'];
+      if (direct is Map) {
+        for (final entry in direct.entries) {
+          if (entry.value is! Map) continue;
+          final tag = entry.key.toString();
+          _nodes.putIfAbsent(
+            tag,
+            () => Outbound(
+              tag: tag,
+              name: tag,
+              config: Map<String, dynamic>.from(entry.value as Map),
+            ),
+          );
+        }
+      }
       _fallbacks[group.tag] = group.fallbackOutboundTags;
       if (_nodes.containsKey(group.tag)) continue;
       final tuning = group.urlTestConfig;
+      // Provider strategies (e.g. Xray leastPing) are managed URLTest
+      // groups in our runtime, not standalone outbound protocol types.
+      final type = group.type == 'selector' ? 'selector' : 'urltest';
       _nodes[group.tag] = Outbound(
         tag: group.tag,
         name: group.name,
         info: OutboundInfo(country: group.country),
         config: {
+          ...group.config,
           'tag': group.tag,
-          'type': group.type,
-          'outbounds': group.outboundTags,
-          if (group.type == 'urltest') ...{
+          'type': type,
+          'outbounds': group.config['outbounds'] ?? group.outboundTags,
+          if (type == 'urltest') ...{
             if (tuning.url != null) 'url': tuning.url,
             if (tuning.intervalSeconds != null)
               'interval': '${tuning.intervalSeconds}s',
@@ -44,6 +68,7 @@ class SubscriptionServerCatalog {
       for (final node in _nodes.values)
         if (isGroup(node) &&
             !owned.contains(node.tag) &&
+            node.config['_group_only'] != true &&
             members(node.tag).isNotEmpty)
           node,
       for (final node in _nodes.values)
@@ -53,6 +78,36 @@ class SubscriptionServerCatalog {
             node.config['_group_only'] != true)
           node,
     ];
+    final originalPositions = {
+      for (var i = 0; i < roots.length; i++) roots[i].tag: i,
+    };
+    roots.sort((a, b) {
+      final left = a.config['_source_order'];
+      final right = b.config['_source_order'];
+      if (left is num && right is num) {
+        final byOrder = left.compareTo(right);
+        if (byOrder != 0) return byOrder;
+      } else if (left is num) {
+        return -1;
+      } else if (right is num) {
+        return 1;
+      }
+      return originalPositions[a.tag]!.compareTo(originalPositions[b.tag]!);
+    });
+    // A provider's entry selector is a navigation wrapper; show its choices in
+    // the declared order, not the implementation order of the raw outbounds.
+    final expandedRoots = [
+      for (final node in roots)
+        if (node.config['_provider_root'] == true)
+          ...members(
+            node.tag,
+          ).where((child) => isGroup(child) || _isProxyLeaf(child))
+        else
+          node,
+    ];
+    roots
+      ..clear()
+      ..addAll(expandedRoots);
     // A malformed cycle must neither recurse forever nor hide the entire group.
     final reachable = <String>{};
     void mark(String tag) {
@@ -70,6 +125,8 @@ class SubscriptionServerCatalog {
     for (final node in _nodes.values) {
       if (isGroup(node) &&
           !reachable.contains(node.tag) &&
+          node.config['_provider_root'] != true &&
+          node.config['_group_only'] != true &&
           members(node.tag).isNotEmpty) {
         roots.add(node);
         mark(node.tag);
@@ -168,7 +225,8 @@ class SubscriptionServerCatalog {
         }
       }
       configs.add(config);
-      pending.addAll(_references(current));
+      pending.addAll(_references(current).toList().reversed);
+      pending.addAll((_fallbacks[current.tag] ?? const <String>[]).reversed);
       final detour = config['detour'];
       if (detour is String) {
         if (!_nodes.containsKey(detour)) {
@@ -176,6 +234,40 @@ class SubscriptionServerCatalog {
         }
         pending.add(detour);
       }
+    }
+    // Reject dependency cycles rather than exporting a document the core cannot
+    // load. The iterative walk stays bounded for deeply nested profiles.
+    final dependencies = {
+      for (final config in configs)
+        config['tag'] as String: <String>{
+          if (config['outbounds'] is List)
+            ...(config['outbounds'] as List).whereType<String>(),
+          if (config['detour'] is String) config['detour'] as String,
+        },
+    };
+    final dependents = <String, List<String>>{};
+    final degree = <String, int>{};
+    for (final entry in dependencies.entries) {
+      degree[entry.key] = entry.value.length;
+      for (final child in entry.value) {
+        if (!dependencies.containsKey(child)) {
+          throw const SubscriptionServerExportException();
+        }
+        dependents.putIfAbsent(child, () => []).add(entry.key);
+      }
+    }
+    final ready = degree.keys.where((tag) => degree[tag] == 0).toList();
+    var completed = 0;
+    while (ready.isNotEmpty) {
+      final tag = ready.removeLast();
+      completed++;
+      for (final parent in dependents[tag] ?? const <String>[]) {
+        degree[parent] = degree[parent]! - 1;
+        if (degree[parent] == 0) ready.add(parent);
+      }
+    }
+    if (completed != configs.length) {
+      throw const SubscriptionServerExportException();
     }
     return {'outbounds': configs};
   }

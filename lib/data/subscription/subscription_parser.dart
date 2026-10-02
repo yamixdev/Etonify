@@ -108,6 +108,7 @@ class ParsedOutboundGroup {
     this.timeoutSeconds,
     this.concurrency,
     this.unavailableCheckIntervalSeconds,
+    this.config = const {},
   });
 
   final String sourceTag;
@@ -123,6 +124,7 @@ class ParsedOutboundGroup {
   final int? timeoutSeconds;
   final int? concurrency;
   final int? unavailableCheckIntervalSeconds;
+  final Map<String, dynamic> config;
 
   Map<String, dynamic> toMap() => {
     'tag': sourceTag,
@@ -139,6 +141,7 @@ class ParsedOutboundGroup {
     if (concurrency != null) 'concurrency': concurrency,
     if (unavailableCheckIntervalSeconds != null)
       'unavailable_check_interval': unavailableCheckIntervalSeconds,
+    if (config.isNotEmpty) 'config': config,
   };
 
   factory ParsedOutboundGroup.fromMap(Map<String, dynamic> map) {
@@ -164,6 +167,9 @@ class ParsedOutboundGroup {
       concurrency: (map['concurrency'] as num?)?.toInt(),
       unavailableCheckIntervalSeconds:
           (map['unavailable_check_interval'] as num?)?.toInt(),
+      config: map['config'] is Map
+          ? Map<String, dynamic>.from(map['config'] as Map)
+          : const {},
     );
   }
 }
@@ -249,9 +255,11 @@ class SubscriptionParser {
     if (_looksLikeJson(content)) {
       // Sing-box config
       if (SingboxConfigParser.canParse(content)) {
+        final parsed = SingboxConfigParser.parseWithGroups(content);
         return _buildResult(
           format: SubscriptionFormat.singboxConfig,
-          parsedOutbounds: SingboxConfigParser.parse(content),
+          parsedOutbounds: parsed.outbounds,
+          groups: parsed.groups.map(ParsedOutboundGroup.fromMap).toList(),
         );
       }
 

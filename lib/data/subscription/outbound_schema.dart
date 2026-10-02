@@ -66,6 +66,7 @@ class ParsedOutboundSchema {
     '_name',
     '_source_tag',
     '_source_scope',
+    '_source_order',
     '_source_profile_name',
     '_detour_source_tag',
     '_country_override',

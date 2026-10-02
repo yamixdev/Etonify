@@ -1,8 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
@@ -228,30 +229,104 @@ void main() {
     expect(SubscriptionStore.getMetadata('large-profile'), isNull);
   });
 
+  for (final strategy in ['urltest', 'leastping']) {
+    _testSubscriptionWidgets(
+      '$strategy candidates are nested and remain shareable',
+      (tester) async {
+        final profile = _largeProfile();
+        await tester.runAsync(
+          () => SubscriptionStore.save(
+            profile.copyWith(
+              groups: [profile.groups.single.copyWith(type: strategy)],
+            ),
+          ),
+        );
+        await _openDetails(tester, 'large-profile', 'Large profile');
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('subscription_details_proxies')),
+          180,
+          scrollable: _detailsScrollable(),
+        );
+        await _pumpUntilFound(tester, find.text('Automatic group'));
+        expect(find.text('Server 0'), findsNothing);
+        await tester.tap(find.text('Automatic group'));
+        await _pumpUi(tester);
+        expect(find.text('Server 0'), findsOneWidget);
+        expect(find.text('Server 299'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('subscription_share_group')),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('Server 299'));
+        await _pumpUi(tester);
+        expect(find.text('Share link'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   _testSubscriptionWidgets(
-    'automatic candidates are nested and remain shareable',
+    'a server chain shares its complete JSON instead of a lossy link',
     (tester) async {
-      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      String? clipboardText;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboardText = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      final profile = _largeProfile();
+      await tester.runAsync(
+        () => SubscriptionStore.save(
+          profile.copyWith(
+            groups: const [],
+            outbounds: [
+              profile.outbounds[0].copyWith(
+                config: {...profile.outbounds[0].config, 'detour': 'server-1'},
+              ),
+              profile.outbounds[1].copyWith(
+                config: {...profile.outbounds[1].config, '_group_only': true},
+              ),
+            ],
+          ),
+        ),
+      );
       await _openDetails(tester, 'large-profile', 'Large profile');
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('subscription_details_proxies')),
         180,
         scrollable: _detailsScrollable(),
       );
-      await _pumpUntilFound(tester, find.text('Automatic group'));
-      expect(find.text('Server 0'), findsNothing);
-      await tester.tap(find.text('Automatic group'));
+      await _pumpUntilFound(tester, find.text('Server 0'));
+      await tester.tap(find.text('Server 0'));
       await _pumpUi(tester);
-      expect(find.text('Server 0'), findsOneWidget);
-      expect(find.text('Server 299'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('subscription_share_group')),
-        findsOneWidget,
+      final link = tester.widget<ListTile>(
+        find.ancestor(
+          of: find.text('Share link'),
+          matching: find.byType(ListTile),
+        ),
       );
-      await tester.tap(find.text('Server 299'));
+      expect(link.enabled, isFalse);
+      await tester.tap(find.text('sing-box outbound'));
       await _pumpUi(tester);
-      expect(find.text('Share link'), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      expect(clipboardText, isNotNull);
+      final copied = jsonDecode(clipboardText!) as Map;
+      final nodes = (copied['outbounds'] as List).cast<Map<String, dynamic>>();
+      expect(nodes.map((node) => node['tag']), ['server-0', 'server-1']);
+      expect(nodes.first['detour'], nodes.last['tag']);
+      expect(
+        nodes.any((node) => node.keys.any((key) => key.startsWith('_'))),
+        isFalse,
+      );
     },
   );
 
