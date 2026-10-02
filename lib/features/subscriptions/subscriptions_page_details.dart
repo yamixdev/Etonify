@@ -802,6 +802,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                           inputFormatters: [noNewlineInputFormatter],
                           maxLines: 2,
                           minLines: 1,
+                          scrollPhysics: const _StationaryTextScrollPhysics(),
                           textInputAction: TextInputAction.done,
                           style: theme.textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.w700,
@@ -910,6 +911,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                                     ) ??
                                     l10n.subscriptionLocalFile
                               : subscription.url,
+                          scrollPhysics: const _StationaryTextScrollPhysics(),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurface,
                           ),

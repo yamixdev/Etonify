@@ -7,6 +7,51 @@ import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 
 void main() {
+  test(
+    'split routing applies mode and both lists as one validated restart',
+    () {
+      final controller = AppSettingsController();
+      final change = controller.setSplitRoutingSettings(
+        mode: SplitRoutingMode.proxySelected,
+        included: ['com.google.android.youtube'],
+        excluded: ['org.telegram.messenger'],
+      );
+      expect(change.forceFullServiceRestart, isTrue);
+      expect(controller.splitRoutingPackages, ['com.google.android.youtube']);
+      expect(controller.splitRoutingExcludedPackages, [
+        'org.telegram.messenger',
+      ]);
+      expect(
+        () => controller.setSplitRoutingSettings(
+          mode: SplitRoutingMode.proxySelected,
+          included: [],
+          excluded: [],
+        ),
+        throwsStateError,
+      );
+      expect(controller.splitRoutingPackages, ['com.google.android.youtube']);
+      final noChange = controller.setSplitRoutingSettings(
+        mode: SplitRoutingMode.proxySelected,
+        included: ['com.google.android.youtube'],
+        excluded: ['org.telegram.messenger'],
+      );
+      expect(noChange.changed, isFalse);
+    },
+  );
+  test('split routing modes retain independent application selections', () {
+    final controller = AppSettingsController();
+    controller.setSplitRoutingMode(SplitRoutingMode.proxySelected);
+    controller.setSplitRoutingPackages(['com.google.android.youtube']);
+    controller.setSplitRoutingMode(SplitRoutingMode.bypassSelected);
+    expect(controller.splitRoutingPackages, isEmpty);
+    controller.setSplitRoutingPackages(['org.telegram.messenger']);
+    controller.setSplitRoutingMode(SplitRoutingMode.proxySelected);
+    expect(controller.splitRoutingPackages, ['com.google.android.youtube']);
+    controller.setSplitRoutingMode(SplitRoutingMode.disabled);
+    expect(controller.splitRoutingPackages, isEmpty);
+    controller.setSplitRoutingMode(SplitRoutingMode.bypassSelected);
+    expect(controller.splitRoutingPackages, ['org.telegram.messenger']);
+  });
   test('auto-connect is opt-in and changing it does not restart VPN', () {
     final controller = AppSettingsController();
     expect(controller.autoConnectOnLaunch, isFalse);

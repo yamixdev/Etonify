@@ -3443,4 +3443,71 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coreLastChangeLabel => 'Last applied';
+
+  @override
+  String get splitRoutingApply => 'Apply';
+
+  @override
+  String get splitRoutingEnabled => 'Application routing';
+
+  @override
+  String get splitRoutingSystemApps => 'System apps';
+
+  @override
+  String get splitRoutingOnlySelected => 'Selected only';
+
+  @override
+  String get splitRoutingResetTitle => 'Application routing was reset';
+
+  @override
+  String get splitRoutingResetFailed =>
+      'Could not complete the reset. Auto-connect remains paused. Try pressing Connect again.';
+
+  @override
+  String get splitRoutingResetMessage =>
+      'The interface was redesigned. Previous selections were cleared and split routing was disabled. Select apps separately for each mode. VPN was stopped to avoid changing application routes without your confirmation.';
+
+  @override
+  String get splitRoutingResetPageMessage =>
+      'The interface was redesigned and previous selections were reset once. Configure each mode separately. Your new selections will be retained.';
+
+  @override
+  String get splitRoutingConfigure => 'Set up';
+
+  @override
+  String get splitRoutingLater => 'Later';
+
+  @override
+  String get splitRoutingRulesHint =>
+      'Apps entering the VPN still follow traffic rules. Direct rules can bypass the selected proxy.';
+
+  @override
+  String get splitRoutingLimit => 'Select up to 128 apps per mode.';
+
+  @override
+  String get splitRoutingUnsavedTitle => 'Unsaved changes';
+
+  @override
+  String get splitRoutingUnsavedMessage =>
+      'Apply your changes or discard them before leaving.';
+
+  @override
+  String get splitRoutingDiscard => 'Discard';
+
+  @override
+  String get splitRoutingApplyFailed =>
+      'Could not apply or save settings. Check your connection and try again.';
+
+  @override
+  String get routingBlockLeaksCompact => 'Block STUN/WebRTC';
+
+  @override
+  String get routingBlockLeaksSummary =>
+      'Reduce WebRTC traffic bypassing the proxy';
+
+  @override
+  String get routingBypassLocalSummary => 'Local addresses connect directly';
+
+  @override
+  String get routingAdBlockSummary => 'Local domain filter';
 }

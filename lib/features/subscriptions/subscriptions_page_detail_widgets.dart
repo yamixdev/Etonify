@@ -1,5 +1,20 @@
 part of 'subscriptions_page.dart';
 
+// A drag belongs to the page, but editing/selection may still reveal a caret.
+class _StationaryTextScrollPhysics extends ScrollPhysics {
+  const _StationaryTextScrollPhysics({super.parent});
+
+  @override
+  bool get allowUserScrolling => false;
+
+  @override
+  bool get allowImplicitScrolling => true;
+
+  @override
+  _StationaryTextScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      _StationaryTextScrollPhysics(parent: buildParent(ancestor));
+}
+
 class _CountBadge extends StatelessWidget {
   const _CountBadge({required this.label});
 

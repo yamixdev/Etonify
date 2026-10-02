@@ -12,6 +12,88 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test(
+    'cache refresh restarts a service started while the build was pending',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'config-native-start-race-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final target = File('${dir.path}/config.json');
+      await target.writeAsString('old');
+      final runtime = _BlockingRuntime();
+      final lifecycle = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(lifecycle.dispose);
+      var statusReads = 0;
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        connected: false,
+        readConfigPath: () async => target.path,
+        readRuntimeStatus: () async => {
+          'running': ++statusReads > 1,
+          'mode': 'vpn',
+          'recordedServiceAlive': statusReads > 1,
+        },
+      );
+      final result = await coordinator.emitCurrentConfigLogAsync(
+        'split routing settings changed',
+        restartRuntime: true,
+        applyWhenNativeRunning: true,
+        forceFullServiceRestart: true,
+        refreshCachedConfig: true,
+      );
+      expect(result.status, SingboxConfigApplyStatus.applied);
+      expect(runtime.stopCalls, 1);
+      expect(runtime.startCalls, 1);
+      expect(statusReads, greaterThanOrEqualTo(3));
+    },
+  );
+  test('migration interlock rejects native apply and direct start', () async {
+    final runtime = _BlockingRuntime();
+    final lifecycle = RuntimeLifecycleController(runtime: runtime);
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(
+      runtimeLifecycle: lifecycle,
+      allowRuntimeApply: () => false,
+    );
+    final emitted = await coordinator.emitCurrentConfigLogAsync(
+      'migration',
+      restartRuntime: true,
+    );
+    expect(emitted.superseded, isTrue);
+    final applied = await coordinator.applyRuntimeConfig(
+      build: _build('must not apply'),
+      useVpn: true,
+      restartRuntime: true,
+    );
+    expect(applied.superseded, isTrue);
+    final started = await coordinator.startRuntimeWithBuild(
+      _build('must not start'),
+      useVpn: true,
+    );
+    expect(started.success, isFalse);
+    expect(runtime.appliedConfigs, isEmpty);
+  });
+  test(
+    'migration invalidates native cached config without starting VPN',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('config-reset-test-');
+      addTearDown(() => dir.delete(recursive: true));
+      final target = File('${dir.path}/config.json');
+      await target.writeAsString('old split routing');
+      final lifecycle = RuntimeLifecycleController(
+        runtime: _FailingPreparedRuntime(),
+      );
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+      );
+      await coordinator.invalidateCachedRuntimeConfig();
+      expect(await target.exists(), isFalse);
+      await coordinator.invalidateCachedRuntimeConfig();
+    },
+  );
   test('serializes config applies and drops queued stale builds', () async {
     final runtime = _BlockingRuntime();
     final lifecycle = RuntimeLifecycleController(
@@ -456,6 +538,8 @@ SingboxConfigCoordinator _coordinator({
   bool connected = true,
   Duration fullServiceRestartDebounce = const Duration(milliseconds: 450),
   SingboxConfigPathReader? readConfigPath,
+  bool Function()? allowRuntimeApply,
+  SingboxRuntimeStatusReader? readRuntimeStatus,
   SingboxConfigCoordinatorSnapshot Function()? snapshot,
 }) {
   return SingboxConfigCoordinator(
@@ -472,13 +556,16 @@ SingboxConfigCoordinator _coordinator({
     onRuntimeLifecycleTimeout: (_) {},
     cacheStartedBuild: (_) {},
     syncRuntimeState: () async {},
-    readRuntimeStatus: () async => const <String, dynamic>{
-      'running': true,
-      'mode': 'vpn',
-      'recordedServiceAlive': true,
-      'runtimeIntentFresh': true,
-    },
+    readRuntimeStatus:
+        readRuntimeStatus ??
+        () async => const <String, dynamic>{
+          'running': true,
+          'mode': 'vpn',
+          'recordedServiceAlive': true,
+          'runtimeIntentFresh': true,
+        },
     readConfigPath: readConfigPath,
+    allowRuntimeApply: allowRuntimeApply,
     fullServiceRestartDebounce: fullServiceRestartDebounce,
   );
 }

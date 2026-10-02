@@ -1381,4 +1381,26 @@
   "coreRuntimeGenerationLabel": "Runtime generation",
   "coreConfigSchemaLabel": "Configuration schema",
   "coreLastChangeLabel": "Last applied"
+,
+  "splitRoutingApply": "Apply",
+  "splitRoutingEnabled": "Application routing",
+  "splitRoutingSystemApps": "System apps",
+  "splitRoutingOnlySelected": "Selected only",
+  "splitRoutingResetTitle": "Application routing was reset",
+  "splitRoutingResetFailed": "Could not complete the reset. Auto-connect remains paused. Try pressing Connect again.",
+  "splitRoutingResetMessage": "The interface was redesigned. Previous selections were cleared and split routing was disabled. Select apps separately for each mode. VPN was stopped to avoid changing application routes without your confirmation.",
+  "splitRoutingResetPageMessage": "The interface was redesigned and previous selections were reset once. Configure each mode separately. Your new selections will be retained.",
+  "splitRoutingConfigure": "Set up",
+  "splitRoutingLater": "Later",
+  "splitRoutingRulesHint": "Apps entering the VPN still follow traffic rules. Direct rules can bypass the selected proxy.",
+  "splitRoutingLimit": "Select up to 128 apps per mode.",
+  "splitRoutingUnsavedTitle": "Unsaved changes",
+  "splitRoutingUnsavedMessage": "Apply your changes or discard them before leaving.",
+  "splitRoutingDiscard": "Discard",
+  "splitRoutingApplyFailed": "Could not apply or save settings. Check your connection and try again.",
+  "routingBlockLeaksCompact": "Block STUN/WebRTC",
+  "routingBlockLeaksSummary": "Reduce WebRTC traffic bypassing the proxy",
+  "routingBypassLocalSummary": "Local addresses connect directly",
+  "routingAdBlockSummary": "Local domain filter"
+
 }

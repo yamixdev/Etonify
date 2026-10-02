@@ -14,6 +14,152 @@ import 'package:meow_client/features/settings/settings_routing_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  testWidgets(
+    'large text and keyboard keep controls reachable without overflow',
+    (tester) async {
+      await _pumpPage(
+        tester,
+        const RussiaRouteDataStatus.unavailable(),
+        textScale: 1.6,
+        keyboardInset: 300,
+        installedApps: [
+          {'packageName': 'com.example.app', 'label': 'Example'},
+        ],
+        scrollTo: 'Раздельная маршрутизация',
+      );
+      await tester.tap(find.text('Раздельная маршрутизация'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.text('Example'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('split-routing-app-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Example'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('split-routing-apply')), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+  testWidgets('app lists remain independent drafts until Apply', (
+    tester,
+  ) async {
+    var applies = 0;
+    final controller = await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      installedApps: [
+        {'packageName': 'org.telegram.messenger', 'label': 'Telegram'},
+        {'packageName': 'com.example.mail', 'label': 'Mail'},
+      ],
+      scrollTo: 'Раздельная маршрутизация',
+      onSplitRoutingPackagesChanged: (_) => applies++,
+    );
+    await tester.tap(find.text('Раздельная маршрутизация'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.tap(
+      find.byKey(const ValueKey('split-app-org.telegram.messenger')),
+    );
+    await tester.tap(find.text('Вне VPN'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('split-app-com.example.mail')));
+    await tester.tap(find.text('Через VPN'));
+    await tester.pumpAndSettle();
+    expect(applies, 0);
+    expect(controller.splitRoutingMode, SplitRoutingMode.disabled);
+    final telegram = find.descendant(
+      of: find.byKey(const ValueKey('split-app-org.telegram.messenger')),
+      matching: find.byType(Checkbox),
+    );
+    expect(tester.widget<Checkbox>(telegram).value, isTrue);
+    await tester.tap(find.byKey(const ValueKey('split-routing-apply')));
+    await tester.pumpAndSettle();
+    expect(applies, 1);
+    expect(controller.splitRoutingIncludedPackages, ['org.telegram.messenger']);
+    expect(controller.splitRoutingExcludedPackages, ['com.example.mail']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets(
+    'empty cache still loads apps when old selected package is missing',
+    (tester) async {
+      await _pumpPage(
+        tester,
+        const RussiaRouteDataStatus.unavailable(),
+        splitRoutingMode: SplitRoutingMode.proxySelected,
+        splitRoutingPackages: ['com.old.removed'],
+        preloadApps: [
+          {'packageName': 'com.google.android.youtube', 'label': 'YouTube'},
+        ],
+        scrollTo: 'Раздельная маршрутизация',
+      );
+      await tester.tap(find.text('Раздельная маршрутизация'));
+      await tester.pumpAndSettle();
+      expect(find.text('YouTube'), findsOneWidget);
+      expect(find.text('com.old.removed'), findsOneWidget);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+
+  testWidgets('large app catalog builds only viewport and searches packages', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      installedApps: List.generate(
+        1000,
+        (i) => {'packageName': 'com.example.app$i', 'label': 'App $i'},
+      ),
+      scrollTo: 'Раздельная маршрутизация',
+    );
+    await tester.tap(find.text('Раздельная маршрутизация'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox).evaluate().length, lessThan(25));
+    await tester.enterText(find.byType(TextField), 'com.example.app999');
+    await tester.pump(const Duration(milliseconds: 160));
+    await tester.pumpAndSettle();
+    expect(find.text('App 999'), findsOneWidget);
+    expect(find.byType(Checkbox), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('enabled empty app list is never applied as unrestricted VPN', (
+    tester,
+  ) async {
+    List<String>? applied;
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Раздельная маршрутизация',
+      onSplitRoutingPackagesChanged: (v) => applied = v,
+    );
+    await tester.tap(find.text('Раздельная маршрутизация'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byKey(const ValueKey('split-routing-apply')));
+    await tester.pumpAndSettle();
+    expect(applied, isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  testWidgets('split routing opens a dedicated page with independent modes', (
+    tester,
+  ) async {
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Раздельная маршрутизация',
+    );
+    await tester.tap(find.text('Раздельная маршрутизация'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SegmentedButton<SplitRoutingMode>), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byKey(const ValueKey('split-routing-apply')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   testWidgets('traffic rules replace the old smart routing entry', (
     tester,
   ) async {
@@ -21,7 +167,7 @@ void main() {
 
     expect(find.text('Правила трафика'), findsOneWidget);
     expect(find.text('Умная маршрутизация'), findsNothing);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('traffic rules show three presets without duplicate navigation', (
     tester,
@@ -42,7 +188,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('🇷🇺'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('traffic rule card opens details and developer profile', (
     tester,
@@ -78,7 +224,7 @@ void main() {
     await tester.tap(find.byTooltip('Проверено'));
     await tester.pumpAndSettle();
     expect(find.text('Участник проекта Etonify.'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('selected split app keeps name and package on separate rows', (
     tester,
@@ -101,7 +247,7 @@ void main() {
 
     expect(find.text('Telegram'), findsOneWidget);
     expect(find.text('org.telegram.messenger'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('missing selected app does not repeat package as its name', (
     tester,
@@ -116,7 +262,7 @@ void main() {
 
     expect(find.text('Приложение не найдено'), findsOneWidget);
     expect(find.text('com.example.removed'), findsOneWidget);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('selected split app can be removed without reopening picker', (
     tester,
@@ -139,20 +285,30 @@ void main() {
       onSplitRoutingPackagesChanged: (value) => changedPackages = value,
     );
 
-    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.tap(
+      find.byKey(const ValueKey('split-app-org.telegram.messenger')),
+    );
     await tester.pumpAndSettle();
-
+    // Selecting a row is a draft; disable the now-empty mode before applying.
+    expect(changedPackages, isNull);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('split-routing-apply')));
+    await tester.pumpAndSettle();
     expect(changedPackages, isEmpty);
-    expect(find.text('Telegram'), findsNothing);
-  });
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 }
 
-Future<void> _pumpPage(
+Future<AppSettingsController> _pumpPage(
   WidgetTester tester,
   RussiaRouteDataStatus routeStatus, {
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled,
   List<String> splitRoutingPackages = const [],
   List<Map<String, dynamic>> installedApps = const [],
+  List<Map<String, dynamic>>? preloadApps,
+  double textScale = 1,
+  double keyboardInset = 0,
   String scrollTo = 'Правила трафика',
   ValueChanged<List<String>>? onSplitRoutingPackagesChanged,
 }) async {
@@ -183,7 +339,16 @@ Future<void> _pumpPage(
     setBypassLocalNetwork: (_) {},
     setSplitRoutingMode: (_) {},
     setSplitRoutingPackages: onSplitRoutingPackagesChanged ?? (_) {},
-    preloadInstalledApps: () async => installedApps,
+    preloadInstalledApps: () async => preloadApps ?? installedApps,
+    applySplitRoutingSettings: (mode, included, excluded) async {
+      controller.setSplitRoutingSettings(
+        mode: mode,
+        included: included,
+        excluded: excluded,
+      );
+      onSplitRoutingPackagesChanged?.call(controller.splitRoutingPackages);
+      return true;
+    },
   );
 
   await tester.pumpWidget(
@@ -198,7 +363,14 @@ Future<void> _pumpPage(
           () => InstalledAppsCacheNotifier(installedApps),
         ),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            viewInsets: EdgeInsets.only(bottom: keyboardInset),
+          ),
+          child: child!,
+        ),
         locale: Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: [
@@ -212,10 +384,23 @@ Future<void> _pumpPage(
     ),
   );
   await tester.pumpAndSettle();
+  final inSplitPage =
+      scrollTo == 'Telegram' || scrollTo == 'Приложение не найдено';
   await tester.scrollUntilVisible(
-    find.text(scrollTo),
+    find.text(inSplitPage ? 'Раздельная маршрутизация' : scrollTo),
     300,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
+  if (inSplitPage) {
+    await tester.tap(find.text('Раздельная маршрутизация'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text(scrollTo),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+  }
+  return controller;
 }

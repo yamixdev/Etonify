@@ -3447,4 +3447,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get coreLastChangeLabel => 'Последнее применение';
+
+  @override
+  String get splitRoutingApply => 'Применить';
+
+  @override
+  String get splitRoutingEnabled => 'Маршрутизация приложений';
+
+  @override
+  String get splitRoutingSystemApps => 'Системные';
+
+  @override
+  String get splitRoutingOnlySelected => 'Выбранные';
+
+  @override
+  String get splitRoutingResetTitle => 'Раздельная маршрутизация сброшена';
+
+  @override
+  String get splitRoutingResetFailed =>
+      'Не удалось завершить сброс. Автоподключение пока приостановлено. Попробуйте снова нажать подключение.';
+
+  @override
+  String get splitRoutingResetMessage =>
+      'Раздел переработан. Старые списки очищены, раздельная маршрутизация отключена. Выберите приложения заново для каждого режима. VPN остановлен, чтобы маршруты приложений не изменились без вашего подтверждения.';
+
+  @override
+  String get splitRoutingResetPageMessage =>
+      'Раздел переработан, старые списки однократно сброшены. Настройте каждый режим отдельно. При следующих запусках новые списки сохранятся.';
+
+  @override
+  String get splitRoutingConfigure => 'Настроить';
+
+  @override
+  String get splitRoutingLater => 'Позже';
+
+  @override
+  String get splitRoutingRulesHint =>
+      'Приложения внутри VPN также следуют правилам трафика. Прямые правила могут обходить выбранный прокси.';
+
+  @override
+  String get splitRoutingLimit =>
+      'В каждом режиме можно выбрать до 128 приложений.';
+
+  @override
+  String get splitRoutingUnsavedTitle => 'Изменения не сохранены';
+
+  @override
+  String get splitRoutingUnsavedMessage =>
+      'Примените изменения или отмените их перед выходом.';
+
+  @override
+  String get splitRoutingDiscard => 'Отменить изменения';
+
+  @override
+  String get splitRoutingApplyFailed =>
+      'Не удалось применить или сохранить настройки. Проверьте подключение и попробуйте ещё раз.';
+
+  @override
+  String get routingBlockLeaksCompact => 'Блокировать STUN/WebRTC';
+
+  @override
+  String get routingBlockLeaksSummary =>
+      'Ограничивает обход прокси через WebRTC';
+
+  @override
+  String get routingBypassLocalSummary => 'Локальные адреса работают напрямую';
+
+  @override
+  String get routingAdBlockSummary => 'Локальный фильтр доменов';
 }

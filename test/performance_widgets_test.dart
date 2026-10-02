@@ -815,6 +815,85 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'expanded proxy panel stops painting and ticking the covered home',
+    (tester) async {
+      final repaint = ValueNotifier(0);
+      addTearDown(repaint.dispose);
+      var paints = 0;
+      const homeKey = ValueKey('covered-home-paint');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProxyPanelShell(
+            ready: true,
+            onboardingCompleted: true,
+            loading: const SizedBox.shrink(),
+            welcome: const SizedBox.shrink(),
+            visibleRows: 40,
+            hasActiveProfile: true,
+            homeBuilder: (_, _) => CustomPaint(
+              key: homeKey,
+              painter: _PaintProbe(repaint, () => paints++),
+              child: const SizedBox.expand(),
+            ),
+            sheetBuilder: (_, _, _, _, gestures) => Material(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: TextButton(
+                  onPressed: gestures.onHeaderTap,
+                  child: const Text('Open proxies'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final home = find.byKey(homeKey, skipOffstage: false);
+      final originalRender = tester.renderObject(home);
+      await tester.tap(find.text('Open proxies'));
+      await tester.pumpAndSettle();
+      final settledPaints = paints;
+      repaint.value++;
+      await tester.pump();
+      expect(paints, settledPaints);
+      expect(TickerMode.valuesOf(tester.element(home)).enabled, isFalse);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(paints, greaterThan(settledPaints));
+      expect(TickerMode.valuesOf(tester.element(home)).enabled, isTrue);
+      expect(identical(tester.renderObject(home), originalRender), isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'proxy list prepares a bounded buffer ahead of the visible rows',
+    (tester) async {
+      final proxies = List.generate(1000, _performanceProxy);
+      await tester.pumpWidget(_scrollTestPage(proxies));
+      final viewport = tester.getRect(find.byType(ListView));
+      final rows = find
+          .byType(ProxyTile, skipOffstage: false)
+          .evaluate()
+          .toList();
+      expect(rows.length, lessThan(40));
+      expect(
+        rows.any(
+          (row) =>
+              tester
+                  .getRect(find.byWidget(row.widget, skipOffstage: false))
+                  .top >
+              viewport.bottom + viewport.height * .35,
+        ),
+        isTrue,
+        reason:
+            'Upcoming rows should be ready before a fast swipe reveals them',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('sparse proxy panel can expand to the viewport on a tall phone', (
     tester,
   ) async {
@@ -875,6 +954,17 @@ void main() {
     expect(expandedHeight, greaterThanOrEqualTo(viewportHeight - 9));
     expect(tester.takeException(), isNull);
   });
+}
+
+class _PaintProbe extends CustomPainter {
+  _PaintProbe(Listenable repaint, this.onPaint) : super(repaint: repaint);
+  final VoidCallback onPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_PaintProbe oldDelegate) => false;
 }
 
 Widget _scrollTestPage(

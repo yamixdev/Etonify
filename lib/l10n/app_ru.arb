@@ -1381,4 +1381,26 @@
   "coreRuntimeGenerationLabel": "Поколение runtime",
   "coreConfigSchemaLabel": "Схема конфига",
   "coreLastChangeLabel": "Последнее применение"
+,
+  "splitRoutingApply": "Применить",
+  "splitRoutingEnabled": "Маршрутизация приложений",
+  "splitRoutingSystemApps": "Системные",
+  "splitRoutingOnlySelected": "Выбранные",
+  "splitRoutingResetTitle": "Раздельная маршрутизация сброшена",
+  "splitRoutingResetFailed": "Не удалось завершить сброс. Автоподключение пока приостановлено. Попробуйте снова нажать подключение.",
+  "splitRoutingResetMessage": "Раздел переработан. Старые списки очищены, раздельная маршрутизация отключена. Выберите приложения заново для каждого режима. VPN остановлен, чтобы маршруты приложений не изменились без вашего подтверждения.",
+  "splitRoutingResetPageMessage": "Раздел переработан, старые списки однократно сброшены. Настройте каждый режим отдельно. При следующих запусках новые списки сохранятся.",
+  "splitRoutingConfigure": "Настроить",
+  "splitRoutingLater": "Позже",
+  "splitRoutingRulesHint": "Приложения внутри VPN также следуют правилам трафика. Прямые правила могут обходить выбранный прокси.",
+  "splitRoutingLimit": "В каждом режиме можно выбрать до 128 приложений.",
+  "splitRoutingUnsavedTitle": "Изменения не сохранены",
+  "splitRoutingUnsavedMessage": "Примените изменения или отмените их перед выходом.",
+  "splitRoutingDiscard": "Отменить изменения",
+  "splitRoutingApplyFailed": "Не удалось применить или сохранить настройки. Проверьте подключение и попробуйте ещё раз.",
+  "routingBlockLeaksCompact": "Блокировать STUN/WebRTC",
+  "routingBlockLeaksSummary": "Ограничивает обход прокси через WebRTC",
+  "routingBypassLocalSummary": "Локальные адреса работают напрямую",
+  "routingAdBlockSummary": "Локальный фильтр доменов"
+
 }

@@ -7,6 +7,42 @@ import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test(
+    'legacy split routing is reset once without disabling auto-connect',
+    () async {
+      final store = MemoryAppSettingsStore();
+      final initial = await store.loadState();
+      await store.saveState(
+        initial.copyWith(
+          splitRoutingMode: SplitRoutingMode.proxySelected,
+          splitRoutingPackages: ['com.google.android.youtube'],
+          autoConnectOnLaunch: true,
+        ),
+      );
+      final controller = AppBootstrapController(
+        fallbackClientVersionLabel: '0.3.7',
+        loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+      );
+      final result = await controller.load(providedStore: store);
+      expect(result.state.splitRoutingMode, SplitRoutingMode.disabled);
+      expect(result.state.splitRoutingPackages, isEmpty);
+      expect(result.state.autoConnectOnLaunch, isTrue);
+      expect(
+        (await store.loadState()).splitRoutingMode,
+        SplitRoutingMode.disabled,
+      );
+
+      await store.saveState(
+        result.state.copyWith(
+          splitRoutingMode: SplitRoutingMode.proxySelected,
+          splitRoutingPackages: ['org.mozilla.firefox'],
+        ),
+      );
+      final next = await controller.load(providedStore: store);
+      expect(next.state.splitRoutingMode, SplitRoutingMode.proxySelected);
+      expect(next.state.splitRoutingPackages, ['org.mozilla.firefox']);
+    },
+  );
   test('memory bootstrap skips durable storage initialization', () async {
     var hiveInitialized = false;
     var subscriptionsInitialized = false;

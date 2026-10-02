@@ -17,6 +17,12 @@ typedef SetRussiaDnsDirectResolverCommand = void Function(String value);
 typedef SetBypassLocalNetworkCommand = void Function(bool value);
 typedef SetSplitRoutingModeCommand = void Function(SplitRoutingMode value);
 typedef SetSplitRoutingPackagesCommand = void Function(List<String> value);
+typedef ApplySplitRoutingSettingsCommand =
+    Future<bool> Function(
+      SplitRoutingMode mode,
+      List<String> included,
+      List<String> excluded,
+    );
 typedef PreloadInstalledAppsCommand =
     Future<List<Map<String, dynamic>>> Function();
 typedef SetDnsDirectPresetCommand = void Function(String value);
@@ -55,6 +61,7 @@ class AppSettingsCommands {
   SetBypassLocalNetworkCommand? _setBypassLocalNetwork;
   SetSplitRoutingModeCommand? _setSplitRoutingMode;
   SetSplitRoutingPackagesCommand? _setSplitRoutingPackages;
+  ApplySplitRoutingSettingsCommand? _applySplitRoutingSettings;
   PreloadInstalledAppsCommand? _preloadInstalledApps;
   SetDnsDirectPresetCommand? _setDnsDirectPreset;
   SetDnsDirectResolverCommand? _setDnsDirectResolver;
@@ -210,6 +217,7 @@ class AppSettingsCommands {
     required SetSplitRoutingModeCommand setSplitRoutingMode,
     required SetSplitRoutingPackagesCommand setSplitRoutingPackages,
     required PreloadInstalledAppsCommand preloadInstalledApps,
+    ApplySplitRoutingSettingsCommand? applySplitRoutingSettings,
   }) {
     _setBlockLeaks = setBlockLeaks;
     _setAdBlockEnabled = setAdBlockEnabled;
@@ -222,6 +230,7 @@ class AppSettingsCommands {
     _setBypassLocalNetwork = setBypassLocalNetwork;
     _setSplitRoutingMode = setSplitRoutingMode;
     _setSplitRoutingPackages = setSplitRoutingPackages;
+    _applySplitRoutingSettings = applySplitRoutingSettings;
     _preloadInstalledApps = preloadInstalledApps;
   }
 
@@ -237,6 +246,7 @@ class AppSettingsCommands {
     _setBypassLocalNetwork = null;
     _setSplitRoutingMode = null;
     _setSplitRoutingPackages = null;
+    _applySplitRoutingSettings = null;
     _preloadInstalledApps = null;
   }
 
@@ -291,6 +301,16 @@ class AppSettingsCommands {
 
   void setSplitRoutingPackages(List<String> value) =>
       _setSplitRoutingPackages?.call(value);
+
+  Future<bool> applySplitRoutingSettings(
+    SplitRoutingMode mode,
+    List<String> included,
+    List<String> excluded,
+  ) async {
+    final command = _applySplitRoutingSettings;
+    if (command == null) throw StateError('Split routing command is not bound');
+    return command(mode, included, excluded);
+  }
 
   Future<List<Map<String, dynamic>>> preloadInstalledApps() async {
     final command = _preloadInstalledApps;

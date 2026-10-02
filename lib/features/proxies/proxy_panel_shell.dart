@@ -585,7 +585,25 @@ class _ProxyPanelShellState extends State<ProxyPanelShell>
 
           return Stack(
             children: [
-              RepaintBoundary(child: widget.homeBuilder(context, metrics)),
+              ValueListenableBuilder<ProxyPanelMetrics>(
+                valueListenable: _metricsNotifier,
+                child: RepaintBoundary(
+                  child: widget.homeBuilder(context, metrics),
+                ),
+                builder: (context, liveMetrics, child) {
+                  // Keep the home state, but avoid painting and animating it
+                  // behind the opaque, fully expanded proxy list.
+                  final covered =
+                      sheet != null &&
+                      liveMetrics.canFillScreen &&
+                      liveMetrics.atMaxExtent &&
+                      !liveMetrics.animating;
+                  return TickerMode(
+                    enabled: !covered,
+                    child: Offstage(offstage: covered, child: child),
+                  );
+                },
+              ),
               if (sheet != null) ...[
                 ValueListenableBuilder<ProxyPanelMetrics>(
                   valueListenable: _metricsNotifier,

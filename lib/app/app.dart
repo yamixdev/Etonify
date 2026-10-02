@@ -99,6 +99,7 @@ import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/singbox/core_config_migration.dart';
+import 'package:meow_client/app/split_routing_reset_session.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
@@ -227,6 +228,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final ProxyRuntimeController _proxyRuntime = ProxyRuntimeController();
   late final LatencyCoordinator _latencyCoordinator;
   CoreConfigMigrationResult? _pendingCoreConfigMigration;
+  SplitRoutingResetSession _splitRoutingResetSession = SplitRoutingResetSession(
+    pending: false,
+  );
   final GroupUrlTestScheduler _groupUrlTestScheduler = GroupUrlTestScheduler();
   final DeferredAutomaticUrlTest _deferredAutomaticUrlTest =
       DeferredAutomaticUrlTest();
@@ -952,7 +956,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _handleRuntimeLogIssue(String reason, String message) {
-    if (!mounted ||
+    if (_splitRoutingResetSession.pending ||
+        !mounted ||
         !_connected ||
         !_foregroundLifecycleActive ||
         _runtimeTransitionInProgress) {
@@ -2148,6 +2153,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setBypassLocalNetwork: _setBypassLocalNetwork,
       setSplitRoutingMode: _setSplitRoutingMode,
       setSplitRoutingPackages: _setSplitRoutingPackages,
+      applySplitRoutingSettings: _applySplitRoutingSettings,
       preloadInstalledApps: _warmInstalledApps,
     );
     _appSettingsCommands.bindDnsHandlers(
@@ -2318,6 +2324,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       cacheStartedBuild: _cacheLastStartedBuild,
       syncRuntimeState: _syncRuntimeState,
       refreshCapabilities: _refreshCoreCapabilities,
+      allowRuntimeApply: () => !_splitRoutingResetSession.pending,
     );
     _appTrafficMonitor = AppTrafficMonitor(
       host: AppTrafficMonitorHost(
@@ -2965,6 +2972,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
     setState(() {
       _pendingCoreConfigMigration = pendingCoreConfigMigration;
+      _splitRoutingResetSession = SplitRoutingResetSession(
+        pending: state.splitRoutingResetPending,
+      );
       _store = store;
       _ownsStore = ownsStore;
       _clientVersionLabel = appVersionInfo.displayVersion;
@@ -3056,8 +3066,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        unawaited(_maybeShowHwidDefaultNotice());
-        unawaited(_maybeAutoConnectOnLaunch());
+        unawaited(_finishStartupNotices());
       }
     });
 
@@ -3075,6 +3084,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _maybeAutoConnectOnLaunch() async {
+    if (_splitRoutingResetSession.suppressAutoConnect) return;
     if (_launchAutoConnectAttempted || !Platform.isAndroid) return;
     _launchAutoConnectAttempted = true;
     if (!_settings.autoConnectOnLaunch) return;
@@ -3092,6 +3102,113 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     AppLogStore.info('runtime', 'auto-connect requested on app launch');
     await _startConnection(source: 'auto_launch');
+  }
+
+  Future<void> _finishStartupNotices() async {
+    await _handleSplitRoutingReset();
+    if (!mounted || _splitRoutingResetSession.pending) return;
+    await _maybeShowHwidDefaultNotice();
+    if (mounted) await _maybeAutoConnectOnLaunch();
+  }
+
+  Future<void> _handleSplitRoutingReset() async {
+    if (!_ready || !mounted || !_splitRoutingResetSession.pending) return;
+    try {
+      final openSettings = await _splitRoutingResetSession.handle(
+        stop: () async {
+          _cancelAutomaticRuntimeRecovery('split_routing_reset');
+          _runtimeIntent.suppressQueuedRestart();
+          _configCoordinator.cancelPendingWork(reason: 'split routing reset');
+          if (!await _performRuntimeStop(reason: 'split_routing_reset')) {
+            return false;
+          }
+          await _configCoordinator.invalidateCachedRuntimeConfig();
+          return true;
+        },
+        showNotice: () async {
+          final context = _navigatorKey.currentContext;
+          if (!mounted || context == null || !context.mounted) return null;
+          final l10n = AppLocalizations.of(context);
+          return showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (c) => AlertDialog(
+              title: Text(l10n.splitRoutingResetTitle),
+              content: Text(l10n.splitRoutingResetMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: Text(l10n.splitRoutingLater),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(c, true),
+                  child: Text(l10n.splitRoutingConfigure),
+                ),
+              ],
+            ),
+          );
+        },
+        acknowledge: () async {
+          // Replace the invalidated native tile snapshot, but never start VPN.
+          if (_activeProfileId.isNotEmpty) {
+            if (!await _ensureActiveSubscriptionHydratedForRuntime()) {
+              throw StateError(
+                'Active profile could not be loaded for split routing reset',
+              );
+            }
+            final build = await _configCoordinator
+                .buildCurrentSingboxConfigInBackground();
+            if (build == null || !build.hasPreparedConfig) {
+              throw StateError(
+                'Split routing reset config was superseded or unavailable',
+              );
+            }
+            await _configCoordinator.promotePreparedConfigBuild(build);
+          }
+          ref.read(appSettingsProvider.notifier).mutate((controller) {
+            controller.splitRoutingResetPending = false;
+            return const AppSettingsChange(changed: true);
+          });
+          final state = _currentSettingsState();
+          try {
+            await _persistState();
+          } catch (_) {
+            if (mounted) {
+              ref.read(appSettingsProvider.notifier).mutate((controller) {
+                controller.splitRoutingResetPending = true;
+                return const AppSettingsChange(changed: true);
+              });
+            }
+            await _configCoordinator.invalidateCachedRuntimeConfig();
+            rethrow;
+          }
+          if (!mounted) return;
+          _lastAppliedSettingsState = state;
+          _runtimeIntent.clearQueuedRestartSuppression();
+        },
+      );
+      if (openSettings == true && mounted) {
+        await _navigatorKey.currentState?.push<void>(
+          MaterialPageRoute(
+            builder: (_) =>
+                const SettingsSplitRoutingPage(showResetExplanation: true),
+          ),
+        );
+      }
+      if (mounted && !_splitRoutingResetSession.pending) {
+        _startSubscriptionAutoRefresh();
+      }
+    } catch (error) {
+      AppLogStore.error('split routing reset', 'Reset remains pending: $error');
+      if (mounted) {
+        final context = _navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          _showAppSnackBar(
+            AppLocalizations.of(context).splitRoutingResetFailed,
+          );
+        }
+      }
+    }
   }
 
   void _scheduleDeferredBootstrapStatuses({
@@ -3272,14 +3389,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
     });
   }
 
-  Future<void> _runSettingsConfigTransaction({
+  Future<bool> _runSettingsConfigTransaction({
     required AppSettingsChange change,
     required AppSettingsState previousState,
     required int generation,
   }) async {
     if (_offlineUrlTestSession != null && !_offlineUrlTestSession!.isTerminal) {
       if (!await _cancelOfflineProbeForConfigChange('settings_changed')) {
-        return;
+        if (mounted && generation == _settingsConfigApplyGeneration) {
+          _pendingSettingsConfigApplyGeneration = 0;
+          _restoreAppliedSettings(
+            previousState,
+            reason: 'offline probe cancellation failed',
+          );
+        }
+        return false;
       }
     }
     final reason = change.configReason ?? 'settings changed';
@@ -3288,22 +3412,34 @@ class _MeowClientState extends ConsumerState<MeowClient>
       restartRuntime: change.restartRuntime,
       applyWhenNativeRunning: true,
       forceFullServiceRestart: change.forceFullServiceRestart,
+      refreshCachedConfig: reason == 'split routing settings changed',
     );
     if (!mounted || generation != _settingsConfigApplyGeneration) {
-      return;
+      return false;
     }
     _pendingSettingsConfigApplyGeneration = 0;
     if (result.success) {
       _lastAppliedSettingsState = _currentSettingsState();
-      await _persistState();
+      try {
+        await _persistState();
+      } catch (error) {
+        AppLogStore.error('settings transaction', 'Persistence failed: $error');
+        return false;
+      }
       AppLogStore.info(
         'settings transaction',
         'applied reason=$reason configGeneration=$generation '
             'runtimeGeneration=${result.runtimeGeneration}',
       );
-      return;
+      return true;
     }
-    if (result.superseded) return;
+    if (result.superseded) {
+      _restoreAppliedSettings(
+        previousState,
+        reason: 'settings apply superseded',
+      );
+      return false;
+    }
     _restoreAppliedSettings(
       _lastAppliedSettingsState ?? previousState,
       reason: result.error,
@@ -3313,6 +3449,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       'rolled back reason=$reason configGeneration=$generation '
           'error=${result.error}',
     );
+    return false;
   }
 
   void _restoreAppliedSettings(
@@ -3631,7 +3768,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   void _startSubscriptionAutoRefresh() {
     _subscriptionAutoRefreshTimer?.cancel();
     _subscriptionAutoRefreshTimer = null;
-    if (!mounted || !_foregroundLifecycleActive || !_ready) {
+    if (_splitRoutingResetSession.pending ||
+        !mounted ||
+        !_foregroundLifecycleActive ||
+        !_ready) {
       return;
     }
     if (!_automaticSubscriptionUpdatesBlocked) {
@@ -4005,6 +4145,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _startConnection({required String source}) async {
+    if (_splitRoutingResetSession.pending) {
+      await _handleSplitRoutingReset();
+      return;
+    }
     if (_runtimeTransitionInProgress ||
         _starting ||
         _invalidOutboundRetryScheduled) {
@@ -5876,13 +6020,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _resetSettingsToDefaults() async {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    final defaults = AppSettingsController().toState(
-      onboardingCompleted: _onboardingCompleted,
-      acceptedLegalVersion: _acceptedLegalVersion,
-      acceptedLegalAtMillis: _acceptedLegalAtMillis,
-      activeProfileId: _activeProfileId,
-      selectedProxyTag: _selectedProxyTag,
-    );
+    final defaults = AppSettingsController()
+        .toState(
+          onboardingCompleted: _onboardingCompleted,
+          acceptedLegalVersion: _acceptedLegalVersion,
+          acceptedLegalAtMillis: _acceptedLegalAtMillis,
+          activeProfileId: _activeProfileId,
+          selectedProxyTag: _selectedProxyTag,
+        )
+        .copyWith(
+          splitRoutingSchemaVersion: _settings.splitRoutingSchemaVersion,
+          splitRoutingResetPending: _settings.splitRoutingResetPending,
+        );
     await _applySettingsState(
       defaults,
       configReason: 'settings reset to defaults',
@@ -6126,6 +6275,67 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     _applySettingsChange(() => _settings.setSplitRoutingMode(value));
+  }
+
+  Future<bool> _applySplitRoutingSettings(
+    SplitRoutingMode mode,
+    List<String> included,
+    List<String> excluded,
+  ) async {
+    if (_splitRoutingResetSession.pending) return false;
+    final previous = _lastAppliedSettingsState ?? _currentSettingsState();
+    late AppSettingsChange change;
+    setState(() {
+      change = ref
+          .read(appSettingsProvider.notifier)
+          .mutate(
+            (controller) => controller.setSplitRoutingSettings(
+              mode: mode,
+              included: included,
+              excluded: excluded,
+            ),
+          );
+    });
+    if (!change.changed) {
+      // Retry a previous persistence failure even if runtime settings already
+      // match the draft. Equality alone is not proof of a completed apply.
+      await _persistState();
+      return true;
+    }
+    if (change.configReason == null) {
+      try {
+        await _persistState();
+      } catch (_) {
+        if (mounted) {
+          ref.read(appSettingsProvider.notifier).hydrate(previous);
+        }
+        rethrow;
+      }
+      _lastAppliedSettingsState = _currentSettingsState();
+      return true;
+    }
+    _settingsConfigApplyTimer?.cancel();
+    _settingsConfigApplyTimer = null;
+    _configCoordinator.cancelPendingWork(reason: 'split routing apply');
+    final generation = ++_settingsConfigApplyGeneration;
+    _pendingSettingsConfigApplyGeneration = generation;
+    final applied = await _runSettingsConfigTransaction(
+      change: change,
+      previousState: previous,
+      generation: generation,
+    );
+    return applied &&
+        mounted &&
+        generation == _settingsConfigApplyGeneration &&
+        _settings.splitRoutingMode == mode &&
+        listEquals(
+          _settings.splitRoutingIncludedPackages,
+          normalizeSplitRoutingPackages(included),
+        ) &&
+        listEquals(
+          _settings.splitRoutingExcludedPackages,
+          normalizeSplitRoutingPackages(excluded),
+        );
   }
 
   void _setSplitRoutingPackages(List<String> value) {
@@ -8006,7 +8216,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _maybeShowHwidDefaultNotice() async {
-    if (_hwidNoticeDialogShowing || !_ready || !mounted) {
+    if (_splitRoutingResetSession.pending ||
+        _hwidNoticeDialogShowing ||
+        !_ready ||
+        !mounted) {
       return;
     }
     if (!(_onboardingCompleted && _legalAccepted)) {

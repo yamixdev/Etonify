@@ -7,6 +7,31 @@ import 'package:meow_client/data/update/app_update_channel.dart';
 
 void main() {
   test(
+    'legacy split import replaces active bank and preserves migration metadata',
+    () {
+      final store = _TestSettingsStore();
+      final current = store
+          .mapState({})
+          .copyWith(
+            splitRoutingSchemaVersion: 1,
+            splitRoutingResetPending: true,
+            splitRoutingIncludedPackages: ['com.old.app'],
+            splitRoutingExcludedPackages: ['com.other.app'],
+          );
+      final restored = store.mergeSafeImportMap(current, {
+        'split_routing_mode': 'proxy_selected',
+        'split_routing_packages': 'com.new.app',
+        'split_routing_schema': '0',
+        'split_routing_reset_pending': '0',
+      });
+      expect(restored.splitRoutingIncludedPackages, ['com.new.app']);
+      expect(restored.splitRoutingExcludedPackages, ['com.other.app']);
+      expect(restored.splitRoutingPackages, ['com.new.app']);
+      expect(restored.splitRoutingSchemaVersion, 1);
+      expect(restored.splitRoutingResetPending, isTrue);
+    },
+  );
+  test(
     'core settings round trip and scoped reset retains entry acknowledgement',
     () {
       final store = _TestSettingsStore();

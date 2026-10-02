@@ -445,6 +445,75 @@ void main() {
   );
 
   _testSubscriptionWidgets(
+    'name and URL stay fixed with an elastic parent scroll behavior',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(
+        tester,
+        'large-profile',
+        'Large profile',
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+        ),
+      );
+      final outer = tester.state<ScrollableState>(_detailsScrollable());
+      final name = find.byKey(const ValueKey('subscription_profile_name'));
+      final url = find.byType(SelectableText).first;
+      for (final field in [name, url]) {
+        outer.position.jumpTo(0);
+        await tester.pump();
+        final inner = tester.state<ScrollableState>(
+          find.descendant(of: field, matching: find.byType(Scrollable)).first,
+        );
+        final gesture = await tester.startGesture(tester.getCenter(field));
+        await gesture.moveBy(const Offset(0, -20));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, -60));
+        await tester.pump();
+        expect(inner.position.pixels, 0);
+        expect(outer.position.pixels, greaterThan(0), reason: '$field');
+        await gesture.up();
+        await _pumpUi(tester);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'long profile names still reveal the caret while editing',
+    (tester) async {
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      final field = find.byKey(const ValueKey('subscription_profile_name'));
+      final longName = List.filled(30, 'Long profile name').join(' ');
+      await tester.enterText(field, longName);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      final inner = tester.state<ScrollableState>(
+        find.descendant(of: field, matching: find.byType(Scrollable)).first,
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(inner.position.pixels, greaterThan(0));
+      final editable = tester.state<EditableTextState>(
+        find.descendant(of: field, matching: find.byType(EditableText)),
+      );
+      final caret = editable.renderEditable.getLocalRectForCaret(
+        TextPosition(offset: longName.length),
+      );
+      final caretBottom = editable.renderEditable.localToGlobal(
+        caret.bottomLeft,
+      );
+      expect(
+        caretBottom.dy,
+        lessThanOrEqualTo(tester.getRect(field).bottom + 1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
     'advanced settings retain their height during the closing animation',
     (tester) async {
       await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
@@ -1194,8 +1263,17 @@ Subscription _largeProfile() => Subscription(
   ],
 );
 
-Future<void> _openDetails(WidgetTester tester, String id, String name) async {
-  await _openSheet(tester, activeSubscriptionId: id);
+Future<void> _openDetails(
+  WidgetTester tester,
+  String id,
+  String name, {
+  ScrollBehavior? scrollBehavior,
+}) async {
+  await _openSheet(
+    tester,
+    activeSubscriptionId: id,
+    scrollBehavior: scrollBehavior,
+  );
   await _pumpUntilFound(tester, find.text(name));
   await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
   await tester.pump();
@@ -1323,11 +1401,13 @@ Future<void> _openSheet(
   String? activeSubscriptionId,
   Locale locale = const Locale('en'),
   double textScale = 1,
+  ScrollBehavior? scrollBehavior,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      scrollBehavior: scrollBehavior,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(
           context,

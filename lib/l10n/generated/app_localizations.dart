@@ -6101,6 +6101,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last applied'**
   String get coreLastChangeLabel;
+
+  /// No description provided for @splitRoutingApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get splitRoutingApply;
+
+  /// No description provided for @splitRoutingEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Application routing'**
+  String get splitRoutingEnabled;
+
+  /// No description provided for @splitRoutingSystemApps.
+  ///
+  /// In en, this message translates to:
+  /// **'System apps'**
+  String get splitRoutingSystemApps;
+
+  /// No description provided for @splitRoutingOnlySelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected only'**
+  String get splitRoutingOnlySelected;
+
+  /// No description provided for @splitRoutingResetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Application routing was reset'**
+  String get splitRoutingResetTitle;
+
+  /// No description provided for @splitRoutingResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete the reset. Auto-connect remains paused. Try pressing Connect again.'**
+  String get splitRoutingResetFailed;
+
+  /// No description provided for @splitRoutingResetMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The interface was redesigned. Previous selections were cleared and split routing was disabled. Select apps separately for each mode. VPN was stopped to avoid changing application routes without your confirmation.'**
+  String get splitRoutingResetMessage;
+
+  /// No description provided for @splitRoutingResetPageMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The interface was redesigned and previous selections were reset once. Configure each mode separately. Your new selections will be retained.'**
+  String get splitRoutingResetPageMessage;
+
+  /// No description provided for @splitRoutingConfigure.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up'**
+  String get splitRoutingConfigure;
+
+  /// No description provided for @splitRoutingLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get splitRoutingLater;
+
+  /// No description provided for @splitRoutingRulesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Apps entering the VPN still follow traffic rules. Direct rules can bypass the selected proxy.'**
+  String get splitRoutingRulesHint;
+
+  /// No description provided for @splitRoutingLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Select up to 128 apps per mode.'**
+  String get splitRoutingLimit;
+
+  /// No description provided for @splitRoutingUnsavedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved changes'**
+  String get splitRoutingUnsavedTitle;
+
+  /// No description provided for @splitRoutingUnsavedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply your changes or discard them before leaving.'**
+  String get splitRoutingUnsavedMessage;
+
+  /// No description provided for @splitRoutingDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get splitRoutingDiscard;
+
+  /// No description provided for @splitRoutingApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply or save settings. Check your connection and try again.'**
+  String get splitRoutingApplyFailed;
+
+  /// No description provided for @routingBlockLeaksCompact.
+  ///
+  /// In en, this message translates to:
+  /// **'Block STUN/WebRTC'**
+  String get routingBlockLeaksCompact;
+
+  /// No description provided for @routingBlockLeaksSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Reduce WebRTC traffic bypassing the proxy'**
+  String get routingBlockLeaksSummary;
+
+  /// No description provided for @routingBypassLocalSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Local addresses connect directly'**
+  String get routingBypassLocalSummary;
+
+  /// No description provided for @routingAdBlockSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Local domain filter'**
+  String get routingAdBlockSummary;
 }
 
 class _AppLocalizationsDelegate

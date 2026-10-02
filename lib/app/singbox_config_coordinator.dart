@@ -256,6 +256,7 @@ class SingboxConfigCoordinator {
     SingboxRuntimeStatusReader? readRuntimeStatus,
     SingboxConfigPathReader? readConfigPath,
     SingboxConfigCapabilitiesRefresher? refreshCapabilities,
+    bool Function()? allowRuntimeApply,
     this.fullServiceRestartDebounce = const Duration(milliseconds: 450),
   }) : _readSnapshot = readSnapshot,
        _isMounted = isMounted,
@@ -273,7 +274,8 @@ class SingboxConfigCoordinator {
        _readRuntimeStatus = readRuntimeStatus ?? SingboxRuntime.instance.status,
        _readConfigPath =
            readConfigPath ?? SingboxRuntime.instance.getConfigPath,
-       _refreshCapabilities = refreshCapabilities;
+       _refreshCapabilities = refreshCapabilities,
+       _allowRuntimeApply = allowRuntimeApply ?? (() => true);
 
   final Duration fullServiceRestartDebounce;
 
@@ -293,6 +295,7 @@ class SingboxConfigCoordinator {
   final SingboxRuntimeStatusReader _readRuntimeStatus;
   final SingboxConfigPathReader _readConfigPath;
   final SingboxConfigCapabilitiesRefresher? _refreshCapabilities;
+  final bool Function() _allowRuntimeApply;
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
@@ -363,8 +366,15 @@ class SingboxConfigCoordinator {
     required bool restartRuntime,
     bool applyWhenNativeRunning = false,
     bool forceFullServiceRestart = false,
+    bool refreshCachedConfig = false,
   }) async {
     var snapshot = _readSnapshot();
+    if (!_allowRuntimeApply()) {
+      return const SingboxConfigApplyResult(
+        status: SingboxConfigApplyStatus.superseded,
+        reason: 'startup_migration_pending',
+      );
+    }
     var applyToRuntime =
         snapshot.connected || snapshot.runtimeTransitionInProgress;
     if (!applyToRuntime &&
@@ -374,16 +384,31 @@ class SingboxConfigCoordinator {
       );
       applyToRuntime = status['running'] == true;
     }
-    final generation = applyToRuntime ? ++_runtimeConfigApplyGeneration : 0;
+    var generation = applyToRuntime ? ++_runtimeConfigApplyGeneration : 0;
     if (applyToRuntime && _isMounted()) {
       _setPhase(SingboxConfigCoordinatorPhase.reconfiguring);
     }
     final SingboxConfigBuildResult? build;
     try {
       build = await buildCurrentSingboxConfigInBackground(
-        prepareConfig: applyToRuntime,
+        prepareConfig: applyToRuntime || refreshCachedConfig,
         returnConfig: applyToRuntime,
       );
+      if (!applyToRuntime && refreshCachedConfig && build != null) {
+        // Building can take time; a native tile may start the service meanwhile.
+        final status = await _runtimeStatusSnapshot(
+          reason: 'cached_config_promotion',
+        );
+        applyToRuntime =
+            status['running'] == true ||
+            status['recordedServiceAlive'] == true ||
+            status['runtimeIntentFresh'] == true;
+        if (applyToRuntime) {
+          generation = ++_runtimeConfigApplyGeneration;
+        } else {
+          await promotePreparedConfigBuild(build);
+        }
+      }
     } catch (error, stackTrace) {
       AppLogStore.error(
         'sing-box config',
@@ -495,7 +520,9 @@ class SingboxConfigCoordinator {
     _PreparedConfigTransaction? preparedConfigTransaction;
     var runtimeApplySucceeded = false;
     try {
-      if (!_isMounted() || !_isCurrentApply(generation)) {
+      if (!_allowRuntimeApply() ||
+          !_isMounted() ||
+          !_isCurrentApply(generation)) {
         return _recordApplyResult(
           SingboxConfigApplyResult(
             status: SingboxConfigApplyStatus.superseded,
@@ -509,7 +536,9 @@ class SingboxConfigCoordinator {
         restartRuntime: restartRuntime,
         forceFullServiceRestart: forceFullServiceRestart,
       );
-      if (!_isMounted() || !_isCurrentApply(generation)) {
+      if (!_allowRuntimeApply() ||
+          !_isMounted() ||
+          !_isCurrentApply(generation)) {
         return _recordApplyResult(
           SingboxConfigApplyResult(
             status: SingboxConfigApplyStatus.superseded,
@@ -649,6 +678,15 @@ class SingboxConfigCoordinator {
     SingboxConfigBuildResult build, {
     required bool useVpn,
   }) {
+    if (!_allowRuntimeApply()) {
+      discardPreparedConfigCandidate(build);
+      return Future.value(
+        const RuntimeLifecycleResult.failure(
+          policy: RuntimeApplyPolicy.fullServiceRestart,
+          error: 'startup_migration_pending',
+        ),
+      );
+    }
     return _runtimeLifecycle.startRuntimeWithBuild(
       build: build,
       useVpn: useVpn,
@@ -848,6 +886,15 @@ class SingboxConfigCoordinator {
       sourcePath: build.configPath!,
       targetPath: targetPath,
     );
+  }
+
+  /// Call only after the native service has stopped. Prevents the Android tile
+  /// from reusing a configuration invalidated by a settings migration.
+  Future<void> invalidateCachedRuntimeConfig() async {
+    final path = await ensureSingboxConfigPath();
+    if (path == null || path.trim().isEmpty) return;
+    final file = File(path);
+    if (await file.exists()) await file.delete();
   }
 
   Future<_PreparedConfigTransaction?> _beginPreparedConfigTransaction(

@@ -183,6 +183,38 @@ void main() {
   });
 
   testWidgets(
+    'public IP value follows its heading without a button-sized gap',
+    (tester) async {
+      useTallViewport(tester);
+      final notifier = ValueNotifier(snapshot());
+      addTearDown(notifier.dispose);
+      final controller = PublicIpController(
+        load: () async => PublicIpInfo.fromTrace('ip=203.0.113.8\nloc=SE'),
+      );
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(app(notifier, publicIpController: controller));
+      await tester.pump();
+      final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
+      final title = find.descendant(of: card, matching: find.text('Ваш IP'));
+      final value = find.descendant(
+        of: card,
+        matching: find.text('203.0.113.8'),
+      );
+      expect(
+        tester.getTopLeft(value).dy - tester.getBottomLeft(title).dy,
+        lessThanOrEqualTo(20),
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('public-ip-refresh'))).height,
+        greaterThanOrEqualTo(48),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets(
     'opening fetches once, updates preserve IP and country on failure',
     (tester) async {
       useTallViewport(tester);

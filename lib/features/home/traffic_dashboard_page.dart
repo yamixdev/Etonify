@@ -539,9 +539,32 @@ class _PublicIpSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _SectionTitle(
-                icon: Icons.public_rounded,
-                label: l10n.trafficDashboardPublicIp,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SectionTitle(
+                    icon: Icons.public_rounded,
+                    label: l10n.trafficDashboardPublicIp,
+                  ),
+                  const Gap(12),
+                  Row(
+                    children: [
+                      CountryFlagBadge(
+                        countryCode: info?.countryCode ?? '',
+                        size: 28,
+                      ),
+                      const Gap(10),
+                      Expanded(
+                        child: Text(
+                          _displayIp(info?.ip ?? '', hideIp, l10n),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
             IconButton(
@@ -560,21 +583,6 @@ class _PublicIpSection extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh_rounded),
-            ),
-          ],
-        ),
-        const Gap(4),
-        Row(
-          children: [
-            CountryFlagBadge(countryCode: info?.countryCode ?? '', size: 28),
-            const Gap(10),
-            Expanded(
-              child: Text(
-                _displayIp(info?.ip ?? '', hideIp, l10n),
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
             ),
           ],
         ),

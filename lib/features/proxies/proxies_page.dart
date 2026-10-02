@@ -39,9 +39,9 @@ const _kProxySheetHeaderHeight = 116.0;
 const _kProxySheetCompactHeaderHeight = 100.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
 const _kProxySheetRowExtent = proxyPanelRowExtent;
-const _kProxyListScrollCacheExtent = ScrollCacheExtent.pixels(
-  _kProxySheetRowExtent * 2,
-);
+// Prepare upcoming rows before a fast swipe reaches them. The buffer scales
+// with the viewport rather than the subscription size, keeping long lists lazy.
+const _kProxyListScrollCacheExtent = ScrollCacheExtent.viewport(0.5);
 const _kProxySheetHeaderCollapseDistance = 48.0;
 const _kProxySheetHeaderBlurStart = 0.0;
 

@@ -134,6 +134,20 @@ class AppBootstrapController {
     }
 
     final appVersionInfo = await appVersionInfoFuture;
+    if (state.splitRoutingSchemaVersion < 1) {
+      state = state.copyWith(
+        splitRoutingSchemaVersion: 1,
+        splitRoutingResetPending:
+            state.splitRoutingMode != SplitRoutingMode.disabled,
+        splitRoutingMode: SplitRoutingMode.disabled,
+        splitRoutingPackages: const [],
+        splitRoutingIncludedPackages: const [],
+        splitRoutingExcludedPackages: const [],
+      );
+      // Persist before touching the native VPN. A crash must not repeat the
+      // reset or lose the pending notice/auto-connect interlock.
+      await store.saveState(state);
+    }
     // The native capability bridge is needed for migration planning, but it
     // must not compete with encrypted Hive I/O during cold start. On slower
     // devices that contention was visible as a blank 1–3 second launch.

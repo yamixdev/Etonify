@@ -40,6 +40,7 @@ class AppSettingsImpactRegistry {
     'bypass local network changed',
     'split routing mode changed',
     'split routing packages changed',
+    'split routing settings changed',
     'experimental fakeip changed',
   };
 
@@ -172,6 +173,10 @@ class AppSettingsController {
   bool bypassLocalNetwork = true;
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled;
   List<String> splitRoutingPackages = const <String>[];
+  List<String> splitRoutingIncludedPackages = const [];
+  List<String> splitRoutingExcludedPackages = const [];
+  int splitRoutingSchemaVersion = 0;
+  bool splitRoutingResetPending = false;
   String singBoxLogLevel = 'warning';
   bool experimentalTcpFastOpen = true;
   bool experimentalTcpMultiPath = false;
@@ -264,6 +269,10 @@ class AppSettingsController {
       bypassLocalNetwork: bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages,
+      splitRoutingIncludedPackages: splitRoutingIncludedPackages,
+      splitRoutingExcludedPackages: splitRoutingExcludedPackages,
+      splitRoutingSchemaVersion: splitRoutingSchemaVersion,
+      splitRoutingResetPending: splitRoutingResetPending,
       singBoxLogLevel: singBoxLogLevel,
       experimentalTcpFastOpen: experimentalTcpFastOpen,
       experimentalTcpMultiPath: experimentalTcpMultiPath,
@@ -362,6 +371,22 @@ class AppSettingsController {
     bypassLocalNetwork = state.bypassLocalNetwork;
     splitRoutingMode = state.splitRoutingMode;
     splitRoutingPackages = List<String>.from(state.splitRoutingPackages);
+    splitRoutingIncludedPackages = List<String>.from(
+      state.splitRoutingIncludedPackages,
+    );
+    splitRoutingExcludedPackages = List<String>.from(
+      state.splitRoutingExcludedPackages,
+    );
+    if (splitRoutingMode == SplitRoutingMode.proxySelected &&
+        splitRoutingIncludedPackages.isEmpty) {
+      splitRoutingIncludedPackages = List<String>.from(splitRoutingPackages);
+    }
+    if (splitRoutingMode == SplitRoutingMode.bypassSelected &&
+        splitRoutingExcludedPackages.isEmpty) {
+      splitRoutingExcludedPackages = List<String>.from(splitRoutingPackages);
+    }
+    splitRoutingSchemaVersion = state.splitRoutingSchemaVersion;
+    splitRoutingResetPending = state.splitRoutingResetPending;
     singBoxLogLevel = state.singBoxLogLevel;
     experimentalTcpFastOpen = state.experimentalTcpFastOpen;
     experimentalTcpMultiPath = state.experimentalTcpMultiPath;
@@ -944,6 +969,15 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     splitRoutingMode = value;
+    splitRoutingPackages = switch (value) {
+      SplitRoutingMode.disabled => const [],
+      SplitRoutingMode.proxySelected => List<String>.from(
+        splitRoutingIncludedPackages,
+      ),
+      SplitRoutingMode.bypassSelected => List<String>.from(
+        splitRoutingExcludedPackages,
+      ),
+    };
     if (disableFakeIp) {
       experimentalFakeIpEnabled = false;
     }
@@ -953,12 +987,54 @@ class AppSettingsController {
     );
   }
 
+  AppSettingsChange setSplitRoutingSettings({
+    required SplitRoutingMode mode,
+    required List<String> included,
+    required List<String> excluded,
+  }) {
+    final nextIncluded = normalizeSplitRoutingPackages(included);
+    final nextExcluded = normalizeSplitRoutingPackages(excluded);
+    final active = switch (mode) {
+      SplitRoutingMode.disabled => const <String>[],
+      SplitRoutingMode.proxySelected => nextIncluded,
+      SplitRoutingMode.bypassSelected => nextExcluded,
+    };
+    if (mode != SplitRoutingMode.disabled && active.isEmpty) {
+      throw StateError(
+        'Select at least one application before enabling split routing',
+      );
+    }
+    if (splitRoutingMode == mode &&
+        splitRoutingIncludedPackages.join('\n') == nextIncluded.join('\n') &&
+        splitRoutingExcludedPackages.join('\n') == nextExcluded.join('\n')) {
+      return const AppSettingsChange.none();
+    }
+    final runtimeChanged =
+        splitRoutingMode != mode ||
+        splitRoutingPackages.join('\n') != active.join('\n');
+    splitRoutingIncludedPackages = nextIncluded;
+    splitRoutingExcludedPackages = nextExcluded;
+    splitRoutingMode = mode;
+    splitRoutingPackages = active;
+    splitRoutingSchemaVersion = 1;
+    if (mode != SplitRoutingMode.disabled) experimentalFakeIpEnabled = false;
+    return AppSettingsChange(
+      changed: true,
+      configReason: runtimeChanged ? 'split routing settings changed' : null,
+    );
+  }
+
   AppSettingsChange setSplitRoutingPackages(List<String> value) {
     final normalized = normalizeSplitRoutingPackages(value);
     if (splitRoutingPackages.join('\n') == normalized.join('\n')) {
       return const AppSettingsChange.none();
     }
     splitRoutingPackages = normalized;
+    if (splitRoutingMode == SplitRoutingMode.proxySelected) {
+      splitRoutingIncludedPackages = normalized;
+    } else if (splitRoutingMode == SplitRoutingMode.bypassSelected) {
+      splitRoutingExcludedPackages = normalized;
+    }
     return const AppSettingsChange(
       changed: true,
       configReason: 'split routing packages changed',

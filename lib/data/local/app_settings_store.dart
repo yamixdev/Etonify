@@ -207,6 +207,10 @@ class AppSettingsState {
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
+    this.splitRoutingSchemaVersion = 0,
+    this.splitRoutingResetPending = false,
+    this.splitRoutingIncludedPackages = const [],
+    this.splitRoutingExcludedPackages = const [],
     required this.singBoxLogLevel,
     required this.experimentalTcpFastOpen,
     required this.experimentalTcpMultiPath,
@@ -279,6 +283,10 @@ class AppSettingsState {
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
+  final int splitRoutingSchemaVersion;
+  final bool splitRoutingResetPending;
+  final List<String> splitRoutingIncludedPackages;
+  final List<String> splitRoutingExcludedPackages;
   final String singBoxLogLevel;
   final bool experimentalTcpFastOpen;
   final bool experimentalTcpMultiPath;
@@ -351,6 +359,10 @@ class AppSettingsState {
     bool? bypassLocalNetwork,
     SplitRoutingMode? splitRoutingMode,
     List<String>? splitRoutingPackages,
+    int? splitRoutingSchemaVersion,
+    bool? splitRoutingResetPending,
+    List<String>? splitRoutingIncludedPackages,
+    List<String>? splitRoutingExcludedPackages,
     String? singBoxLogLevel,
     bool? experimentalTcpFastOpen,
     bool? experimentalTcpMultiPath,
@@ -447,6 +459,14 @@ class AppSettingsState {
       bypassLocalNetwork: bypassLocalNetwork ?? this.bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode ?? this.splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages ?? this.splitRoutingPackages,
+      splitRoutingSchemaVersion:
+          splitRoutingSchemaVersion ?? this.splitRoutingSchemaVersion,
+      splitRoutingResetPending:
+          splitRoutingResetPending ?? this.splitRoutingResetPending,
+      splitRoutingIncludedPackages:
+          splitRoutingIncludedPackages ?? this.splitRoutingIncludedPackages,
+      splitRoutingExcludedPackages:
+          splitRoutingExcludedPackages ?? this.splitRoutingExcludedPackages,
       singBoxLogLevel: singBoxLogLevel ?? this.singBoxLogLevel,
       experimentalTcpFastOpen:
           experimentalTcpFastOpen ?? this.experimentalTcpFastOpen,
@@ -576,6 +596,10 @@ abstract class AppSettingsStore {
   static const _bypassLocalNetworkKey = 'bypass_local_network';
   static const _splitRoutingModeKey = 'split_routing_mode';
   static const _splitRoutingPackagesKey = 'split_routing_packages';
+  static const _splitRoutingSchemaKey = 'split_routing_schema';
+  static const _splitRoutingResetPendingKey = 'split_routing_reset_pending';
+  static const _splitRoutingIncludedKey = 'split_routing_included_packages';
+  static const _splitRoutingExcludedKey = 'split_routing_excluded_packages';
   static const _singBoxLogLevelKey = 'singbox_log_level';
   static const _experimentalTcpFastOpenKey = 'experimental_tcp_fast_open';
   static const _experimentalTcpMultiPathKey = 'experimental_tcp_multi_path';
@@ -641,6 +665,8 @@ abstract class AppSettingsStore {
     _bypassLocalNetworkKey,
     _splitRoutingModeKey,
     _splitRoutingPackagesKey,
+    _splitRoutingIncludedKey,
+    _splitRoutingExcludedKey,
     _singBoxLogLevelKey,
     _experimentalTcpFastOpenKey,
     _experimentalTcpMultiPathKey,
@@ -666,7 +692,26 @@ abstract class AppSettingsStore {
       for (final entry in imported.entries)
         if (safeExportKeys.contains(entry.key)) entry.key: entry.value,
     };
-    return mapState({...currentMap, ...sanitized});
+    final merged = {...currentMap, ...sanitized};
+    final mode = merged[_splitRoutingModeKey]?.toString();
+    final bank = mode == 'proxy_selected'
+        ? _splitRoutingIncludedKey
+        : mode == 'bypass_selected'
+        ? _splitRoutingExcludedKey
+        : null;
+    if (bank != null) {
+      // Older backups only contained the active list. Never leave a stale bank
+      // that differs from the list actually applied to Android.
+      if (sanitized.containsKey(_splitRoutingPackagesKey) &&
+          !sanitized.containsKey(bank)) {
+        merged[bank] = sanitized[_splitRoutingPackagesKey];
+      } else {
+        merged[_splitRoutingPackagesKey] = merged[bank];
+      }
+    } else {
+      merged[_splitRoutingPackagesKey] = '';
+    }
+    return mapState(merged);
   }
 
   AppSettingsState mapState(Map<String, dynamic> map) {
@@ -938,6 +983,14 @@ abstract class AppSettingsStore {
         _ => SplitRoutingMode.disabled,
       },
       splitRoutingPackages: packageListValue(_splitRoutingPackagesKey),
+      splitRoutingSchemaVersion:
+          int.tryParse(map[_splitRoutingSchemaKey]?.toString() ?? '') ?? 0,
+      splitRoutingResetPending: boolValue(
+        _splitRoutingResetPendingKey,
+        defaultValue: false,
+      ),
+      splitRoutingIncludedPackages: packageListValue(_splitRoutingIncludedKey),
+      splitRoutingExcludedPackages: packageListValue(_splitRoutingExcludedKey),
       singBoxLogLevel: map[_singBoxLogLevelKey]?.toString() ?? 'warning',
       experimentalTcpFastOpen: boolValue(
         _experimentalTcpFastOpenKey,
@@ -1057,6 +1110,14 @@ abstract class AppSettingsStore {
         state.splitRoutingPackages,
       ).join('\n'),
       _singBoxLogLevelKey: state.singBoxLogLevel,
+      _splitRoutingSchemaKey: '${state.splitRoutingSchemaVersion}',
+      _splitRoutingResetPendingKey: state.splitRoutingResetPending ? '1' : '0',
+      _splitRoutingIncludedKey: normalizeSplitRoutingPackages(
+        state.splitRoutingIncludedPackages,
+      ).join('\n'),
+      _splitRoutingExcludedKey: normalizeSplitRoutingPackages(
+        state.splitRoutingExcludedPackages,
+      ).join('\n'),
       _experimentalTcpFastOpenKey: state.experimentalTcpFastOpen ? '1' : '0',
       _experimentalTcpMultiPathKey: state.experimentalTcpMultiPath ? '1' : '0',
       _experimentalInterruptExistingConnectionsKey:
