@@ -10,7 +10,6 @@ class ProxyTile extends StatelessWidget {
     this.titleOverride,
     this.subtitleOverride,
     this.forceBaseInset = false,
-    this.showGroupHandle = false,
     this.animate = true,
     this.runtimeState,
     this.identityChild,
@@ -25,7 +24,6 @@ class ProxyTile extends StatelessWidget {
   final String? titleOverride;
   final String? subtitleOverride;
   final bool forceBaseInset;
-  final bool showGroupHandle;
   final bool animate;
   final ProxyRuntimeVisualState? runtimeState;
   final Widget? identityChild;
@@ -103,9 +101,9 @@ class ProxyTile extends StatelessWidget {
     );
     final horizontalInset = !forceBaseInset && proxy.isGroupChild ? 24.0 : 6.0;
     final emphasized = selected || highlighted;
-    final groupHandleVisible = showGroupHandle || onOpenGroup != null;
-    final animationDuration = animate
-        ? const Duration(milliseconds: 220)
+    final shouldAnimate = animate && !MediaQuery.disableAnimationsOf(context);
+    final animationDuration = shouldAnimate
+        ? const Duration(milliseconds: 120)
         : Duration.zero;
     final decoration = BoxDecoration(
       color: selected
@@ -121,79 +119,68 @@ class ProxyTile extends StatelessWidget {
           ? theme.colorScheme.primary.withValues(alpha: selected ? 1 : .46)
           : Colors.transparent,
     );
-    final rowChild = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      child: Row(
-        children: [
-          animate
-              ? AnimatedContainer(
-                  duration: animationDuration,
-                  width: 4,
-                  height: 46,
-                  decoration: indicatorDecoration,
-                )
-              : Container(
-                  width: 4,
-                  height: 46,
-                  decoration: indicatorDecoration,
-                ),
-          const SizedBox(width: 10),
-          Expanded(
-            child:
-                identityChild ??
-                _ProxyTileIdentity(
-                  proxy: proxy,
-                  titleOverride: titleOverride,
-                  subtitleOverride: subtitleOverride,
-                ),
+    final longPress =
+        onLongPress ??
+        (onOpenGroup == null
+            ? null
+            : () {
+                final box = context.findRenderObject() as RenderBox?;
+                onOpenGroup!(
+                  box != null && box.attached
+                      ? box.localToGlobal(Offset.zero) & box.size
+                      : Rect.zero,
+                );
+              });
+    final rowChild = Stack(
+      alignment: AlignmentDirectional.centerStart,
+      children: [
+        PositionedDirectional(
+          start: 2,
+          child: Container(
+            width: 3,
+            height: 34,
+            decoration: indicatorDecoration,
           ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: groupHandleVisible ? 120 : (selecting ? 104 : 72),
-            child: !groupHandleVisible
-                ? latencyLabel
-                : Row(
-                    children: [
-                      Expanded(child: latencyLabel),
-                      SizedBox(
-                        width: 48,
-                        child: IconButton(
-                          key: ValueKey('proxy-group-action-${proxy.tag}'),
-                          tooltip: _localizedProxyTitle(l10n, proxy),
-                          icon: const Icon(Icons.chevron_right_rounded),
-                          onPressed: onOpenGroup == null
-                              ? null
-                              : () {
-                                  final box =
-                                      context.findRenderObject() as RenderBox?;
-                                  final rect = box != null && box.attached
-                                      ? box.localToGlobal(Offset.zero) &
-                                            box.size
-                                      : Rect.zero;
-                                  onOpenGroup!(rect);
-                                },
-                        ),
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: _kProxySheetRowExtent - 2,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child:
+                      identityChild ??
+                      _ProxyTileIdentity(
+                        proxy: proxy,
+                        titleOverride: titleOverride,
+                        subtitleOverride: subtitleOverride,
                       ),
-                    ],
-                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(width: selecting ? 104 : 72, child: latencyLabel),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
     final child = animate
         ? InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: onTap,
-            onLongPress: onLongPress,
+            onLongPress: longPress,
             child: rowChild,
           )
         : GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
-            onLongPress: onLongPress,
+            onLongPress: longPress,
             child: rowChild,
           );
-    if (animate) {
+    if (shouldAnimate) {
       return AnimatedContainer(
         duration: animationDuration,
         curve: Curves.easeOutCubic,
@@ -230,24 +217,25 @@ class _ProxyTileIdentity extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 36,
-          height: 36,
-          child: CountryFlagBadge(countryCode: proxy.countryCode, size: 36),
+          width: 34,
+          height: 34,
+          child: CountryFlagBadge(countryCode: proxy.countryCode, size: 34),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 titleOverride ?? _localizedProxyTitle(l10n, proxy),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Text(
                 subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
                 maxLines: 1,
@@ -262,4 +250,19 @@ class _ProxyTileIdentity extends StatelessWidget {
       ],
     );
   }
+}
+
+// Retain fixed sliver geometry at ordinary text sizes, but leave room for two
+// title lines and a subtitle when the user enlarges the system font.
+double _proxyRowExtent(BuildContext context) {
+  final textTheme = Theme.of(context).textTheme;
+  final scaler = MediaQuery.textScalerOf(context);
+  final title = textTheme.bodyMedium;
+  final subtitle = textTheme.bodySmall;
+  return max(
+    _kProxySheetRowExtent,
+    scaler.scale(title?.fontSize ?? 14) * (title?.height ?? 1.4) * 2 +
+        scaler.scale(subtitle?.fontSize ?? 12) * (subtitle?.height ?? 1.4) +
+        15,
+  );
 }

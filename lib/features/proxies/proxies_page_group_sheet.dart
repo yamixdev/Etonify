@@ -262,7 +262,6 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     required bool highlighted,
     String? titleOverride,
     String? subtitleOverride,
-    bool showGroupHandle = false,
     VoidCallback? onLongPress,
     required VoidCallback onTap,
   }) {
@@ -281,7 +280,6 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
         titleOverride: titleOverride,
         subtitleOverride: subtitleOverride,
         forceBaseInset: true,
-        showGroupHandle: showGroupHandle,
         animate: false,
         onTap: onTap,
         onTestLatency: widget.onProxyUrlTest == null
@@ -363,7 +361,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                   physics: const ClampingScrollPhysics(
                     parent: AlwaysScrollableScrollPhysics(),
                   ),
-                  itemExtent: _kProxySheetRowExtent,
+                  itemExtent: _proxyRowExtent(context),
                   scrollCacheExtent: _kProxyListScrollCacheExtent,
                   addAutomaticKeepAlives: false,
                   addRepaintBoundaries: true,
@@ -384,7 +382,6 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                           highlighted: false,
                           titleOverride: groupTitle,
                           subtitleOverride: groupSubtitle,
-                          showGroupHandle: true,
                           onTap: () => _select(widget.group.tag),
                         ),
                       );

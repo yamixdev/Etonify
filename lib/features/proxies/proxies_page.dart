@@ -1176,7 +1176,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                 parent: AlwaysScrollableScrollPhysics(),
               )
             : const NeverScrollableScrollPhysics(),
-        itemExtent: _kProxySheetRowExtent,
+        itemExtent: _proxyRowExtent(context),
         scrollCacheExtent: _kProxyListScrollCacheExtent,
         addAutomaticKeepAlives: false,
         addRepaintBoundaries: true,

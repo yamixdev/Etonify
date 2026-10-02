@@ -1384,12 +1384,13 @@ void main() {
     },
   );
 
-  testWidgets('embedded proxy rows use larger flag hit visuals', (
+  testWidgets('compact embedded rows remain selectable through the flag', (
     tester,
   ) async {
     final proxies = <AppProxySummary>[
       _proxy('proxy-1', 'proxy 1', latency: 42),
     ];
+    String? selected;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1403,7 +1404,7 @@ void main() {
               selectedTag: 'proxy-1',
               connected: false,
               progressiveBlurEnabled: false,
-              onSelected: (_) {},
+              onSelected: (tag) => selected = tag,
               onUrlTest: () async {},
               embedded: true,
               sheetAtMaxExtent: true,
@@ -1414,7 +1415,12 @@ void main() {
       ),
     );
 
-    expect(tester.getSize(find.byType(CountryFlagBadge).first).height, 36);
+    expect(
+      tester.getSize(find.byType(ProxyTile).first).height,
+      greaterThanOrEqualTo(48),
+    );
+    await tester.tapAt(tester.getCenter(find.byType(CountryFlagBadge).first));
+    expect(selected, 'proxy-1');
   });
 
   testWidgets('running full URLTest exposes a cancel action', (tester) async {

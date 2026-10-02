@@ -9,6 +9,116 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
 void main() {
+  testWidgets(
+    'compact group rows keep selection and testing separate from opening',
+    (tester) async {
+      final group = _performanceProxy(0).copyWith(
+        isGroup: true,
+        childCount: 3,
+        displayName: 'LTE Auto Netherlands',
+      );
+      var selections = 0;
+      var tests = 0;
+      final opened = <Rect>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 320,
+                child: ProxyTile(
+                  proxy: group,
+                  selected: true,
+                  animate: false,
+                  onTap: () => selections++,
+                  onTestLatency: () => tests++,
+                  onOpenGroup: opened.add,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(ValueKey('proxy-latency-action-${group.tag}')),
+      );
+      expect(tests, 1);
+      expect(selections, 0);
+      await tester.tap(find.text('LTE Auto Netherlands'));
+      expect(selections, 1);
+      await tester.longPress(find.text('LTE Auto Netherlands'));
+      expect(opened, hasLength(1));
+      expect(opened.single.width, greaterThan(0));
+      expect(selections, 1);
+      expect(tests, 1);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'embedded compact rows fit long names with enlarged Russian text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final children = List.generate(
+        3,
+        (index) => _performanceProxy(index + 1),
+      );
+      final group = _performanceProxy(0).copyWith(
+        isGroup: true,
+        childCount: 3,
+        displayName: 'LTE Авто — Нидерланды и другие серверы',
+        childTags: [for (final child in children) child.tag],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ProxiesPage(
+              proxies: [group],
+              selectedTag: '',
+              connected: true,
+              embedded: true,
+              sheetAtMaxExtent: true,
+              sheetExtent: 1,
+              progressiveBlurEnabled: false,
+              groupChildrenByTag: {group.tag: children},
+              onSelected: (_) {},
+              onUrlTest: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Автовыбор · 3 прокси'), findsOneWidget);
+      await tester.longPress(find.text(group.displayName));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('proxy-group-sheet-surface')),
+        findsOneWidget,
+      );
+      expect(find.text(children.first.displayName), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('ping updates retain the static flag and labels of a row', (
     tester,
   ) async {
