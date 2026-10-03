@@ -1,114 +1,181 @@
 <div align="center">
 
+<img src="docs/assets/etonify-mark.svg" width="88" height="88" alt="Etonify">
+
 # Etonify
 
-**Android-first open-source VPN client built around a modified sing-box core.**
+**An open-source VPN client for Android.**
 
-[English](README.md) • [Русский](README_ru.md) • [Українська](README_uk.md) • [简体中文](README_cn.md) • [فارسی](README_fa.md)
+Built with Flutter and a modified sing-box core.
 
-<p align="center">
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-34A853?logo=android&logoColor=white" alt="Android"></a>
-  <a href="https://github.com/yamixdev/etonify-core"><img src="https://img.shields.io/badge/Core-v1.15.0--alpha.3--etonify.5-E53935?logo=box&logoColor=white" alt="Core"></a>
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Version-0.3.6%2B26-FF6F00?logo=github&logoColor=white" alt="Version"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License"></a>
+<p dir="ltr">
+<b>English</b> · <a href="README_ru.md">Русский</a> · <a href="README_uk.md">Українська</a> · <a href="README_cn.md">简体中文</a> · <a href="README_fa.md">فارسی</a>
 </p>
 
-[Download APK](https://github.com/yamixdev/Etonify/releases) • [Changelog](CHANGELOG.md) • [Report a problem](https://github.com/yamixdev/Etonify/issues/new/choose) • [Support the project](https://t.me/tribute/app?startapp=dQAQ) • [Telegram](https://t.me/etonify)
+<p dir="ltr">
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-74452B?style=flat-square" alt="Client: 0.3.7+37"></a>
+  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-53473E?style=flat-square" alt="Bundled core: 1.15.0-alpha.10-etonify.1"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-2E5C46?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-3B4C63?style=flat-square" alt="GPL-3.0-or-later"></a>
+</p>
 
-<br/>
+**[Download APK](https://github.com/yamixdev/Etonify/releases)** · [Changelog](CHANGELOG.md) · [Report a problem](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
 
-<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="Etonify interface" width="720">
+[Features](#features) · [Quick start](#quick-start) · [Compatibility](#compatibility) · [Development](#development)
 
 </div>
 
-Etonify is an open-source VPN client for Android, built with Flutter and [etonify-core](https://github.com/yamixdev/etonify-core), a maintained fork of sing-box. It manages subscriptions, server selection, DNS and traffic routing.
+Etonify brings subscriptions, proxy selection, routing and connection diagnostics into one Android app. The interface supports light, dark and dynamic color themes.
 
-The application does not provide VPN servers. You need your own server or a subscription from a provider.
+> [!IMPORTANT]
+> Etonify does not provide VPN servers or sell subscriptions. Connect your own server or use a subscription from a provider.
 
-## Versions and requirements
-
-| Component | Version or requirement |
-| :--- | :--- |
-| Client source | `0.3.6+26` |
-| Bundled core | `v1.15.0-alpha.3-etonify.5`, based on sing-box `1.15.0-alpha.3` |
-| Flutter SDK | `3.47.5` (Dart 3.13) |
-| Android | 8.0 or later (API 26+) |
-| APK architectures | `arm64-v8a`, `armeabi-v7a` |
-| Interface languages | English and Russian |
-
-The source version comes from [pubspec.yaml](pubspec.yaml); the bundled core version comes from [libbox.provenance.json](android/app/libs/libbox.provenance.json). The source tree may contain changes that are not yet published. Check [Releases](https://github.com/yamixdev/Etonify/releases) for available APKs and release notes.
-
-Android is the supported release platform. Other Flutter platform directories do not imply supported desktop or iOS builds.
-
-## Getting started
-
-1. Download an APK for your device from Releases and install it.
-2. Add a subscription or import a server configuration.
-3. Select a server or an automatic selection group.
-4. Start the connection and approve Android's VPN permission request.
-
-In-app updates are available under **About > Updates**. Use the menu in that section to select **Stable** or **Beta**. Beta includes prereleases intended for testing; the version displayed in the app may not contain a “beta” suffix.
+<a id="features"></a>
 
 ## Features
 
-- **Connections:** Android VPN through TUN, local HTTP/SOCKS proxy, or both.
-- **Subscriptions:** import from a URL, file, clipboard, QR code or supported deep link; refresh profiles and view provider-supplied traffic and expiry information.
-- **Servers:** manual selection, automatic selection groups, proxy chains and latency testing through the proxy connection.
-- **Routing:** per-app routing, local network bypass, traffic rules and local rule sets.
-- **DNS:** direct and proxied resolvers, encrypted DNS options and AdGuard DNS filtering.
-- **Core settings:** network strategy, connection timeouts, TCP keepalive and UDP/NAT controls. The section includes explanations, a first-visit notice and its own reset action. See [Core settings](docs/core-settings.md).
-- **Diagnostics:** connection logs and runtime information for troubleshooting.
+| Area | What you can do |
+| :--- | :--- |
+| Subscriptions | Import from a URL, file, clipboard, QR code or supported deep link. Refresh profiles and see provider-supplied traffic and expiry information. |
+| Servers and groups | Choose a server manually or use an automatic group. Browse nested groups in subscription order, share a server or group, and export a profile to JSON for file import. |
+| Latency checks | Check a server, a group's members or the subscription. View measured results and working-server counters without treating untested servers as failed. |
+| Routing | Choose apps that use VPN or bypass it. Each mode has its own selection. Configure traffic rules, local network bypass and local rule sets. |
+| Traffic dashboard | Follow upload/download speed, session traffic and uptime. Refresh the current external IP and its country flag. |
+| DNS and core settings | Configure direct or proxied DNS, encrypted DNS and AdGuard DNS filtering. Adjust network strategy, timeouts, TCP keepalive and UDP/NAT controls. |
+| Connection and diagnostics | Use Android TUN VPN, a local HTTP/SOCKS proxy or both. Inspect logs, core compatibility, applied configuration and runtime resources. |
 
-Latency tests measure a request through the proxy, not ICMP ping. A missing result does not by itself establish whether a server works.
+Latency checks send a request through the proxy; they are not ICMP ping. A missing result is not a measured failure. Group results and counters depend on completed checks of their members.
+
+<details>
+<summary>Interface preview</summary>
+
+Appearance may vary with the version and selected theme.
+
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="Interface preview" width="720">
+
+</details>
+
+<a id="quick-start"></a>
+
+## Connect in four steps
+
+1. Install an APK for your device from [Releases](https://github.com/yamixdev/Etonify/releases).
+2. Add your subscription or import a server configuration.
+3. Select a server or an automatic selection group.
+4. Start the connection and approve Android's VPN permission request.
+
+In **About → Updates**, choose **Stable** or **Beta** from the menu. Beta includes prereleases for testing; the displayed app version may not have a “beta” suffix.
+
+If an update reports that split-tunneling settings were reset, review the section and select apps again before enabling it.
+
+<a id="versions"></a>
+
+## Versions and requirements
+
+| Component | Current source tree |
+| :--- | :--- |
+| Client | `0.3.7+37` |
+| Bundled core | `v1.15.0-alpha.10-etonify.1` |
+| Upstream baseline | `v1.15.0-alpha.10` |
+| Flutter SDK | `3.47.5` · Dart `3.13` |
+| Android | 8.0 or later · API 26+ |
+| APK architectures | `arm64-v8a` · `armeabi-v7a` |
+| App interface languages | English and Russian |
+
+> [!NOTE]
+> These versions refer to the source code. Available APKs are listed in [Releases](https://github.com/yamixdev/Etonify/releases). The core is based on a prerelease version of sing-box.
+
+Client version: [pubspec.yaml](pubspec.yaml). Binary version and source commit: [libbox.provenance.json](android/app/libs/libbox.provenance.json). Android is the supported release platform; other Flutter platform directories do not imply supported builds.
+
+<a id="compatibility"></a>
 
 ## Configuration compatibility
 
-Import formats include server links, sing-box JSON, Xray JSON, Clash YAML and SIP008. Supported protocols include VLESS, VMess, Trojan, Shadowsocks, Hysteria/Hysteria2, TUIC, AnyTLS, NaiveProxy, HTTP and SOCKS. Compatibility depends on the protocol, transport and fields used in the configuration.
+**Import formats**
 
-Importing an Xray or Clash profile does not mean every feature of its original core is supported. Etonify converts supported settings to its own sing-box configuration. See [sing-box 1.14 compatibility](docs/schema-1.14-compatibility.md) for migration details.
+`sing-box JSON` · `Xray JSON` · `Clash YAML` · `SIP008` · server links
 
-WireGuard has not been supported since Etonify 0.3.1 because of problems with its operation in the client.
+**Protocols**
 
-Multiplexing requires compatible server support. It is not automatically negotiated for every server, and sing-box multiplexing is not interchangeable with Xray Mux. Provider-supplied settings and manual overrides are explained in the core settings section.
+`VLESS` · `VMess` · `Trojan` · `Shadowsocks` · `Hysteria / Hysteria2` · `TUIC` · `AnyTLS` · `NaiveProxy` · `HTTP` · `SOCKS`
 
-## Privacy and security
+Etonify converts supported Xray and Clash settings to its sing-box configuration. Importing a profile does not enable every feature of the original core. Compatibility depends on the protocol, transport and fields used.
 
-- **Send HWID to provider** in General settings controls the global device-identification option for subscription requests. Individual subscriptions can also have saved consent. Review these settings before adding a subscription.
-- Untrusted proxy certificates are a separate security setting. Enabling it bypasses certificate verification; it should not be a general fix for connection problems.
-- Logs and screenshots can contain subscription URLs, server addresses, credentials or device identifiers. Check and redact attachments before sharing them, even if the application has already masked some fields.
+- WireGuard is not included in the Android build.
+- Multiplexing requires compatible server support. sing-box multiplexing and Xray Mux are not interchangeable.
+- Nested group membership comes from configuration references, not names such as `cand-*`. Group exports retain their referenced members and dependencies.
 
-Report vulnerabilities privately using the [security policy](SECURITY.md), not a public issue.
+Read about [proxy selection and nested groups](docs/proxy-selection-contract.md), [core settings and multiplexing](docs/core-settings.md), and [earlier sing-box schema migrations](docs/schema-1.14-compatibility.md).
 
-## Building and development
+<a id="privacy"></a>
 
-The client CI uses Flutter `3.47.5` and JDK `21`. Dart constraints are defined in [pubspec.yaml](pubspec.yaml), and Android build tools are pinned in the Gradle files. Rebuilding the core uses a separate toolchain recorded in [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE).
+## Privacy and safe sharing
+
+Etonify connects to the VPN servers you choose. Your traffic does not pass through MeowTeam servers. The client has no advertising or analytics SDKs.
+
+- **On your device:** subscriptions, profiles, selected servers, settings, diagnostic logs and downloaded rules are handled locally. On Android, subscription and settings databases are encrypted with a key protected by Android Keystore. This does not encrypt exported files.
+- **To developers:** the client does not automatically send profiles or diagnostic logs. You choose what to share when contacting support.
+- **To external services:** subscription imports and refreshes contact the subscription URL; client updates, rules and changelog images are downloaded from GitHub and their respective sources. Latency checks contact the configured test URL, and DNS queries go to the selected resolver. These services see information from their network requests, including the exit IP address.
+- **“Your IP”:** the client contacts Cloudflare to determine the external address and country when you open the panel or refresh manually. The request follows the device's current routes, including VPN and split-tunneling rules.
+
+A VPN alone does not guarantee anonymity: what your VPN and DNS providers can see depends on the protocol, encryption and your settings.
+
+- HWID sharing is enabled globally by default and can be turned off in settings. When the global setting is off, per-subscription consent can still enable it for a profile. Review global, profile and custom-header settings before adding a subscription.
+- Allowing untrusted proxy certificates bypasses certificate verification. Do not use it as a general fix for connection problems.
+- Profile exports, backups, logs and screenshots may contain subscription URLs, access keys, passwords, server addresses or device identifiers. Review and redact them before sharing.
+
+Report vulnerabilities privately using the contact information in [SECURITY.md](SECURITY.md). Do not publish exploit details in a public issue.
+
+<a id="development"></a>
+
+## Development
+
+The client uses the committed AAR: a normal client build does not rebuild the Go core. CI uses Flutter `3.47.5` and JDK `21`; install the Android SDK and Python 3 as well.
+
+<details>
+<summary>Show client setup, checks and a debug build</summary>
 
 ```powershell
 git clone --recurse-submodules https://github.com/yamixdev/Etonify.git
 cd Etonify
 flutter pub get
 flutter gen-l10n
+dart run pigeon --input pigeons/singbox_api.dart
+python scripts/verify_libbox.py
 flutter analyze
 flutter test
 flutter build apk --debug
 ```
 
-For release builds, configure your signing key in `android/key.properties`. Some Happ encrypted-subscription compatibility assets are not public; see [private build inputs](.github/private/README.md) before expecting a local build to match official builds in that area.
+For release builds, configure signing in `android/key.properties`. Official builds may restore private Happ encrypted-subscription compatibility assets; read [private build inputs](.github/private/README.md) before expecting a local build to match that behavior.
 
-The bundled AAR's source commit, version, toolchain and checksum are recorded in [libbox.provenance.json](android/app/libs/libbox.provenance.json). Do not infer the binary's source revision from the current submodule HEAD. See [bundled core documentation](android/app/libs/README.md) for replacement requirements and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+</details>
 
-## Support
+<details>
+<summary>How the bundled core is pinned</summary>
 
-For bugs and suggestions, use the [issue forms](https://github.com/yamixdev/Etonify/issues/new/choose). Include the application version, device model, Android version and vendor software version, reproduction steps and relevant redacted logs. If the problem started after an update, mention the last working version.
+The submodule pins the core source. Android compiles against `android/app/libs/libbox.aar`. Both must be updated together with the sources JAR, checksum and provenance. `scripts/verify_libbox.py` checks this pairing and the Android Java API contract.
 
-Project news: [@etonify](https://t.me/etonify). Questions and private support: [Etonify Direct](https://t.me/etonify?direct).
+Core replacement requirements: [bundled core documentation](android/app/libs/README.md). Separate core toolchain: [ETONIFY_BASELINE](etonify-core/release/ETONIFY_BASELINE). Release automation: [GitHub Actions guide](docs/github-actions.md).
 
-## Support the project
+</details>
 
-Etonify is an independent open-source project. If you like the app, you can [support the developer through Tribute](https://t.me/tribute/app?startapp=dQAQ). I would appreciate it, and your support helps me continue working on the project.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a patch.
 
-## License and acknowledgements
+<a id="support"></a>
 
-Etonify is maintained by MeowTeam: [yamixdev](https://github.com/yamixdev) and [dudosxdev](https://github.com/dudosxdev). The project uses [sing-box](https://github.com/SagerNet/sing-box) and other open-source components.
+## Get help or support development
 
-Licensed under the [GNU GPL v3.0 or later](LICENSE). See [NOTICE.md](NOTICE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and third-party notices.
+For a bug report, include the app version, device model, Android and vendor OS versions, reproduction steps and redacted logs. If it started after an update, name the last working version.
+
+[Open an issue](https://github.com/yamixdev/Etonify/issues/new/choose) · [Project news](https://t.me/etonify) · [Private support](https://t.me/etonify?direct)
+
+You can support development through [Tribute](https://t.me/tribute/app?startapp=dQAQ) or [DonationAlerts](https://dalink.to/yamix31).
+
+<a id="license"></a>
+
+## People and licenses
+
+Maintained by MeowTeam: [yamixdev](https://github.com/yamixdev) and [dudosxdev](https://github.com/dudosxdev). Built on [sing-box](https://github.com/SagerNet/sing-box) and other open-source components.
+
+Licensed under [GNU GPL v3.0 or later](LICENSE). See [NOTICE.md](NOTICE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and third-party licenses.
