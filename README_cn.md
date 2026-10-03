@@ -1,5 +1,7 @@
 <div align="center">
 
+# Etonify
+
 <img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" width="640" alt="Etonify by MeowTeam">
 
 **开源 Android VPN 客户端。**
@@ -11,11 +13,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="docs/assets/badge-client.svg" height="36" alt="客户端: 0.3.7+37"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="docs/assets/badge-core.svg" height="36" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="客户端: 0.3.7+37"></a>
+  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
   <br>
-  <a href="https://developer.android.com"><img src="docs/assets/badge-android.svg" height="36" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="docs/assets/badge-license.svg" height="36" alt="GPL-3.0-or-later"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=for-the-badge" alt="GPL-3.0-or-later"></a>
 </p>
 
 **[下载 APK](https://github.com/yamixdev/Etonify/releases)** · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
