@@ -1,8 +1,6 @@
 <div align="center" dir="rtl">
 
-<img src="docs/assets/etonify-mark.svg" width="88" height="88" alt="Etonify">
-
-# Etonify
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" width="640" alt="Etonify by MeowTeam">
 
 **کلاینت VPN متن‌باز برای Android.**
 
@@ -13,10 +11,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-74452B?style=flat-square" alt="کلاینت: 0.3.7+37"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-53473E?style=flat-square" alt="هستهٔ داخلی: 1.15.0-alpha.10-etonify.1"></a>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-2E5C46?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-3B4C63?style=flat-square" alt="GPL-3.0-or-later"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="docs/assets/badge-client.svg" height="36" alt="کلاینت: 0.3.7+37"></a>
+  <a href="android/app/libs/libbox.provenance.json"><img src="docs/assets/badge-core.svg" height="36" alt="هستهٔ داخلی: 1.15.0-alpha.10-etonify.1"></a>
+  <br>
+  <a href="https://developer.android.com"><img src="docs/assets/badge-android.svg" height="36" alt="Android 8.0+"></a>
+  <a href="LICENSE"><img src="docs/assets/badge-license.svg" height="36" alt="GPL-3.0-or-later"></a>
 </p>
 
 **[دانلود APK](https://github.com/yamixdev/Etonify/releases)** · [تغییرات](CHANGELOG.md) · [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
@@ -48,14 +47,6 @@ Etonify مدیریت اشتراک‌ها، انتخاب پروکسی، مسیر�
 
 آزمون تأخیر درخواست را از طریق پروکسی می‌فرستد و ICMP ping نیست. نبود نتیجه به معنی شکست اندازه‌گیری‌شده نیست. نتایج گروه و شمارنده‌ها به آزمون‌های تکمیل‌شدهٔ اعضای آن بستگی دارند.
 
-<details>
-<summary>مشاهدهٔ رابط برنامه</summary>
-
-ظاهر برنامه ممکن است با نسخه و تم انتخاب‌شده تفاوت داشته باشد.
-
-<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="مشاهدهٔ رابط برنامه" width="720">
-
-</details>
 
 <a id="quick-start"></a>
 

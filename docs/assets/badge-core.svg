@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="292" height="36" viewBox="0 0 292 36" role="img" aria-label="Core 1.15.0-alpha.10-etonify.1">
+  <title>Core 1.15.0-alpha.10-etonify.1</title>
+  <rect x=".5" y=".5" width="291" height="35" rx="9.5" fill="#0f4159"/>
+  <rect x=".5" y=".5" width="291" height="35" rx="9.5" fill="none" stroke="#fff" stroke-opacity=".12"/>
+  <g transform="translate(12 8) scale(.833333)" color="#b9dce8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 3v3m6-3v3m-6 12v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/></g>
+  <text x="42" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#c3dfe9">Core</text>
+  <text x="80" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#fff">1.15.0-alpha.10-etonify.1</text>
+</svg>

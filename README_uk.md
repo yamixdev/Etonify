@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/etonify-mark.svg" width="88" height="88" alt="Etonify">
-
-# Etonify
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" width="640" alt="Etonify by MeowTeam">
 
 **VPN-клієнт для Android із відкритим кодом.**
 
@@ -13,10 +11,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-74452B?style=flat-square" alt="Клієнт: 0.3.7+37"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-53473E?style=flat-square" alt="Вбудоване ядро: 1.15.0-alpha.10-etonify.1"></a>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-2E5C46?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-3B4C63?style=flat-square" alt="GPL-3.0-or-later"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="docs/assets/badge-client.svg" height="36" alt="Клієнт: 0.3.7+37"></a>
+  <a href="android/app/libs/libbox.provenance.json"><img src="docs/assets/badge-core.svg" height="36" alt="Вбудоване ядро: 1.15.0-alpha.10-etonify.1"></a>
+  <br>
+  <a href="https://developer.android.com"><img src="docs/assets/badge-android.svg" height="36" alt="Android 8.0+"></a>
+  <a href="LICENSE"><img src="docs/assets/badge-license.svg" height="36" alt="GPL-3.0-or-later"></a>
 </p>
 
 **[Завантажити APK](https://github.com/yamixdev/Etonify/releases)** · [Історія змін](CHANGELOG.md) · [Повідомити про проблему](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
@@ -46,14 +45,6 @@ Etonify поєднує підписки, вибір проксі, маршрут
 
 Перевірка затримки надсилає запит через проксі, а не ICMP-пінг. Відсутність результату не означає виміряний збій. Результати груп і лічильники залежать від завершених перевірок їхніх учасників.
 
-<details>
-<summary>Переглянути інтерфейс</summary>
-
-Вигляд може відрізнятися залежно від версії та вибраної теми.
-
-<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="Переглянути інтерфейс" width="720">
-
-</details>
 
 <a id="quick-start"></a>
 

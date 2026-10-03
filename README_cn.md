@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/etonify-mark.svg" width="88" height="88" alt="Etonify">
-
-# Etonify
+<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" width="640" alt="Etonify by MeowTeam">
 
 **开源 Android VPN 客户端。**
 
@@ -13,10 +11,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-74452B?style=flat-square" alt="客户端: 0.3.7+37"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-53473E?style=flat-square" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-2E5C46?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-3B4C63?style=flat-square" alt="GPL-3.0-or-later"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="docs/assets/badge-client.svg" height="36" alt="客户端: 0.3.7+37"></a>
+  <a href="android/app/libs/libbox.provenance.json"><img src="docs/assets/badge-core.svg" height="36" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
+  <br>
+  <a href="https://developer.android.com"><img src="docs/assets/badge-android.svg" height="36" alt="Android 8.0+"></a>
+  <a href="LICENSE"><img src="docs/assets/badge-license.svg" height="36" alt="GPL-3.0-or-later"></a>
 </p>
 
 **[下载 APK](https://github.com/yamixdev/Etonify/releases)** · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
@@ -46,14 +45,6 @@ Etonify 将订阅、代理选择、路由和连接诊断整合到一个 Android 
 
 延迟测试通过代理发送请求，不是 ICMP ping。没有结果不等于已测得连接失败。分组结果和计数取决于成员已完成的测试。
 
-<details>
-<summary>查看界面</summary>
-
-界面可能因版本和所选主题而有所不同。
-
-<img src="https://github.com/user-attachments/assets/c5a9780c-6b26-45e1-9458-42c23e204dde" alt="查看界面" width="720">
-
-</details>
 
 <a id="quick-start"></a>
 

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="202" height="36" viewBox="0 0 202 36" role="img" aria-label="License GPL-3.0-or-later">
+  <title>License GPL-3.0-or-later</title>
+  <rect x=".5" y=".5" width="201" height="35" rx="9.5" fill="#0f4159"/>
+  <rect x=".5" y=".5" width="201" height="35" rx="9.5" fill="none" stroke="#fff" stroke-opacity=".12"/>
+  <g transform="translate(12 8) scale(.833333)" color="#b9dce8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/></g>
+  <text x="42" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#c3dfe9">License</text>
+  <text x="99" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#fff">GPL 3.0+</text>
+</svg>

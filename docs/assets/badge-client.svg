@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="174" height="36" viewBox="0 0 174 36" role="img" aria-label="Client 0.3.7+37">
+  <title>Client 0.3.7+37</title>
+  <rect x=".5" y=".5" width="173" height="35" rx="9.5" fill="#0f4159"/>
+  <rect x=".5" y=".5" width="173" height="35" rx="9.5" fill="none" stroke="#fff" stroke-opacity=".12"/>
+  <g transform="translate(12 8) scale(.833333)" color="#b9dce8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></g>
+  <text x="42" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#c3dfe9">Client</text>
+  <text x="88" y="22.5" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#fff">0.3.7+37</text>
+</svg>
