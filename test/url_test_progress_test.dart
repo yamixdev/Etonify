@@ -2,6 +2,155 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
+  test('temporary metadata-only reload preserves a sweep before hydration', () {
+    final counter = UrlTestProgressCounter();
+    void synchronize({bool hydrated = true}) => counter.synchronizeCatalog(
+      scopeKey: 'profile',
+      catalogKey: Object(),
+      catalogComplete: hydrated,
+      visibleTags: () => hydrated ? const ['a', 'b'] : const [],
+      testableTags: () => const {'a', 'b'},
+      resultForTag: (_) => true,
+    );
+    synchronize();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {'a', 'b'},
+      resultForTag: (_) => null,
+    );
+    counter.applyCoreSessionSnapshot(total: 2, completed: 1);
+    counter.update(['a'], (_) => true);
+    synchronize(hydrated: false);
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 2, working: 1, completed: 1),
+    );
+    synchronize();
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 2, working: 1, completed: 1),
+    );
+  });
+
+  test('hydration initializes manual progress without a full sweep', () {
+    final counter = UrlTestProgressCounter();
+    final results = <String, bool?>{'sweden': true};
+    counter.reset(
+      visibleTags: const [],
+      testableTags: const {},
+      resultForTag: (tag) => results[tag],
+    );
+    final tags = ['sweden', for (var i = 0; i < 12; i++) 'child-$i'];
+    final catalogKey = Object();
+    void synchronize() => counter.synchronizeCatalog(
+      catalogKey: catalogKey,
+      visibleTags: () => tags,
+      testableTags: () => tags.toSet(),
+      resultForTag: (tag) => results[tag],
+    );
+    synchronize();
+    expect(counter.state(), const UrlTestProgressState(total: 13, working: 1));
+    for (var i = 0; i < 9; i++) {
+      results['child-$i'] = true;
+      synchronize();
+      counter.update(['child-$i', 'auto-group'], (tag) => results[tag]);
+    }
+    expect(counter.state(), const UrlTestProgressState(total: 13, working: 10));
+    counter.update(['sweden', 'child-0'], (tag) => results[tag]);
+    expect(counter.state().working, 10);
+  });
+
+  test('unchanged catalog does not seed old results into a new full sweep', () {
+    final counter = UrlTestProgressCounter();
+    final key = Object();
+    var scans = 0;
+    void synchronize() => counter.synchronizeCatalog(
+      catalogKey: key,
+      visibleTags: () {
+        scans++;
+        return const ['a', 'b'];
+      },
+      testableTags: () => const {'a', 'b'},
+      resultForTag: (_) => true,
+    );
+    synchronize();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {'a', 'b'},
+      resultForTag: (_) => null,
+    );
+    counter.applyCoreSessionSnapshot(total: 2, completed: 1);
+    counter.update(['a'], (_) => true);
+    synchronize();
+    expect(scans, 1);
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 2, working: 1, completed: 1),
+    );
+  });
+
+  test(
+    'metadata replacement preserves an in-progress sweep for the same tags',
+    () {
+      final counter = UrlTestProgressCounter();
+      void synchronize() => counter.synchronizeCatalog(
+        scopeKey: 'profile',
+        catalogKey: Object(),
+        visibleTags: () => const ['a', 'b'],
+        testableTags: () => const {'a', 'b'},
+        resultForTag: (_) => true,
+      );
+      synchronize();
+      counter.reset(
+        visibleTags: const ['a', 'b'],
+        testableTags: const {'a', 'b'},
+        resultForTag: (_) => null,
+      );
+      counter.applyCoreSessionSnapshot(total: 2, completed: 1);
+      counter.update(['a'], (_) => true);
+      synchronize();
+      expect(
+        counter.state(),
+        const UrlTestProgressState(total: 2, working: 1, completed: 1),
+      );
+    },
+  );
+
+  test(
+    'another profile with identical tags does not retain previous results',
+    () {
+      final counter = UrlTestProgressCounter();
+      for (final profile in ['first', 'second']) {
+        counter.synchronizeCatalog(
+          scopeKey: profile,
+          catalogKey: Object(),
+          visibleTags: () => const ['a', 'b'],
+          testableTags: () => const {'a', 'b'},
+          resultForTag: (_) => profile == 'first' ? true : null,
+        );
+      }
+      expect(counter.state(), const UrlTestProgressState(total: 2));
+    },
+  );
+
+  test(
+    'changed catalog drops removed servers and retains only fresh results',
+    () {
+      final counter = UrlTestProgressCounter();
+      void synchronize(Object key, List<String> tags) =>
+          counter.synchronizeCatalog(
+            catalogKey: key,
+            visibleTags: () => tags,
+            testableTags: () => tags.toSet(),
+            resultForTag: (tag) => tag == 'stale' ? null : true,
+          );
+      synchronize(Object(), ['old', 'retained']);
+      synchronize(Object(), ['retained', 'stale', 'pending']);
+      counter.update(['old'], (_) => true);
+      expect(counter.state(), const UrlTestProgressState(total: 3, working: 2));
+    },
+  );
+
   test(
     'reconciliation retains current server plus three unique group children',
     () {

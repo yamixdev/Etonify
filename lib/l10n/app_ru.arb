@@ -1,4 +1,9 @@
 {
+  "coreConfigActive": "Активен",
+  "coreConfigUntrackedDescription": "Ядро работает. В этой сессии приложения нет записи о запуске его конфигурации.",
+  "experimentalNetworkSection": "Сеть",
+  "experimentalSelectionSection": "Выбор сервера",
+  "experimentalMemorySection": "Память",
   "subscriptionCustomInterval": "Свой интервал",
   "subscriptionIntervalValue": "Интервал",
   "subscriptionIntervalHours": "Часы",

@@ -1,4 +1,9 @@
 {
+  "coreConfigActive": "Active",
+  "coreConfigUntrackedDescription": "The core is running. This app session has no record of its configuration startup.",
+  "experimentalNetworkSection": "Network",
+  "experimentalSelectionSection": "Server selection",
+  "experimentalMemorySection": "Memory",
   "subscriptionCustomInterval": "Custom interval",
   "subscriptionIntervalValue": "Interval",
   "subscriptionIntervalHours": "Hours",

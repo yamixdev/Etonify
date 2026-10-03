@@ -42,30 +42,32 @@ class SettingsExperimentalPage extends ConsumerWidget {
       showDragHandle: true,
       builder: (context) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    l10n.tlsFragmentationTitle,
-                    style: Theme.of(context).textTheme.titleLarge,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.tlsFragmentationTitle,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
                 ),
-              ),
-              for (final mode in TlsFragmentationMode.values)
-                ListTile(
-                  selected: mode == currentMode,
-                  title: Text(_tlsFragmentationModeLabel(l10n, mode)),
-                  subtitle: Text(_tlsFragmentationModeSubtitle(l10n, mode)),
-                  trailing: mode == currentMode
-                      ? const Icon(Icons.check_rounded)
-                      : null,
-                  onTap: () => Navigator.of(context).pop(mode),
-                ),
-            ],
+                for (final mode in TlsFragmentationMode.values)
+                  ListTile(
+                    selected: mode == currentMode,
+                    title: Text(_tlsFragmentationModeLabel(l10n, mode)),
+                    subtitle: Text(_tlsFragmentationModeSubtitle(l10n, mode)),
+                    trailing: mode == currentMode
+                        ? const Icon(Icons.check_rounded)
+                        : null,
+                    onTap: () => Navigator.of(context).pop(mode),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -111,8 +113,6 @@ class SettingsExperimentalPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final settings = ref.watch(appSettingsProvider).controller;
     final commands = ref.read(appSettingsCommandsProvider);
 
@@ -143,120 +143,195 @@ class SettingsExperimentalPage extends ConsumerWidget {
             appBottomSafePadding(context, settingsScreenPadding.bottom),
           ),
           children: [
-            Card(
-              margin: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: SettingsLeadingIcon(
-                      icon: Icons.content_cut_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.tlsFragmentationTitle),
-                    subtitle: Text(
+            _ExperimentalSection(
+              title: l10n.experimentalNetworkSection,
+              children: [
+                _ExperimentalSettingTile(
+                  icon: Icons.content_cut_rounded,
+                  title: l10n.tlsFragmentationTitle,
+                  description:
                       '${_tlsFragmentationModeLabel(l10n, currentTlsFragmentationMode)} · ${l10n.tlsFragmentationSubtitle}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _showTlsFragmentationPicker(
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _showTlsFragmentationPicker(
+                    context,
+                    commands,
+                    currentTlsFragmentationMode,
+                  ),
+                ),
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.bolt_rounded,
+                  title: l10n.experimentalTcpFastOpenTitle,
+                  description: l10n.experimentalTcpFastOpenSubtitle,
+                  value: currentTcpFastOpen,
+                  onChanged: commands.setExperimentalTcpFastOpen,
+                ),
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.merge_type_rounded,
+                  title: l10n.experimentalTcpMultiPathTitle,
+                  description: l10n.experimentalTcpMultiPathSubtitle,
+                  value: currentTcpMultiPath,
+                  onChanged: commands.setExperimentalTcpMultiPath,
+                ),
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.dns_rounded,
+                  title: l10n.experimentalFakeIpTitle,
+                  description: fakeIpAvailable
+                      ? l10n.experimentalFakeIpSubtitle
+                      : l10n.experimentalFakeIpUnavailableSubtitle,
+                  value: fakeIpAvailable && currentFakeIpEnabled,
+                  onChanged: fakeIpAvailable
+                      ? commands.setExperimentalFakeIpEnabled
+                      : null,
+                ),
+              ],
+            ),
+            const Gap(settingsSectionGap),
+            _ExperimentalSection(
+              title: l10n.experimentalSelectionSection,
+              children: [
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.sync_problem_rounded,
+                  title: l10n.experimentalInterruptConnectionsTitle,
+                  description: l10n.experimentalInterruptConnectionsSubtitle,
+                  value: currentInterruptExistingConnections,
+                  onChanged:
+                      commands.setExperimentalInterruptExistingConnections,
+                ),
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.speed_rounded,
+                  title: l10n.experimentalUrlTestStrictToleranceTitle,
+                  description: l10n.experimentalUrlTestStrictToleranceSubtitle,
+                  value: currentUrlTestStrictTolerance,
+                  onChanged: commands.setExperimentalUrlTestStrictTolerance,
+                ),
+              ],
+            ),
+            const Gap(settingsSectionGap),
+            _ExperimentalSection(
+              title: l10n.experimentalMemorySection,
+              children: [
+                _ExperimentalSettingTile.toggle(
+                  icon: Icons.memory_rounded,
+                  title: l10n.memoryLimitTitle,
+                  description: currentMemoryLimitEnabled
+                      ? l10n.memoryLimitEnabledSubtitle
+                      : l10n.memoryLimitDisabledSubtitle,
+                  value: currentMemoryLimitEnabled,
+                  onChanged: (value) => unawaited(
+                    _setMemoryLimitEnabled(
                       context,
                       commands,
-                      currentTlsFragmentationMode,
+                      value,
+                      warningDismissed: currentMemoryLimitWarningDismissed,
                     ),
                   ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.bolt_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.experimentalTcpFastOpenTitle),
-                    subtitle: Text(l10n.experimentalTcpFastOpenSubtitle),
-                    value: currentTcpFastOpen,
-                    onChanged: commands.setExperimentalTcpFastOpen,
-                  ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.merge_type_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.experimentalTcpMultiPathTitle),
-                    subtitle: Text(l10n.experimentalTcpMultiPathSubtitle),
-                    value: currentTcpMultiPath,
-                    onChanged: commands.setExperimentalTcpMultiPath,
-                  ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.dns_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.experimentalFakeIpTitle),
-                    subtitle: Text(
-                      fakeIpAvailable
-                          ? l10n.experimentalFakeIpSubtitle
-                          : l10n.experimentalFakeIpUnavailableSubtitle,
-                    ),
-                    value: fakeIpAvailable && currentFakeIpEnabled,
-                    onChanged: fakeIpAvailable
-                        ? commands.setExperimentalFakeIpEnabled
-                        : null,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Gap(settingsIslandGap),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Column(
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExperimentalSection extends StatelessWidget {
+  const _ExperimentalSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(4, 0, 4, 8),
+        child: Semantics(
+          header: true,
+          child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ),
+      ),
+      SettingsTileGroup(dividerIndent: 16, children: children),
+    ],
+  );
+}
+
+class _ExperimentalSettingTile extends StatelessWidget {
+  const _ExperimentalSettingTile({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.trailing,
+    required this.onTap,
+  }) : value = null,
+       onChanged = null;
+
+  const _ExperimentalSettingTile.toggle({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required bool this.value,
+    required this.onChanged,
+  }) : trailing = null,
+       onTap = null;
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool? value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final enabled = value == null || onChanged != null;
+    final color = enabled
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface.withValues(alpha: .38);
+    return MergeSemantics(
+      child: InkWell(
+        onTap: value == null
+            ? onTap
+            : onChanged == null
+            ? null
+            : () => onChanged!(!value!),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.sync_problem_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.experimentalInterruptConnectionsTitle),
-                    subtitle: Text(
-                      l10n.experimentalInterruptConnectionsSubtitle,
-                    ),
-                    value: currentInterruptExistingConnections,
-                    onChanged:
-                        commands.setExperimentalInterruptExistingConnections,
-                  ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.speed_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.experimentalUrlTestStrictToleranceTitle),
-                    subtitle: Text(
-                      l10n.experimentalUrlTestStrictToleranceSubtitle,
-                    ),
-                    value: currentUrlTestStrictTolerance,
-                    onChanged: commands.setExperimentalUrlTestStrictTolerance,
-                  ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.memory_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.memoryLimitTitle),
-                    subtitle: Text(
-                      currentMemoryLimitEnabled
-                          ? l10n.memoryLimitEnabledSubtitle
-                          : l10n.memoryLimitDisabledSubtitle,
-                    ),
-                    value: currentMemoryLimitEnabled,
-                    onChanged: (value) => unawaited(
-                      _setMemoryLimitEnabled(
-                        context,
-                        commands,
-                        value,
-                        warningDismissed: currentMemoryLimitWarningDismissed,
+                  SettingsLeadingIcon(icon: icon, color: color, size: 36),
+                  const Gap(12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: enabled ? theme.colorScheme.onSurface : color,
                       ),
                     ),
                   ),
+                  const Gap(8),
+                  if (value != null)
+                    Switch(value: value!, onChanged: onChanged)
+                  else
+                    trailing!,
                 ],
               ),
-            ),
-          ],
+              const Gap(8),
+              Text(
+                description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

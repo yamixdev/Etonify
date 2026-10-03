@@ -83,6 +83,51 @@ class UrlTestProgressState {
 /// every URLTest result. A full scan is needed only when the active testable
 /// server set changes.
 class UrlTestProgressCounter {
+  Object? _catalogKey;
+  Object? _scopeKey;
+  bool _catalogInitialized = false;
+
+  /// Hydration can arrive after the first targeted probe. Initialize the
+  /// catalog independently of full sweeps, and scan it only when it changes.
+  void synchronizeCatalog({
+    Object? scopeKey,
+    bool catalogComplete = true,
+    required Object? catalogKey,
+    required Iterable<String> Function() visibleTags,
+    required Set<String> Function() testableTags,
+    required bool? Function(String tag) resultForTag,
+  }) {
+    // A same-profile reload first exposes metadata, not an empty payload.
+    // Keep this sweep intact until hydration supplies the actual membership.
+    if (_catalogInitialized && _scopeKey == scopeKey && !catalogComplete) {
+      return;
+    }
+    if (_catalogInitialized &&
+        _scopeKey == scopeKey &&
+        _catalogKey == catalogKey) {
+      return;
+    }
+    final nextVisibleTags = visibleTags().toSet();
+    // Outbound metadata (ping, IP or country) can replace the source list
+    // during a sweep. Membership, not list identity, owns its progress.
+    if (_catalogInitialized &&
+        _scopeKey == scopeKey &&
+        nextVisibleTags.length == _visibleTags.length &&
+        nextVisibleTags.containsAll(_visibleTags)) {
+      _catalogKey = catalogKey;
+      return;
+    }
+    reset(
+      visibleTags: nextVisibleTags,
+      testableTags: testableTags(),
+      resultForTag: resultForTag,
+      includeKnownVisibleResults: true,
+    );
+    _catalogKey = catalogKey;
+    _scopeKey = scopeKey;
+    _catalogInitialized = true;
+  }
+
   Set<String> _visibleTags = const <String>{};
   Set<String> _tags = const <String>{};
   final Map<String, bool> _results = <String, bool>{};

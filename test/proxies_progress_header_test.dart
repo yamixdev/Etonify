@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/app/offline_url_test_session.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
@@ -60,20 +61,75 @@ Widget _buildHeaderTestApp({
 }
 
 void main() {
+  testWidgets('republishing a finished logical sweep retains offline results', (
+    tester,
+  ) async {
+    final session = OfflineUrlTestSession(
+      id: 'offline',
+      fingerprint: 'config',
+      physicalNetworkEpoch: 1,
+      tags: {'a', 'b'},
+    )..runOffline();
+    final progress = ValueNotifier(session.progress);
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(
+      _buildHeaderTestApp(
+        progressNotifier: progress,
+        connected: false,
+        serverCount: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+    session.accept(
+      tag: 'a',
+      delayMillis: 100,
+      available: true,
+      logicalSessionId: 'offline',
+      physicalNetworkEpoch: 1,
+    );
+    session.accept(
+      tag: 'b',
+      delayMillis: 0,
+      available: false,
+      logicalSessionId: 'offline',
+      physicalNetworkEpoch: 1,
+    );
+    progress.value = session.progress;
+    await tester.pump();
+    expect(find.text('Рабочих 1 / 2'), findsOneWidget);
+    // Metadata refresh republishes the retained logical session after the
+    // native probe is gone; the header must not switch to "Всего".
+    progress.value = UrlTestProgressState.idle;
+    await tester.pump();
+    progress.value = session.progress;
+    await tester.pump();
+    expect(find.text('Рабочих 1 / 2'), findsOneWidget);
+    expect(find.text('Всего 2'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
-    'idle header adds unique group children to the current working server',
+    'hydrated header counts current server and manual children without a sweep',
     (tester) async {
       final counter = UrlTestProgressCounter();
       final results = <String, bool?>{'sweden': true};
       counter.reset(
-        visibleTags: const ['sweden', 'a', 'b', 'c', 'pending'],
-        testableTags: const {'sweden', 'a', 'b', 'c', 'pending'},
+        visibleTags: const [],
+        testableTags: const {},
         resultForTag: (tag) => results[tag],
       );
       final progress = ValueNotifier(counter.state());
       addTearDown(progress.dispose);
       await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
       await tester.pumpAndSettle();
+      expect(find.textContaining('Рабочих'), findsNothing);
+      counter.synchronizeCatalog(
+        catalogKey: Object(),
+        visibleTags: () => const ['sweden', 'a', 'b', 'c', 'pending'],
+        testableTags: () => const {'a', 'b', 'c', 'pending'},
+        resultForTag: (tag) => results[tag],
+      );
+      progress.value = counter.state();
+      await tester.pump();
       expect(find.text('Рабочих 1 / 5'), findsOneWidget);
       results.addAll({'a': true, 'b': true, 'c': true, 'auto': true});
       counter.update(['a', 'b', 'c', 'auto', 'a'], (tag) => results[tag]);

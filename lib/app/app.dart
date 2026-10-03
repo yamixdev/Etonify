@@ -1301,6 +1301,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
     _fullProxyListCacheReady = result.includesFullProxyList;
     _fullProxyListCacheRequested = result.includesFullProxyList;
+    _updateUrlTestProgress(resetCounter: false);
     _publishProxyRuntimeVisualStates();
     _publishTrafficDashboardSnapshot();
     _preloadProxyFlags();
@@ -1347,6 +1348,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _activeProfileCache = activeSubscription == null
         ? null
         : _metadataProfileSummary(activeSubscription);
+    _updateUrlTestProgress(resetCounter: false);
     _publishTrafficDashboardSnapshot();
     if (!clearProxyCache) {
       return;
@@ -4631,11 +4633,34 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return tags;
   }
 
+  void _synchronizeUrlTestProgressCatalog() {
+    final subscription = _activeSubscription;
+    _urlTestProgressCounter.synchronizeCatalog(
+      scopeKey: subscription?.id,
+      catalogComplete:
+          subscription == null ||
+          subscription.outbounds.isNotEmpty ||
+          (!subscription.hasRawPayload &&
+              subscription.cachedVisibleProxyCount <= 0),
+      // Only inspect membership when the source lists change; the counter
+      // preserves an active sweep across ping/IP/country metadata changes.
+      catalogKey: (
+        subscription?.id,
+        subscription?.outbounds,
+        subscription?.proxyChains,
+      ),
+      visibleTags: _userVisibleServerTags,
+      testableTags: () => _runtimeRecovery.lastStartedUrlTestOutboundTags,
+      resultForTag: _urlTestProgressResultForTag,
+    );
+  }
+
   void _updateUrlTestProgress({
     bool? isRunning,
     bool? isCancelled,
     bool resetCounter = true,
   }) {
+    _synchronizeUrlTestProgressCatalog();
     if (resetCounter) {
       _urlTestProgressCounter.reset(
         visibleTags: _userVisibleServerTags(),
@@ -4657,7 +4682,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
               _latencyCoordinator.kind == LatencySessionKind.full),
       isCancelled: isCancelled ?? _urlTestCancelled,
     );
-    _urlTestProgressNotifier.value = nextState;
+    final logicalSession = _offlineUrlTestSession;
+    if (logicalSession != null && (!logicalSession.isTerminal || !_connected)) {
+      // Catalog hydration/metadata must not take publication ownership from
+      // an offline sweep, including its completed or cancelled result.
+      _publishOfflineUrlTestProgress();
+    } else {
+      _urlTestProgressNotifier.value = nextState;
+    }
     if (isRunning == false) {
       _proxyVisualRevisionDebounceTimer?.cancel();
       _proxyRuntimeVisualStates.notifyRevision();
@@ -4693,6 +4725,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (logicalSession != null && _offlineProgressPublished) {
       _publishOfflineUrlTestProgress();
     }
+    _synchronizeUrlTestProgressCatalog();
     _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
       isRunning: _fullUrlTestSessionRunning,
@@ -6773,16 +6806,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     _offlineProgressPublished = true;
-    _urlTestProgressNotifier.value = UrlTestProgressState(
-      isRunning: !session.isTerminal,
-      isCancelled: session.phase == OfflineUrlTestPhase.cancelled,
-      isPaused: session.phase == OfflineUrlTestPhase.pausingForVpn,
-      isOfflineSession: _offlineProbeConfig != null,
-      total: session.total,
-      working: session.working,
-      failed: session.failed,
-      completed: session.completed,
-    );
+    _urlTestProgressNotifier.value = session.progress;
     _urlTestInFlightNotifier.value = !session.isTerminal;
   }
 

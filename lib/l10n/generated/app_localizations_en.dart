@@ -9,6 +9,22 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get coreConfigActive => 'Active';
+
+  @override
+  String get coreConfigUntrackedDescription =>
+      'The core is running. This app session has no record of its configuration startup.';
+
+  @override
+  String get experimentalNetworkSection => 'Network';
+
+  @override
+  String get experimentalSelectionSection => 'Server selection';
+
+  @override
+  String get experimentalMemorySection => 'Memory';
+
+  @override
   String get subscriptionCustomInterval => 'Custom interval';
 
   @override

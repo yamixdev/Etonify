@@ -12,6 +12,82 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test('confirmed ordinary startup records the applied config', () async {
+    final runtime = _BlockingRuntime();
+    final lifecycle = RuntimeLifecycleController(runtime: runtime);
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(runtimeLifecycle: lifecycle);
+
+    final starting = coordinator.startRuntimeWithBuild(
+      _build('first'),
+      useVpn: true,
+    );
+    await runtime.firstApplyStarted.future;
+    expect(coordinator.lastApplyResult.reason, 'not_applied_yet');
+    runtime.releaseFirstApply.complete();
+    expect((await starting).success, isTrue);
+    expect(
+      coordinator.lastApplyResult.status,
+      SingboxConfigApplyStatus.applied,
+    );
+    expect(coordinator.lastApplyResult.reason, 'runtime_start');
+    expect(coordinator.lastApplyAtMillis, greaterThan(0));
+  });
+
+  test('failed ordinary startup records failure rather than applied', () async {
+    final runtime = _FailingStartRuntime();
+    final lifecycle = RuntimeLifecycleController(runtime: runtime);
+    addTearDown(lifecycle.dispose);
+    final coordinator = _coordinator(runtimeLifecycle: lifecycle);
+    final result = await coordinator.startRuntimeWithBuild(
+      _build('failed config'),
+      useVpn: true,
+    );
+    expect(result.success, isFalse);
+    expect(coordinator.lastApplyResult.status, SingboxConfigApplyStatus.failed);
+    expect(
+      coordinator.lastApplyResult.error,
+      contains('ordinary start failed'),
+    );
+  });
+
+  test(
+    'prepared promotion error replaces the previous applied result',
+    () async {
+      final runtime = _BlockingRuntime();
+      final lifecycle = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(runtimeLifecycle: lifecycle);
+      expect(
+        (await coordinator.startRuntimeWithBuild(
+          _build('success'),
+          useVpn: true,
+        )).success,
+        isTrue,
+      );
+      expect(
+        coordinator.lastApplyResult.status,
+        SingboxConfigApplyStatus.applied,
+      );
+      await expectLater(
+        coordinator.startRuntimeWithBuild(
+          _build('', configPath: 'candidate-without-target.json'),
+          useVpn: true,
+        ),
+        throwsStateError,
+      );
+      expect(
+        coordinator.lastApplyResult.status,
+        SingboxConfigApplyStatus.failed,
+      );
+      expect(
+        coordinator.lastApplyResult.error,
+        contains('target path is unavailable'),
+      );
+      expect(runtime.startCalls, 1);
+    },
+  );
+
   test(
     'cache refresh restarts a service started while the build was pending',
     () async {
@@ -645,6 +721,13 @@ SingboxConfigBuildResult _build(String config, {String? configPath}) {
     selectedProxyInvalid: false,
     startableOutboundCount: 1,
   );
+}
+
+class _FailingStartRuntime extends _BlockingRuntime {
+  @override
+  Future<void> start({required String config, required bool useVpn}) async {
+    throw StateError('ordinary start failed');
+  }
 }
 
 class _FailingPreparedRuntime extends _BlockingRuntime {

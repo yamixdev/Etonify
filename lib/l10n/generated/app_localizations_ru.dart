@@ -9,6 +9,22 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get coreConfigActive => 'Активен';
+
+  @override
+  String get coreConfigUntrackedDescription =>
+      'Ядро работает. В этой сессии приложения нет записи о запуске его конфигурации.';
+
+  @override
+  String get experimentalNetworkSection => 'Сеть';
+
+  @override
+  String get experimentalSelectionSection => 'Выбор сервера';
+
+  @override
+  String get experimentalMemorySection => 'Память';
+
+  @override
   String get subscriptionCustomInterval => 'Свой интервал';
 
   @override

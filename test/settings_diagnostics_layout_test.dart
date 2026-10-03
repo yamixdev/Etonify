@@ -7,6 +7,62 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  for (final status in <Map<String, dynamic>>[
+    {'running': false, 'mode': 'vpn', 'runtimeGeneration': 1},
+    {'running': true, 'mode': 'vpn', 'runtimeGeneration': 0},
+    {'running': true, 'mode': 'probe', 'runtimeGeneration': 1},
+  ]) {
+    testWidgets('does not infer an active VPN config from $status', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: SettingsDiagnosticsPage(
+            onShowOnboarding: () {},
+            loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+            readRuntimeStatus: () async => status,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Активен'), findsNothing);
+      expect(find.text('Ещё не применялся'), findsOneWidget);
+    });
+  }
+
+  testWidgets('native runtime without a Dart journal is active, not unapplied', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsDiagnosticsPage(
+          onShowOnboarding: () {},
+          loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+          readRuntimeStatus: () async => const {
+            'running': true,
+            'mode': 'vpn',
+            'runtimeGeneration': 1,
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Ещё не применялся'), findsNothing);
+    expect(find.text('Активен'), findsOneWidget);
+    expect(
+      find.text(
+        'Ядро работает. В этой сессии приложения нет записи о запуске его конфигурации.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('diagnostic labels stay readable on a narrow screen', (
     tester,
   ) async {

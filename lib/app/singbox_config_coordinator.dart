@@ -677,25 +677,55 @@ class SingboxConfigCoordinator {
   Future<RuntimeLifecycleResult> startRuntimeWithBuild(
     SingboxConfigBuildResult build, {
     required bool useVpn,
-  }) {
+  }) async {
     if (!_allowRuntimeApply()) {
       discardPreparedConfigCandidate(build);
-      return Future.value(
-        const RuntimeLifecycleResult.failure(
-          policy: RuntimeApplyPolicy.fullServiceRestart,
-          error: 'startup_migration_pending',
-        ),
+      return const RuntimeLifecycleResult.failure(
+        policy: RuntimeApplyPolicy.fullServiceRestart,
+        error: 'startup_migration_pending',
       );
     }
-    return _runtimeLifecycle.startRuntimeWithBuild(
-      build: build,
-      useVpn: useVpn,
-      promotePreparedConfig: promotePreparedConfigBuild,
-      cacheStartedBuild: _cacheStartedBuild,
-      logCall: _logCall,
-      trimMemory: _trimRuntimeStartMemory,
-      onWatchdogTimeout: _onRuntimeLifecycleTimeout,
-    );
+    final generation = ++_runtimeConfigApplyGeneration;
+    try {
+      final result = await _runtimeLifecycle.startRuntimeWithBuild(
+        build: build,
+        useVpn: useVpn,
+        promotePreparedConfig: promotePreparedConfigBuild,
+        cacheStartedBuild: _cacheStartedBuild,
+        logCall: _logCall,
+        trimMemory: _trimRuntimeStartMemory,
+        onWatchdogTimeout: _onRuntimeLifecycleTimeout,
+      );
+      // The lifecycle only reports success after native status/event confirmation.
+      // A late startup must not overwrite a newer configuration's diagnostics.
+      if (_isMounted() && _isCurrentApply(generation) && _allowRuntimeApply()) {
+        _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: result.success
+                ? SingboxConfigApplyStatus.applied
+                : SingboxConfigApplyStatus.failed,
+            reason: 'runtime_start',
+            generation: generation,
+            error: result.error ?? '',
+          ),
+        );
+      }
+      return result;
+    } catch (error) {
+      // Preparation happens before the lifecycle's native-start error handler.
+      // Preserve exception propagation while keeping the last attempt truthful.
+      if (_isMounted() && _isCurrentApply(generation) && _allowRuntimeApply()) {
+        _recordApplyResult(
+          SingboxConfigApplyResult(
+            status: SingboxConfigApplyStatus.failed,
+            reason: 'runtime_start',
+            generation: generation,
+            error: error.toString(),
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<ProbeConfigBuildResult?> buildProbeConfig({

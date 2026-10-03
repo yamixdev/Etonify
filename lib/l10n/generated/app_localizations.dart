@@ -98,6 +98,36 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @coreConfigActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get coreConfigActive;
+
+  /// No description provided for @coreConfigUntrackedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'The core is running. This app session has no record of its configuration startup.'**
+  String get coreConfigUntrackedDescription;
+
+  /// No description provided for @experimentalNetworkSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get experimentalNetworkSection;
+
+  /// No description provided for @experimentalSelectionSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Server selection'**
+  String get experimentalSelectionSection;
+
+  /// No description provided for @experimentalMemorySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get experimentalMemorySection;
+
   /// No description provided for @subscriptionCustomInterval.
   ///
   /// In en, this message translates to:

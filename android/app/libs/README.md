@@ -2,7 +2,7 @@
 
 Etonify bundles
 [`yamixdev/etonify-core`](https://github.com/yamixdev/etonify-core/tree/etonify-dev)
-based on the prerelease sing-box `v1.15.0-alpha.3` tag. The exact fork
+based on the prerelease sing-box `v1.15.0-alpha.10` tag. The exact fork
 version and source commit are recorded in `libbox.provenance.json`. The AAR
 exposes Etonify's versioned capability
 contract, targeted and bounded asynchronous URLTest sessions with failover,

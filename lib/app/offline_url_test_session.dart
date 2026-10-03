@@ -1,3 +1,5 @@
+import '../models/url_test_progress.dart';
+
 enum OfflineUrlTestPhase {
   preparing,
   runningOffline,
@@ -48,6 +50,19 @@ class OfflineUrlTestSession {
   Set<String> get pendingTags => _tags.difference(_measurements.keys.toSet());
   Map<String, OfflineUrlTestMeasurement> get measurements =>
       Map<String, OfflineUrlTestMeasurement>.unmodifiable(_measurements);
+
+  /// Results belong to the logical sweep, even after its native probe and
+  /// temporary config have been disposed.
+  UrlTestProgressState get progress => UrlTestProgressState(
+    isRunning: !isTerminal,
+    isCancelled: phase == OfflineUrlTestPhase.cancelled,
+    isPaused: phase == OfflineUrlTestPhase.pausingForVpn,
+    isOfflineSession: true,
+    total: total,
+    working: working,
+    failed: failed,
+    completed: completed,
+  );
 
   bool suppressesAutomaticCheck({
     required String reason,

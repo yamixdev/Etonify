@@ -342,6 +342,12 @@ class _CoreIntegrationCard extends StatelessWidget {
     final effectiveGeneration = nativeGeneration > 0
         ? nativeGeneration
         : diagnostics.configRuntimeGeneration;
+    final untrackedNativeConfig =
+        !diagnostics.settingsApplyPending &&
+        diagnostics.applyReason == 'not_applied_yet' &&
+        running &&
+        nativeGeneration > 0 &&
+        (runtimeStatus?['mode'] == 'vpn' || runtimeStatus?['mode'] == 'proxy');
 
     return Card(
       margin: EdgeInsets.zero,
@@ -406,8 +412,19 @@ class _CoreIntegrationCard extends StatelessWidget {
             const Gap(8),
             _AboutInfoRow(
               label: l10n.coreConfigStateLabel,
-              value: _applyStatusLabel(l10n, diagnostics),
+              value: untrackedNativeConfig
+                  ? l10n.coreConfigActive
+                  : _applyStatusLabel(l10n, diagnostics),
             ),
+            if (untrackedNativeConfig) ...[
+              const Gap(8),
+              Text(
+                l10n.coreConfigUntrackedDescription,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
             const Gap(8),
             _AboutInfoRow(
               label: l10n.coreRuntimeStateLabel,
