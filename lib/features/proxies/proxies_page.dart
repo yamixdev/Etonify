@@ -82,10 +82,9 @@ String? _lowestSelectedDisplayName(AppProxySummary proxy) {
 
 String _localizedProxyTitle(AppLocalizations l10n, AppProxySummary proxy) {
   if (!isLowestProxyTag(proxy.tag)) {
-    final selected = proxy.selectedChildName?.trim() ?? '';
-    return proxy.isGroup && selected.isNotEmpty
-        ? '${proxy.displayName} · $selected'
-        : proxy.displayName;
+    // A group's current member belongs in its detail panel, not in the root
+    // list title. Runtime snapshots also select members of inactive groups.
+    return proxy.displayName;
   }
   final base = _localizedLowestBaseLabel(l10n, proxy.tag);
   final selected = _lowestSelectedDisplayName(proxy);

@@ -32,20 +32,25 @@ AppProxySummary _proxy(String tag, {List<String> children = const []}) =>
       childCount: children.length,
     );
 
-Widget _app(Widget child, {TargetPlatform? platform, TextScaler? textScaler}) =>
-    MaterialApp(
-      theme: ThemeData(platform: platform),
-      locale: const Locale('en'),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      home: child,
-      builder: textScaler == null
-          ? null
-          : (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
-              child: child!,
-            ),
-    );
+Widget _app(
+  Widget child, {
+  TargetPlatform? platform,
+  TextScaler? textScaler,
+  Brightness brightness = Brightness.light,
+  Locale locale = const Locale('en'),
+}) => MaterialApp(
+  theme: ThemeData(platform: platform, brightness: brightness),
+  locale: locale,
+  supportedLocales: AppLocalizations.supportedLocales,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  home: child,
+  builder: textScaler == null
+      ? null
+      : (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
+        ),
+);
 
 Widget _page({
   required List<AppProxySummary> proxies,
@@ -103,6 +108,257 @@ Widget _page({
 }
 
 void main() {
+  testWidgets('provider members stay inside all groups after auto and back', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(393, 873));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final subscription = Subscription(
+      id: 'lte',
+      name: 'LTE',
+      url: '',
+      selectedProxyTag: 'auto-se',
+      groups: [
+        for (final country in ['se', 'nl', 'de'])
+          SubscriptionGroup(
+            tag: 'auto-$country',
+            name: {
+              'se': 'LTE Sweden',
+              'nl': 'LTE Netherlands',
+              'de': 'LTE Germany',
+            }[country]!,
+            country: country.toUpperCase(),
+            outboundTags: ['cand-$country-01', 'cand-$country-02'],
+          ),
+      ],
+      outbounds: [
+        for (final country in ['se', 'nl', 'de'])
+          for (final index in ['01', '02'])
+            Outbound(
+              tag: 'cand-$country-$index',
+              name: 'cand-$country-$index',
+              info: OutboundInfo(country: country.toUpperCase()),
+              config: {
+                'type': 'vless',
+                'server': '$country-$index.example.com',
+                'server_port': 443,
+                'uuid': '00000000-0000-0000-0000-000000000001',
+              },
+            ),
+      ],
+    );
+    var selectedTag = '';
+    var runtimeSelections = <String, String>{};
+    late ProxyCacheBuildResult cache;
+    await tester.pumpWidget(
+      _app(
+        StatefulBuilder(
+          builder: (context, setState) {
+            cache = buildProxyCache(
+              ProxyCacheBuildInput(
+                subscription: subscription,
+                selectedProxyTag: selectedTag,
+                lowestLatency: null,
+                runtimeLowestOutboundTag: null,
+                runtimeLowestSelections: const {},
+                urlTestInFlight: false,
+                runtimeLatencies: const {'cand-se-02': 11},
+                unavailableLatencyTags: const {},
+                latencyErrors: const {},
+                runtimeGroupSelections: runtimeSelections,
+                markAllServersRussia: false,
+              ),
+            );
+            return Scaffold(
+              body: ProxiesPage(
+                proxies: cache.activeProxies,
+                groupChildrenByTag: cache.groupChildrenByTag,
+                selectedTag: selectedTag,
+                connected: true,
+                progressiveBlurEnabled: false,
+                hapticEnabled: false,
+                embedded: true,
+                sheetAtMaxExtent: true,
+                sheetExtent: 1,
+                collapsedSheetExtent: 0,
+                expandedHeaderExtent: 1,
+                onUrlTest: () async {},
+                onSelected: (tag) => setState(() {
+                  selectedTag = tag;
+                  runtimeSelections = {
+                    'auto-se': 'cand-se-02',
+                    'auto-nl': 'cand-nl-01',
+                    'auto-de': 'cand-de-01',
+                  };
+                }),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('LTE Sweden'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proxy-open-group-auto-se')));
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('proxy-group-sheet-surface'));
+    expect(
+      find.descendant(of: panel, matching: find.text('cand-se-02')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Back').last);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    expect(selectedTag, 'auto-se');
+    expect(
+      cache.activeProxies
+          .map((proxy) => proxy.tag)
+          .where((tag) => tag.startsWith('cand-')),
+      isEmpty,
+    );
+    for (final title in ['LTE Sweden', 'LTE Netherlands', 'LTE Germany']) {
+      expect(find.text(title), findsOneWidget);
+    }
+    expect(find.textContaining('cand-'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('proxy-open-group-auto-nl')));
+    await tester.pumpAndSettle();
+    expect(find.text('cand-nl-01'), findsOneWidget);
+    expect(find.text('cand-nl-02'), findsOneWidget);
+    expect(find.text('cand-se-02'), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cand-'), findsNothing);
+    expect(cache.groupChildrenByTag['auto-de']!.map((proxy) => proxy.tag), [
+      'cand-de-01',
+      'cand-de-02',
+    ]);
+  });
+
+  for (final title in ['Node', 'A long title that wraps onto a second line']) {
+    testWidgets('protocol follows title without a reserved gap: $title', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 873));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: ProxyTile(
+                proxy: _proxy(title),
+                selected: false,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final nameFinder = find.text(title);
+      final name = tester.getRect(nameFinder);
+      final label = tester.widget<Text>(nameFinder);
+      final painter = TextPainter(
+        text: TextSpan(text: label.data, style: label.style),
+        textDirection: TextDirection.ltr,
+        maxLines: label.maxLines,
+      )..layout(maxWidth: name.width);
+      addTearDown(painter.dispose);
+      final protocol = tester.getRect(find.text('vless'));
+      expect(
+        protocol.top - (name.top + painter.height),
+        inInclusiveRange(2.0, 4.0),
+      );
+    });
+  }
+
+  testWidgets('group open action is outlined and does not cover empty space', (
+    tester,
+  ) async {
+    var selected = 0;
+    var opened = 0;
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: ProxyTile(
+            proxy: _proxy('Group', children: ['Node']),
+            selected: false,
+            onTap: () => selected++,
+            onOpenGroup: (_) => opened++,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final action = find.byKey(const ValueKey('proxy-open-group-Group'));
+    expect(tester.widget(action), isA<OutlinedButton>());
+    final area = tester.getRect(action);
+    expect(area.height, greaterThanOrEqualTo(28));
+    final row = tester.getRect(find.byType(ProxyTile));
+    await tester.tapAt(Offset(row.right - 170, area.center.dy));
+    expect(opened, 0);
+    expect(selected, 0);
+    await tester.tap(action);
+    expect(opened, 1);
+    expect(selected, 0);
+    await tester.drag(action, const Offset(0, -80));
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 1.1, 2.0]) {
+      testWidgets('outlined group fits Russian text in $brightness at $scale', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(const Size(320, 873));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final group = _proxy(
+          '⚡ ⭐ LTE Авто - Нидерланды с длинным названием',
+          children: ['Node'],
+        );
+        final selections = <String>[];
+        await tester.pumpWidget(
+          _app(
+            _page(
+              proxies: [group],
+              groups: {
+                group.tag: [_proxy('Node')],
+              },
+              onSelected: selections.add,
+            ),
+            brightness: brightness,
+            locale: const Locale('ru'),
+            platform: TargetPlatform.android,
+            textScaler: TextScaler.linear(scale),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final action = find.byKey(ValueKey('proxy-open-group-${group.tag}'));
+        final button = tester.widget<OutlinedButton>(action);
+        final theme = Theme.of(tester.element(action));
+        expect(
+          button.style!.side!.resolve({})!.color,
+          theme.colorScheme.outlineVariant,
+        );
+        final name = tester.getRect(find.text(group.displayName));
+        final area = tester.getRect(action);
+        expect(area.top, greaterThanOrEqualTo(name.bottom + 2));
+        expect(area.right, lessThanOrEqualTo(320));
+        expect(tester.takeException(), isNull);
+        await tester.tap(action);
+        await tester.pumpAndSettle();
+        expect(find.text('Node'), findsOneWidget);
+        expect(selections, isEmpty);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('Node'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets(
     'open nested panel refreshes actual leaf and flag without losing scroll',
     (tester) async {
@@ -368,42 +624,42 @@ void main() {
     expect(selected, 1);
   });
 
-  testWidgets(
-    'group shows its actual leaf while subtitle remains an open action',
-    (tester) async {
-      final leaf = _proxy('Actual leaf');
-      final nested = _proxy('Nested', children: [leaf.tag]);
-      final group = _proxy('Group', children: [nested.tag]).copyWith(
-        selectedChildTag: leaf.tag,
-        selectedChildName: leaf.displayName,
-      );
-      final selections = <String>[];
-      await tester.pumpWidget(
-        _app(
-          _page(
-            proxies: [group],
-            groups: {
-              'Group': [nested],
-              'Nested': [leaf],
-            },
-            onSelected: selections.add,
-          ),
+  testWidgets('group keeps its name outside and shows the actual leaf inside', (
+    tester,
+  ) async {
+    final leaf = _proxy('Actual leaf');
+    final nested = _proxy('Nested', children: [leaf.tag]);
+    final group = _proxy(
+      'Group',
+      children: [nested.tag],
+    ).copyWith(selectedChildTag: leaf.tag, selectedChildName: leaf.displayName);
+    final selections = <String>[];
+    await tester.pumpWidget(
+      _app(
+        _page(
+          proxies: [group],
+          groups: {
+            'Group': [nested],
+            'Nested': [leaf],
+          },
+          onSelected: selections.add,
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Group · Actual leaf'), findsOneWidget);
-      await tester.tap(find.textContaining('Automatic selection'));
-      await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('proxy-group-header-Group')),
-          matching: find.text('Group · Actual leaf'),
-        ),
-        findsOneWidget,
-      );
-      expect(selections, isEmpty);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Group'), findsOneWidget);
+    expect(find.text('Group · Actual leaf'), findsNothing);
+    await tester.tap(find.textContaining('Automatic selection'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('proxy-group-header-Group')),
+        matching: find.text('Group · Actual leaf'),
+      ),
+      findsOneWidget,
+    );
+    expect(selections, isEmpty);
+  });
 
   testWidgets('nested groups use one panel; back restores parent scroll', (
     tester,

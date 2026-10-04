@@ -259,7 +259,7 @@ class _ProxyTileIdentity extends StatelessWidget {
               child: child,
             ),
           );
-    Widget selectAction(Widget child, {double height = 28, Key? key}) => action(
+    Widget selectAction(Widget child, {double height = 24, Key? key}) => action(
       key: key,
       onTap: () => _ProxyTileActions.of(context).onTap(),
       onLongPress: actions.onLongPress == null
@@ -269,7 +269,12 @@ class _ProxyTileIdentity extends StatelessWidget {
         constraints: BoxConstraints(minWidth: 44, minHeight: height),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: child,
+          child: Align(
+            alignment: AlignmentDirectional.bottomStart,
+            widthFactor: 1,
+            heightFactor: 1,
+            child: child,
+          ),
         ),
       ),
     );
@@ -311,20 +316,36 @@ class _ProxyTileIdentity extends StatelessWidget {
                 ),
               ),
               if (actions.onOpenGroup != null)
-                Tooltip(
-                  message: l10n.proxyOpenGroup(
-                    _localizedProxyTitle(l10n, proxy),
-                  ),
-                  child: action(
-                    key: ValueKey('proxy-open-group-${proxy.tag}'),
-                    onTap: () =>
-                        _ProxyTileActions.of(context).onOpenGroup?.call(),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 28),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: subtitle,
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 3),
+                  child: Tooltip(
+                    message: l10n.proxyOpenGroup(
+                      _localizedProxyTitle(l10n, proxy),
+                    ),
+                    child: OutlinedButton(
+                      key: ValueKey('proxy-open-group-${proxy.tag}'),
+                      onPressed: () =>
+                          _ProxyTileActions.of(context).onOpenGroup?.call(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.onSurfaceVariant,
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        minimumSize: const Size(0, 28),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.standard,
+                        animationDuration: actions.animate
+                            ? const Duration(milliseconds: 120)
+                            : Duration.zero,
                       ),
+                      child: subtitle,
                     ),
                   ),
                 )
@@ -348,10 +369,15 @@ double _proxyRowExtent(BuildContext context) {
   final scaler = MediaQuery.textScalerOf(context);
   final title = textTheme.bodyMedium;
   final subtitle = textTheme.bodySmall;
+  final subtitleHeight =
+      scaler.scale(subtitle?.fontSize ?? 12) * (subtitle?.height ?? 1.4);
+  // The group button has a minimum height even at ordinary text sizes.
+  final groupActionHeight = max(28.0, subtitleHeight + 8);
   return max(
     _kProxySheetRowExtent,
     scaler.scale(title?.fontSize ?? 14) * (title?.height ?? 1.4) * 2 +
-        scaler.scale(subtitle?.fontSize ?? 12) * (subtitle?.height ?? 1.4) +
-        15,
+        groupActionHeight +
+        // Outer padding/margins (10), title gap (3), pixel rounding (1).
+        14,
   );
 }
