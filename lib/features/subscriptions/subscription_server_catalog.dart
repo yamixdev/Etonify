@@ -6,6 +6,7 @@ import 'package:meow_client/models/subscription.dart';
 /// from names such as `cand-01`: only explicit provider references are used.
 class SubscriptionServerCatalog {
   SubscriptionServerCatalog(Subscription subscription) {
+    visibleProxyCount = subscription.concreteServerCount;
     final visible = filterProxyDependencies(
       subscription.outbounds
           .where((node) => isSupportedOutboundConfig(node.config))
@@ -57,12 +58,17 @@ class SubscriptionServerCatalog {
     final owned = <String>{};
     for (final node in _nodes.values) {
       if (!isGroup(node)) continue;
-      final tags = <String>{
-        ..._references(node),
-        ...?_fallbacks[node.tag],
-      }.where((tag) => tag != node.tag && _nodes.containsKey(tag)).toList();
+      final tags = <String>{..._references(node)}
+          .where(
+            (tag) =>
+                tag != node.tag &&
+                _nodes.containsKey(tag) &&
+                (isGroup(_nodes[tag]!) || _isProxyLeaf(_nodes[tag]!)),
+          )
+          .toList();
       _children[node.tag] = tags;
       owned.addAll(tags);
+      owned.addAll(_fallbacks[node.tag] ?? const []);
     }
     roots = [
       for (final node in _nodes.values)
@@ -153,9 +159,7 @@ class SubscriptionServerCatalog {
     return _memberCounts.putIfAbsent(tag, () => _countLeaves([tag]));
   }
 
-  late final int visibleProxyCount = _countLeaves(
-    roots.map((node) => node.tag),
-  );
+  late final int visibleProxyCount;
 
   int _countLeaves(Iterable<String> tags) {
     final leaves = <String>{};
@@ -277,8 +281,7 @@ class SubscriptionServerCatalog {
     return references is List ? references.whereType<String>() : const [];
   }
 
-  static bool _isProxyLeaf(Outbound node) =>
-      node.type != 'direct' && node.type != 'block' && node.type != 'dns';
+  static bool _isProxyLeaf(Outbound node) => isConcreteSubscriptionServer(node);
 }
 
 class SubscriptionServerExportException implements Exception {

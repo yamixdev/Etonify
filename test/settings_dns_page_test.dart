@@ -52,6 +52,62 @@ Finder _directResolverField() {
 }
 
 void main() {
+  testWidgets('DNS selectors use shared settings title styling', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(
+          AppSettingsController(),
+        ),
+        appSettingsCommandsProvider.overrideWithValue(AppSettingsCommands()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _dnsSettingsApp(
+        harnessKey: GlobalKey<_DnsSettingsHarnessState>(),
+        container: container,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final resolver = find.text('Resolver').first;
+    final resolverText = tester.widget<Text>(resolver);
+    expect(resolverText.style?.fontSize, 16);
+    expect(resolverText.style?.fontWeight, FontWeight.w700);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('DNS switches use shared settings title styling', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(
+          AppSettingsController(),
+        ),
+        appSettingsCommandsProvider.overrideWithValue(AppSettingsCommands()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _dnsSettingsApp(
+        harnessKey: GlobalKey<_DnsSettingsHarnessState>(),
+        container: container,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final secureOnly = find.text('Encrypted DNS only');
+    await tester.ensureVisible(secureOnly);
+    await tester.pumpAndSettle();
+    final renderedTitle = tester.widget<RichText>(
+      find.descendant(of: secureOnly, matching: find.byType(RichText)),
+    );
+    expect(renderedTitle.text.style?.fontSize, 16);
+    expect(renderedTitle.text.style?.fontWeight, FontWeight.w700);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'DNS draft survives parent rebuild and commits only when editing finishes',
     (tester) async {

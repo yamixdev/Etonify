@@ -61,6 +61,53 @@ Widget _buildHeaderTestApp({
 }
 
 void main() {
+  testWidgets('group or automatic check does not show full-sweep progress', (
+    tester,
+  ) async {
+    final progress = ValueNotifier(
+      const UrlTestProgressState(
+        isRunning: true,
+        total: 10,
+        working: 7,
+        failed: 3,
+        completed: 2,
+      ),
+    );
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
+    await tester.pumpAndSettle();
+    expect(find.text('Работает 7 / 10'), findsOneWidget);
+    expect(find.textContaining('Проверено'), findsNothing);
+  });
+  testWidgets('lightning progress starts at zero and disappears on stop', (
+    tester,
+  ) async {
+    final progress = ValueNotifier(
+      const UrlTestProgressState(
+        isRunning: true,
+        showCheckProgress: true,
+        total: 10,
+        working: 8,
+        failed: 2,
+        completed: 0,
+      ),
+    );
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
+    await tester.pumpAndSettle();
+    expect(find.text('Работает 8 / 10'), findsOneWidget);
+    expect(find.text('Проверено 0 / 10'), findsOneWidget);
+    progress.value = progress.value.copyWith(completed: 4);
+    await tester.pump();
+    expect(find.text('Проверено 4 / 10'), findsOneWidget);
+    progress.value = progress.value.copyWith(
+      isRunning: false,
+      isCancelled: true,
+    );
+    await tester.pump();
+    expect(find.text('Работает 8 / 10'), findsOneWidget);
+    expect(find.textContaining('Проверено'), findsNothing);
+  });
   testWidgets('republishing a finished logical sweep retains offline results', (
     tester,
   ) async {
@@ -96,14 +143,14 @@ void main() {
     );
     progress.value = session.progress;
     await tester.pump();
-    expect(find.text('Рабочих 1 / 2'), findsOneWidget);
+    expect(find.text('Работает 1 / 2'), findsOneWidget);
     // Metadata refresh republishes the retained logical session after the
     // native probe is gone; the header must not switch to "Всего".
     progress.value = UrlTestProgressState.idle;
     await tester.pump();
     progress.value = session.progress;
     await tester.pump();
-    expect(find.text('Рабочих 1 / 2'), findsOneWidget);
+    expect(find.text('Работает 1 / 2'), findsOneWidget);
     expect(find.text('Всего 2'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -121,7 +168,7 @@ void main() {
       addTearDown(progress.dispose);
       await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Рабочих'), findsNothing);
+      expect(find.textContaining('Работает'), findsNothing);
       counter.synchronizeCatalog(
         catalogKey: Object(),
         visibleTags: () => const ['sweden', 'a', 'b', 'c', 'pending'],
@@ -130,13 +177,13 @@ void main() {
       );
       progress.value = counter.state();
       await tester.pump();
-      expect(find.text('Рабочих 1 / 5'), findsOneWidget);
+      expect(find.text('Работает 1 / 5'), findsOneWidget);
       results.addAll({'a': true, 'b': true, 'c': true, 'auto': true});
       counter.update(['a', 'b', 'c', 'auto', 'a'], (tag) => results[tag]);
       progress.value = counter.state();
       await tester.pump();
-      expect(find.text('Рабочих 4 / 5'), findsOneWidget);
-      expect(find.text('Проверено 4 / 5'), findsOneWidget);
+      expect(find.text('Работает 4 / 5'), findsOneWidget);
+      expect(find.textContaining('Проверено'), findsNothing);
     },
   );
   testWidgets(
@@ -145,6 +192,7 @@ void main() {
       final progressNotifier = ValueNotifier<UrlTestProgressState>(
         const UrlTestProgressState(
           isRunning: true,
+          showCheckProgress: true,
           isCancelled: false,
           total: 10,
           working: 5,
@@ -159,10 +207,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Рабочих 5 / 10'), findsOneWidget);
+      expect(find.text('Работает 5 / 10'), findsOneWidget);
       expect(find.text('Проверено 7 / 10'), findsOneWidget);
       expect(
-        tester.widget<Text>(find.text('Рабочих 5 / 10')).style?.color,
+        tester.widget<Text>(find.text('Работает 5 / 10')).style?.color,
         Colors.green,
       );
 
@@ -196,11 +244,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Рабочих 8 / 10'), findsOneWidget);
+      expect(find.text('Работает 8 / 10'), findsOneWidget);
     },
   );
 
-  testWidgets('an incomplete run keeps its checked count visible', (
+  testWidgets('an incomplete stopped run hides its checked count', (
     tester,
   ) async {
     final progressNotifier = ValueNotifier<UrlTestProgressState>(
@@ -211,34 +259,33 @@ void main() {
       _buildHeaderTestApp(progressNotifier: progressNotifier),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Рабочих 29 / 239'), findsOneWidget);
-    expect(find.text('Проверено 219 / 239'), findsOneWidget);
+    expect(find.text('Работает 29 / 239'), findsOneWidget);
+    expect(find.textContaining('Проверено'), findsNothing);
   });
 
-  testWidgets(
-    'progress bar and counter display cancelled status with tested count',
-    (tester) async {
-      final progressNotifier = ValueNotifier<UrlTestProgressState>(
-        const UrlTestProgressState(
-          isRunning: false,
-          isCancelled: true,
-          total: 10,
-          working: 4,
-          failed: 1,
-        ),
-      );
-      addTearDown(progressNotifier.dispose);
+  testWidgets('cancelled check keeps availability but hides checked count', (
+    tester,
+  ) async {
+    final progressNotifier = ValueNotifier<UrlTestProgressState>(
+      const UrlTestProgressState(
+        isRunning: false,
+        isCancelled: true,
+        total: 10,
+        working: 4,
+        failed: 1,
+      ),
+    );
+    addTearDown(progressNotifier.dispose);
 
-      await tester.pumpWidget(
-        _buildHeaderTestApp(progressNotifier: progressNotifier),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      _buildHeaderTestApp(progressNotifier: progressNotifier),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text('Прокси'), findsOneWidget);
-      expect(find.text('Рабочих 4 / 10'), findsOneWidget);
-      expect(find.text('Проверено 5 / 10'), findsOneWidget);
-    },
-  );
+    expect(find.text('Прокси'), findsOneWidget);
+    expect(find.text('Работает 4 / 10'), findsOneWidget);
+    expect(find.textContaining('Проверено'), findsNothing);
+  });
 
   testWidgets(
     'offline shows only the profile server count, not stale results',
@@ -258,7 +305,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Всего 141'), findsOneWidget);
-      expect(find.textContaining('Рабочих'), findsNothing);
+      expect(find.textContaining('Работает'), findsNothing);
       expect(
         find.byKey(const ValueKey('proxy-test-progress-bar')),
         findsNothing,
@@ -288,7 +335,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Рабочих 2 / 3'), findsOneWidget);
+    expect(find.text('Работает 2 / 3'), findsOneWidget);
     expect(find.text('Всего 3'), findsNothing);
     expect(
       find.byKey(const ValueKey('proxy-test-progress-bar')),
@@ -315,11 +362,11 @@ void main() {
     final latency = tester.widget<Text>(find.text('45 ms'));
     final theme = Theme.of(tester.element(find.byType(ProxiesPage)));
     expect(latency.style?.color, theme.colorScheme.onSurfaceVariant);
-    expect(find.textContaining('Рабочих'), findsNothing);
+    expect(find.textContaining('Работает'), findsNothing);
     expect(find.byType(ProxyLatencyDots), findsNothing);
   });
 
-  testWidgets('progress bar and counter are hidden when idle without results', (
+  testWidgets('availability shows zero before the first manual result', (
     tester,
   ) async {
     final progressNotifier = ValueNotifier<UrlTestProgressState>(
@@ -339,7 +386,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Прокси'), findsOneWidget);
-    expect(find.textContaining('Рабочих'), findsNothing);
+    expect(find.text('Работает 0 / 10'), findsOneWidget);
     expect(find.text('Всего 1'), findsNothing);
   });
 
@@ -351,6 +398,7 @@ void main() {
       const UrlTestProgressState(
         isRunning: true,
         total: 57,
+        showCheckProgress: true,
         working: 38,
         failed: 3,
       ),
@@ -395,6 +443,7 @@ void main() {
       const UrlTestProgressState(
         isRunning: true,
         total: 57,
+        showCheckProgress: true,
         working: 38,
         failed: 3,
       ),
@@ -427,6 +476,7 @@ void main() {
         const UrlTestProgressState(
           isRunning: true,
           total: 367,
+          showCheckProgress: true,
           working: 14,
           failed: 144,
         ),
@@ -492,6 +542,7 @@ void main() {
       const UrlTestProgressState(
         isRunning: true,
         total: 57,
+        showCheckProgress: true,
         working: 38,
         failed: 3,
       ),
@@ -505,7 +556,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final working = find.text('Рабочих 38 / 57');
+    final working = find.text('Работает 38 / 57');
     final tested = find.text('Проверено 41 / 57');
     expect(working, findsOneWidget);
     expect(tested, findsOneWidget);

@@ -4,6 +4,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
   const _GroupOutboundsSheet({
     required this.group,
     required this.children,
+    required this.groupChildrenByTag,
     required this.selectedTag,
     required this.progressiveBlurEnabled,
     this.runtimeStates,
@@ -18,6 +19,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
 
   final AppProxySummary group;
   final List<AppProxySummary> children;
+  final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore? runtimeStates;
@@ -35,6 +37,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
     return _GroupOutboundsSheetBody(
       group: group,
       children: children,
+      groupChildrenByTag: groupChildrenByTag,
       selectedTag: selectedTag,
       progressiveBlurEnabled: progressiveBlurEnabled,
       runtimeStates: runtimeStates,
@@ -53,6 +56,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   const _GroupOutboundsSheetBody({
     required this.group,
     required this.children,
+    required this.groupChildrenByTag,
     required this.selectedTag,
     required this.progressiveBlurEnabled,
     this.runtimeStates,
@@ -67,6 +71,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
 
   final AppProxySummary group;
   final List<AppProxySummary> children;
+  final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore? runtimeStates;
@@ -93,8 +98,28 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   List<AppProxySummary>? _sortedChildrenCache;
   ProxySort? _sortedChildrenSort;
   Map<Key, int> _childIndexes = const <Key, int>{};
+  late final List<AppProxySummary> _navigation;
+  final Map<String, ScrollController> _scrollControllers = {};
 
-  Key get _groupHeaderKey => ValueKey('proxy-group-header-${widget.group.tag}');
+  AppProxySummary get _group {
+    if (_navigation.length == 1) return widget.group;
+    final current = _navigation.last;
+    final parentTag = _navigation[_navigation.length - 2].tag;
+    for (final child
+        in widget.groupChildrenByTag[parentTag] ?? const <AppProxySummary>[]) {
+      if (child.tag == current.tag) return child;
+    }
+    return current;
+  }
+
+  List<AppProxySummary> get _children =>
+      widget.groupChildrenByTag[_group.tag] ??
+      (_navigation.length == 1 ? widget.children : const []);
+
+  ScrollController get _scrollController =>
+      _scrollControllers.putIfAbsent(_group.tag, () => ScrollController());
+
+  Key get _groupHeaderKey => ValueKey('proxy-group-header-${_group.tag}');
 
   Key _childKey(AppProxySummary proxy) => ValueKey('proxy-row-${proxy.tag}');
 
@@ -103,6 +128,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     super.initState();
     _sort = widget.initialSort;
     _selectedTag = widget.selectedTag;
+    _navigation = [widget.group];
     widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
   }
 
@@ -114,6 +140,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
     }
     if (oldWidget.children != widget.children ||
+        oldWidget.groupChildrenByTag != widget.groupChildrenByTag ||
         oldWidget.group.selectedChildTag != widget.group.selectedChildTag) {
       _sortedChildrenCache = null;
       _sortedChildrenSort = null;
@@ -129,7 +156,45 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   void dispose() {
     _runtimeResortTimer?.cancel();
     widget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
+    for (final controller in _scrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  bool _canOpenGroup(AppProxySummary group) =>
+      group.isGroup &&
+      group.membersSelectable &&
+      (widget.groupChildrenByTag[group.tag]?.isNotEmpty ?? false) &&
+      !_navigation.any((ancestor) => ancestor.tag == group.tag);
+
+  void _resetNavigationPresentation() {
+    _runtimeResortTimer?.cancel();
+    _runtimeResortTimer = null;
+    _listScrollActive = false;
+    _runtimeResortPending = false;
+    _sortedChildrenCache = null;
+    _sortedChildrenSort = null;
+    _childIndexes = const {};
+  }
+
+  void _openGroup(AppProxySummary group) {
+    if (!_canOpenGroup(group)) return;
+    setState(() {
+      _navigation.add(group);
+      _resetNavigationPresentation();
+    });
+  }
+
+  void _back() {
+    if (_navigation.length == 1) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _navigation.removeLast();
+      _resetNavigationPresentation();
+    });
   }
 
   void _onRuntimeStatesChanged() {
@@ -146,27 +211,24 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     if (_runtimeResortTimer?.isActive ?? false) {
       return;
     }
-    _runtimeResortTimer = Timer(
-      _runtimeResortInterval(widget.children.length),
-      () {
-        _runtimeResortTimer = null;
-        if (!mounted ||
-            (_sort != ProxySort.latency && _sort != ProxySort.working)) {
-          return;
-        }
-        if (_listScrollActive) {
-          _runtimeResortPending = true;
-          return;
-        }
-        _runtimeResortPending = false;
-        final previous = _sortedChildrenCache;
-        _sortedChildrenCache = null;
-        _sortedChildrenSort = null;
-        if (!listEquals(previous, _sortedChildren())) {
-          setState(() {});
-        }
-      },
-    );
+    _runtimeResortTimer = Timer(_runtimeResortInterval(_children.length), () {
+      _runtimeResortTimer = null;
+      if (!mounted ||
+          (_sort != ProxySort.latency && _sort != ProxySort.working)) {
+        return;
+      }
+      if (_listScrollActive) {
+        _runtimeResortPending = true;
+        return;
+      }
+      _runtimeResortPending = false;
+      final previous = _sortedChildrenCache;
+      _sortedChildrenCache = null;
+      _sortedChildrenSort = null;
+      if (!listEquals(previous, _sortedChildren())) {
+        setState(() {});
+      }
+    });
   }
 
   bool _handleScrollNotification(ScrollNotification notification) {
@@ -201,7 +263,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     if (cached != null && _sortedChildrenSort == _sort) {
       return cached;
     }
-    final children = widget.children
+    final children = _children
         .where(
           (proxy) => shouldShowProxyForSort(
             proxy,
@@ -214,8 +276,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       children,
       _sort,
       keepPinnedFirst: false,
-      prioritizedTag: _selectedTag == widget.group.tag
-          ? (widget.group.selectedChildTag ?? '')
+      prioritizedTag: _selectedTag == _group.tag
+          ? (_group.selectedChildTag ?? '')
           : _selectedTag,
       runtimeStateFor: widget.runtimeStates?.valueFor,
     );
@@ -263,6 +325,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     String? titleOverride,
     String? subtitleOverride,
     VoidCallback? onLongPress,
+    ValueChanged<Rect>? onOpenGroup,
     required VoidCallback onTap,
   }) {
     final identity = _ProxyTileIdentity(
@@ -286,6 +349,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
             ? null
             : () => unawaited(widget.onProxyUrlTest!(proxy.tag)),
         onLongPress: onLongPress,
+        onOpenGroup: onOpenGroup,
       );
     }
 
@@ -315,7 +379,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final bottomInset = appSystemNavigationBarInset(context);
-    final activeChildTag = widget.group.selectedChildTag;
+    final group = _group;
+    final activeChildTag = group.selectedChildTag;
     final children = _sortedChildren();
     AppProxySummary? activeChild;
     for (final proxy in children) {
@@ -325,12 +390,18 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       }
     }
 
-    final groupBaseTitle = isLowestProxyTag(widget.group.tag)
-        ? _localizedLowestBaseLabel(l10n, widget.group.tag)
-        : widget.group.displayName;
-    final groupTitle = activeChild == null
+    final groupBaseTitle = isLowestProxyTag(group.tag)
+        ? _localizedLowestBaseLabel(l10n, group.tag)
+        : group.displayName;
+    final actualChildName = group.selectedChildName?.trim() ?? '';
+    final selectedChildName = actualChildName.isNotEmpty
+        ? actualChildName
+        : activeChild == null
+        ? ''
+        : _localizedProxyTitle(l10n, activeChild);
+    final groupTitle = selectedChildName.isEmpty
         ? groupBaseTitle
-        : '$groupBaseTitle · ${_localizedProxyTitle(l10n, activeChild)}';
+        : '$groupBaseTitle · $selectedChildName';
     final groupSubtitle = activeChild == null
         ? l10n.proxyAutomaticSelectionLabel
         : '${l10n.proxyAutomaticSelectionLabel} · '
@@ -358,9 +429,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
               NotificationListener<ScrollNotification>(
                 onNotification: _handleScrollNotification,
                 child: ListView.builder(
-                  physics: const ClampingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
+                  key: PageStorageKey('proxy-group-list-${group.tag}'),
+                  controller: _scrollController,
                   itemExtent: _proxyRowExtent(context),
                   scrollCacheExtent: _kProxyListScrollCacheExtent,
                   addAutomaticKeepAlives: false,
@@ -377,12 +447,12 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                       return KeyedSubtree(
                         key: _groupHeaderKey,
                         child: _runtimeTile(
-                          proxy: widget.group,
-                          selected: widget.group.tag == _selectedTag,
+                          proxy: group,
+                          selected: group.tag == _selectedTag,
                           highlighted: false,
                           titleOverride: groupTitle,
                           subtitleOverride: groupSubtitle,
-                          onTap: () => _select(widget.group.tag),
+                          onTap: () => _select(group.tag),
                         ),
                       );
                     }
@@ -395,7 +465,12 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                         highlighted:
                             proxy.tag == activeChildTag || proxy.highlighted,
                         onTap: () => _select(proxy.tag),
-                        onLongPress: () => _openProxyShareSheet(proxy),
+                        onLongPress: proxy.isGroup
+                            ? null
+                            : () => _openProxyShareSheet(proxy),
+                        onOpenGroup: _canOpenGroup(proxy)
+                            ? (_) => _openGroup(proxy)
+                            : null,
                       ),
                     );
                   },
@@ -416,11 +491,11 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                     child: child!,
                   ),
                   child: _GroupOutboundsSheetHeader(
-                    title: l10n.proxySelectorTitle,
+                    title: groupBaseTitle,
                     l10n: l10n,
                     sort: _sort,
                     onSortSelected: _setSort,
-                    onClose: () => Navigator.of(context).pop(),
+                    onClose: _back,
                   ),
                 ),
               ),
@@ -430,43 +505,49 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       ),
     );
 
-    return RepaintBoundary(
-      child: AnimatedBuilder(
-        animation: widget.routeAnimation,
-        builder: (context, _) {
-          final raw = widget.routeAnimation.value.clamp(0.0, 1.0).toDouble();
-          final progress = Curves.easeOutCubic.transform(raw);
-          final scrimProgress = Curves.easeInOutCubic.transform(raw);
-          final animatedRect = panelRect.shift(
-            Offset(0, panelRect.height * (1 - progress)),
-          );
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () => Navigator.of(context).pop(),
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.32 * scrimProgress),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned.fromRect(
-                rect: animatedRect,
-                child: IgnorePointer(
-                  ignoring: raw < 0.6,
-                  child: ClipRRect(
-                    clipBehavior: Clip.hardEdge,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(28),
-                    ),
-                    child: sheetBody,
+    return PopScope(
+      canPop: _navigation.length == 1,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: widget.routeAnimation,
+          builder: (context, _) {
+            final raw = widget.routeAnimation.value.clamp(0.0, 1.0).toDouble();
+            final progress = Curves.easeOutCubic.transform(raw);
+            final scrimProgress = Curves.easeInOutCubic.transform(raw);
+            final animatedRect = panelRect.shift(
+              Offset(0, panelRect.height * (1 - progress)),
+            );
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => Navigator.of(context).pop(),
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.32 * scrimProgress),
+                    child: const SizedBox.expand(),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+                Positioned.fromRect(
+                  rect: animatedRect,
+                  child: IgnorePointer(
+                    ignoring: raw < 0.6,
+                    child: ClipRRect(
+                      clipBehavior: Clip.hardEdge,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                      child: sheetBody,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -512,13 +593,14 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 16,
-            right: 16,
+            left: 72,
+            right: 72,
             top: 18,
             bottom: 0,
             child: Center(
               child: Text(
                 title,
+                key: const ValueKey('proxy-group-current-name'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

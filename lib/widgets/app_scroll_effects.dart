@@ -30,7 +30,7 @@ class _AppScrollEffectsState extends State<AppScrollEffects> {
   @override
   Widget build(BuildContext context) {
     return ScrollConfiguration(
-      behavior: const _AppScrollBehavior(),
+      behavior: const MaterialScrollBehavior(),
       child: NotificationListener<ScrollNotification>(
         onNotification: _handleScrollNotification,
         child: widget.child,
@@ -173,12 +173,3 @@ class _AppScrollEffectsState extends State<AppScrollEffects> {
 }
 
 enum _ScrollEdge { leading, trailing }
-
-class _AppScrollBehavior extends MaterialScrollBehavior {
-  const _AppScrollBehavior();
-
-  @override
-  ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
-  }
-}

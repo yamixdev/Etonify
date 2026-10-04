@@ -814,10 +814,10 @@ abstract class AppSettingsStore {
           },
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: boolValue(_hideServerIpKey, defaultValue: false),
-      sendHwidToProviders:
-          !boolValue(_hwidDefaultNoticeShownKey, defaultValue: false)
-          ? true
-          : boolValue(_sendHwidToProvidersKey, defaultValue: true),
+      sendHwidToProviders: boolValue(
+        _sendHwidToProvidersKey,
+        defaultValue: true,
+      ),
       hwidDefaultNoticeShown: boolValue(
         _hwidDefaultNoticeShownKey,
         defaultValue: false,

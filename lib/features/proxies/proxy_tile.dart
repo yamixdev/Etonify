@@ -119,18 +119,16 @@ class ProxyTile extends StatelessWidget {
           ? theme.colorScheme.primary.withValues(alpha: selected ? 1 : .46)
           : Colors.transparent,
     );
-    final longPress =
-        onLongPress ??
-        (onOpenGroup == null
-            ? null
-            : () {
-                final box = context.findRenderObject() as RenderBox?;
-                onOpenGroup!(
-                  box != null && box.attached
-                      ? box.localToGlobal(Offset.zero) & box.size
-                      : Rect.zero,
-                );
-              });
+    final VoidCallback? openGroup = onOpenGroup == null
+        ? null
+        : () {
+            final box = context.findRenderObject() as RenderBox?;
+            onOpenGroup!(
+              box != null && box.attached
+                  ? box.localToGlobal(Offset.zero) & box.size
+                  : Rect.zero,
+            );
+          };
     final rowChild = Stack(
       alignment: AlignmentDirectional.centerStart,
       children: [
@@ -151,13 +149,22 @@ class ProxyTile extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child:
-                      identityChild ??
-                      _ProxyTileIdentity(
-                        proxy: proxy,
-                        titleOverride: titleOverride,
-                        subtitleOverride: subtitleOverride,
-                      ),
+                  child: _ProxyTileActions(
+                    animate: shouldAnimate,
+                    onTap: onTap,
+                    onLongPress:
+                        onLongPress ??
+                        openGroup ??
+                        (proxy.isGroup ? () {} : null),
+                    onOpenGroup: openGroup,
+                    child:
+                        identityChild ??
+                        _ProxyTileIdentity(
+                          proxy: proxy,
+                          titleOverride: titleOverride,
+                          subtitleOverride: subtitleOverride,
+                        ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 SizedBox(width: selecting ? 104 : 72, child: latencyLabel),
@@ -167,34 +174,47 @@ class ProxyTile extends StatelessWidget {
         ),
       ],
     );
-    final child = animate
-        ? InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: onTap,
-            onLongPress: longPress,
-            child: rowChild,
-          )
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            onLongPress: longPress,
-            child: rowChild,
-          );
     if (shouldAnimate) {
       return AnimatedContainer(
         duration: animationDuration,
         curve: Curves.easeOutCubic,
         margin: EdgeInsets.fromLTRB(horizontalInset, 1, 6, 1),
         decoration: decoration,
-        child: child,
+        child: rowChild,
       );
     }
     return Container(
       margin: EdgeInsets.fromLTRB(horizontalInset, 1, 6, 1),
       decoration: decoration,
-      child: child,
+      child: rowChild,
     );
   }
+}
+
+// Callbacks are looked up when an action runs, keeping the cached identity
+// subtree independent of frequent latency updates.
+class _ProxyTileActions extends InheritedWidget {
+  const _ProxyTileActions({
+    required this.animate,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onOpenGroup,
+    required super.child,
+  });
+
+  final VoidCallback onTap;
+  final bool animate;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onOpenGroup;
+
+  static _ProxyTileActions of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_ProxyTileActions>()!;
+
+  @override
+  bool updateShouldNotify(_ProxyTileActions oldWidget) =>
+      animate != oldWidget.animate ||
+      (onOpenGroup == null) != (oldWidget.onOpenGroup == null) ||
+      (onLongPress == null) != (oldWidget.onLongPress == null);
 }
 
 // Passed as ValueListenableBuilder.child so ping-only updates do not rebuild
@@ -214,36 +234,105 @@ class _ProxyTileIdentity extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    final actions = context
+        .dependOnInheritedWidgetOfExactType<_ProxyTileActions>()!;
+    Widget action({
+      Key? key,
+      required VoidCallback onTap,
+      VoidCallback? onLongPress,
+      required Widget child,
+    }) => actions.animate
+        ? InkWell(
+            key: key,
+            borderRadius: BorderRadius.circular(8),
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: child,
+          )
+        : Semantics(
+            button: true,
+            child: GestureDetector(
+              key: key,
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              onLongPress: onLongPress,
+              child: child,
+            ),
+          );
+    Widget selectAction(Widget child, {double height = 28, Key? key}) => action(
+      key: key,
+      onTap: () => _ProxyTileActions.of(context).onTap(),
+      onLongPress: actions.onLongPress == null
+          ? null
+          : () => _ProxyTileActions.of(context).onLongPress?.call(),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 44, minHeight: height),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: child,
+        ),
+      ),
+    );
+    final subtitle = Text(
+      subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
     return Row(
       children: [
-        SizedBox(
-          width: 34,
-          height: 34,
-          child: CountryFlagBadge(countryCode: proxy.countryCode, size: 34),
+        selectAction(
+          SizedBox(
+            width: 36,
+            height: 48,
+            child: Center(
+              child: CountryFlagBadge(countryCode: proxy.countryCode, size: 34),
+            ),
+          ),
+          height: 48,
+          key: ValueKey('proxy-flag-${proxy.tag}'),
         ),
-        const SizedBox(width: 12),
-        Expanded(
+        const SizedBox(width: 4),
+        Flexible(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                titleOverride ?? _localizedProxyTitle(l10n, proxy),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+              selectAction(
+                Text(
+                  titleOverride ?? _localizedProxyTitle(l10n, proxy),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+              if (actions.onOpenGroup != null)
+                Tooltip(
+                  message: l10n.proxyOpenGroup(
+                    _localizedProxyTitle(l10n, proxy),
+                  ),
+                  child: action(
+                    key: ValueKey('proxy-open-group-${proxy.tag}'),
+                    onTap: () =>
+                        _ProxyTileActions.of(context).onOpenGroup?.call(),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 28),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: subtitle,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 3),
+                  child: subtitle,
                 ),
-              ),
             ],
           ),
         ),

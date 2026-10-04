@@ -2,6 +2,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
 
 void main() {
+  test(
+    'offline progress keeps the full catalog when the queue skips a leaf',
+    () {
+      final session = OfflineUrlTestSession(
+        id: 'partial-queue',
+        fingerprint: 'config',
+        physicalNetworkEpoch: 1,
+        tags: {'a', 'b'},
+        visibleTags: {'a', 'b', 'skipped'},
+        initialResults: const {'skipped': true},
+      )..runOffline();
+      expect(session.progress.total, 3);
+      expect(session.progress.working, 1);
+      expect(session.progress.tested, 0);
+      expect(session.pendingTags, {'a', 'b'});
+      session.accept(
+        tag: 'a',
+        delayMillis: 50,
+        available: true,
+        logicalSessionId: session.id,
+        physicalNetworkEpoch: 1,
+      );
+      expect(session.progress.working, 2);
+      expect(session.progress.tested, 1);
+      expect(session.isTerminal, isFalse);
+      session.accept(
+        tag: 'b',
+        delayMillis: 0,
+        available: false,
+        logicalSessionId: session.id,
+        physicalNetworkEpoch: 1,
+      );
+      expect(session.progress.total, 3);
+      expect(session.progress.working, 2);
+      expect(session.progress.failed, 1);
+      expect(session.progress.tested, 2);
+      expect(session.pendingTags, isEmpty);
+      expect(session.phase, OfflineUrlTestPhase.completed);
+      expect(session.progress.showCheckProgress, isFalse);
+    },
+  );
+
+  test(
+    'offline recheck retains last availability but starts checked at zero',
+    () {
+      final session = OfflineUrlTestSession(
+        id: 'recheck',
+        fingerprint: 'config',
+        physicalNetworkEpoch: 1,
+        tags: {'a', 'b', 'c'},
+        initialResults: const {
+          'a': true,
+          'b': true,
+          'c': false,
+          'old-profile': true,
+        },
+      )..runOffline();
+      expect(session.progress.working, 2);
+      expect(session.progress.tested, 0);
+      session.accept(
+        tag: 'a',
+        delayMillis: 0,
+        available: false,
+        logicalSessionId: 'recheck',
+        physicalNetworkEpoch: 1,
+      );
+      expect(session.progress.working, 1);
+      expect(session.progress.tested, 1);
+      expect(session.pendingTags, {'b', 'c'});
+      session.cancel();
+      expect(session.progress.working, 1);
+      expect(session.progress.showCheckProgress, isFalse);
+    },
+  );
   test('completed offline sweep suppresses only duplicate startup checks', () {
     final session = OfflineUrlTestSession(
       id: 'manual-startup',

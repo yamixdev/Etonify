@@ -90,16 +90,7 @@ String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
 }
 
 bool subscriptionCountNeedsHydration(Subscription subscription) =>
-    subscription.cachedVisibleProxyCount < 0 ||
-    (subscription.cachedVisibleProxyCount == 0 && subscription.hasRawPayload);
-
-int _visibleProxyCount(Iterable<Outbound> outbounds) {
-  return outbounds
-      .where((outbound) => !outbound.info.deleted)
-      .where((outbound) => isSupportedOutboundConfig(outbound.config))
-      .where((outbound) => outbound.config['_group_only'] != true)
-      .length;
-}
+    subscription.cachedVisibleProxyCount < 0;
 
 enum _HappImportDecision { sendHwid, withoutHwid }
 
@@ -277,7 +268,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           subscription,
         );
       }
-      final visibleProxyCount = _visibleProxyCount(hydrated.outbounds);
+      final visibleProxyCount = hydrated.concreteServerCount;
       hasUnsupportedWireGuard =
           hasUnsupportedWireGuard ||
           hydrated.outbounds.any(
@@ -549,9 +540,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       await _maybeHandleMovedSubscription(created);
       if (mounted) {
         setState(() {
-          _subscriptionServerCounts[created.id] = _visibleProxyCount(
-            created.outbounds,
-          );
+          _subscriptionServerCounts[created.id] = created.concreteServerCount;
           if (created.rawContent.trim().length > 16) {
             _subscriptionsWithRawPayload.add(created.id);
           }
@@ -1170,7 +1159,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                         CustomScrollView(
                           controller: _sheetScrollController,
                           physics: listCanScroll
-                              ? const ClampingScrollPhysics()
+                              ? null
                               : const NeverScrollableScrollPhysics(),
                           slivers: [
                             const SliverToBoxAdapter(
@@ -1233,7 +1222,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                                         _subscriptionServerCounts[sub.id];
                                     final serverCount =
                                         hydratedServerCount ??
-                                        _visibleProxyCount(sub.outbounds);
+                                        sub.concreteServerCount;
                                     final rawLooksNonEmpty =
                                         _subscriptionsWithRawPayload.contains(
                                           sub.id,

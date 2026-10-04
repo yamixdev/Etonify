@@ -30,6 +30,24 @@ class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
     'error',
   ];
   String _levelFilter = 'all';
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _jumpToLatest() {
+    if (!_scrollController.hasClients) return;
+    unawaited(
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+      ),
+    );
+  }
 
   static const _visibleLevelOrder = <String>[
     'all',
@@ -248,6 +266,17 @@ class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
       appBar: AppBar(
         title: Text(l10n.logsTitle),
         actions: [
+          ValueListenableBuilder<List<AppLogEntry>>(
+            valueListenable: AppLogStore.entries,
+            builder: (context, entries, _) {
+              if (!entries.any(_matchesFilter)) return const SizedBox.shrink();
+              return IconButton(
+                onPressed: _jumpToLatest,
+                icon: const Icon(Icons.vertical_align_bottom_rounded),
+                tooltip: l10n.logsJumpToLatest,
+              );
+            },
+          ),
           IconButton(
             onPressed: () => _exportVisibleLogs(context),
             icon: const Icon(Icons.file_upload_outlined),
@@ -308,6 +337,7 @@ class _SettingsLogsPageState extends ConsumerState<SettingsLogsPage> {
                     ),
                   )
                 : ListView.separated(
+                    controller: _scrollController,
                     padding: EdgeInsets.fromLTRB(
                       16,
                       progressiveHeaderTopPadding(context, 16),

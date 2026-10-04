@@ -1,3 +1,134 @@
+import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/data/subscription/outbound_support.dart';
+
+const subscriptionServerCountPolicyVersion = 1;
+
+/// Whether an outbound represents a real, supported server rather than a
+/// navigation group, synthetic choice or core-only dependency.
+bool isConcreteSubscriptionServer(Outbound outbound) {
+  final type = outboundTypeOf(outbound.config);
+  return outbound.tag.trim().isNotEmpty &&
+      !outbound.info.deleted &&
+      !isSyntheticProxyTag(outbound.tag) &&
+      outbound.config['_synthetic'] != true &&
+      !(outbound.config['_group_only'] == true &&
+          outbound.config['detour'] is String &&
+          (outbound.config['detour'] as String).trim().isNotEmpty) &&
+      isSupportedOutboundConfig(outbound.config) &&
+      !const {
+        '',
+        'unknown',
+        'selector',
+        'urltest',
+        'direct',
+        'block',
+        'dns',
+      }.contains(type);
+}
+
+/// Unique server leaves reachable through explicit group membership. Detour
+/// dependencies keep a server usable but are not themselves server choices.
+/// The walk and dependency pruning are bounded even for cyclic provider groups.
+Set<String> concreteSubscriptionServerTags(
+  Iterable<Outbound> outbounds, [
+  Iterable<SubscriptionGroup> groups = const [],
+]) {
+  final nodes = <String, Outbound>{
+    for (final node in outbounds)
+      if (!node.info.deleted && isSupportedOutboundConfig(node.config))
+        node.tag: node,
+  };
+  final children = <String, Set<String>>{};
+  final primaryChildren = <String, Set<String>>{};
+  final fallbackTags = <String>{};
+  for (final node in nodes.values) {
+    final type = outboundTypeOf(node.config);
+    if (type != 'selector' && type != 'urltest') continue;
+    final references = node.config['outbounds'];
+    children[node.tag] = {
+      if (references is List) ...references.whereType<String>(),
+    };
+    primaryChildren[node.tag] = children[node.tag]!;
+  }
+  for (final group in groups) {
+    fallbackTags.addAll(group.fallbackOutboundTags);
+    nodes.putIfAbsent(
+      group.tag,
+      () => Outbound(
+        tag: group.tag,
+        name: group.name,
+        config: {
+          ...group.config,
+          'type': group.type == 'selector' ? 'selector' : 'urltest',
+        },
+      ),
+    );
+    final references = group.config['outbounds'];
+    children.putIfAbsent(group.tag, () => {}).addAll({
+      ...group.outboundTags,
+      if (references is List) ...references.whereType<String>(),
+    });
+    primaryChildren[group.tag] = {
+      ...group.outboundTags,
+      if (references is List) ...references.whereType<String>(),
+    };
+    final direct = group.config['_direct_outbounds'];
+    if (direct is Map) {
+      for (final entry in direct.entries) {
+        if (entry.value is! Map) continue;
+        final config = Map<String, dynamic>.from(entry.value as Map);
+        if (!isSupportedOutboundConfig(config)) continue;
+        final tag = entry.key.toString();
+        nodes.putIfAbsent(
+          tag,
+          () => Outbound(tag: tag, name: tag, config: config),
+        );
+      }
+    }
+  }
+  // Removing one unavailable detour may invalidate another dependent server.
+  var changed = true;
+  while (changed) {
+    final unavailable = <String>{};
+    for (final node in nodes.values) {
+      final detour = node.config['detour'];
+      if ((detour is String && !nodes.containsKey(detour)) ||
+          (children.containsKey(node.tag) &&
+              !primaryChildren[node.tag]!.any(nodes.containsKey))) {
+        unavailable.add(node.tag);
+      }
+    }
+    changed = unavailable.isNotEmpty;
+    for (final tag in unavailable) {
+      nodes.remove(tag);
+    }
+  }
+  final ownedTags = children.values.expand((tags) => tags).toSet();
+  final pending = <String>[
+    for (final node in nodes.values)
+      if (node.config['_group_only'] != true &&
+          !fallbackTags.contains(node.tag) &&
+          (!ownedTags.contains(node.tag) || children.containsKey(node.tag)) &&
+          !isSyntheticProxyTag(node.tag) &&
+          node.config['_synthetic'] != true)
+        node.tag,
+  ];
+  final seen = <String>{};
+  final servers = <String>{};
+  while (pending.isNotEmpty) {
+    final tag = pending.removeLast();
+    if (!seen.add(tag)) continue;
+    final node = nodes[tag];
+    if (node == null) continue;
+    if (children.containsKey(tag)) {
+      pending.addAll(children[tag]!);
+    } else if (isConcreteSubscriptionServer(node)) {
+      servers.add(tag);
+    }
+  }
+  return Set.unmodifiable(servers);
+}
+
 /// Parsed subscription header info (subscription-userinfo, profile-title, etc.)
 class SubscriptionInfo {
   const SubscriptionInfo({
@@ -549,6 +680,11 @@ class Subscription {
   final UrlTestConfig urlTestConfig;
   final SubscriptionInfo? info;
 
+  Set<String> get concreteServerTags =>
+      concreteSubscriptionServerTags(outbounds, groups);
+
+  int get concreteServerCount => concreteServerTags.length;
+
   bool get needsRefresh {
     if (disableAutoUpdate || autoRefreshMinutes <= 0) return false;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -556,12 +692,10 @@ class Subscription {
   }
 
   Map<String, dynamic> toMetadataMap() {
-    final payloadLoaded = rawContent.isNotEmpty || outbounds.isNotEmpty;
+    final payloadLoaded =
+        rawContent.isNotEmpty || outbounds.isNotEmpty || groups.isNotEmpty;
     final visibleProxyCount = payloadLoaded
-        ? outbounds
-              .where((outbound) => !outbound.info.deleted)
-              .where((outbound) => outbound.config['_group_only'] != true)
-              .length
+        ? concreteServerCount
         : cachedVisibleProxyCount;
     final rawPayloadAvailable = hasRawPayload || rawContent.trim().length > 16;
     return {
@@ -576,6 +710,8 @@ class Subscription {
       'auto_refresh_minutes': autoRefreshMinutes,
       if (autoRefreshOverridden) 'auto_refresh_overridden': true,
       if (visibleProxyCount >= 0) 'visible_proxy_count': visibleProxyCount,
+      if (visibleProxyCount >= 0)
+        'visible_proxy_count_policy': subscriptionServerCountPolicyVersion,
       if (rawPayloadAvailable) 'has_raw_payload': true,
       if (payloadRevision.isNotEmpty) 'payload_revision': payloadRevision,
       if (proxyChains.isNotEmpty)
@@ -621,7 +757,11 @@ class Subscription {
       markAllServersRussia: map['mark_all_servers_russia'] == true,
       autoRefreshMinutes: map['auto_refresh_minutes'] as int? ?? 360,
       autoRefreshOverridden: map['auto_refresh_overridden'] == true,
-      cachedVisibleProxyCount: map['visible_proxy_count'] as int? ?? -1,
+      cachedVisibleProxyCount:
+          map['visible_proxy_count_policy'] ==
+              subscriptionServerCountPolicyVersion
+          ? map['visible_proxy_count'] as int? ?? -1
+          : -1,
       hasRawPayload: map['has_raw_payload'] == true,
       payloadRevision: map['payload_revision'] as String? ?? '',
       proxyChains:

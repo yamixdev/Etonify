@@ -1,3 +1,23 @@
+/// Both success and failure are reusable terminal results, but never a
+/// persisted ping without a runtime timestamp or a previous network's result.
+bool latencyResultIsFresh({
+  required bool? result,
+  required int? measuredAtSeconds,
+  required int nowSeconds,
+  required int maxAgeSeconds,
+  required bool invalidated,
+}) {
+  if (invalidated ||
+      result == null ||
+      measuredAtSeconds == null ||
+      measuredAtSeconds <= 0 ||
+      maxAgeSeconds <= 0) {
+    return false;
+  }
+  final age = nowSeconds - measuredAtSeconds;
+  return age >= -5 && age <= maxAgeSeconds;
+}
+
 /// Includes every ancestor of a changed leaf, even when its children are
 /// intentionally hidden from the proxy list. Cycles are harmless here.
 Set<String> latencyAffectedTags(

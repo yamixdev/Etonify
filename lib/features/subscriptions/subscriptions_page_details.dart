@@ -1107,7 +1107,11 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 title: Text(l10n.sendHwidTitle),
-                                subtitle: Text(l10n.sendHwidSubtitle),
+                                subtitle: Text(
+                                  SubscriptionFetcher.sendHwidToProviders
+                                      ? l10n.sendHwidGlobalEnabledSubtitle
+                                      : l10n.sendHwidSubtitle,
+                                ),
                                 value:
                                     _sendHwid ||
                                     SubscriptionFetcher.sendHwidToProviders,

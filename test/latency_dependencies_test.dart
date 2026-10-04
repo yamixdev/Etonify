@@ -3,6 +3,30 @@ import 'package:meow_client/app/latency_dependencies.dart';
 
 void main() {
   test(
+    'group selection only reuses recent terminal results on this network',
+    () {
+      bool fresh({
+        int? time = 950,
+        bool? result = true,
+        bool invalidated = false,
+      }) => latencyResultIsFresh(
+        result: result,
+        measuredAtSeconds: time,
+        nowSeconds: 1000,
+        maxAgeSeconds: 60,
+        invalidated: invalidated,
+      );
+      expect(fresh(), isTrue);
+      expect(fresh(result: false), isTrue);
+      expect(fresh(time: 939), isFalse);
+      expect(fresh(time: null), isFalse);
+      expect(fresh(time: 0), isFalse);
+      expect(fresh(time: 1100), isFalse);
+      expect(fresh(result: null), isFalse);
+      expect(fresh(invalidated: true), isFalse);
+    },
+  );
+  test(
     'group check expands nested groups into unique concrete server tags',
     () {
       expect(

@@ -2,6 +2,88 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
+  test(
+    'new sweep keeps last availability and counts only new unique results',
+    () {
+      final counter = UrlTestProgressCounter();
+      final results = <String, bool?>{'a': true, 'b': true, 'c': false};
+      counter.reset(
+        visibleTags: const ['a', 'b', 'c'],
+        testableTags: const {'a', 'b', 'c'},
+        resultForTag: (tag) => results[tag],
+      );
+      counter.beginSweep(testableTags: const {'a', 'b', 'c'});
+      expect(counter.state(isRunning: true).working, 2);
+      expect(counter.state(isRunning: true).tested, 0);
+      counter.update(['a', 'a'], (tag) => results[tag]);
+      expect(counter.state().working, 2);
+      expect(counter.state().tested, 1);
+      results['b'] = false;
+      counter.update(['b'], (tag) => results[tag]);
+      expect(counter.state().working, 1);
+      expect(counter.state().tested, 2);
+      counter.applyCoreSessionSnapshot(total: 3, completed: 1);
+      expect(counter.state().tested, 2);
+      counter.beginSweep(testableTags: const {'a', 'b', 'c'});
+      expect(counter.state().working, 1);
+      expect(counter.state().tested, 0);
+    },
+  );
+  test('helpers in native queue do not count as checked visible servers', () {
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {'a', 'b', 'helper'},
+      resultForTag: (_) => null,
+    );
+    counter.beginSweep(testableTags: const {'a', 'b', 'helper'});
+    counter.applyCoreSessionSnapshot(total: 3, completed: 1);
+    counter.update(['helper'], (_) => true);
+    expect(counter.state().tested, 0);
+    counter.update(['a'], (_) => false);
+    expect(counter.state().tested, 1);
+  });
+  test('cached availability is not completion of a new sweep', () {
+    const progress = UrlTestProgressState(
+      isRunning: true,
+      total: 10,
+      working: 8,
+      failed: 2,
+      completed: 0,
+    );
+    expect(progress.tested, 0);
+    expect(progress.working, 8);
+  });
+  test('rechecking a group replaces availability per unique server', () {
+    final counter = UrlTestProgressCounter();
+    final tags = {for (var i = 0; i < 10; i++) 'node-$i'};
+    final results = {for (final tag in tags) tag: true};
+    counter.reset(
+      visibleTags: tags,
+      testableTags: tags,
+      resultForTag: (tag) => results[tag],
+    );
+    counter.update(['node-0', 'node-0', 'node-1'], (tag) => results[tag]);
+    expect(counter.state().working, 10);
+    results.addAll({'node-1': false, 'node-3': false, 'node-8': false});
+    counter.update(tags, (tag) => results[tag]);
+    expect(counter.state().working, 7);
+    counter.update(tags, (tag) => results[tag]);
+    expect(counter.state().working, 7);
+    results['node-3'] = true;
+    counter.update(['node-3', 'node-3'], (tag) => results[tag]);
+    expect(counter.state().working, 8);
+  });
+  test('native helpers cannot increase the visible server denominator', () {
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {'a', 'b', 'detour-helper'},
+      resultForTag: (_) => null,
+    );
+    counter.applyCoreSessionSnapshot(total: 3, completed: 1);
+    expect(counter.state().total, 2);
+  });
   test('temporary metadata-only reload preserves a sweep before hydration', () {
     final counter = UrlTestProgressCounter();
     void synchronize({bool hydrated = true}) => counter.synchronizeCatalog(
@@ -180,13 +262,10 @@ void main() {
       expect(counter.state().total, 5);
     },
   );
-  test(
-    'checked count never trails visible successes when status event lags',
-    () {
-      const progress = UrlTestProgressState(total: 3, working: 2, completed: 1);
-      expect(progress.tested, 2);
-    },
-  );
+  test('explicit checked count is independent of cached availability', () {
+    const progress = UrlTestProgressState(total: 3, working: 2, completed: 1);
+    expect(progress.tested, 1);
+  });
 
   test(
     'progress leaves untested visible nodes pending and updates changed tags',

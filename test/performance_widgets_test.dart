@@ -527,52 +527,60 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('provider group selects the group without exposing members', (
-    tester,
-  ) async {
-    final selected = <String>[];
-    final group = _performanceProxy(0).copyWith(
-      tag: 'provider-auto',
-      displayName: 'Provider auto',
-      isGroup: true,
-      membersSelectable: false,
-      childTags: ['cand-1'],
-      childCount: 1,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: ProxiesPage(
-            proxies: [group],
-            selectedTag: '',
-            connected: true,
-            progressiveBlurEnabled: false,
-            onSelected: selected.add,
-            onUrlTest: () async {},
-            groupChildrenByTag: {
-              'provider-auto': [
-                _performanceProxy(
-                  1,
-                ).copyWith(tag: 'cand-1', displayName: 'cand-1'),
-              ],
-            },
+  testWidgets(
+    'provider group name selects; subtitle opens members separately',
+    (tester) async {
+      final selected = <String>[];
+      final group = _performanceProxy(0).copyWith(
+        tag: 'provider-auto',
+        displayName: 'Provider auto',
+        isGroup: true,
+        childTags: ['cand-1'],
+        childCount: 1,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: ProxiesPage(
+              proxies: [group],
+              selectedTag: '',
+              connected: true,
+              progressiveBlurEnabled: false,
+              onSelected: selected.add,
+              onUrlTest: () async {},
+              groupChildrenByTag: {
+                'provider-auto': [
+                  _performanceProxy(
+                    1,
+                  ).copyWith(tag: 'cand-1', displayName: 'cand-1'),
+                ],
+              },
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final tile = find.byWidgetPredicate(
-      (widget) => widget is ProxyTile && widget.proxy.tag == 'provider-auto',
-    );
-    expect(tester.widget<ProxyTile>(tile).onOpenGroup, isNull);
-    await tester.tap(tile);
-    await tester.pumpAndSettle();
-    expect(selected, ['provider-auto']);
-    expect(find.text('cand-1'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.pumpAndSettle();
+      final tile = find.byWidgetPredicate(
+        (widget) => widget is ProxyTile && widget.proxy.tag == 'provider-auto',
+      );
+      expect(tester.widget<ProxyTile>(tile).onOpenGroup, isNotNull);
+      await tester.tap(
+        find.descendant(of: tile, matching: find.text('Provider auto')),
+      );
+      await tester.pumpAndSettle();
+      expect(selected, ['provider-auto']);
+      expect(find.text('cand-1'), findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('proxy-open-group-provider-auto')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('cand-1'), findsOneWidget);
+      expect(selected, ['provider-auto']);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('expandable group sheet paints an opaque full panel', (
     tester,
@@ -604,12 +612,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final tile = tester.widget<ProxyTile>(
-      find.byWidgetPredicate(
-        (widget) => widget is ProxyTile && widget.proxy.tag == 'group',
-      ),
-    );
-    tile.onOpenGroup!(Rect.zero);
+    await tester.tap(find.byKey(const ValueKey('proxy-open-group-group')));
     await tester.pumpAndSettle();
     final surface = find.byKey(const ValueKey('proxy-group-sheet-surface'));
     expect(surface, findsOneWidget);

@@ -354,7 +354,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
               SingleChildScrollView(
                 controller: widget.scrollController,
                 physics: contentCanScroll
-                    ? const ClampingScrollPhysics()
+                    ? null
                     : const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   18,
@@ -406,7 +406,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                               userAgentHint:
                                   SubscriptionFetcher.defaultUserAgent,
                               sendHwidLabel: l10n.sendHwidTitle,
-                              sendHwidSubtitle: l10n.sendHwidSubtitle,
+                              sendHwidSubtitle:
+                                  SubscriptionFetcher.sendHwidToProviders
+                                  ? l10n.sendHwidGlobalEnabledSubtitle
+                                  : l10n.sendHwidSubtitle,
                               customHwidLabel: l10n.customHwidTitle,
                               customHwidSubtitle: l10n.customHwidSubtitle,
                               customHwidSwitchLabel: l10n.useCustomHwidTitle,

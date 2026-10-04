@@ -4,6 +4,31 @@ import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  testWidgets('OTA setting title uses the shared settings title styling', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: SettingsUpdatePage(currentVersion: '0.3.7-beta.4'),
+      ),
+    );
+    await tester.pump();
+    final tile = find.byKey(const ValueKey('update-install-mode-setting'));
+    final title = tester.widget<ListTile>(tile).title!;
+    final renderedTitle = tester.widget<RichText>(
+      find.descendant(
+        of: find.byWidget(title),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(renderedTitle.text.style?.fontSize, 16);
+    expect(renderedTitle.text.style?.fontWeight, FontWeight.w700);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'update screen keeps full short title and controls near the top',
     (tester) async {

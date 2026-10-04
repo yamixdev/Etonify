@@ -190,6 +190,9 @@ Map<String, dynamic> _compactOutboundPresentationConfig(
     'server_port',
     'security',
     '_group_only',
+    '_synthetic',
+    'outbounds',
+    'detour',
   ]) {
     if (config.containsKey(key)) {
       compact[key] = config[key];
@@ -498,6 +501,12 @@ AppProxySummary _buildHomeDisplayProxy(
   final groupByTag = <String, SubscriptionGroup>{
     for (final group in subscription.groups) group.tag: group,
   };
+  final concreteTags = subscription.concreteServerTags;
+  final leafTagsByGroup = <String, List<String>>{};
+  List<String> groupLeafTags(String tag) => leafTagsByGroup.putIfAbsent(
+    tag,
+    () => _concreteGroupLeafTags(tag, groupByTag, outboundByTag, concreteTags),
+  );
   final chainByTag = <String, SubscriptionProxyChain>{
     for (final chain in subscription.proxyChains) chain.tag: chain,
   };
@@ -512,7 +521,7 @@ AppProxySummary _buildHomeDisplayProxy(
       input.runtimeGroupSelections,
     );
     if (runtimeSelected != null &&
-        group.outboundTags.contains(runtimeSelected)) {
+        groupLeafTags(group.tag).contains(runtimeSelected)) {
       final selected = outboundByTag[runtimeSelected];
       if (selected != null && !selected.info.deleted) {
         return summaryForOutbound(selected);
@@ -525,17 +534,14 @@ AppProxySummary _buildHomeDisplayProxy(
     final child = selectedGroupChild(group);
     final childName = child?.protocolLabel;
     final childCountry = child?.countryCode ?? '';
-    final childCount = group.outboundTags
-        .where(outboundByTag.containsKey)
-        .length;
-    final count = childCount == 0 ? group.outboundTags.length : childCount;
+    final count = groupLeafTags(group.tag).length;
     final groupCountry = input.markAllServersRussia
         ? 'RU'
         : _normalizeCountryCode(group.country);
     return AppProxySummary(
       tag: group.tag,
       displayName: group.name.trim().isEmpty ? group.tag : group.name,
-      countryCode: childCountry.isNotEmpty ? childCountry : groupCountry,
+      countryCode: child == null ? groupCountry : childCountry,
       type: 'urltest',
       server: '',
       port: 0,
@@ -557,7 +563,7 @@ AppProxySummary _buildHomeDisplayProxy(
       membersSelectable: false,
       childCount: count,
       selectedChildTag: child?.tag,
-      selectedChildName: null,
+      selectedChildName: child?.displayName,
       highlighted: selectedTag == group.tag,
     );
   }
@@ -659,6 +665,44 @@ AppProxySummary _buildHomeDisplayProxy(
   return _fallbackDisplayProxy(subscription, selectableOutbounds);
 }
 
+// Only primary references are navigable/testable group members. Fallbacks
+// remain core dependencies even when another group exposes them as servers.
+List<String> _concreteGroupLeafTags(
+  String root,
+  Map<String, SubscriptionGroup> groups,
+  Map<String, Outbound> outbounds,
+  Set<String> concreteTags,
+) {
+  final leaves = <String>{};
+  final seen = <String>{};
+  final pending = <String>[root];
+  while (pending.isNotEmpty) {
+    final tag = pending.removeLast();
+    if (!seen.add(tag)) continue;
+    final group = groups[tag];
+    if (group != null) {
+      final references = group.config['outbounds'];
+      pending.addAll(
+        <String>{
+          ...group.outboundTags,
+          if (references is List) ...references.whereType<String>(),
+        }.toList().reversed,
+      );
+    } else if (concreteTags.contains(tag)) {
+      leaves.add(tag);
+    } else {
+      final node = outbounds[tag];
+      if (node?.type == 'selector' || node?.type == 'urltest') {
+        final references = node!.config['outbounds'];
+        if (references is List) {
+          pending.addAll(references.whereType<String>().toList().reversed);
+        }
+      }
+    }
+  }
+  return leaves.toList(growable: false);
+}
+
 ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   final subscription = input.subscription;
   if (subscription == null) {
@@ -680,7 +724,25 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
       .where((outbound) => !outbound.info.deleted)
       .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
-  final catalog = ProxySelectionCatalog(visibleOutbounds, subscription.groups);
+  final groupsByTag = {
+    for (final group in subscription.groups) group.tag: group,
+  };
+  final concreteTags = subscription.concreteServerTags;
+  final outboundByTag = {
+    for (final outbound in visibleOutbounds) outbound.tag: outbound,
+  };
+  final leafTagsByGroup = <String, List<String>>{};
+  List<String> groupLeafTags(String root) => leafTagsByGroup.putIfAbsent(
+    root,
+    () =>
+        _concreteGroupLeafTags(root, groupsByTag, outboundByTag, concreteTags),
+  );
+  // Selection geometry uses root choices, not server leaves. Resolve each
+  // group's runtime membership independently of provider declaration order.
+  final catalog = ProxySelectionCatalog(visibleOutbounds, [
+    for (final group in subscription.groups)
+      group.copyWith(outboundTags: groupLeafTags(group.tag)),
+  ]);
   final selectableOutbounds = catalog.standaloneOutbounds;
   final proxySummaries = visibleOutbounds
       .map((outbound) => _buildProxySummary(input, outbound))
@@ -704,25 +766,59 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   final groupSummaries = <AppProxySummary>[];
   final lowestCandidateGroupSummaries = <AppProxySummary>[];
   final lowestCandidateGroupChildTags = <String>{};
-  for (final group in subscription.groups) {
-    final visibleChildTags = group.outboundTags
-        .where(proxySummariesByTag.containsKey)
-        .toList(growable: false);
-    if (visibleChildTags.isEmpty) {
-      continue;
+  final builtGroups = <String, AppProxySummary?>{};
+  final buildingGroups = <String>{};
+  AppProxySummary? buildGroup(String tag) {
+    if (builtGroups.containsKey(tag)) return builtGroups[tag];
+    if (!buildingGroups.add(tag)) return null;
+    final group = groupsByTag[tag]!;
+    final leaves = groupLeafTags(tag);
+    if (leaves.isEmpty) {
+      buildingGroups.remove(tag);
+      builtGroups[tag] = null;
+      return null;
     }
-    groupedOutboundTags.addAll(visibleChildTags);
+    final references = group.config['outbounds'];
+    final childTags = <String>{
+      if (references is List)
+        ...references.whereType<String>()
+      else
+        ...group.outboundTags,
+    };
+    final immediateTags = <String>[];
+    for (final child in childTags) {
+      final summary = groupsByTag.containsKey(child)
+          ? buildGroup(child)
+          : concreteTags.contains(child)
+          ? proxySummariesByTag[child]
+          : null;
+      if (summary != null) immediateTags.add(child);
+    }
+    // Malformed cyclic references may still have valid resolved leaf members.
+    if (immediateTags.isEmpty) immediateTags.addAll(leaves);
     final groupSummary = _buildGroupProxySummary(
       input,
       group,
-      visibleChildTags,
+      immediateTags,
       proxySummariesByTag,
+      leafTags: leaves,
     );
+    buildingGroups.remove(tag);
+    builtGroups[tag] = groupSummary;
+    proxySummariesByTag[tag] = groupSummary;
+    return groupSummary;
+  }
+
+  for (final group in subscription.groups) {
+    final groupSummary = buildGroup(group.tag);
+    if (groupSummary == null) continue;
+    final leaves = groupLeafTags(group.tag);
+    groupedOutboundTags.addAll(groupSummary.childTags);
+    groupedOutboundTags.addAll(leaves);
     groupSummaries.add(groupSummary);
-    proxySummariesByTag[groupSummary.tag] = groupSummary;
     if (catalog.candidateTags.contains(group.tag)) {
       lowestCandidateGroupSummaries.add(groupSummary);
-      lowestCandidateGroupChildTags.addAll(visibleChildTags);
+      lowestCandidateGroupChildTags.addAll(leaves);
     }
   }
 
@@ -1098,10 +1194,7 @@ AppProfileSummary _buildProfileSummary(Subscription subscription) {
     consumed: info?.consumed.toDouble() ?? 0,
     total: info?.total?.toDouble() ?? 0,
     remainingDays: info?.remainingDays,
-    outboundsCount: ProxySelectionCatalog(
-      subscription.outbounds,
-      subscription.groups,
-    ).candidateTags.length,
+    outboundsCount: subscription.concreteServerCount,
     sourceLabel: '',
   );
 }
@@ -1404,8 +1497,9 @@ AppProxySummary _buildGroupProxySummary(
   ProxyCacheBuildInput input,
   SubscriptionGroup group,
   List<String> visibleChildTags,
-  Map<String, AppProxySummary> childSummariesByTag,
-) {
+  Map<String, AppProxySummary> childSummariesByTag, {
+  required List<String> leafTags,
+}) {
   final runtimeSelectedTag = resolveRuntimeGroupLeaf(
     {
       for (final entry
@@ -1416,8 +1510,7 @@ AppProxySummary _buildGroupProxySummary(
     input.runtimeGroupSelections,
   );
   final selectedChildTag =
-      runtimeSelectedTag != null &&
-          visibleChildTags.contains(runtimeSelectedTag)
+      runtimeSelectedTag != null && leafTags.contains(runtimeSelectedTag)
       ? runtimeSelectedTag
       : null;
   final selectedChild = selectedChildTag == null
@@ -1430,20 +1523,20 @@ AppProxySummary _buildGroupProxySummary(
   final selectedChildName = selectedChild?.protocolLabel;
   final hasSelectedChild =
       selectedChildName != null && selectedChildName.isNotEmpty;
-  final unavailable = visibleChildTags.every(
+  final unavailable = leafTags.every(
     (tag) => input.unavailableLatencyTags.contains(tag),
   );
   final runtimeLowestTag = _activeRuntimeLowestOutboundTag(input);
   return AppProxySummary(
     tag: group.tag,
     displayName: group.name.trim().isEmpty ? group.tag : group.name,
-    countryCode: selectedCountry.isNotEmpty ? selectedCountry : groupCountry,
+    countryCode: selectedChild == null ? groupCountry : selectedCountry,
     type: 'urltest',
     server: '',
     port: 0,
     detailText: hasSelectedChild
         ? 'URLTest · $selectedChildName'
-        : 'URLTest · ${visibleChildTags.length} outbounds',
+        : 'URLTest · ${leafTags.length} outbounds',
     ip: selectedChild?.ip ?? '',
     latency: selectedChild?.latency,
     latencyFresh: selectedChild?.latencyFresh ?? false,
@@ -1453,19 +1546,18 @@ AppProxySummary _buildGroupProxySummary(
     latencyError: selectedChild?.latencyError,
     protocolLabel: hasSelectedChild
         ? 'URLTest · $selectedChildName'
-        : 'URLTest · ${visibleChildTags.length} outbounds',
+        : 'URLTest · ${leafTags.length} outbounds',
     endpointLabel: selectedChild?.endpointLabel ?? '',
     isGroup: true,
-    membersSelectable: false,
+    membersSelectable: visibleChildTags.isNotEmpty,
     childTags: visibleChildTags,
-    childCount: visibleChildTags.length,
+    childCount: leafTags.length,
     selectedChildTag: selectedChildTag,
-    selectedChildName: null,
+    selectedChildName: selectedChild?.displayName,
     highlighted:
         input.selectedProxyTag == group.tag ||
-        visibleChildTags.contains(input.selectedProxyTag) ||
-        (runtimeLowestTag != null &&
-            visibleChildTags.contains(runtimeLowestTag)),
+        leafTags.contains(input.selectedProxyTag) ||
+        (runtimeLowestTag != null && leafTags.contains(runtimeLowestTag)),
   );
 }
 
@@ -1485,29 +1577,16 @@ AppProxySummary _withParentGroup(
   String? selectedLeafTag,
 ) {
   final highlightedByGroupUrlTest =
-      parentTag != null && selectedLeafTag == summary.tag;
+      parentTag != null &&
+      selectedLeafTag != null &&
+      (selectedLeafTag == summary.tag ||
+          (summary.isGroup && summary.selectedChildTag == selectedLeafTag));
   final runtimeLowestTag = _activeRuntimeLowestOutboundTag(input);
   final highlightedByLowest =
       isLowestProxyTag(input.selectedProxyTag) &&
       runtimeLowestTag == summary.tag;
-  return AppProxySummary(
-    tag: summary.tag,
-    displayName: summary.displayName,
-    countryCode: summary.countryCode,
-    type: summary.type,
-    server: summary.server,
-    port: summary.port,
-    detailText: summary.detailText,
-    ip: summary.ip,
-    latency: summary.latency,
-    latencyFresh: summary.latencyFresh,
-    latencyChecking: summary.latencyChecking,
-    latencyUnavailable: summary.latencyUnavailable,
-    latencyError: summary.latencyError,
-    protocolLabel: summary.protocolLabel,
-    endpointLabel: summary.endpointLabel,
+  return summary.copyWith(
     parentGroupTag: parentTag,
-    childCount: summary.childCount,
     highlighted:
         summary.highlighted || highlightedByGroupUrlTest || highlightedByLowest,
   );

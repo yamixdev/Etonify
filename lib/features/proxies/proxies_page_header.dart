@@ -265,18 +265,13 @@ class _ProxySheetHeader extends StatelessWidget {
                                 ),
                               );
                             }
-                            final showProgress =
-                                progressState.total > 0 &&
-                                (progressState.isRunning ||
-                                    progressState.hasResults ||
-                                    progressState.isCancelled);
+                            final showProgress = progressState.total > 0;
                             if (!showProgress) {
                               return const SizedBox.shrink();
                             }
                             final showTested =
-                                progressState.isRunning ||
-                                progressState.isCancelled ||
-                                progressState.tested < progressState.total;
+                                progressState.isRunning &&
+                                progressState.showCheckProgress;
                             final workingColor =
                                 theme.brightness == Brightness.dark
                                 ? Colors.lightGreen
@@ -299,7 +294,7 @@ class _ProxySheetHeader extends StatelessWidget {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (showTested || progressState.isPaused)
+                                  if (showTested)
                                     Text(
                                       progressState.isPaused
                                           ? l10n.proxiesCheckPaused

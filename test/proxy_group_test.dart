@@ -16,6 +16,88 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  test('group members and nested groups are valid manual runtime choices', () {
+    const subscription = Subscription(
+      id: 'manual-member',
+      name: 'Manual member',
+      url: '',
+      outbounds: [
+        Outbound(
+          tag: 'leaf',
+          name: 'Leaf',
+          config: {
+            'type': 'socks',
+            'server': 'leaf.example',
+            'server_port': 1080,
+            '_group_only': true,
+          },
+        ),
+        Outbound(
+          tag: 'orphan-helper',
+          name: 'Helper',
+          config: {
+            'type': 'socks',
+            'server': 'helper.example',
+            'server_port': 1080,
+            '_group_only': true,
+          },
+        ),
+        Outbound(
+          tag: 'standalone',
+          name: 'Standalone',
+          config: {
+            'type': 'socks',
+            'server': 'standalone.example',
+            'server_port': 1080,
+          },
+        ),
+      ],
+      groups: [
+        SubscriptionGroup(
+          tag: 'parent',
+          name: 'Parent',
+          outboundTags: ['leaf'],
+          config: {
+            'outbounds': ['nested'],
+          },
+        ),
+        SubscriptionGroup(
+          tag: 'nested',
+          name: 'Nested',
+          outboundTags: ['leaf'],
+          config: {
+            '_group_only': true,
+            'outbounds': ['leaf'],
+          },
+        ),
+      ],
+    );
+    final catalog = ProxySelectionCatalog(
+      subscription.outbounds,
+      subscription.groups,
+    );
+    expect(catalog.candidateTags, ['parent', 'standalone']);
+    expect(catalog.resolveSelection('leaf'), 'leaf');
+    expect(catalog.resolveSelection('nested'), 'nested');
+    expect(catalog.resolveSelection('orphan-helper'), catalog.defaultTag);
+    for (final selected in ['leaf', 'nested']) {
+      final config = _defaultBuilder(
+        subscription,
+        selectedProxyTag: selected,
+      ).build();
+      final outbounds = (config['outbounds'] as List)
+          .cast<Map<String, dynamic>>();
+      final root = outbounds.singleWhere((node) => node['tag'] == 'select');
+      expect(root['default'], selected);
+      expect(
+        root['outbounds'],
+        containsAll(['parent', 'nested', 'leaf', 'standalone']),
+      );
+      expect(root['outbounds'], isNot(contains('orphan-helper')));
+      final lowest = outbounds.singleWhere((node) => node['tag'] == 'lowest');
+      expect(lowest['outbounds'], ['parent', 'standalone']);
+    }
+  });
   test(
     'import removes transitive detours to missing or unsupported-only groups',
     () {
@@ -435,7 +517,7 @@ void main() {
         buildProxyCache(
           lowestInput,
         ).groupChildrenByTag[root.tag]!.map((node) => node.tag),
-        [configs.last['tag']],
+        [configs[1]['tag']],
       );
       expect(
         buildProxyCache(
@@ -659,7 +741,7 @@ void main() {
       hasLength(2),
     );
   });
-  test('provider candidates stay in runtime but never bypass their group', () {
+  test('provider auto is default but members can be selected explicitly', () {
     final parsed = SubscriptionParser.parse(
       jsonEncode({
         'remarks': 'Provider auto',
@@ -696,8 +778,13 @@ void main() {
     final select = outbounds.singleWhere(
       (outbound) => outbound['tag'] == 'select',
     );
-    expect(select['outbounds'], [group.tag]);
-    expect(select['default'], group.tag);
+    expect(select['outbounds'], [group.tag, 'cand-01', 'cand-02']);
+    expect(select['default'], 'cand-01');
+    final automatic =
+        (_defaultBuilder(subscription).build()['outbounds'] as List)
+            .cast<Map<String, dynamic>>()
+            .singleWhere((node) => node['tag'] == 'select');
+    expect(automatic['default'], group.tag);
     expect(
       outbounds.map((outbound) => outbound['tag']),
       containsAll(group.outboundTags),
@@ -723,9 +810,9 @@ void main() {
         proxy.latency,
         200,
       ); // Actual selection, not the minimum measurement.
-      expect(proxy.membersSelectable, isFalse);
+      expect(proxy.membersSelectable, cache.includesFullProxyList);
       expect(proxy.protocolLabel, isNot(contains('cand-')));
-      expect(proxy.selectedChildName, isNull);
+      expect(proxy.selectedChildName, 'cand-01');
     }
     expect(buildProxyCache(input).activeProxies.map((proxy) => proxy.tag), [
       group.tag,
@@ -1125,7 +1212,13 @@ void main() {
       (entry) => entry['tag'] == 'group-auto',
     );
 
-    expect(selector['outbounds'], ['lowest', 'group-auto', 'standalone']);
+    expect(selector['outbounds'], [
+      'lowest',
+      'group-auto',
+      'standalone',
+      'leaf-1',
+      'leaf-2',
+    ]);
     expect(selector['default'], 'group-auto');
     expect(lowest['outbounds'], ['group-auto', 'standalone']);
     expect(lowest['timeout'], '8s');

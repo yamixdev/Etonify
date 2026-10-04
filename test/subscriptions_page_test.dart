@@ -39,6 +39,43 @@ void main() {
     }
   });
 
+  _testSubscriptionWidgets(
+    'active subscription list inherits platform physics',
+    (tester) async {
+      await tester.runAsync(() async {
+        for (var index = 0; index < 8; index++) {
+          await SubscriptionStore.save(
+            Subscription(
+              id: 'scroll-$index',
+              name: 'Profile $index',
+              url: '',
+              cachedVisibleProxyCount: 0,
+            ),
+          );
+        }
+      });
+      await _openSheet(
+        tester,
+        scrollBehavior: const MaterialScrollBehavior().copyWith(
+          physics: const BouncingScrollPhysics(),
+        ),
+      );
+      await _pumpUntilFound(tester, find.text('Profile 0'));
+      await tester.drag(find.text('Subscriptions'), const Offset(0, -520));
+      await _pumpUi(tester, const Duration(milliseconds: 420));
+      final scrollable = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(scrollable.position.physics, isA<BouncingScrollPhysics>());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('profile snapshot waits for a queued full-profile save', () async {
     final original = _largeProfile();
     await SubscriptionStore.save(original);
@@ -761,6 +798,52 @@ void main() {
       expect(info?.customRequestHeader, 'Authorization: fresh');
       expect(info?.customHwid, 'fresh-hwid');
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'global HWID permission is explicit and cannot be disabled locally',
+    (tester) async {
+      final sharingBefore = SubscriptionFetcher.sendHwidToProviders;
+      SubscriptionFetcher.configureHwidSharing(true);
+      addTearDown(
+        () => SubscriptionFetcher.configureHwidSharing(sharingBefore),
+      );
+      await tester.runAsync(() => SubscriptionStore.save(_largeProfile()));
+      await _openDetails(tester, 'large-profile', 'Large profile');
+      await tester.scrollUntilVisible(
+        find.byType(ExpansionTile),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(
+                const PageStorageKey('subscription_details_scroll'),
+              ),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byType(ExpansionTile));
+      await _pumpUi(tester);
+      final tile = tester.widget<SwitchListTile>(
+        find
+            .descendant(
+              of: find.byType(ExpansionTile),
+              matching: find.byType(SwitchListTile),
+            )
+            .first,
+      );
+      expect(tile.value, isTrue);
+      expect(tile.onChanged, isNull);
+      expect(
+        (tile.subtitle! as Text).data,
+        contains('global provider permission'),
+      );
+      expect(
+        SubscriptionStore.getMetadata('large-profile')?.info?.requireHwid ??
+            false,
+        isFalse,
+      );
     },
   );
 

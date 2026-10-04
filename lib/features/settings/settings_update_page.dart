@@ -631,106 +631,109 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
           ),
         ],
       ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          settingsScreenPadding.left,
-          progressiveHeaderTopPadding(context, 8),
-          settingsScreenPadding.right,
-          appBottomSafePadding(context, 112),
-        ),
-        children: [
-          _UpdateHero(
-            checking: _checking,
-            title: _titleFor(context, result),
-            subtitle: _subtitleFor(context, result),
+      body: Theme(
+        data: settingsTileTheme(context),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            settingsScreenPadding.left,
+            progressiveHeaderTopPadding(context, 8),
+            settingsScreenPadding.right,
+            appBottomSafePadding(context, 112),
           ),
-          const Gap(8),
-          Card(
-            margin: EdgeInsets.zero,
-            child: ListTile(
-              key: const ValueKey('update-install-mode-setting'),
-              leading: SettingsLeadingIcon(
-                icon: Icons.system_update_alt_rounded,
-                color: theme.colorScheme.primary,
-              ),
-              title: Text(l10n.updatesInstallModeTitle),
-              subtitle: Text(_installModeName(l10n, _installMode)),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: _chooseInstallMode,
-            ),
-          ),
-          const Gap(10),
-          _UpdateInfoCard(
-            currentVersion: _currentVersion,
-            info: info,
-            checkedAt: result?.checkedAt,
-            action: _UpdateActionButton(
-              result: result,
+          children: [
+            _UpdateHero(
               checking: _checking,
-              downloading: _downloading,
-              installing: _installing,
-              onCheck: () => _check(manual: true),
-              onDownload: info == null ? null : () => _startUpdateFlow(info),
-              onInstall: cachedInstallerPath == null
-                  ? null
-                  : _installDownloaded,
+              title: _titleFor(context, result),
+              subtitle: _subtitleFor(context, result),
             ),
-            verification: _verification,
-            cacheAction: cachedInstallerPath == null
-                ? null
-                : _CachedInstallerButton(
-                    clearing: _clearingUpdateCache,
-                    onDelete: _deleteCachedInstaller,
-                  ),
-          ),
-          if (_downloading || _downloadProgress != null) ...[
-            const Gap(12),
-            _DownloadProgressCard(progress: _downloadProgress),
-          ],
-          if (info != null) ...[
-            const Gap(10),
+            const Gap(8),
             Card(
               margin: EdgeInsets.zero,
               child: ListTile(
-                key: const ValueKey('open-release-notes'),
+                key: const ValueKey('update-install-mode-setting'),
                 leading: SettingsLeadingIcon(
-                  icon: Icons.article_outlined,
+                  icon: Icons.system_update_alt_rounded,
                   color: theme.colorScheme.primary,
                 ),
-                title: Text(l10n.updatesReleaseNotesTitle),
-                subtitle: Text(info.displayVersion),
+                title: Text(l10n.updatesInstallModeTitle),
+                subtitle: Text(_installModeName(l10n, _installMode)),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => ChangelogPage(
-                      currentVersion: _currentVersion,
-                      currentBuildNumber: _currentVersionCode,
-                      updateChannel: _updateChannel,
-                      initialInfo: info,
+                onTap: _chooseInstallMode,
+              ),
+            ),
+            const Gap(10),
+            _UpdateInfoCard(
+              currentVersion: _currentVersion,
+              info: info,
+              checkedAt: result?.checkedAt,
+              action: _UpdateActionButton(
+                result: result,
+                checking: _checking,
+                downloading: _downloading,
+                installing: _installing,
+                onCheck: () => _check(manual: true),
+                onDownload: info == null ? null : () => _startUpdateFlow(info),
+                onInstall: cachedInstallerPath == null
+                    ? null
+                    : _installDownloaded,
+              ),
+              verification: _verification,
+              cacheAction: cachedInstallerPath == null
+                  ? null
+                  : _CachedInstallerButton(
+                      clearing: _clearingUpdateCache,
+                      onDelete: _deleteCachedInstaller,
+                    ),
+            ),
+            if (_downloading || _downloadProgress != null) ...[
+              const Gap(12),
+              _DownloadProgressCard(progress: _downloadProgress),
+            ],
+            if (info != null) ...[
+              const Gap(10),
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  key: const ValueKey('open-release-notes'),
+                  leading: SettingsLeadingIcon(
+                    icon: Icons.article_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: Text(l10n.updatesReleaseNotesTitle),
+                  subtitle: Text(info.displayVersion),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => ChangelogPage(
+                        currentVersion: _currentVersion,
+                        currentBuildNumber: _currentVersionCode,
+                        updateChannel: _updateChannel,
+                        initialInfo: info,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-          if (result?.status == AppUpdateStatus.error) ...[
-            const Gap(12),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  result?.error?.trim().isNotEmpty == true
-                      ? result!.error!
-                      : l10n.updatesErrorSubtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+            ],
+            if (result?.status == AppUpdateStatus.error) ...[
+              const Gap(12),
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    result?.error?.trim().isNotEmpty == true
+                        ? result!.error!
+                        : l10n.updatesErrorSubtitle,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
       resizeToAvoidBottomInset: false,
       backgroundColor: theme.colorScheme.surface,

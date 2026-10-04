@@ -5,6 +5,26 @@ import 'package:meow_client/app/app.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 
 void main() {
+  testWidgets('disabled HWID does not show an enabled notice on launch', (
+    tester,
+  ) async {
+    final base = await MemoryAppSettingsStore().loadState();
+    final store = MemoryAppSettingsStore(
+      base.copyWith(
+        onboardingCompleted: true,
+        acceptedLegalVersion: '0.2.1',
+        acceptedLegalAtMillis: 1,
+        hwidDefaultNoticeShown: false,
+        autoCheckNoticeAcknowledged: true,
+        sendHwidToProviders: false,
+      ),
+    );
+    await tester.pumpWidget(ProviderScope(child: MeowClient(store: store)));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect((await store.loadState()).sendHwidToProviders, isFalse);
+  });
+
   testWidgets(
     'HWID notice dialog shows on launch when ready and not yet acknowledged',
     (tester) async {

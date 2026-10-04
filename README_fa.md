@@ -13,7 +13,7 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="کلاینت: 0.3.7+37"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.8%2B38-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="کلاینت: 0.3.8+38"></a>
   <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="هستهٔ داخلی: 1.15.0-alpha.10-etonify.1"></a>
   <br>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
@@ -69,7 +69,7 @@ Etonify مدیریت اشتراک‌ها، انتخاب پروکسی، مسیر�
 
 | بخش | کد فعلی مخزن |
 | :--- | :--- |
-| کلاینت | <code dir="ltr">0.3.7+37</code> |
+| کلاینت | <code dir="ltr">0.3.8+38</code> |
 | هستهٔ داخلی | <code dir="ltr">v1.15.0-alpha.10-etonify.1</code> |
 | نسخهٔ پایهٔ sing-box | <code dir="ltr">v1.15.0-alpha.10</code> |
 | Flutter SDK | <code dir="ltr">3.47.5</code> · Dart <code dir="ltr">3.13</code> |

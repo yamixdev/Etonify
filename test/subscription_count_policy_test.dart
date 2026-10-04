@@ -3,7 +3,7 @@ import 'package:meow_client/features/subscriptions/subscriptions_page.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
-  test('rechecks a zero count when a saved payload exists', () {
+  test('fresh summaries do not require hydration even at zero', () {
     const subscription = Subscription(
       id: 'stale-count',
       name: 'Profile',
@@ -11,7 +11,7 @@ void main() {
       cachedVisibleProxyCount: 0,
       hasRawPayload: true,
     );
-    expect(subscriptionCountNeedsHydration(subscription), isTrue);
+    expect(subscriptionCountNeedsHydration(subscription), isFalse);
     expect(
       subscriptionCountNeedsHydration(
         subscription.copyWith(hasRawPayload: false),

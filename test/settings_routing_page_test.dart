@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,9 +13,222 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
+import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  testWidgets(
+    'traffic preparation shows progress and keeps selection disabled',
+    (tester) async {
+      final preparation = Completer<RussiaRouteDataStatus>();
+      final selected = <TrafficRulePreset>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: TrafficRulesPage(
+            currentPreset: TrafficRulePreset.none,
+            currentStatus: const RussiaRouteDataStatus.unavailable(),
+            currentRussiaDnsDirectResolver: 'udp://77.88.8.8',
+            onPrepareRuleData: (_) => preparation.future,
+            onPresetChanged: selected.add,
+            onRussiaDnsDirectResolverChanged: (_) {},
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Подготавливаем правило…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+      await tester.tap(find.text('.RU без VPN'));
+      await tester.pump();
+      expect(selected, isEmpty);
+      preparation.complete(
+        const RussiaRouteDataStatus(
+          available: true,
+          sourceName: 'bundled',
+          versionTag: 'test',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNotNull);
+    },
+  );
+
+  const readyFilter = AdBlockRuleSetStatus(
+    available: true,
+    providerName: 'AdGuard DNS Filter',
+    sourceUrl: AdBlockRuleSetService.sourceUrl,
+    blockRuleSetPath: '/filter.srs',
+    blockedDomainCount: 120,
+  );
+
+  testWidgets('first filter action prepares before enabling blocking', (
+    tester,
+  ) async {
+    final download = Completer<AdBlockRuleSetStatus>();
+    final enabledValues = <bool>[];
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Фильтр ещё не скачан',
+      downloadAdBlock: () => download.future,
+      onAdBlockEnabled: enabledValues.add,
+    );
+    expect(find.text('Включить локальную блокировку'), findsNothing);
+    expect(
+      find.text(
+        'Скачиваем список с AdGuard и сохраняем его локально для sing-box.',
+      ),
+      findsNothing,
+    );
+    await tester.scrollUntilVisible(find.text('Скачать и включить'), 150);
+    await tester.tap(find.text('Скачать и включить'));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(enabledValues, isEmpty);
+    download.complete(readyFilter);
+    await tester.pumpAndSettle();
+    expect(enabledValues, [true]);
+    expect(find.text('Включить локальную блокировку'), findsOneWidget);
+    expect(find.text('Обновить'), findsOneWidget);
+    expect(find.text('Удалить'), findsOneWidget);
+  });
+
+  testWidgets('failed first filter download stays off and can retry', (
+    tester,
+  ) async {
+    final enabledValues = <bool>[];
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Фильтр ещё не скачан',
+      downloadAdBlock: () async => throw StateError('offline'),
+      onAdBlockEnabled: enabledValues.add,
+    );
+    await tester.scrollUntilVisible(find.text('Скачать и включить'), 150);
+    await tester.tap(find.text('Скачать и включить'));
+    await tester.pumpAndSettle();
+    expect(enabledValues, isEmpty);
+    expect(find.text('Фильтр ещё не скачан'), findsOneWidget);
+    expect(find.text('Скачать и включить'), findsOneWidget);
+    expect(find.text('Включить локальную блокировку'), findsNothing);
+  });
+
+  testWidgets('deleting a prepared filter does not report a download', (
+    tester,
+  ) async {
+    final deletion = Completer<AdBlockRuleSetStatus>();
+    final enabledValues = <bool>[];
+    await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Удалить',
+      adBlockStatus: readyFilter,
+      adBlockEnabled: true,
+      deleteAdBlock: () => deletion.future,
+      onAdBlockEnabled: enabledValues.add,
+    );
+    await tester.tap(find.text('Удалить'));
+    await tester.pump();
+    expect(find.text('Скачиваем и собираем локальный фильтр...'), findsNothing);
+    expect(find.text('Удаляем фильтр…'), findsOneWidget);
+    expect(enabledValues, isEmpty);
+    deletion.complete(const AdBlockRuleSetStatus.unavailable());
+    await tester.pumpAndSettle();
+    expect(enabledValues, [false]);
+    expect(find.text('Скачать и включить'), findsOneWidget);
+    expect(find.text('Включить локальную блокировку'), findsNothing);
+  });
+
+  testWidgets('failed filter update retains ready filter and enabled state', (
+    tester,
+  ) async {
+    final enabledValues = <bool>[];
+    final controller = await _pumpPage(
+      tester,
+      const RussiaRouteDataStatus.unavailable(),
+      scrollTo: 'Обновить',
+      adBlockStatus: readyFilter,
+      adBlockEnabled: true,
+      downloadAdBlock: () async => throw StateError('offline'),
+      onAdBlockEnabled: enabledValues.add,
+    );
+    await tester.tap(find.text('Обновить'));
+    await tester.pumpAndSettle();
+    expect(controller.adBlockEnabled, isTrue);
+    expect(enabledValues, isEmpty);
+    expect(find.text('Фильтр готов, доменов: 120'), findsOneWidget);
+    expect(find.text('Удалить'), findsOneWidget);
+  });
+
+  testWidgets(
+    'selected traffic rule has one card and aligned selection control',
+    (tester) async {
+      await _pumpPage(
+        tester,
+        const RussiaRouteDataStatus.unavailable(),
+        currentPreset: TrafficRulePreset.aiViaVpn,
+      );
+      await tester.tap(find.text('Правила трафика'));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.info_outline_rounded), findsNWidgets(3));
+      final selected = find.byIcon(Icons.check_circle_rounded);
+      final infos = find.byIcon(Icons.info_outline_rounded);
+      expect(
+        tester.getCenter(selected).dy,
+        closeTo(tester.getCenter(infos.at(1)).dy, 1),
+      );
+      final subtitle = tester.widget<Text>(
+        find.text('Нейросети через VPN, остальной трафик напрямую.'),
+      );
+      expect(subtitle.maxLines, isNull);
+      expect(subtitle.overflow, isNot(TextOverflow.ellipsis));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'large text keeps traffic rule descriptions and controls reachable',
+    (tester) async {
+      await _pumpPage(
+        tester,
+        const RussiaRouteDataStatus.unavailable(),
+        currentPreset: TrafficRulePreset.aiViaVpn,
+        textScale: 1.6,
+      );
+      await tester.tap(find.text('Правила трафика'));
+      await tester.pumpAndSettle();
+      final selected = find.byIcon(Icons.check_circle_rounded);
+      final selectedCard = find.ancestor(
+        of: selected,
+        matching: find.byType(Card),
+      );
+      final info = find.descendant(
+        of: selectedCard,
+        matching: find.byIcon(Icons.info_outline_rounded),
+      );
+      expect(
+        tester.getCenter(selected).dy,
+        closeTo(tester.getCenter(info).dy, 1),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Социальные сети через VPN'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.text(
+          'Соцсети и мессенджеры через VPN, остальной трафик напрямую.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'large text and keyboard keep controls reachable without overflow',
     (tester) async {
@@ -311,14 +526,20 @@ Future<AppSettingsController> _pumpPage(
   double keyboardInset = 0,
   String scrollTo = 'Правила трафика',
   ValueChanged<List<String>>? onSplitRoutingPackagesChanged,
+  AdBlockRuleSetStatus adBlockStatus = const AdBlockRuleSetStatus.unavailable(),
+  bool adBlockEnabled = false,
+  Future<AdBlockRuleSetStatus> Function()? downloadAdBlock,
+  Future<AdBlockRuleSetStatus> Function()? deleteAdBlock,
+  ValueChanged<bool>? onAdBlockEnabled,
+  TrafficRulePreset currentPreset = TrafficRulePreset.none,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 860));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   final controller = AppSettingsController()
     ..blockLeaks = true
-    ..adBlockEnabled = false
-    ..trafficRulePreset = TrafficRulePreset.none
+    ..adBlockEnabled = adBlockEnabled
+    ..trafficRulePreset = currentPreset
     ..russiaDnsDirectResolver = 'udp://77.88.8.8'
     ..bypassLocalNetwork = true
     ..vpnInboundEnabled = true
@@ -328,10 +549,11 @@ Future<AppSettingsController> _pumpPage(
   final commands = AppSettingsCommands();
   commands.bindRoutingHandlers(
     setBlockLeaks: (_) {},
-    setAdBlockEnabled: (_) {},
-    downloadAdBlockRuleSet: () async =>
-        const AdBlockRuleSetStatus.unavailable(),
-    deleteAdBlockRuleSet: () async => const AdBlockRuleSetStatus.unavailable(),
+    setAdBlockEnabled: onAdBlockEnabled ?? (_) {},
+    downloadAdBlockRuleSet:
+        downloadAdBlock ?? () async => const AdBlockRuleSetStatus.unavailable(),
+    deleteAdBlockRuleSet:
+        deleteAdBlock ?? () async => const AdBlockRuleSetStatus.unavailable(),
     refreshRoutingRuleData: () async => routeStatus,
     setTrafficRulePreset: (_) {},
     prepareTrafficRuleData: (_) async => routeStatus,
@@ -356,6 +578,9 @@ Future<AppSettingsController> _pumpPage(
       overrides: [
         appSettingsControllerProvider.overrideWithValue(controller),
         appSettingsCommandsProvider.overrideWithValue(commands),
+        adBlockStatusProvider.overrideWith(
+          () => AdBlockStatusNotifier(adBlockStatus),
+        ),
         russiaRouteDataStatusProvider.overrideWith(
           () => RussiaRouteDataStatusNotifier(routeStatus),
         ),

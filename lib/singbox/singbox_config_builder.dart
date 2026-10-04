@@ -212,18 +212,20 @@ class SingboxConfigBuilder {
         ...availableLowestTags,
         ...groupTags,
         ...selectableOutboundTags,
+        ...selectionCatalog.manualSelectionTags,
       },
     );
     final chainTags = chainOutbounds
         .map((outbound) => outbound['tag']?.toString() ?? '')
         .where((tag) => tag.isNotEmpty)
         .toList(growable: false);
-    final selectableTags = <String>[
+    final selectableTags = <String>{
       ...availableLowestTags,
       ...groupTags,
       ...chainTags,
       ...selectableOutboundTags,
-    ];
+      ...selectionCatalog.manualSelectionTags,
+    }.toList(growable: false);
     final hasProxies = outboundTags.isNotEmpty;
     final normalizedSplitRoutingPackages = _normalizedSplitRoutingPackages();
     final tunSplitActive =

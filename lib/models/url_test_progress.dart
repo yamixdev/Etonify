@@ -4,6 +4,7 @@ class UrlTestProgressState {
     this.isCancelled = false,
     this.isPaused = false,
     this.isOfflineSession = false,
+    this.showCheckProgress = false,
     this.total = 0,
     this.working = 0,
     this.failed = 0,
@@ -16,16 +17,13 @@ class UrlTestProgressState {
   final bool isCancelled;
   final bool isPaused;
   final bool isOfflineSession;
+  final bool showCheckProgress;
   final int total;
   final int working;
   final int failed;
   final int? completed;
 
-  int get tested =>
-      (completed == null || completed! < working + failed
-              ? working + failed
-              : completed!)
-          .clamp(0, total);
+  int get tested => (completed ?? working + failed).clamp(0, total);
   int get pending => (total - tested).clamp(0, total);
 
   bool get hasResults => total > 0 && (isRunning || isCancelled || tested > 0);
@@ -35,6 +33,7 @@ class UrlTestProgressState {
     bool? isCancelled,
     bool? isPaused,
     bool? isOfflineSession,
+    bool? showCheckProgress,
     int? total,
     int? working,
     int? failed,
@@ -45,6 +44,7 @@ class UrlTestProgressState {
       isCancelled: isCancelled ?? this.isCancelled,
       isPaused: isPaused ?? this.isPaused,
       isOfflineSession: isOfflineSession ?? this.isOfflineSession,
+      showCheckProgress: showCheckProgress ?? this.showCheckProgress,
       total: total ?? this.total,
       working: working ?? this.working,
       failed: failed ?? this.failed,
@@ -61,6 +61,7 @@ class UrlTestProgressState {
           isCancelled == other.isCancelled &&
           isPaused == other.isPaused &&
           isOfflineSession == other.isOfflineSession &&
+          showCheckProgress == other.showCheckProgress &&
           total == other.total &&
           working == other.working &&
           failed == other.failed &&
@@ -72,6 +73,7 @@ class UrlTestProgressState {
     isCancelled,
     isPaused,
     isOfflineSession,
+    showCheckProgress,
     total,
     working,
     failed,
@@ -136,6 +138,8 @@ class UrlTestProgressCounter {
   int _failed = 0;
   int? _coreTotal;
   int _coreCompleted = 0;
+  Set<String>? _sweepCompletedTags;
+  Set<String> _nativeSweepTags = const {};
 
   void reset({
     required Iterable<String> visibleTags,
@@ -151,31 +155,58 @@ class UrlTestProgressCounter {
     _failed = 0;
     _coreTotal = null;
     _coreCompleted = 0;
+    _sweepCompletedTags = null;
+    _nativeSweepTags = Set.of(testableTags);
     update(_tags, resultForTag);
     if (includeKnownVisibleResults) {
       update(_visibleTags, resultForTag);
     }
   }
 
+  /// A new queue resets completion, not the servers' last known availability.
+  void beginSweep({required Set<String> testableTags}) {
+    _sweepCompletedTags = <String>{};
+    _nativeSweepTags = Set.of(testableTags);
+    _additionalCompletedTags.clear();
+    _coreTotal = null;
+    _coreCompleted = 0;
+  }
+
   /// The core reports completed concrete probes. The header can include more
   /// visible nodes than the queue, so skipped nodes remain pending.
   void applyCoreSessionSnapshot({required int total, required int completed}) {
     _coreTotal = total < 0 ? 0 : total;
-    _coreCompleted = completed.clamp(0, _coreTotal!);
+    // A queue with core-only helpers cannot identify how many visible leaves
+    // finished. In that case only concrete per-tag results count as checked.
+    _coreCompleted =
+        _sweepCompletedTags != null &&
+            !_nativeSweepTags.every(_visibleTags.contains)
+        ? 0
+        : completed.clamp(0, _coreTotal!);
   }
 
   void update(
     Iterable<String> changedTags,
-    bool? Function(String tag) resultForTag,
-  ) {
+    bool? Function(String tag) resultForTag, {
+    Set<String>? completedTags,
+  }) {
     for (final tag in changedTags) {
+      if (!_visibleTags.contains(tag)) continue;
+      final next = resultForTag(tag);
+      // UI snapshots may touch a pending row that still has a cached ping.
+      // Only accepted terminal measurements advance this sweep.
+      if (next != null &&
+          _sweepCompletedTags != null &&
+          (completedTags == null || completedTags.contains(tag))) {
+        _sweepCompletedTags!.add(tag);
+        if (!_nativeSweepTags.contains(tag)) _additionalCompletedTags.add(tag);
+      }
       if (!_tags.contains(tag)) {
-        if (!_visibleTags.contains(tag) || resultForTag(tag) == null) continue;
+        if (next == null) continue;
         _tags.add(tag);
-        _additionalCompletedTags.add(tag);
+        if (_sweepCompletedTags == null) _additionalCompletedTags.add(tag);
       }
       final previous = _results[tag];
-      final next = resultForTag(tag);
       if (previous == next) continue;
       if (previous == true) _working--;
       if (previous == false) _failed--;
@@ -192,19 +223,22 @@ class UrlTestProgressCounter {
   UrlTestProgressState state({
     bool isRunning = false,
     bool isCancelled = false,
+    bool showCheckProgress = false,
   }) => UrlTestProgressState(
     isRunning: isRunning,
     isCancelled: isCancelled,
-    total: _coreTotal == null
-        ? _visibleTags.length
-        : (_coreTotal! > _visibleTags.length
-              ? _coreTotal!
-              : _visibleTags.length),
+    showCheckProgress: showCheckProgress,
+    total: _visibleTags.length,
     // Count only individually measured nodes, not synthetic group rows.
     working: _working,
     failed: _failed,
-    completed: _coreTotal == null
-        ? null
-        : _coreCompleted + _additionalCompletedTags.length,
+    completed: _sweepCompletedTags == null
+        ? (_coreTotal == null
+              ? null
+              : _coreCompleted + _additionalCompletedTags.length)
+        : (_coreCompleted + _additionalCompletedTags.length >
+                  _sweepCompletedTags!.length
+              ? _coreCompleted + _additionalCompletedTags.length
+              : _sweepCompletedTags!.length),
   );
 }

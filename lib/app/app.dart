@@ -62,7 +62,6 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
-import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
@@ -1375,10 +1374,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       consumed: info?.consumed.toDouble() ?? 0,
       total: info?.total?.toDouble() ?? 0,
       remainingDays: info?.remainingDays,
-      outboundsCount: ProxySelectionCatalog(
-        subscription.outbounds,
-        subscription.groups,
-      ).candidateTags.length,
+      outboundsCount: subscription.outbounds.isNotEmpty
+          ? subscription.concreteServerCount
+          : max(0, subscription.cachedVisibleProxyCount),
       sourceLabel: '',
     );
   }
@@ -1577,9 +1575,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   AppProxySummary _displaySummaryForGroup(SubscriptionGroup group) {
-    final visibleChildTags = group.outboundTags
-        .where((tag) => _activeOutboundByTagLookup.containsKey(tag))
-        .toList(growable: false);
     final selectedChild = _selectedGroupOutbound(group);
     final selectedSummary = selectedChild == null
         ? null
@@ -1591,13 +1586,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final selectedChildName = selectedSummary?.protocolLabel;
     final hasSelectedChild =
         selectedChildName != null && selectedChildName.isNotEmpty;
-    final childCount = visibleChildTags.isEmpty
-        ? group.outboundTags.length
-        : visibleChildTags.length;
+    final childCount = _concreteTagsForProxyGroup(group.tag).length;
     return AppProxySummary(
       tag: group.tag,
       displayName: group.name.trim().isEmpty ? group.tag : group.name,
-      countryCode: selectedCountry.isNotEmpty ? selectedCountry : groupCountry,
+      countryCode: selectedSummary == null ? groupCountry : selectedCountry,
       type: 'urltest',
       server: '',
       port: 0,
@@ -1617,10 +1610,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
           : 'URLTest · $childCount outbounds',
       endpointLabel: selectedSummary?.endpointLabel ?? '',
       isGroup: true,
-      membersSelectable: false,
+      membersSelectable: true,
       childCount: childCount,
       selectedChildTag: selectedChild?.tag,
-      selectedChildName: null,
+      selectedChildName: selectedSummary?.displayName,
       highlighted: true,
     );
   }
@@ -2247,6 +2240,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _publishProxyRuntimeVisualStatesForUrlTestTags([tag]);
       },
       onSessionChanged: (running, kind, targetTag) {
+        if (running && kind == LatencySessionKind.full) {
+          _partialGroupUrlTestInProgress = _latencyCoordinator.isPartialSession;
+        }
         final fullSessionRunning = running && kind == LatencySessionKind.full;
         final startingFullSession =
             fullSessionRunning && !_fullUrlTestSessionRunning;
@@ -4613,24 +4609,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Set<String> _userVisibleServerTags() {
     final subscription = _activeSubscription;
     if (subscription == null) return const <String>{};
-    final tags = <String>{};
-    for (final outbound in subscription.outbounds) {
-      if (!outbound.info.deleted &&
-          isSupportedOutboundConfig(outbound.config) &&
-          !isReservedProxyTag(outbound.tag) &&
-          !isSyntheticProxyTag(outbound.tag) &&
-          !isLowestProxyTag(outbound.tag) &&
-          outbound.tag != 'direct' &&
-          outbound.tag != 'block' &&
-          outbound.tag != 'dns-out' &&
-          outbound.tag != 'select') {
-        tags.add(outbound.tag);
-      }
-    }
-    for (final chain in subscription.proxyChains) {
-      tags.add(chain.tag);
-    }
-    return tags;
+    return subscription.concreteServerTags;
   }
 
   void _synchronizeUrlTestProgressCatalog() {
@@ -4647,6 +4626,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       catalogKey: (
         subscription?.id,
         subscription?.outbounds,
+        subscription?.groups,
         subscription?.proxyChains,
       ),
       visibleTags: _userVisibleServerTags,
@@ -4662,18 +4642,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }) {
     _synchronizeUrlTestProgressCatalog();
     if (resetCounter) {
-      _urlTestProgressCounter.reset(
-        visibleTags: _userVisibleServerTags(),
-        testableTags: _runtimeRecovery.lastStartedUrlTestOutboundTags.isNotEmpty
-            ? _runtimeRecovery.lastStartedUrlTestOutboundTags
-            : _userVisibleServerTags(),
-        // A new full sweep starts at zero even when previous measurements are
-        // still cached for routing. Only results of this run count here.
-        resultForTag: isRunning == true
-            ? (_) => null
-            : _urlTestProgressResultForTag,
-        includeKnownVisibleResults: isRunning != true,
-      );
+      final testableTags =
+          _runtimeRecovery.lastStartedUrlTestOutboundTags.isNotEmpty
+          ? _runtimeRecovery.lastStartedUrlTestOutboundTags
+          : _userVisibleServerTags();
+      if (isRunning == true) {
+        _urlTestProgressCounter.beginSweep(testableTags: testableTags);
+      } else {
+        _urlTestProgressCounter.reset(
+          visibleTags: _userVisibleServerTags(),
+          testableTags: testableTags,
+          resultForTag: _urlTestProgressResultForTag,
+          includeKnownVisibleResults: true,
+        );
+      }
     }
     final nextState = _urlTestProgressCounter.state(
       isRunning:
@@ -4681,6 +4663,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           (_latencyCoordinator.isRunning &&
               _latencyCoordinator.kind == LatencySessionKind.full),
       isCancelled: isCancelled ?? _urlTestCancelled,
+      showCheckProgress: _latencyCoordinator.isCurrentSessionUserSweep,
     );
     final logicalSession = _offlineUrlTestSession;
     if (logicalSession != null && (!logicalSession.isTerminal || !_connected)) {
@@ -4716,7 +4699,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return null;
   }
 
-  void _updateUrlTestProgressForTags(Iterable<String> changedTags) {
+  bool _hasFreshUrlTestResult(String tag) => latencyResultIsFresh(
+    result: _urlTestProgressResultForTag(tag),
+    measuredAtSeconds: _proxyRuntime.runtimeLatencyTimes[tag],
+    nowSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    maxAgeSeconds: max(15, _urlTestIntervalSeconds),
+    invalidated: _proxyRuntime.isLatencyInvalidated(tag),
+  );
+
+  void _updateUrlTestProgressForTags(
+    Iterable<String> changedTags, {
+    Set<String>? completedTags,
+  }) {
     final logicalSession = _offlineUrlTestSession;
     if (logicalSession != null && (!logicalSession.isTerminal || !_connected)) {
       _publishOfflineUrlTestProgress();
@@ -4726,10 +4720,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _publishOfflineUrlTestProgress();
     }
     _synchronizeUrlTestProgressCatalog();
-    _urlTestProgressCounter.update(changedTags, _urlTestProgressResultForTag);
+    _urlTestProgressCounter.update(
+      changedTags,
+      _urlTestProgressResultForTag,
+      completedTags: completedTags,
+    );
     _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
       isRunning: _fullUrlTestSessionRunning,
       isCancelled: _urlTestCancelled,
+      showCheckProgress: _latencyCoordinator.isCurrentSessionUserSweep,
     );
   }
 
@@ -4768,7 +4767,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       autoCheckServers: _autoCheckServers,
       supportsTargeted:
           _latencyCoordinator.capabilities.supportsTargetedUrlTest,
-      selectedTag: _currentResolvedActiveOutboundTag() ?? '',
+      selectedTag: _concreteTagsForProxyGroup(_selectedProxyTag).isNotEmpty
+          ? _selectedProxyTag
+          : _currentResolvedActiveOutboundTag() ?? '',
     );
     final selectedScope = scope();
     AppLogStore.info(
@@ -4822,6 +4823,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'automatic URLTest start reason=$reason scope=${nextScope.name}',
         );
         if (nextScope == AutomaticUrlTestScope.selected) {
+          if (_concreteTagsForProxyGroup(_selectedProxyTag).isNotEmpty) {
+            return _checkProxyGroup(
+              _selectedProxyTag,
+              force: false,
+              reason: 'automatic_selected_group_$reason',
+            );
+          }
           final tag = _currentResolvedActiveOutboundTag()?.trim() ?? '';
           if (tag.isEmpty) return Future<bool>.value(false);
           if (_latencyCoordinator.kind == LatencySessionKind.full &&
@@ -6579,7 +6587,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _offlineUrlTestSession = null;
       _offlineProbeConfig = null;
     }
-    _updateUrlTestProgress(isRunning: true, isCancelled: false);
     await _latencyCoordinator.runFull(reason: 'manual');
   }
 
@@ -6658,11 +6665,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (tags.isEmpty) {
         throw StateError('No checkable servers in this profile');
       }
+      final previous = _offlineUrlTestSession;
+      final priorResults =
+          previous != null &&
+              previous.fingerprint == probe.probeFingerprint &&
+              previous.physicalNetworkEpoch == _physicalNetworkEpoch
+          ? previous.latestResults
+          : const <String, bool>{};
       final session = OfflineUrlTestSession(
         id: 'manual-${DateTime.now().microsecondsSinceEpoch}-${++_offlineSessionSequence}',
         fingerprint: probe.probeFingerprint,
         physicalNetworkEpoch: _physicalNetworkEpoch,
         tags: tags,
+        visibleTags: visible,
+        initialResults: {
+          for (final tag in visible)
+            if ((priorResults[tag] ?? _urlTestProgressResultForTag(tag))
+                case final bool available)
+              tag: available,
+        },
       );
       _offlineUrlTestSession = session;
       _offlineProbeConfig = probe;
@@ -6833,7 +6854,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _groupUrlTestScheduler.cancel();
     if (!_latencyCoordinator.capabilities.supportsTargetedUrlTest) {
-      _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
       await _latencyCoordinator.runFull(reason: 'manual_active_fallback');
       return;
     }
@@ -6844,7 +6864,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _latencyCoordinator.kind != LatencySessionKind.full ||
           _urlTestProgressResultForTag(targetTag) != null,
     );
-    _proxyRuntime.runtimeLatencyTimes.remove(targetTag);
     await test;
   }
 
@@ -6861,38 +6880,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
-    final group = _activeGroupByTagLookup[tag];
-    final groupChildren = group == null
-        ? const <String>[]
-        : latencyConcreteGroupTags(group.tag, {
-            for (final entry in _activeGroupByTagLookup.entries)
-              entry.key: entry.value.outboundTags,
-          }, _userVisibleServerTags());
-    if (groupChildren.length > 1 && !_latencyCoordinator.isRunning) {
+    if (_concreteTagsForProxyGroup(tag).isNotEmpty) {
       _haptic();
       _groupUrlTestScheduler.cancel();
-      _partialGroupUrlTestInProgress = true;
-      try {
-        await _latencyCoordinator.runFull(
-          reason: 'manual_group',
-          includeOutboundTags: groupChildren,
-        );
-      } finally {
-        _partialGroupUrlTestInProgress = false;
-      }
+      await _checkProxyGroup(tag, force: true, reason: 'manual_group');
       return;
     }
-    // While a full run is active, checking this row only prioritizes its
-    // selected child; the existing run continues through the other children.
     final selectedTarget = latencyTargetTag(
       isLowestProxyTag(tag) ? (_runtimeLowestOutboundTagFor(tag) ?? tag) : tag,
       _runtimeGroupSelections,
     );
-    final target = group == null
-        ? selectedTarget
-        : groupChildren.contains(selectedTarget)
-        ? selectedTarget
-        : groupChildren.firstOrNull;
+    final target = selectedTarget;
     if (target == null) {
       AppLogStore.warning(
         'latency',
@@ -6909,8 +6907,67 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _latencyCoordinator.kind != LatencySessionKind.full ||
           _urlTestProgressResultForTag(target) != null,
     );
-    _proxyRuntime.runtimeLatencyTimes.remove(target);
     await test;
+  }
+
+  List<String> _concreteTagsForProxyGroup(String tag) {
+    _ensureActiveLookupCaches();
+    final visible = _activeSubscription?.concreteServerTags ?? const <String>{};
+    if (isLowestProxyTag(tag)) return visible.toList(growable: false);
+    if (!_activeGroupByTagLookup.containsKey(tag)) return const [];
+    return latencyConcreteGroupTags(tag, {
+      for (final group in _activeGroupByTagLookup.values)
+        group.tag: <String>{
+          ...group.outboundTags,
+          if (group.config['outbounds'] is List)
+            ...(group.config['outbounds'] as List).whereType<String>(),
+        },
+    }, visible);
+  }
+
+  Future<bool> _checkProxyGroup(
+    String tag, {
+    required bool force,
+    required String reason,
+  }) async {
+    final subscriptionId = _activeSubscription?.id;
+    final revision = _activeSubscription?.payloadRevision;
+    final epoch = _physicalNetworkEpoch;
+    final selection = _proxySelection.generation;
+    bool current() =>
+        mounted &&
+        _connected &&
+        _foregroundLifecycleActive &&
+        subscriptionId == _activeSubscription?.id &&
+        revision == _activeSubscription?.payloadRevision &&
+        epoch == _physicalNetworkEpoch &&
+        _proxySelection.isCurrentGeneration(selection);
+    final members = _concreteTagsForProxyGroup(tag);
+    final success = await _latencyCoordinator.runMembers(
+      tags: members,
+      reason: reason,
+      force: force,
+      hasFreshResult: _hasFreshUrlTestResult,
+      isAvailable: (member) => _urlTestProgressResultForTag(member) == true,
+      isCurrent: current,
+    );
+    if (!success &&
+        current() &&
+        !_urlTestCancelled &&
+        members.isNotEmpty &&
+        members.every(
+          (member) =>
+              _hasFreshUrlTestResult(member) &&
+              _urlTestProgressResultForTag(member) == false,
+        )) {
+      final context = _navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        _showAppSnackBar(
+          AppLocalizations.of(context).proxyGroupNoAvailableServersMessage,
+        );
+      }
+    }
+    return success;
   }
 
   Future<void> _handleRuntimeLifecycleTimeout(
@@ -7550,6 +7607,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _urlTestProgressNotifier.value = _urlTestProgressCounter.state(
           isRunning: session.state == 'running',
           isCancelled: session.state == 'cancelled',
+          showCheckProgress: _latencyCoordinator.isCurrentSessionUserSweep,
         );
         if (logicalSession != null) _publishOfflineUrlTestProgress();
       }
@@ -8255,7 +8313,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _hwidNoticeDialogShowing = true;
     try {
-      if (!_settings.hwidDefaultNoticeShown) {
+      if (!_settings.hwidDefaultNoticeShown && _settings.sendHwidToProviders) {
         final l10n = AppLocalizations.of(initialContext);
         final acknowledged = await showDialog<bool>(
           context: initialContext,
@@ -8424,7 +8482,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _forwardLatencyEvents(result.latencyEvents);
     // Group snapshots also carry individual measurements (including checks
     // initiated by the notification). They use the same freshness gate.
-    _updateUrlTestProgressForTags(result.affectedProxyTags);
+    _updateUrlTestProgressForTags(
+      result.affectedProxyTags,
+      completedTags: {for (final event in result.latencyEvents) event.tag},
+    );
     if (!result.changed) {
       if (diagnosticsBecameReady) {
         _onRuntimeDiagnosticsReady();
@@ -8611,7 +8672,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _runtimeGroupSelections,
     );
     if (runtimeSelectedTag != null &&
-        group.outboundTags.contains(runtimeSelectedTag)) {
+        _concreteTagsForProxyGroup(group.tag).contains(runtimeSelectedTag)) {
       final outbound = _activeOutboundByTagLookup[runtimeSelectedTag];
       if (outbound != null) {
         return outbound;
@@ -9064,16 +9125,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         activeProxy: _displayProxy,
         hideActiveProxyIp: _hideServerIp,
         connected: _connected,
-        serverCount: _fullProxyListCacheReady
-            ? max(
-                0,
-                _activeTopLevelProxiesCount -
-                    (_activeProxiesCache.isNotEmpty &&
-                            isLowestProxyTag(_activeProxiesCache.first.tag)
-                        ? 1
-                        : 0),
-              )
-            : (_activeProfileCache?.outboundsCount ?? 0),
+        serverCount: _activeProfileCache?.outboundsCount ?? 0,
         urlTestInFlight: _urlTestInFlight,
         urlTestInFlightListenable: _urlTestInFlightNotifier,
         urlTestProgressListenable: _urlTestProgressNotifier,

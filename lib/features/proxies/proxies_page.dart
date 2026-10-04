@@ -82,7 +82,10 @@ String? _lowestSelectedDisplayName(AppProxySummary proxy) {
 
 String _localizedProxyTitle(AppLocalizations l10n, AppProxySummary proxy) {
   if (!isLowestProxyTag(proxy.tag)) {
-    return proxy.displayName;
+    final selected = proxy.selectedChildName?.trim() ?? '';
+    return proxy.isGroup && selected.isNotEmpty
+        ? '${proxy.displayName} · $selected'
+        : proxy.displayName;
   }
   final base = _localizedLowestBaseLabel(l10n, proxy.tag);
   final selected = _lowestSelectedDisplayName(proxy);
@@ -490,6 +493,25 @@ class ProxiesPage extends StatefulWidget {
   State<ProxiesPage> createState() => _ProxiesPageState();
 }
 
+class _GroupPanelSnapshot {
+  const _GroupPanelSnapshot({
+    required this.proxies,
+    required this.childrenByTag,
+    required this.selectedTag,
+  });
+
+  final List<AppProxySummary> proxies;
+  final Map<String, List<AppProxySummary>> childrenByTag;
+  final String selectedTag;
+
+  AppProxySummary? groupFor(String tag) {
+    for (final proxy in proxies) {
+      if (proxy.tag == tag) return proxy;
+    }
+    return null;
+  }
+}
+
 class _ProxiesPageState extends State<ProxiesPage> {
   late ProxySort _sort;
   List<AppProxySummary> _visibleItems = const [];
@@ -501,6 +523,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
   final ValueNotifier<double> _proxySheetHeaderScrollCollapse =
       ValueNotifier<double>(0);
   bool _groupSheetOpen = false;
+  final ValueNotifier<_GroupPanelSnapshot?> _groupPanelSnapshot = ValueNotifier(
+    null,
+  );
+  bool _groupPanelRefreshScheduled = false;
+  int _groupPanelGeneration = 0;
   List<_ProxyListEntry>? _visibleEntriesCache;
   Map<Key, int> _visibleEntryIndexes = const <Key, int>{};
   List<AppProxySummary>? _visibleEntriesItemsCache;
@@ -530,6 +557,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
   @override
   void didUpdateWidget(covariant ProxiesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_groupSheetOpen &&
+        (oldWidget.proxies != widget.proxies ||
+            oldWidget.groupChildrenByTag != widget.groupChildrenByTag ||
+            oldWidget.selectedTag != widget.selectedTag)) {
+      _scheduleGroupPanelRefresh();
+    }
     if (oldWidget.runtimeStates != widget.runtimeStates) {
       oldWidget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
       widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
@@ -577,7 +610,27 @@ class _ProxiesPageState extends State<ProxiesPage> {
     widget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
     _observedSheetMetrics?.removeListener(_onSheetMetricsChanged);
     _proxySheetHeaderScrollCollapse.dispose();
+    _groupPanelSnapshot.dispose();
     super.dispose();
+  }
+
+  void _publishGroupPanelSnapshot() {
+    _groupPanelSnapshot.value = _GroupPanelSnapshot(
+      proxies: widget.proxies,
+      childrenByTag: widget.groupChildrenByTag,
+      selectedTag: widget.selectedTag,
+    );
+  }
+
+  void _scheduleGroupPanelRefresh() {
+    if (_groupPanelRefreshScheduled) return;
+    _groupPanelRefreshScheduled = true;
+    // The modal is a sibling route, so it cannot be marked dirty while this
+    // page's didUpdateWidget is running. Coalesce metadata refreshes per frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _groupPanelRefreshScheduled = false;
+      if (mounted && _groupSheetOpen) _publishGroupPanelSnapshot();
+    });
   }
 
   void _bindSheetMetricsListenable(
@@ -870,50 +923,67 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (widget.hapticEnabled) {
       unawaited(HapticFeedback.selectionClick());
     }
+    final generation = ++_groupPanelGeneration;
+    _publishGroupPanelSnapshot();
     setState(() {
       _groupSheetOpen = true;
     });
     try {
-      await Navigator.of(context).push<void>(
-        PageRouteBuilder<void>(
-          opaque: false,
-          barrierDismissible: true,
-          barrierColor: Colors.transparent,
-          barrierLabel: MaterialLocalizations.of(
-            context,
-          ).modalBarrierDismissLabel,
-          transitionDuration: const Duration(milliseconds: 440),
-          reverseTransitionDuration: const Duration(milliseconds: 500),
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              _GroupOutboundsSheet(
-                group: group,
-                children: children,
-                selectedTag: widget.selectedTag,
-                progressiveBlurEnabled: widget.progressiveBlurEnabled,
-                runtimeStates: widget.runtimeStates,
-                routeAnimation: animation,
-                onSelected: widget.onSelected,
-                onProxyUrlTest: widget.connected ? widget.onProxyUrlTest : null,
-                onVisibleProxyNeedsLocation: widget.connected
-                    ? widget.onVisibleProxyNeedsLocation
-                    : null,
-                outboundForTag: widget.outboundForTag,
-                initialSort: _sort,
-                onSortChanged: (value) {
-                  if (_sort != value && mounted) {
-                    setState(() {
-                      _sort = value;
-                      _rebuildVisibleItems();
-                    });
-                  }
-                  widget.onSortChanged?.call(value);
-                },
-              ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return child;
-          },
-        ),
+      final route = PageRouteBuilder<void>(
+        opaque: false,
+        barrierDismissible: true,
+        barrierColor: Colors.transparent,
+        barrierLabel: MaterialLocalizations.of(
+          context,
+        ).modalBarrierDismissLabel,
+        transitionDuration: const Duration(milliseconds: 440),
+        reverseTransitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ValueListenableBuilder<_GroupPanelSnapshot?>(
+              valueListenable: _groupPanelSnapshot,
+              builder: (context, snapshot, _) {
+                if (snapshot == null) return const SizedBox.shrink();
+                return _GroupOutboundsSheet(
+                  group: snapshot.groupFor(group.tag) ?? group,
+                  children: snapshot.childrenByTag[group.tag] ?? children,
+                  groupChildrenByTag: snapshot.childrenByTag,
+                  selectedTag: snapshot.selectedTag,
+                  progressiveBlurEnabled: widget.progressiveBlurEnabled,
+                  runtimeStates: widget.runtimeStates,
+                  routeAnimation: animation,
+                  onSelected: widget.onSelected,
+                  onProxyUrlTest: widget.connected
+                      ? widget.onProxyUrlTest
+                      : null,
+                  onVisibleProxyNeedsLocation: widget.connected
+                      ? widget.onVisibleProxyNeedsLocation
+                      : null,
+                  outboundForTag: widget.outboundForTag,
+                  initialSort: _sort,
+                  onSortChanged: (value) {
+                    if (_sort != value && mounted) {
+                      setState(() {
+                        _sort = value;
+                        _rebuildVisibleItems();
+                      });
+                    }
+                    widget.onSortChanged?.call(value);
+                  },
+                );
+              },
+            ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return child;
+        },
       );
+      unawaited(
+        route.completed.then((_) {
+          if (mounted && generation == _groupPanelGeneration) {
+            _groupPanelSnapshot.value = null;
+          }
+        }),
+      );
+      await Navigator.of(context).push<void>(route);
     } finally {
       if (mounted) {
         setState(() {
@@ -1171,11 +1241,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ListView.builder(
         controller: widget.scrollController,
-        physics: listMounted
-            ? const ClampingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              )
-            : const NeverScrollableScrollPhysics(),
+        physics: listMounted ? null : const NeverScrollableScrollPhysics(),
         itemExtent: _proxyRowExtent(context),
         scrollCacheExtent: _kProxyListScrollCacheExtent,
         addAutomaticKeepAlives: false,

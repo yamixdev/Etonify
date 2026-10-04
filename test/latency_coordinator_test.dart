@@ -14,6 +14,254 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  for (final (reason, expected) in [
+    ('manual', true),
+    ('offline_manual', true),
+    ('manual_group', false),
+    ('manual_active_fallback', false),
+    ('periodic', false),
+  ]) {
+    test('only user full sweeps own header progress ($reason)', () async {
+      final coordinator = _coordinator(runTest: (_) async {});
+      addTearDown(coordinator.dispose);
+      final result = coordinator.runFull(reason: reason);
+      expect(coordinator.isCurrentSessionUserSweep, expected);
+      coordinator.cancel();
+      expect(coordinator.isCurrentSessionUserSweep, isFalse);
+      await result;
+    });
+  }
+  group('concrete group checks', () {
+    late List<LatencyTestRequest> requests;
+    late Set<String> fresh;
+    late Set<String> available;
+    late LatencyCoordinator coordinator;
+
+    setUp(() {
+      requests = [];
+      fresh = {'a'};
+      available = {'a'};
+      coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        expectedTags: () => const ['a', 'b', 'outside'],
+        capabilities: _v3Capabilities,
+      );
+    });
+    tearDown(() => coordinator.dispose());
+
+    Future<bool> check({bool force = false, bool Function()? isCurrent}) =>
+        coordinator.runMembers(
+          tags: const ['a', 'b', 'a'],
+          reason: force ? 'manual_group' : 'automatic_selected_group',
+          force: force,
+          hasFreshResult: fresh.contains,
+          isAvailable: available.contains,
+          isCurrent: isCurrent ?? () => true,
+        );
+
+    void finish(int id, Iterable<String> tags, {bool success = true}) {
+      coordinator.handleCoreSession(
+        sessionId: id,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'running',
+        terminalReason: '',
+        available: 0,
+      );
+      for (final tag in tags) {
+        fresh.add(tag);
+        if (success) available.add(tag);
+        coordinator.handleCoreResult(
+          tag: tag,
+          sessionId: id,
+          revision: id,
+          available: success,
+        );
+      }
+      coordinator.handleCoreSession(
+        sessionId: id,
+        groupTag: 'select',
+        targetTag: '',
+        mode: 'manual',
+        state: 'completed',
+        terminalReason: 'completed',
+        available: success ? tags.length : 0,
+      );
+    }
+
+    test(
+      'selection reuses fresh results and only tests missing leaves',
+      () async {
+        final result = check();
+        await Future<void>.delayed(Duration.zero);
+        expect(requests.single.includeOutboundTags, ['b']);
+        finish(1, ['b']);
+        expect(await result, isTrue);
+      },
+    );
+
+    test('fresh complete group does not dispatch another test', () async {
+      fresh.add('b');
+      expect(await check(), isTrue);
+      expect(requests, isEmpty);
+    });
+
+    test(
+      'manual group tests all unique leaves despite cached results',
+      () async {
+        fresh.add('b');
+        final result = check(force: true);
+        await Future<void>.delayed(Duration.zero);
+        expect(requests.single.includeOutboundTags, ['a', 'b']);
+        finish(1, ['a', 'b']);
+        expect(await result, isTrue);
+      },
+    );
+
+    test('joins a full sweep without duplicating probes', () async {
+      final sweep = coordinator.runFull(reason: 'periodic');
+      final result = check(force: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(requests, hasLength(1));
+      finish(1, ['a', 'b', 'outside']);
+      expect(await sweep, isTrue);
+      expect(await result, isTrue);
+      expect(requests, hasLength(1));
+    });
+
+    for (final cancel in [false, true]) {
+      test(
+        'group joins a pending parallel target after full sweep (cancel=$cancel)',
+        () async {
+          final sweep = coordinator.runFull(reason: 'periodic');
+          await Future<void>.delayed(Duration.zero);
+          final target = coordinator.runTarget(
+            targetOutboundTag: 'a',
+            reason: 'manual_tap',
+            force: true,
+          );
+          await target;
+          final result = check(force: true);
+          finish(1, ['b', 'outside']);
+          await sweep;
+          await Future<void>.delayed(Duration.zero);
+          expect(coordinator.hasActiveTargetCheck('a'), isTrue);
+          expect(requests, hasLength(2));
+          if (cancel) {
+            coordinator.cancel();
+            expect(await result, isFalse);
+          } else {
+            fresh.add('a');
+            available.add('a');
+            expect(
+              coordinator.handleCoreResult(
+                tag: 'a',
+                sessionId: 2,
+                revision: 2,
+                available: true,
+              ),
+              isTrue,
+            );
+            expect(await result, isTrue);
+          }
+          expect(requests, hasLength(2));
+        },
+      );
+    }
+
+    test(
+      'manual group reruns finished members but joins still pending probes',
+      () async {
+        final sweep = coordinator.runFull(reason: 'periodic');
+        await Future<void>.delayed(Duration.zero);
+        coordinator.handleCoreSession(
+          sessionId: 1,
+          groupTag: 'select',
+          targetTag: '',
+          mode: 'manual',
+          state: 'running',
+          terminalReason: '',
+          available: 0,
+        );
+        coordinator.handleCoreResult(
+          tag: 'a',
+          sessionId: 1,
+          revision: 1,
+          available: true,
+        );
+        final result = check(force: true);
+        finish(1, ['a', 'b', 'outside']);
+        await sweep;
+        await Future<void>.delayed(Duration.zero);
+        expect(requests, hasLength(2));
+        expect(requests.last.includeOutboundTags, ['a']);
+        finish(2, ['a']);
+        expect(await result, isTrue);
+      },
+    );
+
+    test(
+      'partial running sweep is followed only by uncovered members',
+      () async {
+        final sweep = coordinator.runFull(
+          reason: 'manual_other_group',
+          includeOutboundTags: ['a'],
+        );
+        final result = check(force: true);
+        await Future<void>.delayed(Duration.zero);
+        finish(1, ['a']);
+        expect(await sweep, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(requests, hasLength(2));
+        expect(requests.last.includeOutboundTags, ['b']);
+        finish(2, ['b']);
+        expect(await result, isTrue);
+      },
+    );
+
+    test('cancel prevents delayed follow-up tests', () async {
+      final sweep = coordinator.runFull(
+        reason: 'manual_other_group',
+        includeOutboundTags: ['a'],
+      );
+      final result = check();
+      await Future<void>.delayed(Duration.zero);
+      coordinator.cancel();
+      expect(await sweep, isFalse);
+      expect(await result, isFalse);
+      expect(requests, hasLength(1));
+    });
+
+    test(
+      'selection or network context change prevents delayed follow-up',
+      () async {
+        var current = true;
+        final sweep = coordinator.runFull(
+          reason: 'manual_other_group',
+          includeOutboundTags: ['a'],
+        );
+        final result = check(isCurrent: () => current);
+        await Future<void>.delayed(Duration.zero);
+        current = false;
+        finish(1, ['a']);
+        await sweep;
+        expect(await result, isFalse);
+        expect(requests, hasLength(1));
+      },
+    );
+
+    test(
+      'unavailable complete group is not reported as a working choice',
+      () async {
+        fresh.add('b');
+        available.clear();
+        expect(await check(), isFalse);
+        expect(requests, isEmpty);
+      },
+    );
+  });
+
   test(
     'targeted check reads only its own baseline in a large profile',
     () async {

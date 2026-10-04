@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
   test(
@@ -616,6 +617,52 @@ void main() {
     expect(result, same(ProxyRuntimeGroupUpdateResult.noChanges));
     expect(controller.runtimeLatencies, {'vless-1': 73});
     expect(controller.runtimeLatencyTimes, {'vless-1': 100});
+  });
+
+  test('mixed snapshot does not count a pending cached ping as checked', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.runtimeLatencies['vless-1'] = 73;
+    controller.runtimeLatencyTimes['vless-1'] = 100;
+    bool? resultForTag(String tag) {
+      if (controller.unavailableLatencyTags.contains(tag)) return false;
+      return controller.runtimeLatencies.containsKey(tag) ? true : null;
+    }
+
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['vless-1', 'vless-2'],
+      testableTags: const {'vless-1', 'vless-2'},
+      resultForTag: resultForTag,
+    );
+    counter.beginSweep(testableTags: const {'vless-1', 'vless-2'});
+    final result = controller.applyGroupUpdates(
+      _input(
+        rawGroups: [
+          {
+            'tag': 'select',
+            'items': [
+              {'tag': 'vless-1', 'status': 'checking', 'delay': 0, 'time': 101},
+              {
+                'tag': 'vless-2',
+                'status': 'available',
+                'delay': 50,
+                'time': 101,
+              },
+            ],
+          },
+        ],
+      ),
+    );
+    expect(result.affectedProxyTags, {'vless-1', 'vless-2'});
+    expect(result.latencyEvents.map((event) => event.tag), ['vless-2']);
+    counter.update(
+      result.affectedProxyTags,
+      resultForTag,
+      completedTags: {for (final event in result.latencyEvents) event.tag},
+    );
+    expect(counter.state().working, 2);
+    expect(counter.state().tested, 1);
   });
 
   test('an error without an unavailable status is still a failed URLTest', () {

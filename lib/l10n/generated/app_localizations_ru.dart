@@ -403,7 +403,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get sendHwidToProvidersDescription =>
-      'Передавать ID устройства, модель и версию ОС при загрузке всех подписок. Отдельные разрешения в подписках сохраняются.';
+      'При включении ID устройства, модель и версия ОС передаются при загрузке всех подписок. При выключении действуют отдельные разрешения в подписках.';
 
   @override
   String get hwidDefaultEnabledNoticeTitle => 'Отправка HWID';
@@ -427,14 +427,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get autoCheckDisabledNoticeMessage =>
-      'Полная автоматическая проверка серверов теперь выключена. Выбранный сервер всё равно проверяется после подключения, смены сети или выбора. Проверить весь список можно кнопкой-молнией, а вернуть автопроверку — в разделе «Подписки и проверка». Режим «Самый быстрый» использует уже полученные результаты; чтобы найти лучший из всех серверов, проверьте весь список.';
+      'Автопроверка всего списка выключена. Выбранный сервер проверяется после подключения и смены сети. При выборе автоматической группы её серверы проверяются один раз; общая автопроверка остаётся выключенной. Режим «Самый быстрый» проверяет отсутствующие или устаревшие результаты во всём списке и выбирает сервер с минимальным пингом. Проверить список вручную можно кнопкой-молнией.';
 
   @override
   String get autoCheckDisabledNoticeAction => 'Понятно';
 
   @override
   String proxiesProgressWorking(int working, int total) {
-    return 'Рабочих $working / $total';
+    return 'Работает $working / $total';
   }
 
   @override
@@ -1970,6 +1970,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get sendHwidSubtitle => 'Нужно некоторым Happ-подпискам';
 
   @override
+  String get sendHwidGlobalEnabledSubtitle =>
+      'HWID отправляется по общему разрешению для провайдеров. Выключение здесь не отменяет общую настройку.';
+
+  @override
   String get useCustomHwidTitle => 'Задать свой HWID';
 
   @override
@@ -2360,7 +2364,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get subscriptionErrorHttpsRequired =>
-      'Эта подписка отправляет HWID или секретные данные, поэтому её можно загружать только по HTTPS.';
+      'Для загрузки подписки используйте адрес HTTPS. Обычный HTTP разрешён только для локальных loopback-адресов.';
 
   @override
   String get subscriptionErrorUnsafeRedirect =>
@@ -2718,6 +2722,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get adBlockDownloadAction => 'Скачать';
 
   @override
+  String get adBlockDownloadAndEnableAction => 'Скачать и включить';
+
+  @override
   String get adBlockUpdateAction => 'Обновить';
 
   @override
@@ -2734,6 +2741,9 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get adBlockDownloadingStatus =>
       'Скачиваем и собираем локальный фильтр...';
+
+  @override
+  String get adBlockDeletingStatus => 'Удаляем фильтр…';
 
   @override
   String get adBlockStageConnecting => 'Подключаемся к AdGuard…';
@@ -2777,7 +2787,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get adBlockMissingHint =>
-      'Скачиваем список с AdGuard и сохраняем его локально для sing-box.';
+      'Скачайте фильтр AdGuard, чтобы включить блокировку. Фильтр сохранится на устройстве.';
 
   @override
   String adBlockReadyStatus(int blockedCount) {
@@ -3227,6 +3237,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'Российские сервисы и локальные адреса работают в обход VPN.';
 
   @override
+  String get trafficRulesRussianSummary =>
+      'Российские сервисы без VPN, остальной трафик через VPN.';
+
+  @override
   String get trafficRulesAiTitle => 'Нейросети через VPN';
 
   @override
@@ -3234,11 +3248,19 @@ class AppLocalizationsRu extends AppLocalizations {
       'Популярные нейросети идут через VPN, остальной трафик — напрямую.';
 
   @override
+  String get trafficRulesAiSummary =>
+      'Нейросети через VPN, остальной трафик напрямую.';
+
+  @override
   String get trafficRulesSocialTitle => 'Социальные сети через VPN';
 
   @override
   String get trafficRulesSocialSubtitle =>
       'Популярные соцсети и мессенджеры идут через VPN, остальной трафик — напрямую.';
+
+  @override
+  String get trafficRulesSocialSummary =>
+      'Соцсети и мессенджеры через VPN, остальной трафик напрямую.';
 
   @override
   String get trafficRulesDetails => 'Состав правила';
@@ -3289,6 +3311,21 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get trafficRulesPreparing => 'Подготавливаем правило…';
+
+  @override
+  String get trafficRulesApplying => 'Применяем правило…';
+
+  @override
+  String get logsJumpToLatest => 'К последним записям';
+
+  @override
+  String proxyOpenGroup(String name) {
+    return 'Открыть группу: $name';
+  }
+
+  @override
+  String get proxyGroupNoAvailableServersMessage =>
+      'В этой группе нет доступных серверов. Выберите другую группу или повторите проверку.';
 
   @override
   String get trafficRulesPrepareFailed =>

@@ -2,8 +2,8 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/models/subscription.dart';
 
 /// The choices exposed to a user, as distinct from the concrete outbounds
-/// needed by the core. Subscription groups are managed URLTest outbounds;
-/// selecting one of their implementation members would bypass that policy.
+/// needed by the core. Top-level choices retain provider auto policies; group
+/// members are separate explicit manual choices available in the group panel.
 class ProxySelectionCatalog {
   ProxySelectionCatalog(
     List<Outbound> outbounds,
@@ -70,12 +70,37 @@ class ProxySelectionCatalog {
         ..clear()
         ..addAll(ordered);
     }
+    final groupByTag = {for (final group in liveGroups) group.tag: group};
+    final concreteTags = concreteSubscriptionServerTags(outbounds, liveGroups);
+    final seen = <String>{};
+    manualSelectionTags = candidateTags.toSet();
+    void visit(String tag) {
+      if (!seen.add(tag)) return;
+      final group = groupByTag[tag];
+      if (group == null) {
+        if (concreteTags.contains(tag)) manualSelectionTags.add(tag);
+        return;
+      }
+      manualSelectionTags.add(tag);
+      final references = group.config['outbounds'];
+      for (final child in <String>{
+        ...group.outboundTags,
+        if (references is List) ...references.whereType<String>(),
+      }) {
+        visit(child);
+      }
+    }
+
+    for (final tag in candidateTags) {
+      visit(tag);
+    }
   }
 
   late final List<SubscriptionGroup> groups;
   late final Set<String> memberTags;
   late final List<Outbound> standaloneOutbounds;
   late final List<String> candidateTags;
+  late final Set<String> manualSelectionTags;
 
   bool get hasLowest => candidateTags.length > 1;
   String get defaultTag =>
@@ -83,9 +108,9 @@ class ProxySelectionCatalog {
 
   String resolveSelection(String preferredTag) {
     final normalized = normalizeProxySelectionTag(preferredTag);
-    if (candidateTags.contains(normalized)) return normalized;
+    if (manualSelectionTags.contains(normalized)) return normalized;
     if (isLowestProxyTag(normalized)) return defaultTag;
-    // Migrate an old saved selection of an internal member to its group.
+    // Old selections of hidden dependencies still resolve to their owner.
     for (final group in groups) {
       if (group.outboundTags.contains(normalized) ||
           group.fallbackOutboundTags.contains(normalized)) {

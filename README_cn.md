@@ -13,7 +13,7 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="客户端: 0.3.7+37"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.8%2B38-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="客户端: 0.3.8+38"></a>
   <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
   <br>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
@@ -67,7 +67,7 @@ Etonify 将订阅、代理选择、路由和连接诊断整合到一个 Android 
 
 | 组件 | 当前源码 |
 | :--- | :--- |
-| 客户端 | `0.3.7+37` |
+| 客户端 | `0.3.8+38` |
 | 内置核心 | `v1.15.0-alpha.10-etonify.1` |
 | sing-box 基线 | `v1.15.0-alpha.10` |
 | Flutter SDK | `3.47.5` · Dart `3.13` |

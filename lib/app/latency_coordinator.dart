@@ -76,6 +76,7 @@ class _ActiveTargetCheck {
   final int startedAtSeconds;
   final int baselineTimeSeconds;
   Timer? timeoutTimer;
+  final Completer<void> finished = Completer<void>();
 }
 
 class LatencyCoordinator {
@@ -149,6 +150,8 @@ class LatencyCoordinator {
   Timer? _watchdogTimer;
   bool _disposed = false;
   int _generation = 0;
+  int _cancellationGeneration = 0;
+  final Map<String, int> _measurementVersions = {};
   int _sessionOperationGeneration = 0;
   int _sessionStartedAtSeconds = 0;
   LatencySessionPhase _phase = LatencySessionPhase.idle;
@@ -183,6 +186,8 @@ class LatencyCoordinator {
   bool get isRunning =>
       _phase == LatencySessionPhase.startingRpc ||
       _phase == LatencySessionPhase.collectingEvents;
+  bool _partialSession = false;
+  bool get isPartialSession => isRunning && _partialSession;
   bool get awaitingCoreSession =>
       _usesSessionEvents && isRunning && _nativeSessionId == 0;
   bool hasActiveTargetCheck(String tag) =>
@@ -194,6 +199,10 @@ class LatencyCoordinator {
       (_sessionReason.startsWith('manual') ||
           _sessionReason == 'offline_manual');
   bool get isCurrentSessionAutomatic => isRunning && !isCurrentSessionManual;
+  bool get isCurrentSessionUserSweep =>
+      isRunning &&
+      _kind == LatencySessionKind.full &&
+      (_sessionReason == 'manual' || _sessionReason == 'offline_manual');
 
   /// Wait without cancelling the check before applying an automatic update.
   /// An in-flight download can finish after a user starts a manual sweep.
@@ -275,6 +284,81 @@ class LatencyCoordinator {
     );
   }
 
+  /// Checks a concrete group without starting a profile-wide sweep. In-flight
+  /// measurements are shared even when that sweep covers only another group.
+  /// A caller's selection/network lease is checked after every async boundary.
+  Future<bool> runMembers({
+    required Iterable<String> tags,
+    required String reason,
+    required bool force,
+    required bool Function(String tag) hasFreshResult,
+    required bool Function(String tag) isAvailable,
+    required bool Function() isCurrent,
+  }) async {
+    final requested = tags
+        .map((tag) => tag.trim())
+        .where((tag) => tag.isNotEmpty)
+        .toSet();
+    if (requested.isEmpty) return false;
+    final cancellation = _cancellationGeneration;
+    final operation = _operationGeneration();
+    final baselines = {
+      for (final tag in requested)
+        tag:
+            (_measurementVersions[tag] ?? 0) +
+            (force && isRunning && _acceptedEventTimes.containsKey(tag)
+                ? 1
+                : 0),
+    };
+    bool current() =>
+        !_disposed &&
+        cancellation == _cancellationGeneration &&
+        operation == _operationGeneration() &&
+        _isConnected() &&
+        _isForeground() &&
+        _canRunDiagnostics() &&
+        isCurrent();
+
+    while (current() &&
+        (isRunning ||
+            _nativeSessionFinished != null ||
+            requested.any(_activeTargetChecks.containsKey))) {
+      await waitForCurrentSession();
+      if (!current()) return false;
+      final native = _nativeSessionFinished;
+      if (native != null) {
+        try {
+          await native.future.timeout(uiPolicy.rpcAckTimeout);
+        } on TimeoutException {
+          return false;
+        }
+      }
+      if (!current()) return false;
+      final targets = [
+        for (final tag in requested)
+          if (_activeTargetChecks[tag] case final check?) check.finished.future,
+      ];
+      if (targets.isNotEmpty) await Future.wait(targets);
+    }
+    if (!current()) return false;
+    final missing = requested
+        .where((tag) {
+          if ((_measurementVersions[tag] ?? 0) > baselines[tag]!) return false;
+          return force || !hasFreshResult(tag);
+        })
+        .toList(growable: false);
+    if (missing.isNotEmpty) {
+      await runFull(reason: reason, includeOutboundTags: missing);
+      if (!current()) return false;
+    }
+    return requested.any(
+      (tag) =>
+          isAvailable(tag) &&
+          ((_measurementVersions[tag] ?? 0) > baselines[tag]! ||
+              (!force && hasFreshResult(tag))),
+    );
+  }
+
   Future<bool> runTarget({
     required String targetOutboundTag,
     required String reason,
@@ -288,6 +372,9 @@ class LatencyCoordinator {
             'supported=${_capabilities.supportsTargetedUrlTest}',
       );
       return Future<bool>.value(false);
+    }
+    if (_activeTargetChecks.containsKey(targetTag)) {
+      return Future<bool>.value(true);
     }
     if (isRunning) {
       if (_kind != LatencySessionKind.full ||
@@ -341,8 +428,7 @@ class LatencyCoordinator {
       Duration(milliseconds: _targetDeadlineMillis),
       () {
         if (_activeTargetChecks[targetTag] == check) {
-          _activeTargetChecks.remove(targetTag);
-          _notifyParallelTargetChanged(targetTag);
+          _finishParallelTarget(targetTag, check);
         }
       },
     );
@@ -369,13 +455,27 @@ class LatencyCoordinator {
         'latency',
         'parallel targeted URLTest failed: $error',
       );
-      check.timeoutTimer?.cancel();
       if (_activeTargetChecks[targetTag] == check) {
-        _activeTargetChecks.remove(targetTag);
-        _notifyParallelTargetChanged(targetTag);
+        _finishParallelTarget(targetTag, check);
       }
       return false;
     }
+  }
+
+  void _finishParallelTarget(
+    String tag,
+    _ActiveTargetCheck check, {
+    bool measured = false,
+  }) {
+    check.timeoutTimer?.cancel();
+    _activeTargetChecks.remove(tag);
+    // Main-session measurements are counted on settlement. A target finishing
+    // after that settlement (or outside its set) still satisfies a group join.
+    if (measured && !(isRunning && _sessionExpectedTags.contains(tag))) {
+      _measurementVersions[tag] = (_measurementVersions[tag] ?? 0) + 1;
+    }
+    if (!check.finished.isCompleted) check.finished.complete();
+    _notifyParallelTargetChanged(tag);
   }
 
   void _notifyParallelTargetChanged(String tag) {
@@ -416,9 +516,7 @@ class LatencyCoordinator {
       return false;
     }
     if (activeCheck != null) {
-      activeCheck.timeoutTimer?.cancel();
-      _activeTargetChecks.remove(normalizedTag);
-      _notifyParallelTargetChanged(normalizedTag);
+      _finishParallelTarget(normalizedTag, activeCheck, measured: true);
     }
     if (!isRunning) {
       return activeCheck != null;
@@ -518,11 +616,9 @@ class LatencyCoordinator {
       }
     }
     if (activeCheck != null) {
-      activeCheck.timeoutTimer?.cancel();
-      _activeTargetChecks.remove(normalizedTag);
-      _notifyParallelTargetChanged(normalizedTag);
+      _finishParallelTarget(normalizedTag, activeCheck, measured: true);
     }
-    if (belongsToMainSession || activeCheck != null) {
+    if (belongsToMainSession || (activeCheck != null && isRunning)) {
       _acceptedEventTimes[normalizedTag] = revision;
     }
     if (belongsToMainSession) {
@@ -598,8 +694,11 @@ class LatencyCoordinator {
 
   void cancel() {
     _generation++;
+    _cancellationGeneration++;
+    _measurementVersions.clear();
     for (final check in _activeTargetChecks.values) {
       check.timeoutTimer?.cancel();
+      if (!check.finished.isCompleted) check.finished.complete();
     }
     _activeTargetChecks.clear();
     final wasRunning = isRunning;
@@ -776,6 +875,7 @@ class LatencyCoordinator {
               .map((tag) => tag.trim())
               .where((tag) => tag.isNotEmpty)
               .toSet();
+    _partialSession = request.includeOutboundTags.isNotEmpty;
     _acceptedEventTimes.clear();
     _successfulTags.clear();
     _acceptedResultRevisions.clear();
@@ -963,6 +1063,11 @@ class LatencyCoordinator {
     final result = _sessionResult;
     final expectedCount = _sessionExpectedTags.length;
     _adoptCoreMeasurements();
+    for (final tag in _acceptedEventTimes.keys.where(
+      _sessionExpectedTags.contains,
+    )) {
+      _measurementVersions[tag] = (_measurementVersions[tag] ?? 0) + 1;
+    }
     final receivedCount = _acceptedEventTimes.keys
         .where(_sessionExpectedTags.contains)
         .length;

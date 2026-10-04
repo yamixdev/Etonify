@@ -90,14 +90,14 @@ void main() {
       isTrue,
     );
   });
-  test('HWID sending defaults to true and migrates older disabled state', () {
+  test('HWID defaults on but preserves an existing disabled value', () {
     final store = _TestSettingsStore();
     final empty = store.mapState(const {});
     expect(empty.sendHwidToProviders, isTrue);
     expect(empty.hwidDefaultNoticeShown, isFalse);
 
     final legacyOff = store.mapState(const {'send_hwid_to_providers': '0'});
-    expect(legacyOff.sendHwidToProviders, isTrue);
+    expect(legacyOff.sendHwidToProviders, isFalse);
     expect(legacyOff.hwidDefaultNoticeShown, isFalse);
 
     final explicitlyDisabled = store.mapState(const {
@@ -106,6 +106,15 @@ void main() {
     });
     expect(explicitlyDisabled.sendHwidToProviders, isFalse);
     expect(explicitlyDisabled.hwidDefaultNoticeShown, isTrue);
+  });
+  test('HWID disabled before notice acknowledgement survives a round trip', () {
+    final store = _TestSettingsStore();
+    final disabled = store
+        .mapState(const {})
+        .copyWith(sendHwidToProviders: false, hwidDefaultNoticeShown: false);
+    final restored = store.mapState(store.stateToMap(disabled));
+    expect(restored.sendHwidToProviders, isFalse);
+    expect(restored.hwidDefaultNoticeShown, isFalse);
   });
   test('defaults to stable runtime values', () {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{});

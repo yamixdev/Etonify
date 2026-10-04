@@ -58,6 +58,7 @@ class SettingsRoutingPage extends ConsumerStatefulWidget {
 class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
   late final AdBlockRuleSetService _adBlockService;
   bool _adBlockBusy = false;
+  bool _adBlockDeleting = false;
   AdBlockUpdateProgress? _adBlockProgress;
 
   @override
@@ -193,6 +194,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
     }
     setState(() {
       _adBlockBusy = true;
+      _adBlockDeleting = true;
     });
     try {
       final commands = ref.read(appSettingsCommandsProvider);
@@ -210,6 +212,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
       if (mounted) {
         setState(() {
           _adBlockBusy = false;
+          _adBlockDeleting = false;
         });
       }
     }
@@ -400,6 +403,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                     _AdBlockStatusPanel(
                       status: adBlockStatus,
                       busy: _adBlockBusy,
+                      deleting: _adBlockDeleting,
                       progress: _adBlockProgress,
                       l10n: l10n,
                     ),
@@ -410,7 +414,10 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                           child: FilledButton.tonalIcon(
                             onPressed: _adBlockBusy
                                 ? null
-                                : () => _downloadAdBlock(),
+                                : () => _downloadAdBlock(
+                                    enableAfterDownload:
+                                        !adBlockStatus.available,
+                                  ),
                             icon: _adBlockBusy
                                 ? const SizedBox(
                                     width: 16,
@@ -425,9 +432,11 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                                         : Icons.download_rounded,
                                   ),
                             label: Text(
-                              adBlockStatus.available
+                              _adBlockBusy && !_adBlockDeleting
+                                  ? l10n.adBlockDownloadingStatus
+                                  : adBlockStatus.available
                                   ? l10n.adBlockUpdateAction
-                                  : l10n.adBlockDownloadAction,
+                                  : l10n.adBlockDownloadAndEnableAction,
                             ),
                           ),
                         ),
@@ -440,16 +449,16 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                         ],
                       ],
                     ),
-                    const Gap(12),
-                    _CompactSwitchRow(
-                      icon: Icons.shield_moon_rounded,
-                      title: l10n.adBlockEnableTitle,
-                      subtitle: adBlockStatus.available
-                          ? l10n.adBlockEnabledSubtitle
-                          : l10n.adBlockMissingSubtitle,
-                      value: adBlockEnabled,
-                      onChanged: _adBlockBusy ? null : _setAdBlock,
-                    ),
+                    if (adBlockStatus.available) ...[
+                      const Gap(12),
+                      _CompactSwitchRow(
+                        icon: Icons.shield_moon_rounded,
+                        title: l10n.adBlockEnableTitle,
+                        subtitle: l10n.adBlockEnabledSubtitle,
+                        value: adBlockEnabled,
+                        onChanged: _adBlockBusy ? null : _setAdBlock,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -960,12 +969,14 @@ class _AdBlockStatusPanel extends StatelessWidget {
   const _AdBlockStatusPanel({
     required this.status,
     required this.busy,
+    required this.deleting,
     required this.progress,
     required this.l10n,
   });
 
   final AdBlockRuleSetStatus status;
   final bool busy;
+  final bool deleting;
   final AdBlockUpdateProgress? progress;
   final AppLocalizations l10n;
 
@@ -1003,7 +1014,9 @@ class _AdBlockStatusPanel extends StatelessWidget {
           const Gap(10),
           Text(
             busy
-                ? _stageLabel(l10n, progress?.stage)
+                ? deleting
+                      ? l10n.adBlockDeletingStatus
+                      : _stageLabel(l10n, progress?.stage)
                 : status.available
                 ? l10n.adBlockReadyStatus(status.blockedDomainCount)
                 : l10n.adBlockMissingStatus,
@@ -1011,21 +1024,23 @@ class _AdBlockStatusPanel extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const Gap(4),
-          Text(
-            busy
-                ? _progressHint(l10n, progress)
-                : status.available
-                ? l10n.adBlockMeta(
-                    updatedAt == null ? '—' : formatLocalDateTime(updatedAt),
-                    status.allowedDomainCount,
-                  )
-                : l10n.adBlockMissingHint,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: cs.onSurfaceVariant,
-              height: 1.3,
+          if (!deleting) ...[
+            const Gap(4),
+            Text(
+              busy
+                  ? _progressHint(l10n, progress)
+                  : status.available
+                  ? l10n.adBlockMeta(
+                      updatedAt == null ? '—' : formatLocalDateTime(updatedAt),
+                      status.allowedDomainCount,
+                    )
+                  : l10n.adBlockMissingHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.3,
+              ),
             ),
-          ),
+          ],
           if (busy) ...[
             const Gap(12),
             LinearProgressIndicator(minHeight: 4, value: progress?.fraction),

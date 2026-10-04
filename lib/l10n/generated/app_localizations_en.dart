@@ -405,7 +405,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sendHwidToProvidersDescription =>
-      'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.';
+      'When enabled, send device ID, model and OS version when fetching all subscriptions. When disabled, individual subscription permissions still apply.';
 
   @override
   String get hwidDefaultEnabledNoticeTitle => 'HWID sending';
@@ -429,7 +429,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCheckDisabledNoticeMessage =>
-      'Automatic full-list checks are now off. The selected server is still checked after connecting, changing networks, or choosing a server. Use the lightning bolt to test the full list, or turn automatic checks back on under \'Subscriptions and testing\'. \'Fastest\' uses results already available; test the full list to find the best server overall.';
+      'Automatic full-list checks are off. The selected server is checked after connecting or changing networks. Choosing an automatic group checks its members once; global automatic checks remain off. \'Fastest\' checks missing or stale latency results across the full list before choosing the lowest-latency server. Use the lightning bolt to check the list manually.';
 
   @override
   String get autoCheckDisabledNoticeAction => 'Got it';
@@ -1973,6 +1973,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendHwidSubtitle => 'Required by some Happ subscriptions';
 
   @override
+  String get sendHwidGlobalEnabledSubtitle =>
+      'HWID is sent because the global provider permission is enabled. Disabling it here does not override the global setting.';
+
+  @override
   String get useCustomHwidTitle => 'Set a custom HWID';
 
   @override
@@ -2362,7 +2366,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subscriptionErrorHttpsRequired =>
-      'This subscription sends an HWID or credentials, so it can only be loaded over HTTPS.';
+      'Use an HTTPS address to load this subscription. Plain HTTP is allowed only for local loopback addresses.';
 
   @override
   String get subscriptionErrorUnsafeRedirect =>
@@ -2718,6 +2722,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adBlockDownloadAction => 'Download';
 
   @override
+  String get adBlockDownloadAndEnableAction => 'Download and enable';
+
+  @override
   String get adBlockUpdateAction => 'Update';
 
   @override
@@ -2734,6 +2741,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get adBlockDownloadingStatus =>
       'Downloading and building the local filter...';
+
+  @override
+  String get adBlockDeletingStatus => 'Deleting the filter…';
 
   @override
   String get adBlockStageConnecting => 'Connecting to AdGuard…';
@@ -2777,7 +2787,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adBlockMissingHint =>
-      'We download the list from AdGuard and keep it locally for sing-box.';
+      'Download the AdGuard filter to enable blocking. The filter will be stored on this device.';
 
   @override
   String adBlockReadyStatus(int blockedCount) {
@@ -3224,6 +3234,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Russian services and local addresses bypass the VPN.';
 
   @override
+  String get trafficRulesRussianSummary =>
+      'Russian services bypass VPN; other traffic uses VPN.';
+
+  @override
   String get trafficRulesAiTitle => 'AI services through VPN';
 
   @override
@@ -3231,11 +3245,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Popular AI services are routed through the VPN; everything else is direct.';
 
   @override
+  String get trafficRulesAiSummary =>
+      'AI services use VPN; other traffic is direct.';
+
+  @override
   String get trafficRulesSocialTitle => 'Social networks through VPN';
 
   @override
   String get trafficRulesSocialSubtitle =>
       'Popular social networks and messengers are routed through the VPN; everything else is direct.';
+
+  @override
+  String get trafficRulesSocialSummary =>
+      'Social networks and messengers use VPN; other traffic is direct.';
 
   @override
   String get trafficRulesDetails => 'Rule details';
@@ -3285,6 +3307,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trafficRulesPreparing => 'Preparing rule data…';
+
+  @override
+  String get trafficRulesApplying => 'Applying rule…';
+
+  @override
+  String get logsJumpToLatest => 'Jump to latest entries';
+
+  @override
+  String proxyOpenGroup(String name) {
+    return 'Open group: $name';
+  }
+
+  @override
+  String get proxyGroupNoAvailableServersMessage =>
+      'No servers in this group are available. Try another group or check again.';
 
   @override
   String get trafficRulesPrepareFailed =>

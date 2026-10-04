@@ -287,157 +287,160 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
 
     return ProgressiveBlurScaffold(
       appBar: AppBar(title: Text(l10n.dnsTitle)),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          settingsScreenPadding.left,
-          progressiveHeaderTopPadding(context, settingsScreenPadding.top),
-          settingsScreenPadding.right,
-          appBottomSafePadding(context, settingsScreenPadding.bottom),
+      body: Theme(
+        data: settingsTileTheme(context),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            settingsScreenPadding.left,
+            progressiveHeaderTopPadding(context, settingsScreenPadding.top),
+            settingsScreenPadding.right,
+            appBottomSafePadding(context, settingsScreenPadding.bottom),
+          ),
+          children: [
+            _SectionLabel(label: l10n.dnsDirectTitle),
+            const Gap(settingsSectionLabelGap),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DnsSelectorTile(
+                      icon: Icons.bolt_rounded,
+                      iconColor: cs.primary,
+                      title: l10n.dnsResolverTitle,
+                      subtitle:
+                          '${_dnsPresetLabel(l10n, directPreset)} • '
+                          '${dnsResolverProtocolLabel(currentDirectResolver)}',
+                      onTap: () => _showPresetPicker(
+                        context: context,
+                        title: l10n.dnsDirectTitle,
+                        presets: directPresets,
+                        current: currentDirectPreset,
+                        onSelected: (preset) {
+                          _commands.setDnsDirectPreset(preset.id);
+                          if (preset.id != 'custom') {
+                            _commands.setDnsDirectResolver(preset.value);
+                            _directController.text = dnsResolverFieldText(
+                              preset.value,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    if (directIsCustom) const Gap(12),
+                    if (directIsCustom)
+                      TextField(
+                        controller: _directController,
+                        focusNode: _directFocusNode,
+                        textInputAction: TextInputAction.done,
+                        onTapOutside: (_) => _directFocusNode.unfocus(),
+                        onSubmitted: (_) => _directFocusNode.unfocus(),
+                        inputFormatters: [noNewlineInputFormatter],
+                        decoration: InputDecoration(
+                          labelText: l10n.dnsResolverTitle,
+                          helperText: l10n.dnsDirectResolverSubtitle,
+                          hintText: '1.1.1.1',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const Gap(settingsSectionGap),
+            _SectionLabel(label: l10n.dnsProxyTitle),
+            const Gap(settingsSectionLabelGap),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DnsSelectorTile(
+                      icon: Icons.shield_rounded,
+                      iconColor: cs.primary,
+                      title: l10n.dnsResolverTitle,
+                      subtitle:
+                          '${_dnsPresetLabel(l10n, proxyPreset)} • '
+                          '${dnsResolverProtocolLabel(currentProxyResolver)}',
+                      onTap: () => _showPresetPicker(
+                        context: context,
+                        title: l10n.dnsProxyTitle,
+                        presets: proxyPresets,
+                        current: currentProxyPreset,
+                        onSelected: (preset) {
+                          _commands.setDnsProxyPreset(preset.id);
+                          if (preset.id != 'custom') {
+                            _commands.setDnsProxyResolver(preset.value);
+                            _proxyController.text = dnsResolverFieldText(
+                              preset.value,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    if (proxyIsCustom) const Gap(12),
+                    if (proxyIsCustom)
+                      TextField(
+                        controller: _proxyController,
+                        focusNode: _proxyFocusNode,
+                        textInputAction: TextInputAction.done,
+                        onTapOutside: (_) => _proxyFocusNode.unfocus(),
+                        onSubmitted: (_) => _proxyFocusNode.unfocus(),
+                        inputFormatters: [noNewlineInputFormatter],
+                        decoration: InputDecoration(
+                          labelText: l10n.dnsResolverTitle,
+                          helperText: l10n.dnsProxyResolverSubtitle,
+                          hintText: 'https://dns.cloudflare.com/dns-query',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const Gap(settingsSectionGap),
+            _SectionLabel(label: l10n.dnsProtectionTitle),
+            const Gap(settingsSectionLabelGap),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.enhanced_encryption_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.dnsSecureOnlyTitle),
+                    subtitle: Text(l10n.dnsSecureOnlySubtitle),
+                    value: currentSecureOnly,
+                    onChanged: _commands.setDnsSecureOnly,
+                  ),
+                  const Divider(height: 1, indent: 72),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.route_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.dnsDirectThroughProxyTitle),
+                    subtitle: Text(l10n.dnsDirectThroughProxySubtitle),
+                    value: currentDirectThroughProxy,
+                    onChanged: _commands.setDnsDirectThroughProxy,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        children: [
-          _SectionLabel(label: l10n.dnsDirectTitle),
-          const Gap(settingsSectionLabelGap),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DnsSelectorTile(
-                    icon: Icons.bolt_rounded,
-                    iconColor: cs.primary,
-                    title: l10n.dnsResolverTitle,
-                    subtitle:
-                        '${_dnsPresetLabel(l10n, directPreset)} • '
-                        '${dnsResolverProtocolLabel(currentDirectResolver)}',
-                    onTap: () => _showPresetPicker(
-                      context: context,
-                      title: l10n.dnsDirectTitle,
-                      presets: directPresets,
-                      current: currentDirectPreset,
-                      onSelected: (preset) {
-                        _commands.setDnsDirectPreset(preset.id);
-                        if (preset.id != 'custom') {
-                          _commands.setDnsDirectResolver(preset.value);
-                          _directController.text = dnsResolverFieldText(
-                            preset.value,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  if (directIsCustom) const Gap(12),
-                  if (directIsCustom)
-                    TextField(
-                      controller: _directController,
-                      focusNode: _directFocusNode,
-                      textInputAction: TextInputAction.done,
-                      onTapOutside: (_) => _directFocusNode.unfocus(),
-                      onSubmitted: (_) => _directFocusNode.unfocus(),
-                      inputFormatters: [noNewlineInputFormatter],
-                      decoration: InputDecoration(
-                        labelText: l10n.dnsResolverTitle,
-                        helperText: l10n.dnsDirectResolverSubtitle,
-                        hintText: '1.1.1.1',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const Gap(settingsSectionGap),
-          _SectionLabel(label: l10n.dnsProxyTitle),
-          const Gap(settingsSectionLabelGap),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DnsSelectorTile(
-                    icon: Icons.shield_rounded,
-                    iconColor: cs.primary,
-                    title: l10n.dnsResolverTitle,
-                    subtitle:
-                        '${_dnsPresetLabel(l10n, proxyPreset)} • '
-                        '${dnsResolverProtocolLabel(currentProxyResolver)}',
-                    onTap: () => _showPresetPicker(
-                      context: context,
-                      title: l10n.dnsProxyTitle,
-                      presets: proxyPresets,
-                      current: currentProxyPreset,
-                      onSelected: (preset) {
-                        _commands.setDnsProxyPreset(preset.id);
-                        if (preset.id != 'custom') {
-                          _commands.setDnsProxyResolver(preset.value);
-                          _proxyController.text = dnsResolverFieldText(
-                            preset.value,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  if (proxyIsCustom) const Gap(12),
-                  if (proxyIsCustom)
-                    TextField(
-                      controller: _proxyController,
-                      focusNode: _proxyFocusNode,
-                      textInputAction: TextInputAction.done,
-                      onTapOutside: (_) => _proxyFocusNode.unfocus(),
-                      onSubmitted: (_) => _proxyFocusNode.unfocus(),
-                      inputFormatters: [noNewlineInputFormatter],
-                      decoration: InputDecoration(
-                        labelText: l10n.dnsResolverTitle,
-                        helperText: l10n.dnsProxyResolverSubtitle,
-                        hintText: 'https://dns.cloudflare.com/dns-query',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const Gap(settingsSectionGap),
-          _SectionLabel(label: l10n.dnsProtectionTitle),
-          const Gap(settingsSectionLabelGap),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.enhanced_encryption_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.dnsSecureOnlyTitle),
-                  subtitle: Text(l10n.dnsSecureOnlySubtitle),
-                  value: currentSecureOnly,
-                  onChanged: _commands.setDnsSecureOnly,
-                ),
-                const Divider(height: 1, indent: 72),
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  secondary: SettingsLeadingIcon(
-                    icon: Icons.route_rounded,
-                    color: cs.primary,
-                  ),
-                  title: Text(l10n.dnsDirectThroughProxyTitle),
-                  subtitle: Text(l10n.dnsDirectThroughProxySubtitle),
-                  value: currentDirectThroughProxy,
-                  onChanged: _commands.setDnsDirectThroughProxy,
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -548,10 +551,9 @@ class _DnsSelectorTileState extends State<_DnsSelectorTile> {
                   children: [
                     Text(
                       widget.title,
-                      style: theme.textTheme.titleSmall?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        fontSize:
-                            (theme.textTheme.titleSmall?.fontSize ?? 14) - 1,
+                        color: cs.onSurface,
                       ),
                     ),
                     const Gap(1),
@@ -561,8 +563,6 @@ class _DnsSelectorTileState extends State<_DnsSelectorTile> {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
-                        fontSize:
-                            (theme.textTheme.bodyMedium?.fontSize ?? 14) - 1,
                       ),
                     ),
                   ],

@@ -13,7 +13,7 @@ Built with Flutter and a modified sing-box core.
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.7%2B37-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="Client: 0.3.7+37"></a>
+  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.8%2B38-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="Client: 0.3.8+38"></a>
   <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="Bundled core: 1.15.0-alpha.10-etonify.1"></a>
   <br>
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
@@ -67,7 +67,7 @@ If an update reports that split-tunneling settings were reset, review the sectio
 
 | Component | Current source tree |
 | :--- | :--- |
-| Client | `0.3.7+37` |
+| Client | `0.3.8+38` |
 | Bundled core | `v1.15.0-alpha.10-etonify.1` |
 | Upstream baseline | `v1.15.0-alpha.10` |
 | Flutter SDK | `3.47.5` · Dart `3.13` |

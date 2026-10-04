@@ -809,7 +809,7 @@ abstract class AppLocalizations {
   /// No description provided for @sendHwidToProvidersDescription.
   ///
   /// In en, this message translates to:
-  /// **'Send device ID, model and OS version when fetching any subscription. Individual subscription permissions still apply.'**
+  /// **'When enabled, send device ID, model and OS version when fetching all subscriptions. When disabled, individual subscription permissions still apply.'**
   String get sendHwidToProvidersDescription;
 
   /// No description provided for @hwidDefaultEnabledNoticeTitle.
@@ -851,7 +851,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoCheckDisabledNoticeMessage.
   ///
   /// In en, this message translates to:
-  /// **'Automatic full-list checks are now off. The selected server is still checked after connecting, changing networks, or choosing a server. Use the lightning bolt to test the full list, or turn automatic checks back on under \'Subscriptions and testing\'. \'Fastest\' uses results already available; test the full list to find the best server overall.'**
+  /// **'Automatic full-list checks are off. The selected server is checked after connecting or changing networks. Choosing an automatic group checks its members once; global automatic checks remain off. \'Fastest\' checks missing or stale latency results across the full list before choosing the lowest-latency server. Use the lightning bolt to check the list manually.'**
   String get autoCheckDisabledNoticeMessage;
 
   /// No description provided for @autoCheckDisabledNoticeAction.
@@ -3575,6 +3575,12 @@ abstract class AppLocalizations {
   /// **'Required by some Happ subscriptions'**
   String get sendHwidSubtitle;
 
+  /// No description provided for @sendHwidGlobalEnabledSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'HWID is sent because the global provider permission is enabled. Disabling it here does not override the global setting.'**
+  String get sendHwidGlobalEnabledSubtitle;
+
   /// No description provided for @useCustomHwidTitle.
   ///
   /// In en, this message translates to:
@@ -4268,7 +4274,7 @@ abstract class AppLocalizations {
   /// No description provided for @subscriptionErrorHttpsRequired.
   ///
   /// In en, this message translates to:
-  /// **'This subscription sends an HWID or credentials, so it can only be loaded over HTTPS.'**
+  /// **'Use an HTTPS address to load this subscription. Plain HTTP is allowed only for local loopback addresses.'**
   String get subscriptionErrorHttpsRequired;
 
   /// No description provided for @subscriptionErrorUnsafeRedirect.
@@ -4844,6 +4850,12 @@ abstract class AppLocalizations {
   /// **'Download'**
   String get adBlockDownloadAction;
 
+  /// No description provided for @adBlockDownloadAndEnableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Download and enable'**
+  String get adBlockDownloadAndEnableAction;
+
   /// No description provided for @adBlockUpdateAction.
   ///
   /// In en, this message translates to:
@@ -4873,6 +4885,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloading and building the local filter...'**
   String get adBlockDownloadingStatus;
+
+  /// No description provided for @adBlockDeletingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting the filter…'**
+  String get adBlockDeletingStatus;
 
   /// No description provided for @adBlockStageConnecting.
   ///
@@ -4941,7 +4959,7 @@ abstract class AppLocalizations {
   /// No description provided for @adBlockMissingHint.
   ///
   /// In en, this message translates to:
-  /// **'We download the list from AdGuard and keep it locally for sing-box.'**
+  /// **'Download the AdGuard filter to enable blocking. The filter will be stored on this device.'**
   String get adBlockMissingHint;
 
   /// No description provided for @adBlockReadyStatus.
@@ -5712,6 +5730,12 @@ abstract class AppLocalizations {
   /// **'Russian services and local addresses bypass the VPN.'**
   String get trafficRulesRussianSubtitle;
 
+  /// No description provided for @trafficRulesRussianSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Russian services bypass VPN; other traffic uses VPN.'**
+  String get trafficRulesRussianSummary;
+
   /// No description provided for @trafficRulesAiTitle.
   ///
   /// In en, this message translates to:
@@ -5724,6 +5748,12 @@ abstract class AppLocalizations {
   /// **'Popular AI services are routed through the VPN; everything else is direct.'**
   String get trafficRulesAiSubtitle;
 
+  /// No description provided for @trafficRulesAiSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'AI services use VPN; other traffic is direct.'**
+  String get trafficRulesAiSummary;
+
   /// No description provided for @trafficRulesSocialTitle.
   ///
   /// In en, this message translates to:
@@ -5735,6 +5765,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Popular social networks and messengers are routed through the VPN; everything else is direct.'**
   String get trafficRulesSocialSubtitle;
+
+  /// No description provided for @trafficRulesSocialSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Social networks and messengers use VPN; other traffic is direct.'**
+  String get trafficRulesSocialSummary;
 
   /// No description provided for @trafficRulesDetails.
   ///
@@ -5831,6 +5867,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Preparing rule data…'**
   String get trafficRulesPreparing;
+
+  /// No description provided for @trafficRulesApplying.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying rule…'**
+  String get trafficRulesApplying;
+
+  /// No description provided for @logsJumpToLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to latest entries'**
+  String get logsJumpToLatest;
+
+  /// No description provided for @proxyOpenGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Open group: {name}'**
+  String proxyOpenGroup(String name);
+
+  /// No description provided for @proxyGroupNoAvailableServersMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No servers in this group are available. Try another group or check again.'**
+  String get proxyGroupNoAvailableServersMessage;
 
   /// No description provided for @trafficRulesPrepareFailed.
   ///

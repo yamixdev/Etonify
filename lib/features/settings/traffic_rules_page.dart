@@ -217,13 +217,17 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
                       },
               ),
             ),
-            if (activeDefinition != null) ...[
+            if (_busy) ...[
               const Gap(settingsIslandGap),
-              _ActiveTrafficRuleCard(
-                definition: activeDefinition,
-                title: _titleFor(l10n, activeDefinition.preset),
-                subtitle: _subtitleFor(l10n, activeDefinition.preset),
-                onInfoTap: () => _openDetails(activeDefinition),
+              const LinearProgressIndicator(),
+              const Gap(8),
+              Text(
+                _status.available
+                    ? l10n.trafficRulesApplying
+                    : l10n.trafficRulesPreparing,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ],
             const Gap(settingsIslandGap),
@@ -242,7 +246,7 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
               _TrafficRuleQuickCard(
                 definition: definition,
                 title: _titleFor(l10n, definition.preset),
-                subtitle: _subtitleFor(l10n, definition.preset),
+                subtitle: _summaryFor(l10n, definition.preset),
                 selected: definition.preset == _currentPreset,
                 busy: _busy,
                 onChoose: () => _applyPreset(definition.preset),
@@ -251,59 +255,6 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
               const Gap(settingsIslandGap),
             ],
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActiveTrafficRuleCard extends StatelessWidget {
-  const _ActiveTrafficRuleCard({
-    required this.definition,
-    required this.title,
-    required this.subtitle,
-    required this.onInfoTap,
-  });
-
-  final TrafficRulePresetDefinition definition;
-  final String title;
-  final String subtitle;
-  final VoidCallback onInfoTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final accent = _accentFor(cs, definition.preset);
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [accent.withValues(alpha: .16), cs.surfaceContainerHigh],
-          ),
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
-          ),
-          leading: _PresetGlyph(preset: definition.preset, accent: accent),
-          title: Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          subtitle: Text(subtitle),
-          trailing: IconButton(
-            tooltip: AppLocalizations.of(context).trafficRulesDetails,
-            onPressed: onInfoTap,
-            icon: const Icon(Icons.info_outline_rounded),
-          ),
         ),
       ),
     );
@@ -349,25 +300,15 @@ class _TrafficRuleQuickCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (selected)
-                          Icon(Icons.check_circle_rounded, color: accent),
-                      ],
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const Gap(4),
                     Text(
                       subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
@@ -375,6 +316,11 @@ class _TrafficRuleQuickCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (selected)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.check_circle_rounded, color: accent),
+                ),
               IconButton(
                 tooltip: AppLocalizations.of(context).trafficRulesDetails,
                 onPressed: onInfoTap,
@@ -1069,6 +1015,15 @@ String _subtitleFor(AppLocalizations l10n, TrafficRulePreset preset) {
     TrafficRulePreset.socialViaVpn => l10n.trafficRulesSocialSubtitle,
   };
 }
+
+String _summaryFor(AppLocalizations l10n, TrafficRulePreset preset) =>
+    switch (preset) {
+      TrafficRulePreset.none => l10n.trafficRulesNone,
+      TrafficRulePreset.russianServicesDirect =>
+        l10n.trafficRulesRussianSummary,
+      TrafficRulePreset.aiViaVpn => l10n.trafficRulesAiSummary,
+      TrafficRulePreset.socialViaVpn => l10n.trafficRulesSocialSummary,
+    };
 
 String _defaultRouteLabel(
   AppLocalizations l10n,
