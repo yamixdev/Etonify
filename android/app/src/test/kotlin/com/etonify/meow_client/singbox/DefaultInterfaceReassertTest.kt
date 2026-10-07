@@ -96,13 +96,15 @@ class DefaultInterfaceReassertTest {
             NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, true,
         )
         shadow.addNetwork(network, info)
-        shadow.setNetworkCapabilities(network, NetworkCapabilities().apply {
+        val capabilities = NetworkCapabilities()
+        shadowOf(capabilities).apply {
             addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        })
+        }
+        shadow.setNetworkCapabilities(network, capabilities)
         val physical = NetworkInterface.getNetworkInterfaces().toList().first { it.index >= 0 }
         shadow.setLinkProperties(network, LinkProperties().apply { interfaceName = physical.name })
         MeowDefaultNetworkMonitor.setListener(object : InterfaceUpdateListener {

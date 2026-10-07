@@ -113,6 +113,15 @@ flutter {
     source = "../.."
 }
 
+// Flutter copies assets into mergeAssets output after AGP has merged them.
+// AGP 9 host-test packaging must wait for that copy, just like APK packaging.
+tasks.matching {
+    it.name.startsWith("package") && it.name.endsWith("UnitTestForUnitTest")
+}.configureEach {
+    val variant = name.removePrefix("package").removeSuffix("UnitTestForUnitTest")
+    dependsOn("copyFlutterAssets$variant")
+}
+
 dependencies {
     implementation(files("libs/libbox.aar"))
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
