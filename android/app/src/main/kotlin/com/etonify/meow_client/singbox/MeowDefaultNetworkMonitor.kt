@@ -382,7 +382,9 @@ object MeowDefaultNetworkMonitor {
     fun reassertDefaultInterfaceAndWait(reason: String, timeoutMs: Long = 1_500L): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         repeat(3) {
-            if (currentInterfaceState("reassert:$reason").available) return true
+            // The initial core callback can precede TUN establishment. Its
+            // cached interface does not prove Android accepted the VPN's
+            // underlying network. Always perform the requested reassertion.
             if (synchronized(lock) { listener == null }) {
                 MeowDiagnostics.log(TAG, "interface_reassert_missing_listener reason=$reason")
                 return false
@@ -398,7 +400,7 @@ object MeowDefaultNetworkMonitor {
                 MeowDiagnostics.log(TAG, "interface_reassert_failed reason=$reason", error)
                 false
             }
-            if (updated || currentInterfaceState("reassert:$reason").available) return true
+            if (updated) return true
             try {
                 Thread.sleep(50)
             } catch (_: InterruptedException) {
@@ -406,7 +408,7 @@ object MeowDefaultNetworkMonitor {
                 return false
             }
         }
-        return currentInterfaceState("reassert:$reason").available
+        return false
     }
 
     private fun updateNetwork(network: Network) {

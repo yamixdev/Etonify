@@ -84,6 +84,11 @@ android {
         // before Gradle runs, while Android lint incorrectly flags that file.
         disable += "PropertyEscape"
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.maxHeapSize = "768m" }
+    }
 }
 
 kotlin {
@@ -113,6 +118,7 @@ dependencies {
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     baselineProfile(project(":benchmark"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
 }
 
 tasks.withType<JavaCompile>().configureEach {

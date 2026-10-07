@@ -280,6 +280,11 @@ object SingboxController {
                     log("warning", "urltest_high_delay $summary")
                 }
             }
+            if (commandClientLifecycle.acceptsEvents(epoch)) {
+                // Keep tile-only notification actions on the actual selected
+                // leaf, including core-restored and nested auto-group choices.
+                MeowBoxService.publishNotificationSelectedOutbounds(groups)
+            }
             emitCoalescedGroups(
                 mapOf(
                     "type" to runtimeEventGroups,

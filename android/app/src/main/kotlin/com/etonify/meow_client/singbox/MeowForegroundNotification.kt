@@ -13,11 +13,13 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import com.etonify.meow_client.MainActivity
+import com.etonify.meow_client.MeowApplication
 import com.etonify.meow_client.R
 import com.etonify.meow_client.generated.notificationTrafficModeBoth
 import com.etonify.meow_client.generated.notificationTrafficModeSpeed
 import com.etonify.meow_client.generated.notificationTrafficModeTotal
 import kotlin.math.max
+import org.json.JSONObject
 
 /**
  * Owns the foreground notification while a libbox runtime is active.
@@ -42,6 +44,7 @@ internal class MeowForegroundNotification(
         private const val DEFAULT_LATENCY_TIMEOUT_MS = 20_000L
         private const val MAX_TEXT_LENGTH = 120
         private const val DEFAULT_TRAFFIC_REFRESH_SECONDS = 2
+        private const val DEFAULT_PROBE_URL = "https://www.gstatic.com/generate_204"
         private const val PRESENTATION_PREFS = "meow_foreground_notification"
         private const val PREF_DETAILED = "detailed"
         private const val PREF_TRAFFIC_DISPLAY_MODE = "traffic_display_mode"
@@ -66,10 +69,54 @@ internal class MeowForegroundNotification(
         fun clearPersistedState(context: Context, notificationId: Int) {
             context.getSharedPreferences(PRESENTATION_PREFS, Context.MODE_PRIVATE)
                 .edit()
-                .clear()
+                // Labels and display preferences also belong to the next
+                // tile-only start. Only the old runtime's measurement expires.
+                .remove(PREF_LATENCY)
                 .apply()
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notificationId)
+        }
+
+        fun savePresentation(context: Context, arguments: Map<*, *>) {
+            persistPresentation(context, Presentation.fromArguments(arguments).copy(latencyMillis = null))
+        }
+
+        private fun persistPresentation(context: Context, value: Presentation) {
+            val request = value.urlTestRequest
+            context.getSharedPreferences(PRESENTATION_PREFS, Context.MODE_PRIVATE).edit().apply {
+                putBoolean(PREF_DETAILED, value.detailed)
+                putString(PREF_TRAFFIC_DISPLAY_MODE, value.trafficDisplayMode)
+                putInt(PREF_TRAFFIC_REFRESH_SECONDS, value.trafficRefreshSeconds)
+                putString(PREF_TITLE, value.title)
+                putString(PREF_CONNECTED_TEXT, value.connectedText)
+                putString(PREF_CHECKING_TEXT, value.checkingText)
+                putString(PREF_UNAVAILABLE_TEXT, value.unavailableText)
+                putString(PREF_TOTAL_LABEL, value.totalLabel)
+                putString(PREF_REFRESH_LABEL, value.refreshLabel)
+                putString(PREF_STOP_LABEL, value.stopLabel)
+                if (value.latencyMillis == null) remove(PREF_LATENCY)
+                else putLong(PREF_LATENCY, value.latencyMillis)
+                if (request == null) {
+                    remove(PREF_URLTEST_GROUP)
+                    remove(PREF_URLTEST_TARGET)
+                    remove(PREF_URLTEST_PRIORITY)
+                    remove(PREF_URLTEST_EXCLUDE)
+                    remove(PREF_URLTEST_URL)
+                    remove(PREF_URLTEST_TIMEOUT)
+                    remove(PREF_URLTEST_CONCURRENCY)
+                    remove(PREF_URLTEST_DEADLINE)
+                } else {
+                    putString(PREF_URLTEST_GROUP, request.groupTag)
+                    putString(PREF_URLTEST_TARGET, request.targetOutboundTag)
+                    putString(PREF_URLTEST_PRIORITY, request.priorityOutboundTag)
+                    putString(PREF_URLTEST_EXCLUDE, request.excludeOutboundTag)
+                    putString(PREF_URLTEST_URL, request.url)
+                    putInt(PREF_URLTEST_TIMEOUT, request.timeoutMillis)
+                    putInt(PREF_URLTEST_CONCURRENCY, request.concurrency)
+                    putInt(PREF_URLTEST_DEADLINE, request.deadlineMillis)
+                }
+                apply()
+            }
         }
     }
 
@@ -87,20 +134,23 @@ internal class MeowForegroundNotification(
             fun fromArguments(arguments: Map<*, *>): UrlTestRequest? {
                 fun text(key: String): String =
                     arguments[key]?.toString()?.trim()?.take(MAX_TEXT_LENGTH).orEmpty()
+                fun tag(key: String): String = arguments[key]?.toString()?.trim().orEmpty()
                 fun number(key: String, fallback: Int): Int =
                     (arguments[key] as? Number)?.toInt()?.takeIf { it > 0 } ?: fallback
 
-                val target = text("targetOutboundTag")
+                val target = tag("targetOutboundTag")
                 val url = text("url")
-                if (target.isEmpty() || url.isEmpty()) {
+                // Flutter also sends probe settings while disconnected. Keep
+                // those settings even though there is no active target yet.
+                if (url.isEmpty()) {
                     return null
                 }
                 val timeout = number("timeoutMillis", 15_000).coerceIn(1_000, 30_000)
                 return UrlTestRequest(
-                    groupTag = text("groupTag").ifEmpty { "select" },
+                    groupTag = tag("groupTag").ifEmpty { "select" },
                     targetOutboundTag = target,
-                    priorityOutboundTag = text("priorityOutboundTag").ifEmpty { target },
-                    excludeOutboundTag = text("excludeOutboundTag"),
+                    priorityOutboundTag = tag("priorityOutboundTag").ifEmpty { target },
+                    excludeOutboundTag = tag("excludeOutboundTag"),
                     url = url,
                     timeoutMillis = timeout,
                     concurrency = number("concurrency", 1).coerceIn(1, 4),
@@ -124,7 +174,34 @@ internal class MeowForegroundNotification(
         val refreshLabel: String = "Проверить пинг",
         val stopLabel: String = "Остановить",
         val urlTestRequest: UrlTestRequest? = null,
-    )
+    ) {
+        companion object {
+            fun fromArguments(arguments: Map<*, *>): Presentation {
+                fun text(key: String, fallback: String): String =
+                    arguments[key]?.toString()?.trim()?.take(MAX_TEXT_LENGTH)?.ifEmpty { fallback }
+                        ?: fallback
+                return Presentation(
+                    detailed = arguments["detailed"] as? Boolean ?: true,
+                    trafficDisplayMode = when (arguments["trafficDisplayMode"]?.toString()) {
+                        notificationTrafficModeTotal -> notificationTrafficModeTotal
+                        notificationTrafficModeBoth -> notificationTrafficModeBoth
+                        else -> notificationTrafficModeSpeed
+                    },
+                    trafficRefreshSeconds = (arguments["trafficRefreshSeconds"] as? Number)?.toInt()
+                        ?.coerceIn(1, 10) ?: DEFAULT_TRAFFIC_REFRESH_SECONDS,
+                    title = text("title", ""),
+                    latencyMillis = (arguments["latencyMillis"] as? Number)?.toLong()?.takeIf { it >= 0L },
+                    connectedText = text("connectedText", "VPN подключён"),
+                    checkingText = text("checkingText", "..."),
+                    unavailableText = text("unavailableText", "Пинг недоступен"),
+                    totalLabel = text("totalLabel", "Всего трафика"),
+                    refreshLabel = text("refreshLabel", "Проверить пинг"),
+                    stopLabel = text("stopLabel", "Остановить"),
+                    urlTestRequest = UrlTestRequest.fromArguments(arguments),
+                )
+            }
+        }
+    }
 
     private val notificationManager =
         service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -149,9 +226,24 @@ internal class MeowForegroundNotification(
     private var latencyActionGeneration = 0L
     private var latencyActionInFlight = false
     private var latencyTimeoutRunnable: Runnable? = null
+    private data class Outbound(
+        val type: String,
+        val members: List<String>,
+        val defaultTag: String,
+    )
+    private var configuredOutbounds: Map<String, Outbound>? = null
+    private var rootOutboundTag = "select"
+    private var selectedOutbounds: Map<String, String> = emptyMap()
 
     fun buildForForeground(status: String): Notification {
         synchronized(this) {
+            if (status != lifecycleStatus && status in setOf("Starting", "Restarting", "Reloading")) {
+                configuredOutbounds = null
+                selectedOutbounds = emptyMap()
+            }
+            if (status == "Connected" && lifecycleStatus != "Connected") {
+                restoreCurrentPingTarget()
+            }
             lifecycleStatus = status
             if (!foregroundStarted) {
                 notificationGeneration++
@@ -167,35 +259,12 @@ internal class MeowForegroundNotification(
 
     fun updatePresentation(arguments: Map<*, *>): Boolean {
         synchronized(this) {
-            fun text(key: String, fallback: String): String =
-                arguments[key]?.toString()?.trim()?.take(MAX_TEXT_LENGTH)?.ifEmpty { fallback }
-                    ?: fallback
-
-            val detailed = arguments["detailed"] as? Boolean ?: true
-            val trafficDisplayMode = when (arguments["trafficDisplayMode"]?.toString()) {
-                notificationTrafficModeTotal -> notificationTrafficModeTotal
-                notificationTrafficModeBoth -> notificationTrafficModeBoth
-                else -> notificationTrafficModeSpeed
+            presentation = Presentation.fromArguments(arguments)
+            if (foregroundStarted && lifecycleStatus == "Connected" &&
+                presentation.urlTestRequest?.targetOutboundTag.isNullOrEmpty()
+            ) {
+                setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
             }
-            val trafficRefreshSeconds =
-                (arguments["trafficRefreshSeconds"] as? Number)?.toInt()
-                    ?.coerceIn(1, 10)
-                    ?: DEFAULT_TRAFFIC_REFRESH_SECONDS
-            val latency = (arguments["latencyMillis"] as? Number)?.toLong()?.takeIf { it >= 0L }
-            presentation = Presentation(
-                detailed = detailed,
-                trafficDisplayMode = trafficDisplayMode,
-                trafficRefreshSeconds = trafficRefreshSeconds,
-                title = text("title", ""),
-                latencyMillis = latency,
-                connectedText = text("connectedText", "VPN подключён"),
-                checkingText = text("checkingText", "..."),
-                unavailableText = text("unavailableText", "Пинг недоступен"),
-                totalLabel = text("totalLabel", "Всего трафика"),
-                refreshLabel = text("refreshLabel", "Проверить пинг"),
-                stopLabel = text("stopLabel", "Остановить"),
-                urlTestRequest = UrlTestRequest.fromArguments(arguments),
-            )
             persistPresentation(presentation)
             trafficRateWindow.requestImmediateEmission()
             if (!latencyChecking) {
@@ -239,7 +308,7 @@ internal class MeowForegroundNotification(
     fun stopAndClear() {
         stopPublishing()
         synchronized(this) {
-            presentation = Presentation()
+            presentation = presentation.copy(latencyMillis = null)
         }
         clearPersistedState(service, notificationId)
     }
@@ -307,7 +376,7 @@ internal class MeowForegroundNotification(
         val timeoutCallback: Runnable
         synchronized(this) {
             request = presentation.urlTestRequest ?: return false
-            if (lifecycleStatus != "Connected" || latencyActionInFlight) {
+            if (request.targetOutboundTag.isEmpty() || lifecycleStatus != "Connected" || latencyActionInFlight) {
                 return false
             }
             latencyActionInFlight = true
@@ -370,18 +439,20 @@ internal class MeowForegroundNotification(
                 ?: fallback
         fun value(key: String, fallback: Int): Int =
             presentationPrefs.getInt(key, fallback)
+        fun tag(key: String, fallback: String): String =
+            presentationPrefs.getString(key, fallback)?.trim()?.ifEmpty { fallback } ?: fallback
 
-        val target = text(PREF_URLTEST_TARGET, "")
+        val target = tag(PREF_URLTEST_TARGET, "")
         val url = text(PREF_URLTEST_URL, "")
-        val request = if (target.isEmpty() || url.isEmpty()) {
+        val request = if (url.isEmpty()) {
             null
         } else {
             val timeout = value(PREF_URLTEST_TIMEOUT, 15_000).coerceIn(1_000, 30_000)
             UrlTestRequest(
-                groupTag = text(PREF_URLTEST_GROUP, "select"),
+                groupTag = tag(PREF_URLTEST_GROUP, "select"),
                 targetOutboundTag = target,
-                priorityOutboundTag = text(PREF_URLTEST_PRIORITY, target),
-                excludeOutboundTag = text(PREF_URLTEST_EXCLUDE, ""),
+                priorityOutboundTag = tag(PREF_URLTEST_PRIORITY, target),
+                excludeOutboundTag = tag(PREF_URLTEST_EXCLUDE, ""),
                 url = url,
                 timeoutMillis = timeout,
                 concurrency = value(PREF_URLTEST_CONCURRENCY, 1).coerceIn(1, 4),
@@ -417,43 +488,87 @@ internal class MeowForegroundNotification(
     }
 
     private fun persistPresentation(value: Presentation) {
-        val request = value.urlTestRequest
-        presentationPrefs.edit().apply {
-            putBoolean(PREF_DETAILED, value.detailed)
-            putString(PREF_TRAFFIC_DISPLAY_MODE, value.trafficDisplayMode)
-            putInt(PREF_TRAFFIC_REFRESH_SECONDS, value.trafficRefreshSeconds)
-            putString(PREF_TITLE, value.title)
-            putString(PREF_CONNECTED_TEXT, value.connectedText)
-            putString(PREF_CHECKING_TEXT, value.checkingText)
-            putString(PREF_UNAVAILABLE_TEXT, value.unavailableText)
-            putString(PREF_TOTAL_LABEL, value.totalLabel)
-            putString(PREF_REFRESH_LABEL, value.refreshLabel)
-            putString(PREF_STOP_LABEL, value.stopLabel)
-            if (value.latencyMillis == null) {
-                remove(PREF_LATENCY)
-            } else {
-                putLong(PREF_LATENCY, value.latencyMillis)
+        persistPresentation(service, value)
+    }
+
+    private fun restoreCurrentPingTarget() {
+        if (configuredOutbounds == null) {
+            val config = runCatching { JSONObject(MeowApplication.configFile.readText()) }.getOrNull()
+            val outbounds = config?.optJSONArray("outbounds")
+            val byTag = mutableMapOf<String, Outbound>()
+            if (outbounds != null) for (index in 0 until outbounds.length()) {
+                val outbound = outbounds.optJSONObject(index) ?: continue
+                val members = outbound.optJSONArray("outbounds")
+                byTag[outbound.optString("tag")] = Outbound(
+                    type = outbound.optString("type"),
+                    members = if (members == null) emptyList() else
+                        (0 until members.length()).map { members.optString(it) },
+                    defaultTag = outbound.optString("default"),
+                )
             }
-            if (request == null) {
-                remove(PREF_URLTEST_GROUP)
-                remove(PREF_URLTEST_TARGET)
-                remove(PREF_URLTEST_PRIORITY)
-                remove(PREF_URLTEST_EXCLUDE)
-                remove(PREF_URLTEST_URL)
-                remove(PREF_URLTEST_TIMEOUT)
-                remove(PREF_URLTEST_CONCURRENCY)
-                remove(PREF_URLTEST_DEADLINE)
-            } else {
-                putString(PREF_URLTEST_GROUP, request.groupTag)
-                putString(PREF_URLTEST_TARGET, request.targetOutboundTag)
-                putString(PREF_URLTEST_PRIORITY, request.priorityOutboundTag)
-                putString(PREF_URLTEST_EXCLUDE, request.excludeOutboundTag)
-                putString(PREF_URLTEST_URL, request.url)
-                putInt(PREF_URLTEST_TIMEOUT, request.timeoutMillis)
-                putInt(PREF_URLTEST_CONCURRENCY, request.concurrency)
-                putInt(PREF_URLTEST_DEADLINE, request.deadlineMillis)
+            // Retain only selection metadata, not credentials or the full JSON.
+            configuredOutbounds = byTag
+            rootOutboundTag = if (byTag.containsKey("select")) "select" else
+                config?.optJSONObject("route")?.optString("final").orEmpty()
+        }
+        setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
+    }
+
+    private fun resolveCurrentPingTarget(): String {
+        var tag = rootOutboundTag
+        val visited = mutableSetOf<String>()
+        while (tag.isNotEmpty() && visited.add(tag)) {
+            val outbound = configuredOutbounds?.get(tag) ?: break
+            when (outbound.type) {
+                "selector", "urltest" -> {
+                    tag = selectedOutbounds[tag]?.takeIf { it in outbound.members }
+                        ?: outbound.defaultTag.takeIf { it in outbound.members }
+                        ?: outbound.members.firstOrNull().orEmpty()
+                }
+                "direct", "block", "dns", "" -> break
+                else -> return tag
             }
-            apply()
+        }
+        return ""
+    }
+
+    private fun setPingTarget(target: String, clearMeasurement: Boolean): Boolean {
+        val oldRequest = presentation.urlTestRequest
+        if (!clearMeasurement && target == oldRequest?.targetOutboundTag.orEmpty()) return false
+        val request = oldRequest?.copy(
+            targetOutboundTag = target,
+            priorityOutboundTag = target,
+            excludeOutboundTag = "",
+        ) ?: target.takeIf { it.isNotEmpty() }?.let {
+            // Outbound tags are identifiers, not display labels. Abbreviating
+            // a long provider tag would address a nonexistent core outbound.
+            UrlTestRequest(
+                groupTag = "select",
+                targetOutboundTag = it,
+                priorityOutboundTag = it,
+                excludeOutboundTag = "",
+                url = DEFAULT_PROBE_URL,
+                timeoutMillis = 15_000,
+                concurrency = 1,
+                deadlineMillis = 20_000,
+            )
+        }
+        // An outstanding action belongs to the previous outbound/network.
+        latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+        latencyTimeoutRunnable = null
+        latencyActionGeneration++
+        latencyActionInFlight = false
+        latencyChecking = false
+        presentation = presentation.copy(latencyMillis = null, urlTestRequest = request)
+        persistPresentation(presentation)
+        return true
+    }
+
+    fun updateSelectedOutbounds(selected: Map<String, String>) {
+        synchronized(this) {
+            if (!foregroundStarted || lifecycleStatus !in setOf("Connected", "Waiting for network")) return
+            selectedOutbounds = selected.toMap()
+            if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = false)) refreshLocked()
         }
     }
 
@@ -540,7 +655,7 @@ internal class MeowForegroundNotification(
             // notification asks Android to promote every traffic refresh.
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
-        if (showDetails && presentation.urlTestRequest != null) {
+        if (showDetails && !presentation.urlTestRequest?.targetOutboundTag.isNullOrEmpty()) {
             builder.addAction(
                 Notification.Action.Builder(
                     Icon.createWithResource(service, android.R.drawable.ic_popup_sync),

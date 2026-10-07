@@ -115,6 +115,10 @@ class MeowBoxService(
             for (boxService in activeServices) {
                 updated = boxService.foregroundNotification.updatePresentation(arguments) || updated
             }
+            if (!updated) {
+                MeowForegroundNotification.savePresentation(MeowApplication.application, arguments)
+                updated = true
+            }
             return updated
         }
 
@@ -133,6 +137,19 @@ class MeowBoxService(
                     downlinkTotal = downlinkTotal,
                     trafficAvailable = trafficAvailable,
                 )
+            }
+        }
+
+        fun publishNotificationSelectedOutbounds(groups: List<Map<String, Any?>>) {
+            val selected = groups.mapNotNull { group ->
+                val tag = group["tag"] as? String ?: return@mapNotNull null
+                val member = group["selected"] as? String ?: return@mapNotNull null
+                tag to member
+            }.toMap()
+            for (boxService in activeServices) {
+                if (boxService.ownsActiveRuntime()) {
+                    boxService.foregroundNotification.updateSelectedOutbounds(selected)
+                }
             }
         }
 
