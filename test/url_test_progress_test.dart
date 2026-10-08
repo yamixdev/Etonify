@@ -3,6 +3,92 @@ import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
   test(
+    'a repeat sweep excludes cached out-of-queue results until freshly probed',
+    () {
+      final counter = UrlTestProgressCounter();
+      counter.reset(
+        visibleTags: const ['a', 'b'],
+        testableTags: const {'a'},
+        includeKnownVisibleResults: true,
+        resultForTag: (_) => true,
+      );
+      counter.beginSweep(testableTags: const {'a'});
+      counter.applyCoreSessionSnapshot(total: 1, completed: 1);
+      counter.update(['b'], (_) => true, completedTags: const {});
+      expect(counter.state().skipped, 1);
+      expect(counter.state().pending, 0);
+      counter.update(['b'], (_) => true, completedTags: const {'b'});
+      expect(counter.state().skipped, 0);
+      expect(counter.state().tested, 2);
+      expect(counter.state().working, 2);
+    },
+  );
+  test('completed 4501-node queue leaves four excluded nodes, not pending', () {
+    final counter = UrlTestProgressCounter();
+    final visible = {for (var i = 0; i < 4505; i++) 'node-$i'};
+    final queue = {for (var i = 0; i < 4501; i++) 'node-$i'};
+    counter.reset(
+      visibleTags: visible,
+      testableTags: queue,
+      resultForTag: (_) => null,
+    );
+    counter.beginSweep(testableTags: queue);
+    counter.applyCoreSessionSnapshot(total: 4501, completed: 4501);
+    final state = counter.state();
+    expect(state.total, 4505);
+    expect(state.tested, 4501);
+    expect(state.skipped, 4);
+    expect(state.pending, 0);
+  });
+
+  test(
+    'queue change with unchanged visible membership preserves measurements',
+    () {
+      final counter = UrlTestProgressCounter();
+      var queue = <String>{'a', 'b'};
+      void sync() => counter.synchronizeCatalog(
+        scopeKey: 'profile',
+        catalogKey: Object(),
+        visibleTags: () => const ['a', 'b', 'c'],
+        testableTags: () => queue,
+        resultForTag: (tag) => tag == 'a' ? true : null,
+      );
+      sync();
+      counter.beginSweep(testableTags: queue);
+      counter.update(['a'], (_) => true);
+      queue = {'a', 'b', 'c'};
+      sync();
+      expect(counter.state().working, 1);
+      expect(counter.state().tested, 1);
+      expect(counter.state().skipped, 0);
+    },
+  );
+
+  test('unknown empty queue does not mark every server as excluded', () {
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {},
+      resultForTag: (_) => null,
+    );
+    expect(counter.state().skipped, 0);
+    expect(counter.state().pending, 2);
+  });
+
+  test('manual terminal result removes an excluded node only once', () {
+    final counter = UrlTestProgressCounter();
+    counter.reset(
+      visibleTags: const ['a', 'b'],
+      testableTags: const {'a'},
+      resultForTag: (_) => null,
+    );
+    expect(counter.state().skipped, 1);
+    counter.update(['b', 'b'], (_) => false);
+    expect(counter.state().skipped, 0);
+    expect(counter.state().failed, 1);
+    expect(counter.state().pending, 1);
+  });
+  test(
     'new sweep keeps last availability and counts only new unique results',
     () {
       final counter = UrlTestProgressCounter();
@@ -267,35 +353,38 @@ void main() {
     expect(progress.tested, 1);
   });
 
-  test(
-    'progress leaves untested visible nodes pending and updates changed tags',
-    () {
-      final counter = UrlTestProgressCounter();
-      final results = <String, bool?>{'a': true, 'b': null, 'c': true};
-      counter.reset(
-        visibleTags: const ['a', 'b', 'c'],
-        testableTags: const {'a', 'b'},
-        resultForTag: (tag) => results[tag],
-      );
-      expect(counter.state(), const UrlTestProgressState(total: 3, working: 1));
+  test('progress distinguishes excluded nodes and updates changed tags', () {
+    final counter = UrlTestProgressCounter();
+    final results = <String, bool?>{'a': true, 'b': null, 'c': true};
+    counter.reset(
+      visibleTags: const ['a', 'b', 'c'],
+      testableTags: const {'a', 'b'},
+      resultForTag: (tag) => results[tag],
+    );
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 3, working: 1, skipped: 1),
+    );
 
-      final visited = <String>[];
-      results['b'] = false;
-      counter.update(['b'], (tag) {
-        visited.add(tag);
-        return results[tag];
-      });
-      expect(visited, ['b']);
-      expect(
-        counter.state(),
-        const UrlTestProgressState(total: 3, working: 1, failed: 1),
-      );
+    final visited = <String>[];
+    results['b'] = false;
+    counter.update(['b'], (tag) {
+      visited.add(tag);
+      return results[tag];
+    });
+    expect(visited, ['b']);
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 3, working: 1, failed: 1, skipped: 1),
+    );
 
-      results['a'] = false;
-      counter.update(['a'], (tag) => results[tag]);
-      expect(counter.state(), const UrlTestProgressState(total: 3, failed: 2));
-    },
-  );
+    results['a'] = false;
+    counter.update(['a'], (tag) => results[tag]);
+    expect(
+      counter.state(),
+      const UrlTestProgressState(total: 3, failed: 2, skipped: 1),
+    );
+  });
 
   test('reset drops measurements from the previous profile', () {
     final counter = UrlTestProgressCounter();

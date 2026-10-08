@@ -445,6 +445,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String proxiesProgressSkipped(int count) {
+    return 'Excluded: $count';
+  }
+
+  @override
+  String get proxiesProgressSkippedExplanation =>
+      'These servers are not in the current core\'s probe queue. They are not counted as failed checks. Unsupported or invalid configurations can be excluded; see the startup logs for available details.';
+
+  @override
   String get proxiesCheckPaused => 'Check paused';
 
   @override

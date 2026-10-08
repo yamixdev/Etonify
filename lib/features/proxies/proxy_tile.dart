@@ -34,6 +34,7 @@ class ProxyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final proxy = runtimeState?.presentation ?? this.proxy;
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     final state = runtimeState;
@@ -158,7 +159,15 @@ class ProxyTile extends StatelessWidget {
                         (proxy.isGroup ? () {} : null),
                     onOpenGroup: openGroup,
                     child:
-                        identityChild ??
+                        (proxy.displayName == this.proxy.displayName &&
+                                proxy.countryCode == this.proxy.countryCode &&
+                                proxy.protocolLabel ==
+                                    this.proxy.protocolLabel &&
+                                proxy.childCount == this.proxy.childCount &&
+                                proxy.selectedChildName ==
+                                    this.proxy.selectedChildName
+                            ? identityChild
+                            : null) ??
                         _ProxyTileIdentity(
                           proxy: proxy,
                           titleOverride: titleOverride,

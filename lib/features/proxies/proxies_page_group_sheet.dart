@@ -98,10 +98,16 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   List<AppProxySummary>? _sortedChildrenCache;
   ProxySort? _sortedChildrenSort;
   Map<Key, int> _childIndexes = const <Key, int>{};
+  AppProxySummary? _presentedGroup;
+  bool _groupPresentationRefreshPending = false;
   late final List<AppProxySummary> _navigation;
   final Map<String, ScrollController> _scrollControllers = {};
 
   AppProxySummary get _group {
+    final live = widget.runtimeStates
+        ?.valueFor(_navigation.last.tag)
+        ?.presentation;
+    if (live != null) return live;
     if (_navigation.length == 1) return widget.group;
     final current = _navigation.last;
     final parentTag = _navigation[_navigation.length - 2].tag;
@@ -169,6 +175,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       !_navigation.any((ancestor) => ancestor.tag == group.tag);
 
   void _resetNavigationPresentation() {
+    _groupPresentationRefreshPending = false;
     _runtimeResortTimer?.cancel();
     _runtimeResortTimer = null;
     _listScrollActive = false;
@@ -198,8 +205,30 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   }
 
   void _onRuntimeStatesChanged() {
+    if (!mounted) return;
+    final group = _group;
+    final previous = _presentedGroup;
+    if ((_groupPresentationRefreshPending && !_listScrollActive) ||
+        (previous != null &&
+            (previous.selectedChildTag != group.selectedChildTag ||
+                previous.selectedChildName != group.selectedChildName ||
+                previous.countryCode != group.countryCode))) {
+      setState(() {
+        if (!_listScrollActive) {
+          _sortedChildrenCache = null;
+          _sortedChildrenSort = null;
+          _groupPresentationRefreshPending = false;
+        } else {
+          _groupPresentationRefreshPending = true;
+          _runtimeResortPending = true;
+        }
+        _presentedGroup = group;
+      });
+    }
     if (!mounted ||
-        (_sort != ProxySort.latency && _sort != ProxySort.working)) {
+        (_sort != ProxySort.latency &&
+            _sort != ProxySort.working &&
+            _sort != ProxySort.country)) {
       return;
     }
     if (_listScrollActive) {
@@ -214,7 +243,9 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     _runtimeResortTimer = Timer(_runtimeResortInterval(_children.length), () {
       _runtimeResortTimer = null;
       if (!mounted ||
-          (_sort != ProxySort.latency && _sort != ProxySort.working)) {
+          (_sort != ProxySort.latency &&
+              _sort != ProxySort.working &&
+              _sort != ProxySort.country)) {
         return;
       }
       if (_listScrollActive) {
@@ -237,7 +268,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
         _listScrollActive = true;
       } else if (notification is ScrollEndNotification) {
         _listScrollActive = false;
-        if (_runtimeResortPending) {
+        if (_runtimeResortPending || _groupPresentationRefreshPending) {
           _onRuntimeStatesChanged();
         }
       }
@@ -380,6 +411,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     final l10n = AppLocalizations.of(context);
     final bottomInset = appSystemNavigationBarInset(context);
     final group = _group;
+    _presentedGroup = group;
     final activeChildTag = group.selectedChildTag;
     final children = _sortedChildren();
     AppProxySummary? activeChild;

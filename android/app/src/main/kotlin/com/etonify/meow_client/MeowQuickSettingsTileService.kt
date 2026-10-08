@@ -135,6 +135,7 @@ class MeowQuickSettingsTileService : TileService() {
 
     private fun startRuntimeService(mode: String) {
         val intent = Intent(this, serviceClass(mode)).setAction(MeowBoxService.ACTION_START)
+            .putExtra(MeowBoxService.EXTRA_TILE_START, true)
         startForegroundService(intent)
     }
 

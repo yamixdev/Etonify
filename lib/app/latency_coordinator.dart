@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/services.dart';
+import 'package:meow_client/app/startup_url_test_handoff.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
@@ -39,6 +41,7 @@ class LatencyTestRequest {
     this.includeOutboundTags = const <String>[],
     this.logicalSessionId = '',
     this.physicalNetworkEpoch = 0,
+    this.startupLeaseToken = 0,
   });
 
   final String groupTag;
@@ -54,6 +57,7 @@ class LatencyTestRequest {
   final List<String> includeOutboundTags;
   final String logicalSessionId;
   final int physicalNetworkEpoch;
+  final int startupLeaseToken;
 }
 
 typedef LatencyTestRunner = Future<void> Function(LatencyTestRequest request);
@@ -273,6 +277,7 @@ class LatencyCoordinator {
     List<String> includeOutboundTags = const <String>[],
     String logicalSessionId = '',
     int physicalNetworkEpoch = 0,
+    int startupLeaseToken = 0,
   }) {
     return _runGroupSession(
       kind: LatencySessionKind.full,
@@ -281,6 +286,7 @@ class LatencyCoordinator {
       includeOutboundTags: includeOutboundTags,
       logicalSessionId: logicalSessionId,
       physicalNetworkEpoch: physicalNetworkEpoch,
+      startupLeaseToken: startupLeaseToken,
     );
   }
 
@@ -294,6 +300,7 @@ class LatencyCoordinator {
     required bool Function(String tag) hasFreshResult,
     required bool Function(String tag) isAvailable,
     required bool Function() isCurrent,
+    int startupLeaseToken = 0,
   }) async {
     final requested = tags
         .map((tag) => tag.trim())
@@ -348,7 +355,11 @@ class LatencyCoordinator {
         })
         .toList(growable: false);
     if (missing.isNotEmpty) {
-      await runFull(reason: reason, includeOutboundTags: missing);
+      await runFull(
+        reason: reason,
+        includeOutboundTags: missing,
+        startupLeaseToken: startupLeaseToken,
+      );
       if (!current()) return false;
     }
     return requested.any(
@@ -363,6 +374,7 @@ class LatencyCoordinator {
     required String targetOutboundTag,
     required String reason,
     bool force = true,
+    int startupLeaseToken = 0,
   }) {
     final targetTag = targetOutboundTag.trim();
     if (targetTag.isEmpty || !_capabilities.supportsTargetedUrlTest) {
@@ -387,6 +399,7 @@ class LatencyCoordinator {
         targetTag: targetTag,
         reason: reason,
         force: force,
+        startupLeaseToken: startupLeaseToken,
       );
     }
     return _runSession(
@@ -406,6 +419,7 @@ class LatencyCoordinator {
         deadlineMillis: _targetDeadlineMillis,
         force: force,
         mode: 'targeted',
+        startupLeaseToken: startupLeaseToken,
       ),
     );
   }
@@ -414,6 +428,7 @@ class LatencyCoordinator {
     required String targetTag,
     required String reason,
     required bool force,
+    int startupLeaseToken = 0,
   }) async {
     if (_activeTargetChecks.containsKey(targetTag)) {
       return true;
@@ -440,6 +455,7 @@ class LatencyCoordinator {
         LatencyTestRequest(
           groupTag: 'select',
           targetOutboundTag: targetTag,
+          startupLeaseToken: startupLeaseToken,
           priorityOutboundTag: targetTag,
           url: _testUrl(),
           timeoutMillis: _configuredTimeoutMillis,
@@ -457,6 +473,11 @@ class LatencyCoordinator {
       );
       if (_activeTargetChecks[targetTag] == check) {
         _finishParallelTarget(targetTag, check);
+      }
+      if (startupLeaseToken > 0 &&
+          error is PlatformException &&
+          error.code == 'startup_lease_expired') {
+        throw const StartupUrlTestLeaseExpired();
       }
       return false;
     }
@@ -571,6 +592,7 @@ class LatencyCoordinator {
     required int sessionId,
     required int revision,
     required bool available,
+    bool borrowedStartupResult = false,
   }) {
     final normalizedTag = tag.trim();
     if (!_usesSessionEvents ||
@@ -598,7 +620,7 @@ class LatencyCoordinator {
         !belongsToMainSession &&
         _isConnected() &&
         _canRunDiagnostics() &&
-        _activeOutboundTag().trim() == normalizedTag;
+        (borrowedStartupResult || _activeOutboundTag().trim() == normalizedTag);
     if (!belongsToMainSession &&
         activeCheck == null &&
         !passiveSelectedResult) {
@@ -801,6 +823,7 @@ class LatencyCoordinator {
     List<String> includeOutboundTags = const <String>[],
     String logicalSessionId = '',
     int physicalNetworkEpoch = 0,
+    int startupLeaseToken = 0,
   }) {
     final manual = mode == 'manual' && _capabilities.supportsUrlTestExhaustive;
     final effectiveConcurrency = _configuredConcurrency;
@@ -817,6 +840,7 @@ class LatencyCoordinator {
       includeOutboundTags: includeOutboundTags,
       logicalSessionId: logicalSessionId,
       physicalNetworkEpoch: physicalNetworkEpoch,
+      startupLeaseToken: startupLeaseToken,
     );
   }
 
@@ -827,6 +851,7 @@ class LatencyCoordinator {
     List<String> includeOutboundTags = const <String>[],
     String logicalSessionId = '',
     int physicalNetworkEpoch = 0,
+    int startupLeaseToken = 0,
   }) => _runSession(
     kind: kind,
     reason: reason,
@@ -836,6 +861,7 @@ class LatencyCoordinator {
       includeOutboundTags: includeOutboundTags,
       logicalSessionId: logicalSessionId,
       physicalNetworkEpoch: physicalNetworkEpoch,
+      startupLeaseToken: startupLeaseToken,
     ),
   );
 
@@ -991,7 +1017,19 @@ class LatencyCoordinator {
         'native URLTest command failed kind=${kind.name} reason=$reason '
             'error=$error\n$stackTrace',
       );
-      _settleCurrent(success: false, reason: 'native_command_error');
+      if (request.startupLeaseToken > 0 &&
+          error is PlatformException &&
+          error.code == 'startup_lease_expired') {
+        _markNativeFinished(nativeFinished);
+        _settleCurrent(
+          success: false,
+          reason: 'startup_lease_expired',
+          error: const StartupUrlTestLeaseExpired(),
+          stackTrace: stackTrace,
+        );
+      } else {
+        _settleCurrent(success: false, reason: 'native_command_error');
+      }
     }
   }
 
@@ -1056,7 +1094,12 @@ class LatencyCoordinator {
     }
   }
 
-  void _settleCurrent({required bool success, required String reason}) {
+  void _settleCurrent({
+    required bool success,
+    required String reason,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
     if (!isRunning) return;
     final previousKind = _kind;
     final previousTarget = _targetTag;
@@ -1088,7 +1131,11 @@ class LatencyCoordinator {
     _sessionResult = null;
     _onSessionChanged(false, previousKind, previousTarget);
     if (result != null && !result.isCompleted) {
-      result.complete(success);
+      if (error == null) {
+        result.complete(success);
+      } else {
+        result.completeError(error, stackTrace);
+      }
     }
     AppLogStore.info(
       'latency',

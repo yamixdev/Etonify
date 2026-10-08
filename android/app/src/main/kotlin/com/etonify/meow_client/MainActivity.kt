@@ -1838,10 +1838,17 @@ class MainActivity : FlutterFragmentActivity() {
                         includeOutboundTags = request.includeOutboundTags,
                         logicalSessionId = request.logicalSessionId,
                         physicalNetworkEpoch = request.physicalNetworkEpoch,
+                        startupLeaseToken = request.startupLeaseToken,
                     ) { urlTestResult ->
                         urlTestResult
                             .onSuccess { callback(Result.success(Unit)) }
-                            .onFailure { callback(errorResult("urltest_failed", it.message)) }
+                            .onFailure { callback(errorResult(if (it is com.etonify.meow_client.singbox.StartupUrlTestLeaseExpiredException) "startup_lease_expired" else "urltest_failed", it.message)) }
+                    }
+                }
+
+                override fun prepareStartupUrlTest(runtimeGeneration: Long, coveredTags: List<String>, callback: (Result<Map<String?, Any?>>) -> Unit) {
+                    MeowBoxService.prepareStartupUrlTest(runtimeGeneration, coveredTags.toSet()) {
+                        callback(Result.success(it))
                     }
                 }
 

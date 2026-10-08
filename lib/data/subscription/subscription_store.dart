@@ -42,6 +42,7 @@ class SubscriptionStore {
 
   static const _metaBoxName = 'subscriptions_secure_v1';
   static const _payloadBoxName = 'subscription_payloads_secure_v1';
+  static const _payloadJournalBoxName = 'subscription_write_journal_secure_v1';
   static const _legacyMetaBoxName = 'subscriptions';
   static const _legacyPayloadBoxName = 'subscription_payloads';
   static const _legacySummaryBoxName = 'subscription_summaries';
@@ -50,12 +51,19 @@ class SubscriptionStore {
   static const _localFileImportScheme = 'meow-file';
   static Box<dynamic>? _metaBox;
   static LazyBox<dynamic>? _payloadBox;
+  static LazyBox<dynamic>? _payloadJournalBox;
+  static final Map<String, Map<dynamic, dynamic>> _pendingPayloadRecovery = {};
   static Future<void>? _payloadInitialization;
   static bool _payloadMigrationRequired = false;
   static final Map<String, Future<void>> _subscriptionWriteLocks =
       <String, Future<void>>{};
-  static final Map<String, Future<Subscription>> _refreshesInFlight =
-      <String, Future<Subscription>>{};
+  static final Map<
+    String,
+    ({Future<Subscription> future, String? requestRevision})
+  >
+  _refreshesInFlight = {};
+  static final Map<String, int> _refreshGenerations = {};
+  static int _nextRefreshGeneration = 0;
 
   // ─────────────────── Lifecycle ───────────────────
 
@@ -66,7 +74,7 @@ class SubscriptionStore {
   /// allowing the first screen to appear before encrypted multi-megabyte
   /// subscription payloads are mapped into Hive.
   static Future<void> init({bool openPayload = true}) async {
-    if (_metaBox?.isOpen != true) {
+    if (_metaBox?.isOpen != true || _payloadJournalBox?.isOpen != true) {
       _metaBox = null;
       await _openMetadataBox();
     }
@@ -88,7 +96,9 @@ class SubscriptionStore {
     if (pending != null) {
       return pending;
     }
-    if (_payloadBox?.isOpen == true) {
+    if (_payloadBox?.isOpen == true &&
+        _payloadJournalBox?.isOpen == true &&
+        !_payloadMigrationRequired) {
       return Future<void>.value();
     }
     _payloadBox = null;
@@ -105,11 +115,19 @@ class SubscriptionStore {
   static Future<void> _initializePayload() async {
     LazyBox<dynamic>? openedPayload;
     try {
-      if (_metaBox?.isOpen != true) {
+      if (_metaBox?.isOpen != true || _payloadJournalBox?.isOpen != true) {
         _metaBox = null;
         await _openMetadataBox();
       }
       if (_payloadBox?.isOpen == true) {
+        for (final id in <String>{
+          ..._payloadJournal.keys.cast<String>(),
+          ..._pendingPayloadRecovery.keys,
+        }) {
+          await _recoverPendingPayloadWrite(id);
+        }
+        await _runStorageMigrations();
+        _payloadMigrationRequired = false;
         return;
       }
       final totalStopwatch = Stopwatch()..start();
@@ -120,6 +138,12 @@ class SubscriptionStore {
       );
       _payloadBox = openedPayload;
       payloadStopwatch.stop();
+      for (final id in <String>{
+        ..._payloadJournal.keys.cast<String>(),
+        ..._pendingPayloadRecovery.keys,
+      }) {
+        await _recoverPendingPayloadWrite(id);
+      }
       await _runStorageMigrations();
       _payloadMigrationRequired = false;
       totalStopwatch.stop();
@@ -170,6 +194,11 @@ class SubscriptionStore {
       await _payloadBox!.close();
     }
     _payloadBox = null;
+    if (_payloadJournalBox?.isOpen == true) {
+      await _payloadJournalBox!.close();
+    }
+    _payloadJournalBox = null;
+    _pendingPayloadRecovery.clear();
     if (_metaBox != null && _metaBox!.isOpen) {
       await _metaBox!.close();
     }
@@ -177,6 +206,7 @@ class SubscriptionStore {
     _payloadMigrationRequired = false;
     _subscriptionWriteLocks.clear();
     _refreshesInFlight.clear();
+    _refreshGenerations.clear();
   }
 
   static Future<void> _openMetadataBox() async {
@@ -184,13 +214,18 @@ class SubscriptionStore {
     try {
       await SecureHiveStorage.init();
       final metaStopwatch = Stopwatch()..start();
-      _metaBox = Hive.isBoxOpen(_metaBoxName)
-          ? Hive.box(_metaBoxName)
-          : await Hive.openBox(
+      final openedMetadata = Hive.isBoxOpen(_metaBoxName)
+          ? Hive.box<dynamic>(_metaBoxName)
+          : await Hive.openBox<dynamic>(
               _metaBoxName,
               encryptionCipher: SecureHiveStorage.cipher,
               compactionStrategy: shouldCompactMetadataBox,
             );
+      _payloadJournalBox = await openPayloadBox(
+        name: _payloadJournalBoxName,
+        cipher: SecureHiveStorage.cipher,
+      );
+      _metaBox = openedMetadata;
       metaStopwatch.stop();
       totalStopwatch.stop();
       await HiveStorageDiagnostics.logBoxOnce(
@@ -208,7 +243,8 @@ class SubscriptionStore {
       // atomically instead of rendering an incomplete legacy profile list.
       final storedVersion =
           (_metaStore.get(_storageSchemaVersionKey) as num?)?.toInt() ?? 0;
-      _payloadMigrationRequired = storedVersion < _storageSchemaVersion;
+      _payloadMigrationRequired =
+          storedVersion < _storageSchemaVersion || _payloadJournal.isNotEmpty;
     } catch (error, stackTrace) {
       AppLogStore.error(
         'subscription storage',
@@ -285,6 +321,71 @@ class SubscriptionStore {
     return _payloadBox!;
   }
 
+  static LazyBox<dynamic> get _payloadJournal {
+    if (_payloadJournalBox?.isOpen != true) {
+      throw StateError('Subscription write journal is unavailable');
+    }
+    return _payloadJournalBox!;
+  }
+
+  /// A durable undo record bridges the two Hive boxes. Metadata is the commit
+  /// marker; its revision is published only after the payload is flushed.
+  static Future<void> _recoverPendingPayloadWrite(String id) async {
+    final pending =
+        _pendingPayloadRecovery[id] ?? await _payloadJournal.get(id);
+    if (pending == null) return;
+    if (pending is! Map || pending['newRevision'] is! String) {
+      throw StateError('Invalid subscription write journal');
+    }
+    final metadata = getMetadata(id);
+    final payload = await _payloadStore.get(id);
+    final committed =
+        metadata?.payloadRevision == pending['newRevision'] &&
+        payload is List<int> &&
+        sha256.convert(payload).toString() == pending['newRevision'];
+    if (!committed) {
+      final oldMetadata = pending['oldMetadata'];
+      // A deletion wins over a pending update. An interrupted initial import
+      // has no old metadata either, so neither case may resurrect a profile.
+      if (!_metaStore.containsKey(id) || oldMetadata == null) {
+        await _payloadStore.delete(id);
+        if (metadata != null) await _metaStore.delete(id);
+      } else {
+        final oldPayload = pending['oldPayload'];
+        if (oldPayload == null) {
+          await _payloadStore.delete(id);
+        } else {
+          await _payloadStore.put(id, oldPayload);
+        }
+        // Preserve intervening metadata-only edits when their payload never
+        // changed. Only roll back metadata that claims the uncommitted payload.
+        if (metadata == null ||
+            metadata.payloadRevision == pending['newRevision']) {
+          await _metaStore.put(id, oldMetadata);
+        }
+      }
+    }
+    // A matching in-memory revision is not proof of a durable commit: recovery
+    // can run because the original flush failed after Hive published the value.
+    // Keep the undo record until both halves have been flushed successfully.
+    await _payloadStore.flush();
+    await _metaStore.flush();
+    await _finishPayloadJournalWrite(id, pending);
+  }
+
+  static Future<void> _finishPayloadJournalWrite(
+    String id,
+    Map<dynamic, dynamic> pending,
+  ) async {
+    // Hive removes the key from memory before flush confirms its deletion.
+    // Keep a recovery copy so later writes cannot bypass failed cleanup and
+    // change the payload while an old undo record may still exist on disk.
+    _pendingPayloadRecovery[id] = pending;
+    await _payloadJournal.delete(id);
+    await _payloadJournal.flush();
+    _pendingPayloadRecovery.remove(id);
+  }
+
   static Future<T> _withSubscriptionWriteLock<T>(
     String id,
     Future<T> Function() action,
@@ -297,7 +398,14 @@ class SubscriptionStore {
           // Keep the per-subscription queue alive even if the previous write
           // failed. The next writer must still see the latest committed payload.
         })
-        .then((_) => action());
+        .then((_) async {
+          if (_pendingPayloadRecovery.containsKey(id) ||
+              (_payloadJournalBox?.isOpen == true &&
+                  _payloadJournal.containsKey(id))) {
+            await _recoverPendingPayloadWrite(id);
+          }
+          return action();
+        });
     queued = next.then<void>((_) {}, onError: (_) {});
     _subscriptionWriteLocks[id] = queued;
     try {
@@ -341,10 +449,9 @@ class SubscriptionStore {
     final indexedResults = <({int index, Subscription subscription})>[];
     var index = 0;
     for (final subscription in getAllMetadata()) {
-      indexedResults.add((
-        index: index,
-        subscription: await withPayload(subscription),
-      ));
+      final snapshot = await get(subscription.id);
+      if (snapshot == null) continue;
+      indexedResults.add((index: index, subscription: snapshot));
       index++;
     }
     indexedResults.sort((a, b) {
@@ -361,15 +468,14 @@ class SubscriptionStore {
   /// from the UI isolate. Hive values are copied before the worker starts.
   static Future<List<Subscription>> getAllInBackground() async {
     await ensurePayloadReady();
-    final metadataSnapshot = _metadataJsonSnapshot();
-    if (metadataSnapshot.isEmpty) {
-      return const <Subscription>[];
-    }
+    final metadataSnapshot = <String>[];
     final payloadSnapshot = <String, dynamic>{};
-    for (final key in _payloadStore.keys) {
-      final raw = await _payloadStore.get(key);
-      if (raw != null) {
-        payloadSnapshot[key.toString()] = raw;
+    for (final entry in getAllMetadata()) {
+      final snapshot = await _storedSnapshot(entry.id);
+      final metadata = snapshot.metadata;
+      if (metadata != null) {
+        metadataSnapshot.add(jsonEncode(metadata.toMetadataMap()));
+        if (snapshot.raw != null) payloadSnapshot[metadata.id] = snapshot.raw;
       }
     }
     return Isolate.run(() {
@@ -440,10 +546,28 @@ class SubscriptionStore {
   /// Gets a single subscription by ID with payload, or null.
   static Future<Subscription?> get(String id) async {
     await ensurePayloadReady();
+    return _withSubscriptionWriteLock(id, () => _getUnlocked(id));
+  }
+
+  /// Only callers already holding the per-profile lock may use this reader.
+  static Future<Subscription?> _getUnlocked(String id) async {
     final metadata = getMetadata(id);
     if (metadata == null) return null;
-    return _withPayload(metadata);
+    final raw = await _payloadStore.get(id);
+    return raw == null ? metadata : _withPayloadFromRaw(metadata, raw);
   }
+
+  /// Copy both halves while excluding writers and recovering any interrupted
+  /// transaction. Decode outside the lock once the snapshot is stable.
+  static Future<({Subscription? metadata, dynamic raw})> _storedSnapshot(
+    String id,
+  ) => _withSubscriptionWriteLock(id, () async {
+    final metadata = getMetadata(id);
+    return (
+      metadata: metadata,
+      raw: metadata == null ? null : await _payloadStore.get(id),
+    );
+  });
 
   /// Gets metadata only for a single subscription by ID synchronously.
   static Subscription? getMetadata(String id) {
@@ -462,11 +586,10 @@ class SubscriptionStore {
   /// isolate. Hive values are copied before the worker starts.
   static Future<Subscription?> getInBackground(String id) async {
     await ensurePayloadReady();
-    final metadataRaw = _metaStore.get(id);
-    if (metadataRaw is! String) {
-      return null;
-    }
-    final payloadRaw = await _payloadStore.get(id);
+    final snapshot = await _storedSnapshot(id);
+    if (snapshot.metadata == null) return null;
+    final metadataRaw = jsonEncode(snapshot.metadata!.toMetadataMap());
+    final payloadRaw = snapshot.raw;
     final isLargePayload = switch (payloadRaw) {
       List<int> bytes => bytes.length >= 32 * 1024,
       String str => str.length >= 32 * 1024,
@@ -579,7 +702,7 @@ class SubscriptionStore {
     if (_payloadBox?.isOpen != true) {
       return null;
     }
-    return await _payloadStore.get(id);
+    return (await _storedSnapshot(id)).raw;
   }
 
   static Subscription hydratePayloadJson(Subscription metadata, dynamic raw) {
@@ -591,7 +714,9 @@ class SubscriptionStore {
     Subscription metadata,
   ) async {
     await ensurePayloadReady();
-    final raw = await _payloadStore.get(metadata.id);
+    final snapshot = await _storedSnapshot(metadata.id);
+    metadata = snapshot.metadata ?? metadata;
+    final raw = snapshot.raw;
     if (raw == null) {
       return metadata;
     }
@@ -637,15 +762,60 @@ class SubscriptionStore {
     }, debugName: 'meow-encode-subscription-payload');
     encodeStopwatch.stop();
     final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
-    final metadataWriteStopwatch = Stopwatch()..start();
-    await _metaStore.put(updatedSub.id, jsonEncode(updatedSub.toMetadataMap()));
-    metadataWriteStopwatch.stop();
+    final metadataWriteStopwatch = Stopwatch();
     final payloadUnchanged =
         existingPayload is List<int> &&
         listEquals(existingPayload, payloadResult.payload);
     final payloadWriteStopwatch = Stopwatch()..start();
+    Map<dynamic, dynamic>? undoRecord;
     if (!payloadUnchanged) {
-      await _payloadStore.put(updatedSub.id, payloadResult.payload);
+      undoRecord = {
+        'oldMetadata': _metaStore.get(sub.id),
+        'oldPayload': existingPayload,
+        'newRevision': payloadResult.revision,
+      };
+      await _payloadJournal.put(sub.id, undoRecord);
+      await _payloadJournal.flush();
+    }
+    try {
+      if (!payloadUnchanged) {
+        await _payloadStore.put(updatedSub.id, payloadResult.payload);
+        await _payloadStore.flush();
+      }
+      payloadWriteStopwatch.stop();
+      metadataWriteStopwatch.start();
+      await _metaStore.put(
+        updatedSub.id,
+        jsonEncode(updatedSub.toMetadataMap()),
+      );
+      await _metaStore.flush();
+      metadataWriteStopwatch.stop();
+    } catch (error, stackTrace) {
+      if (!payloadUnchanged) {
+        try {
+          await _recoverPendingPayloadWrite(sub.id);
+        } catch (recoveryError) {
+          // Keep the durable undo record. Opening storage or the next locked
+          // operation must recover it before exposing this payload again.
+          AppLogStore.error(
+            'subscription storage',
+            'Pending profile write will be recovered on reopen: $recoveryError',
+          );
+        }
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (!payloadUnchanged) {
+      try {
+        await _finishPayloadJournalWrite(sub.id, undoRecord!);
+      } catch (error) {
+        // Both boxes have committed. A leftover journal is harmless and will
+        // be verified and removed by recovery, not treated as a failed save.
+        AppLogStore.warning(
+          'subscription storage',
+          'Write journal cleanup deferred: $error',
+        );
+      }
     }
     payloadWriteStopwatch.stop();
     totalStopwatch.stop();
@@ -820,20 +990,25 @@ class SubscriptionStore {
   /// Deletes a subscription by ID.
   static Future<void> delete(String id) async {
     await ensurePayloadReady();
-    await _withSubscriptionWriteLock(id, () async {
-      await _metaStore.delete(id);
-      await _payloadStore.delete(id);
-    });
+    await _withSubscriptionWriteLock(id, () => _deleteUnlocked(id));
+  }
+
+  static Future<void> _deleteUnlocked(String id) async {
+    // Backups may later restore the same ID and URL. A request issued for the
+    // deleted profile must not be allowed to update that new incarnation.
+    _refreshGenerations[id] = ++_nextRefreshGeneration;
+    _refreshesInFlight.remove(id);
+    await _metaStore.delete(id);
+    await _metaStore.flush();
+    await _payloadStore.delete(id);
+    await _payloadStore.flush();
   }
 
   static Future<void> deleteMany(Iterable<String> ids) async {
     await ensurePayloadReady();
     final idList = ids.toList(growable: false);
     for (final id in idList) {
-      await _withSubscriptionWriteLock(id, () async {
-        await _metaStore.delete(id);
-        await _payloadStore.delete(id);
-      });
+      await _withSubscriptionWriteLock(id, () => _deleteUnlocked(id));
     }
   }
 
@@ -842,13 +1017,12 @@ class SubscriptionStore {
     await ensurePayloadReady();
     final ids = getAllMetadata().map((s) => s.id).toList(growable: false);
     for (final id in ids) {
-      await _withSubscriptionWriteLock(id, () async {
-        await _metaStore.delete(id);
-        await _payloadStore.delete(id);
-      });
+      await _withSubscriptionWriteLock(id, () => _deleteUnlocked(id));
     }
     await _metaStore.clear();
+    await _metaStore.flush();
     await _payloadStore.deleteAll(_payloadStore.keys);
+    await _payloadStore.flush();
   }
 
   // ─────────────────── High-level operations ───────────────────
@@ -1092,9 +1266,29 @@ class SubscriptionStore {
             'url': subscription.url,
             'sendHwid': SubscriptionFetcher.sendHwidToProviders,
             'updated': subscription.lastUpdated,
+            'payloadRevision': subscription.payloadRevision,
             'info': subscription.info?.toMap(),
             'disabled': subscription.disableAutoUpdate,
             'interval': subscription.autoRefreshMinutes,
+          }),
+        ),
+      )
+      .toString();
+
+  static String _requestRevision(
+    Subscription subscription, {
+    bool allowInsecureTls = false,
+  }) => sha256
+      .convert(
+        utf8.encode(
+          jsonEncode({
+            'url': subscription.url,
+            'allowInsecureTls': allowInsecureTls,
+            'sendHwid': SubscriptionFetcher.sendHwidToProviders,
+            'userAgent': subscription.info?.customUserAgent,
+            'headers': subscription.info?.customRequestHeader,
+            'requireHwid': subscription.info?.requireHwid ?? false,
+            'hwid': subscription.info?.customHwid,
           }),
         ),
       )
@@ -1133,19 +1327,29 @@ class SubscriptionStore {
     bool allowInsecureTls = false,
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
   }) {
+    final current = _metaBox?.isOpen == true ? getMetadata(id) : null;
+    final requestRevision = current == null
+        ? null
+        : _requestRevision(current, allowInsecureTls: allowInsecureTls);
     final inFlight = _refreshesInFlight[id];
-    if (inFlight != null) {
-      return inFlight;
+    if (inFlight != null && inFlight.requestRevision == requestRevision) {
+      return inFlight.future;
     }
+    final generation = ++_nextRefreshGeneration;
+    _refreshGenerations[id] = generation;
     final operation = _refresh(
       id,
+      requestGeneration: generation,
       operationTimeout: operationTimeout,
       allowInsecureTls: allowInsecureTls,
       onRouteAttempt: onRouteAttempt,
     );
-    _refreshesInFlight[id] = operation;
+    _refreshesInFlight[id] = (
+      future: operation,
+      requestRevision: requestRevision,
+    );
     return operation.whenComplete(() {
-      if (identical(_refreshesInFlight[id], operation)) {
+      if (identical(_refreshesInFlight[id]?.future, operation)) {
         _refreshesInFlight.remove(id);
       }
     });
@@ -1158,6 +1362,7 @@ class SubscriptionStore {
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
     FetchResult? downloadedResult,
     String? expectedRevision,
+    int? requestGeneration,
   }) async {
     final totalStopwatch = Stopwatch()..start();
     final payloadOpenStopwatch = Stopwatch()..start();
@@ -1165,6 +1370,12 @@ class SubscriptionStore {
     payloadOpenStopwatch.stop();
     final metadataStopwatch = Stopwatch()..start();
     final existingBeforeFetch = getMetadata(id);
+    final requestRevision = existingBeforeFetch == null
+        ? null
+        : _requestRevision(
+            existingBeforeFetch,
+            allowInsecureTls: allowInsecureTls,
+          );
     metadataStopwatch.stop();
     if (existingBeforeFetch == null) {
       throw StateError('Subscription $id not found');
@@ -1220,10 +1431,16 @@ class SubscriptionStore {
     return _withSubscriptionWriteLock(id, () async {
       lockWaitStopwatch.stop();
       final lockReadStopwatch = Stopwatch()..start();
-      final existing = await get(id);
+      final existing = await _getUnlocked(id);
       lockReadStopwatch.stop();
       if (existing == null) {
         throw StateError('Subscription $id not found');
+      }
+      if ((requestGeneration != null &&
+              _refreshGenerations[id] != requestGeneration) ||
+          _requestRevision(existing, allowInsecureTls: allowInsecureTls) !=
+              requestRevision) {
+        throw StateError('Subscription request changed during refresh');
       }
       if (expectedRevision != null &&
           backgroundRevision(existing) != expectedRevision) {
@@ -1334,7 +1551,7 @@ class SubscriptionStore {
     }
 
     return _withSubscriptionWriteLock(id, () async {
-      final existing = await get(id);
+      final existing = await _getUnlocked(id);
       if (existing == null) {
         throw StateError('Subscription $id not found');
       }
@@ -2003,16 +2220,14 @@ class SubscriptionStore {
   }
 
   static Future<void> _saveOrdered(List<Subscription> subscriptions) async {
-    final payload = <dynamic, String>{};
     for (var i = 0; i < subscriptions.length; i++) {
-      if (!_metaStore.containsKey(subscriptions[i].id)) {
-        continue;
-      }
-      final normalized = subscriptions[i].copyWith(sortOrder: i);
-      payload[normalized.id] = jsonEncode(normalized.toMetadataMap());
-    }
-    if (payload.isNotEmpty) {
-      await _metaStore.putAll(payload);
+      final id = subscriptions[i].id;
+      final sortOrder = i;
+      await _withSubscriptionWriteLock(id, () async {
+        final current = getMetadata(id);
+        if (current == null) return;
+        await _saveMetadataUnlocked(current.copyWith(sortOrder: sortOrder));
+      });
     }
   }
 
@@ -2029,7 +2244,9 @@ class SubscriptionStore {
     if (_payloadBox?.isOpen != true) {
       return metadata;
     }
-    final raw = await _payloadStore.get(metadata.id);
+    final snapshot = await _storedSnapshot(metadata.id);
+    metadata = snapshot.metadata ?? metadata;
+    final raw = snapshot.raw;
     if (raw == null) {
       return metadata;
     }

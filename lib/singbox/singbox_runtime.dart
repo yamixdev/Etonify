@@ -356,6 +356,7 @@ class SingboxRuntime {
     List<String> includeOutboundTags = const <String>[],
     String logicalSessionId = '',
     int physicalNetworkEpoch = 0,
+    int startupLeaseToken = 0,
   }) {
     if (!Platform.isAndroid) {
       return Future<void>.value();
@@ -375,6 +376,7 @@ class SingboxRuntime {
         includeOutboundTags: includeOutboundTags,
         logicalSessionId: logicalSessionId,
         physicalNetworkEpoch: physicalNetworkEpoch,
+        startupLeaseToken: startupLeaseToken,
       ),
     );
   }
@@ -387,6 +389,20 @@ class SingboxRuntime {
       return Future<void>.value();
     }
     return _hostApi.cancelUrlTest(groupTag, targetOutboundTag);
+  }
+
+  Future<Map<String, dynamic>> prepareStartupUrlTest({
+    required int runtimeGeneration,
+    required List<String> coveredTags,
+  }) async {
+    if (!Platform.isAndroid) return const {};
+    try {
+      return _normalizeMap(
+        await _hostApi.prepareStartupUrlTest(runtimeGeneration, coveredTags),
+      );
+    } on MissingPluginException {
+      return const {};
+    }
   }
 
   Future<Map<String, dynamic>> status() async {

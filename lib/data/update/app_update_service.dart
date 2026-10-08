@@ -324,6 +324,29 @@ enum AppUpdateDownloadStage {
   ready,
 }
 
+/// One service-owned download, independent of the lifetime of its UI.
+class AppUpdateDownloadOperation extends ChangeNotifier {
+  AppUpdateDownloadOperation._(this.info);
+
+  final AppUpdateInfo info;
+  final _completion = Completer<void>();
+  AppUpdateDownloadProgress _progress = const AppUpdateDownloadProgress(
+    downloadedBytes: 0,
+    totalBytes: 0,
+    bytesPerSecond: 0,
+    done: false,
+    stage: AppUpdateDownloadStage.cleaning,
+  );
+
+  AppUpdateDownloadProgress get progress => _progress;
+  Future<void> get completed => _completion.future;
+
+  void _report(AppUpdateDownloadProgress progress) {
+    _progress = progress;
+    notifyListeners();
+  }
+}
+
 class AppUpdateVerificationResult {
   const AppUpdateVerificationResult({
     required this.ok,
@@ -373,6 +396,23 @@ class AppUpdateService {
   static const _maxUpdateApkBytes = 512 * 1024 * 1024;
   final Map<AppUpdateChannel, Future<AppUpdateCheckResult>> _checksInFlight =
       <AppUpdateChannel, Future<AppUpdateCheckResult>>{};
+  final Set<Future<void>> _cacheMutations = {};
+  AppUpdateDownloadOperation? _activeDownload;
+  Future<void>? _installerLaunch;
+
+  AppUpdateDownloadOperation? get activeDownload => _activeDownload;
+
+  /// Shares only the platform launch, not the unobservable OS installer session.
+  Future<void> launchInstaller(Future<void> Function() launch) {
+    final active = _installerLaunch;
+    if (active != null) return active;
+    // Defer the callback so the slot is reserved even for a synchronous launch.
+    final operation = Future<void>.microtask(launch).whenComplete(() {
+      _installerLaunch = null;
+    });
+    _installerLaunch = operation;
+    return operation;
+  }
 
   Future<Box<dynamic>> _openBox() async {
     await HiveAppSettingsStore.initHive();
@@ -406,6 +446,16 @@ class AppUpdateService {
     bool manual = false,
     AppUpdateChannel channel = AppUpdateChannel.stable,
   }) {
+    final download = _activeDownload;
+    if (download != null) {
+      return Future.value(
+        AppUpdateCheckResult(
+          status: AppUpdateStatus.downloading,
+          checkedAt: DateTime.now(),
+          info: download.info,
+        ),
+      );
+    }
     final inFlight = _checksInFlight[channel];
     if (inFlight != null) return inFlight;
     final operation = _checkForUpdates(
@@ -683,6 +733,27 @@ class AppUpdateService {
   Future<AppUpdateCleanupResult> cleanupInstalledUpdateArtifacts({
     required String currentVersion,
     int? currentBuildNumber,
+  }) {
+    if (_activeDownload != null) {
+      return Future.value(
+        const AppUpdateCleanupResult(
+          deletedFiles: 0,
+          metadataChanged: false,
+          installedAtLeastLatest: false,
+        ),
+      );
+    }
+    return _trackCacheMutation(
+      () => _cleanupInstalledUpdateArtifacts(
+        currentVersion: currentVersion,
+        currentBuildNumber: currentBuildNumber,
+      ),
+    );
+  }
+
+  Future<AppUpdateCleanupResult> _cleanupInstalledUpdateArtifacts({
+    required String currentVersion,
+    int? currentBuildNumber,
   }) async {
     final metadata = await loadMetadata();
     final info = metadata.latestInfo;
@@ -827,6 +898,75 @@ class AppUpdateService {
   }
 
   Future<void> downloadUpdate(
+    AppUpdateInfo info, {
+    required void Function(AppUpdateDownloadProgress progress) onProgress,
+  }) async {
+    final operation = startDownload(info);
+    void report() => onProgress(operation.progress);
+    operation.addListener(report);
+    try {
+      report();
+      await operation.completed;
+    } finally {
+      operation.removeListener(report);
+    }
+  }
+
+  AppUpdateDownloadOperation startDownload(AppUpdateInfo info) {
+    final active = _activeDownload;
+    if (active != null) {
+      if (active.info.tagName != info.tagName ||
+          active.info.channel != info.channel ||
+          active.info.asset.name != info.asset.name ||
+          active.info.asset.downloadUrl != info.asset.downloadUrl ||
+          active.info.asset.digestSha256 != info.asset.digestSha256 ||
+          active.info.asset.sizeBytes != info.asset.sizeBytes) {
+        throw StateError('Another update download is already running.');
+      }
+      return active;
+    }
+    final operation = AppUpdateDownloadOperation._(info);
+    final precedingWork = <Future<void>>[
+      ..._checksInFlight.values.map(
+        (check) =>
+            check.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+      ),
+      ..._cacheMutations,
+    ];
+    _activeDownload = operation;
+    // Starting an operation does not require a view to remain subscribed.
+    unawaited(
+      operation.completed.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      ),
+    );
+    unawaited(_runDownload(operation, precedingWork));
+    return operation;
+  }
+
+  Future<void> _runDownload(
+    AppUpdateDownloadOperation operation,
+    List<Future<void>> precedingWork,
+  ) async {
+    try {
+      for (final work in precedingWork) {
+        try {
+          await work;
+        } catch (_) {
+          // A failed earlier check/cleanup must not poison a new download.
+        }
+      }
+      await _downloadUpdate(operation.info, onProgress: operation._report);
+      _activeDownload = null;
+      operation._completion.complete();
+    } catch (error, stack) {
+      _activeDownload = null;
+      operation._completion.completeError(error, stack);
+    }
+  }
+
+  Future<void> _downloadUpdate(
     AppUpdateInfo info, {
     required void Function(AppUpdateDownloadProgress progress) onProgress,
   }) async {
@@ -998,10 +1138,28 @@ class AppUpdateService {
   }
 
   Future<int> cleanupOldDownloads({String? keepPath}) {
-    return _deleteCachedUpdateFiles(keepPath: keepPath);
+    return _trackCacheMutation(
+      () => _deleteCachedUpdateFiles(keepPath: keepPath),
+    );
+  }
+
+  Future<T> _trackCacheMutation<T>(Future<T> Function() action) {
+    final work = action();
+    final tracked = work.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    _cacheMutations.add(tracked);
+    unawaited(tracked.whenComplete(() => _cacheMutations.remove(tracked)));
+    return work;
   }
 
   Future<int> _deleteCachedUpdateFiles({String? keepPath}) async {
+    // Keep the reservation for the entire cleanup call, even if a download
+    // completes while directory enumeration is awaiting filesystem events.
+    final protectedName = _activeDownload == null
+        ? null
+        : sanitizeAssetFileName(_activeDownload!.info.asset.name).toLowerCase();
     final directory = await _updatesDirectory();
     final keep = keepPath?.trim();
     var deleted = 0;
@@ -1009,6 +1167,16 @@ class AppUpdateService {
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last.toLowerCase();
+      final activeName = _activeDownload == null
+          ? null
+          : sanitizeAssetFileName(
+              _activeDownload!.info.asset.name,
+            ).toLowerCase();
+      if (protectedName != null &&
+          (name == protectedName || name == '$protectedName.part')) {
+        continue;
+      }
+      if (name == activeName || name == '$activeName.part') continue;
       // This directory belongs exclusively to the updater. Do not depend on
       // a release asset naming convention: older or manually renamed assets
       // must not survive forever as stale installer files.
@@ -1029,6 +1197,23 @@ class AppUpdateService {
   }
 
   Future<int> deleteCachedInstallers({
+    required String currentVersion,
+    int? currentBuildNumber,
+  }) {
+    if (_activeDownload != null) {
+      return Future.error(
+        StateError('Cannot delete an active update download.'),
+      );
+    }
+    return _trackCacheMutation(
+      () => _deleteCachedInstallers(
+        currentVersion: currentVersion,
+        currentBuildNumber: currentBuildNumber,
+      ),
+    );
+  }
+
+  Future<int> _deleteCachedInstallers({
     required String currentVersion,
     int? currentBuildNumber,
   }) async {

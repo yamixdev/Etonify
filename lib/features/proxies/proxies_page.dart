@@ -13,6 +13,7 @@ import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -529,12 +530,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
   int _groupPanelGeneration = 0;
   List<_ProxyListEntry>? _visibleEntriesCache;
   Map<Key, int> _visibleEntryIndexes = const <Key, int>{};
-  List<AppProxySummary>? _visibleEntriesItemsCache;
-  ProxySort? _visibleEntriesSortCache;
   bool _embeddedListActivated = false;
   bool? _visibleEntriesCanAddChainCache;
-  bool Function(String tag)? _visibleEntriesChainPredicateCache;
   String? _visibleEntriesSelectedTagCache;
+  int _presentationGeneration = 0;
+  bool _presentationInFlight = false;
+  bool _presentationPending = false;
+  bool _presentationLoading = false;
+  String? _presentationProfileId;
 
   bool _isProxyChain(AppProxySummary proxy) =>
       widget.isProxyChainTag?.call(proxy.tag) ?? false;
@@ -605,6 +608,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
 
   @override
   void dispose() {
+    ++_presentationGeneration;
     _runtimeResortTimer?.cancel();
     widget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
     _observedSheetMetrics?.removeListener(_onSheetMetricsChanged);
@@ -699,6 +703,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   void _releaseEmbeddedListPresentation() {
+    ++_presentationGeneration;
+    _presentationPending = false;
+    _presentationLoading = false;
     _runtimeResortTimer?.cancel();
     _runtimeResortTimer = null;
     _listScrollActive = false;
@@ -715,7 +722,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
         (widget.embedded && !_embeddedListActivated) ||
         (!_proxyDataRefreshPending &&
             _sort != ProxySort.latency &&
-            _sort != ProxySort.working)) {
+            _sort != ProxySort.working &&
+            _sort != ProxySort.country)) {
       return;
     }
     if (_listScrollActive) {
@@ -734,7 +742,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
           (widget.embedded && !_embeddedListActivated) ||
           (!_proxyDataRefreshPending &&
               _sort != ProxySort.latency &&
-              _sort != ProxySort.working)) {
+              _sort != ProxySort.working &&
+              _sort != ProxySort.country)) {
         return;
       }
       if (_listScrollActive) {
@@ -768,37 +777,131 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _invalidateVisibleEntries();
       return false;
     }
-    final visibleItems = <AppProxySummary>[];
-    for (final proxy in widget.proxies) {
-      final parentTag = proxy.parentGroupTag;
-      if (parentTag != null && parentTag.isNotEmpty) {
-        continue;
-      }
-      if (proxy.tag == widget.selectedTag ||
-          _isPinnedHeaderProxy(proxy) ||
-          shouldShowProxyForSort(
-            proxy,
-            _sort,
-            runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
-          )) {
-        visibleItems.add(proxy);
-      }
+    ++_presentationGeneration;
+    if (_presentationProfileId != widget.profileId) {
+      _visibleItems = const [];
+      _invalidateVisibleEntries();
     }
-
-    _sortItems(visibleItems);
-    final nextItems = visibleItems;
-    // Individual rows already listen to their runtime state. Rebuilding the
-    // list is only necessary when filtering or sorting changes its contents.
-    if (listEquals(_visibleItems, nextItems)) {
+    _presentationProfileId = widget.profileId;
+    if (widget.proxies.length >= 500) {
+      _presentationLoading = _visibleItems.isEmpty;
+      _presentationPending = true;
+      unawaited(_prepareLargePresentation());
       return false;
     }
-    _visibleItems = nextItems;
-    _invalidateVisibleEntries();
-    return true;
+    _presentationPending = false;
+    _presentationLoading = false;
+    return _applyPresentation(
+      buildProxyListPresentation(
+        ProxyListPresentationInput(
+          proxies: widget.proxies,
+          sort: _sort,
+          selectedTag: widget.selectedTag,
+          canAddChain: widget.onAddProxyChain != null,
+          chainTags: {
+            for (final proxy in widget.proxies)
+              if (_isProxyChain(proxy)) proxy.tag,
+          },
+          runtimeStates: {
+            for (final proxy in widget.proxies)
+              proxy.tag: ?widget.runtimeStates?.valueFor(proxy.tag),
+          },
+        ),
+      ),
+    );
   }
 
-  bool _isPinnedHeaderProxy(AppProxySummary proxy) =>
-      isLowestProxyTag(proxy.tag) || _isProxyChain(proxy);
+  Future<void> _prepareLargePresentation() async {
+    if (_presentationInFlight) return;
+    _presentationInFlight = true;
+    try {
+      while (_presentationPending && mounted) {
+        _presentationPending = false;
+        final generation = _presentationGeneration;
+        final preparationTimer = Stopwatch()..start();
+        final proxies = widget.proxies;
+        final sort = _sort;
+        final selectedTag = widget.selectedTag;
+        final canAddChain = widget.onAddProxyChain != null;
+        final chainPredicate = widget.isProxyChainTag;
+        final runtimeStates = widget.runtimeStates;
+        final states = <String, ProxyRuntimeVisualState>{};
+        final chains = <String>{};
+        // Resolver callbacks belong to the UI isolate. Snapshot them in small
+        // batches, yielding between batches, then send only values to compute.
+        for (var start = 0; start < proxies.length; start += 128) {
+          await Future<void>.delayed(Duration.zero);
+          if (!mounted || generation != _presentationGeneration) break;
+          for (var i = start; i < min(start + 128, proxies.length); i++) {
+            final proxy = proxies[i];
+            if (chainPredicate?.call(proxy.tag) ?? false) chains.add(proxy.tag);
+            if (sort != ProxySort.source) {
+              final state = runtimeStates?.valueFor(proxy.tag);
+              if (state != null) states[proxy.tag] = state;
+            }
+          }
+        }
+        if (!mounted || generation != _presentationGeneration) continue;
+        final result = await buildProxyListPresentationInBackground(
+          ProxyListPresentationInput(
+            proxies: proxies,
+            sort: sort,
+            selectedTag: selectedTag,
+            canAddChain: canAddChain,
+            chainTags: chains,
+            runtimeStates: states,
+          ),
+        );
+        if (!mounted || generation != _presentationGeneration) continue;
+        if (_listScrollActive) {
+          _runtimeResortPending = true;
+          _proxyDataRefreshPending = true;
+          continue;
+        }
+        final applyTimer = Stopwatch()..start();
+        final wasLoading = _presentationLoading;
+        _presentationLoading = false;
+        final changed = _applyPresentation(result);
+        if (changed || wasLoading) setState(() {});
+        AppLogStore.debug(
+          'proxy presentation',
+          'rows=${proxies.length} sort=${sort.name} '
+              'prepareElapsedMs=${preparationTimer.elapsedMilliseconds} '
+              'workerMs=${result.workerElapsed.inMilliseconds} '
+              'applyUiUs=${applyTimer.elapsedMicroseconds}',
+        );
+      }
+    } catch (error, stack) {
+      if (mounted && !_presentationPending) {
+        setState(() => _presentationLoading = false);
+      }
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'proxy list preparation',
+        ),
+      );
+    } finally {
+      _presentationInFlight = false;
+      if (mounted && _presentationPending) {
+        unawaited(_prepareLargePresentation());
+      }
+    }
+  }
+
+  bool _applyPresentation(ProxyListPresentation result) {
+    final changed =
+        !listEquals(_visibleItems, result.items) ||
+        _visibleEntriesSelectedTagCache != widget.selectedTag ||
+        _visibleEntriesCanAddChainCache != (widget.onAddProxyChain != null);
+    _visibleItems = result.items;
+    _visibleEntriesCache = result.entries;
+    _visibleEntryIndexes = result.indexes;
+    _visibleEntriesSelectedTagCache = widget.selectedTag;
+    _visibleEntriesCanAddChainCache = widget.onAddProxyChain != null;
+    return changed;
+  }
 
   List<_ProxyListEntry> _visibleEntries() {
     if (kDebugMode) {
@@ -815,66 +918,16 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   List<_ProxyListEntry> _visibleEntriesImpl() {
-    final cached = _visibleEntriesCache;
-    if (cached != null &&
-        identical(_visibleEntriesItemsCache, _visibleItems) &&
-        _visibleEntriesSortCache == _sort &&
-        _visibleEntriesSelectedTagCache == widget.selectedTag &&
-        _visibleEntriesCanAddChainCache == (widget.onAddProxyChain != null) &&
-        _visibleEntriesChainPredicateCache == widget.isProxyChainTag) {
-      return cached;
-    }
-    AppProxySummary? selected;
-    final primary = <AppProxySummary>[];
-    final chains = <AppProxySummary>[];
-    final rest = <AppProxySummary>[];
-    for (final proxy in _visibleItems) {
-      if (selected == null && proxy.tag == widget.selectedTag) {
-        selected = proxy;
-      } else if (isLowestProxyTag(proxy.tag)) {
-        primary.add(proxy);
-      } else if (_isProxyChain(proxy)) {
-        chains.add(proxy);
-      } else {
-        rest.add(proxy);
-      }
-    }
-    int byPinnedOrder(AppProxySummary a, AppProxySummary b) =>
-        pinnedProxyTagOrder(a.tag).compareTo(pinnedProxyTagOrder(b.tag));
-    primary.sort(byPinnedOrder);
-    final hasPinnedHeader =
-        (selected != null && _isPinnedHeaderProxy(selected)) ||
-        primary.isNotEmpty ||
-        chains.isNotEmpty ||
-        widget.onAddProxyChain != null;
-    final entries = <_ProxyListEntry>[
-      if (selected != null) _ProxyListEntry.tile(selected),
-      for (final proxy in primary) _ProxyListEntry.tile(proxy),
-      for (final proxy in chains) _ProxyListEntry.tile(proxy),
-      if (widget.onAddProxyChain != null) const _ProxyListEntry.addChain(),
-      if (rest.isNotEmpty && hasPinnedHeader) const _ProxyListEntry.divider(),
-      for (final proxy in rest) _ProxyListEntry.tile(proxy),
-    ];
-    _visibleEntriesCache = entries;
-    _visibleEntryIndexes = <Key, int>{
-      for (var i = 0; i < entries.length; i++) entries[i].key: i,
-    };
-    _visibleEntriesItemsCache = _visibleItems;
-    _visibleEntriesSortCache = _sort;
-    _visibleEntriesSelectedTagCache = widget.selectedTag;
-    _visibleEntriesCanAddChainCache = widget.onAddProxyChain != null;
-    _visibleEntriesChainPredicateCache = widget.isProxyChainTag;
-    return entries;
+    // Keep the previous complete presentation interactive while its replacement
+    // is prepared. Never reconstruct thousands of entries during build().
+    return _visibleEntriesCache ?? const [];
   }
 
   void _invalidateVisibleEntries() {
     _visibleEntriesCache = null;
     _visibleEntryIndexes = const <Key, int>{};
-    _visibleEntriesItemsCache = null;
-    _visibleEntriesSortCache = null;
     _visibleEntriesSelectedTagCache = null;
     _visibleEntriesCanAddChainCache = null;
-    _visibleEntriesChainPredicateCache = null;
   }
 
   List<AppProxySummary> _groupChildren(AppProxySummary group) {
@@ -1255,11 +1308,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
             : EdgeInsets.zero,
         itemCount: !listMounted
             ? 0
-            : widget.proxies.isEmpty
+            : widget.proxies.isEmpty ||
+                  (_presentationLoading && entries.isEmpty)
             ? 1
             : entries.length,
         itemBuilder: (context, index) {
-          if (widget.proxies.isEmpty) {
+          if (widget.proxies.isEmpty ||
+              (_presentationLoading && entries.isEmpty)) {
             return _buildEmptyOrLoadingState(context: context, l10n: l10n);
           }
           return KeyedSubtree(
@@ -1320,10 +1375,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required double listTopPadding,
     required double listBottomPadding,
   }) {
-    if (widget.proxies.isEmpty) {
+    final entries = _visibleEntries();
+    if (widget.proxies.isEmpty || (_presentationLoading && entries.isEmpty)) {
       return _buildEmptyOrLoadingState(context: context, l10n: l10n);
     }
-    final entries = _visibleEntries();
     return ListView.builder(
       scrollCacheExtent: _kProxyListScrollCacheExtent,
       addAutomaticKeepAlives: false,
@@ -1349,7 +1404,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required BuildContext context,
     required AppLocalizations l10n,
   }) {
-    if (widget.loading) {
+    if (widget.loading || _presentationLoading) {
       return const Center(
         child: SizedBox(
           width: 28,

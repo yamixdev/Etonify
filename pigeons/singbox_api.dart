@@ -75,6 +75,7 @@ class UrlTestRequestMessage {
     required this.includeOutboundTags,
     required this.logicalSessionId,
     required this.physicalNetworkEpoch,
+    this.startupLeaseToken = 0,
   });
 
   String groupTag;
@@ -90,6 +91,7 @@ class UrlTestRequestMessage {
   List<String> includeOutboundTags;
   String logicalSessionId;
   int physicalNetworkEpoch;
+  int startupLeaseToken;
 }
 
 class VpnNotificationPresentationMessage {
@@ -320,6 +322,13 @@ abstract class SingboxHostApi {
 
   @asyncCallback
   void urlTest(UrlTestRequestMessage request);
+
+  /// Shares the tile's one startup leaf measurement with the client sweep.
+  @asyncCallback
+  Map<String?, Object?> prepareStartupUrlTest(
+    int runtimeGeneration,
+    List<String> coveredTags,
+  );
 
   @asyncCallback
   void cancelUrlTest(String groupTag, String targetOutboundTag);

@@ -46,6 +46,7 @@ import 'package:meow_client/app/runtime_recovery_policy.dart';
 import 'package:meow_client/app/runtime_session_coordinator.dart';
 import 'package:meow_client/app/singbox_config_coordinator.dart';
 import 'package:meow_client/app/startup_latency_deadline_controller.dart';
+import 'package:meow_client/app/startup_url_test_handoff.dart';
 import 'package:meow_client/app/subscription_coordinator.dart';
 import 'package:meow_client/data/subscription/subscription_background_updates.dart';
 import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
@@ -206,6 +207,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   String? _lastWireGuardWarningSubscriptionId;
   ActiveProxyIpSnapshot _activeProxyIp = const ActiveProxyIpSnapshot.idle();
   final ProxySelectionController _proxySelection = ProxySelectionController();
+  int _startupUrlTestSelectionEpoch = 0;
   final ActiveProxyIpController _activeProxyIpController =
       ActiveProxyIpController();
   late final AppBootstrapController _bootstrapController;
@@ -515,6 +517,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     Map<String, List<AppProxySummary>> children,
   ) {
     _activeGroupChildrenByTagCache = children;
+    if (children.isEmpty) _proxySummariesByTagCache = const {};
     _latencyChildMembershipGeneration++;
   }
 
@@ -585,11 +588,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
             ? await buildProxyCacheInBackground(input)
             : await buildHomeProxyCacheInBackground(input);
         if (mounted && generation == _derivedCacheBuildGeneration) {
+          final applyStopwatch = Stopwatch()..start();
           setState(() {
             _activeProfileCache = result.activeProfile;
             _displayProxyCache = result.displayProxy;
             _activeProxiesCache = result.activeProxies;
             _setActiveGroupChildrenCache(result.groupChildrenByTag);
+            _proxySummariesByTagCache = result.summariesByTag;
             _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
             _fullProxyListCacheReady = result.includesFullProxyList;
             _fullProxyListCacheRequested = result.includesFullProxyList;
@@ -602,7 +607,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
             AppLogStore.info(
               'proxy cache',
               'full build rows=${result.totalTopLevelProxyCount} '
-                  'elapsedMs=${buildStopwatch.elapsedMilliseconds}',
+                  'prepareElapsedMs=${buildStopwatch.elapsedMilliseconds - applyStopwatch.elapsedMilliseconds} '
+                  'workerMs=${result.workerElapsed.inMilliseconds} '
+                  'applyUiMs=${applyStopwatch.elapsedMilliseconds}',
             );
           }
           if (buildFullProxyList && !_proxyPanelOpen) {
@@ -783,6 +790,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _proxySelection.pendingRuntimeSelectTag != null &&
         _proxySelection.pendingRuntimeSelectTag == proxy.tag;
     return ProxyRuntimeVisualState(
+      presentation: proxy,
       latency: proxy.latency,
       latencyFresh: proxy.latencyFresh,
       latencyChecking: proxy.latencyChecking,
@@ -798,7 +806,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _publishProxyRuntimeVisualStates() {
-    _refreshProxySummariesByTagCache();
     final displayProxy = _displayProxyCache;
     _proxyRuntimeVisualStates.replaceResolver(
       _runtimeVisualStateForTag,
@@ -808,26 +815,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   ProxyRuntimeVisualState? _runtimeVisualStateForTag(String tag) {
     final proxy =
-        _proxySummariesByTagCache[tag] ?? _displayProxyForSelectedTag(tag);
+        (_displayProxyCache?.tag == tag ? _displayProxyCache : null) ??
+        _proxySummariesByTagCache[tag] ??
+        _displayProxyForSelectedTag(tag);
     if (proxy == null) {
       return null;
     }
     return _runtimeVisualStateFor(
       _withRuntimeProxyState(proxy, _proxySummariesByTagCache),
     );
-  }
-
-  void _refreshProxySummariesByTagCache() {
-    final summaries = <String, AppProxySummary>{
-      for (final proxy in _activeProxiesCache) proxy.tag: proxy,
-      for (final children in _activeGroupChildrenByTagCache.values)
-        for (final proxy in children) proxy.tag: proxy,
-    };
-    final displayProxy = _displayProxyCache;
-    if (displayProxy != null) {
-      summaries[displayProxy.tag] = displayProxy;
-    }
-    _proxySummariesByTagCache = summaries;
   }
 
   void _publishProxyRuntimeVisualStatesForTags(
@@ -1297,6 +1293,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _displayProxyCache = result.displayProxy;
     _activeProxiesCache = result.activeProxies;
     _setActiveGroupChildrenCache(result.groupChildrenByTag);
+    _proxySummariesByTagCache = result.summariesByTag;
     _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
     _fullProxyListCacheReady = result.includesFullProxyList;
     _fullProxyListCacheRequested = result.includesFullProxyList;
@@ -1385,38 +1382,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (_activeProxiesCache.isEmpty && _displayProxyCache == null) {
       return;
     }
-    final previousSummariesByTag = <String, AppProxySummary>{
-      for (final proxy in _activeProxiesCache) proxy.tag: proxy,
-      for (final children in _activeGroupChildrenByTagCache.values)
-        for (final proxy in children) proxy.tag: proxy,
-    };
-    final previousDisplayProxy = _displayProxyCache;
-    if (previousDisplayProxy != null) {
-      previousSummariesByTag[previousDisplayProxy.tag] = previousDisplayProxy;
-    }
-    _activeProxiesCache = _activeProxiesCache
-        .map((proxy) => _withRuntimeProxyState(proxy, previousSummariesByTag))
-        .toList(growable: false);
-    _activeGroupChildrenByTagCache = {
-      for (final entry in _activeGroupChildrenByTagCache.entries)
-        entry.key: entry.value
-            .map(
-              (proxy) => _withRuntimeProxyState(proxy, previousSummariesByTag),
-            )
-            .toList(growable: false),
-    };
-    final summariesByTag = <String, AppProxySummary>{
-      for (final proxy in _activeProxiesCache) proxy.tag: proxy,
-      for (final children in _activeGroupChildrenByTagCache.values)
-        for (final proxy in children) proxy.tag: proxy,
-    };
     final currentDisplay = _displayProxyCache;
-    if (currentDisplay != null) {
-      summariesByTag[currentDisplay.tag] = currentDisplay;
-    }
     _displayProxyCache = currentDisplay == null
         ? null
-        : _withRuntimeProxyState(currentDisplay, summariesByTag);
+        : _withRuntimeProxyState(currentDisplay, _proxySummariesByTagCache);
     _publishProxyRuntimeVisualStates();
     _publishTrafficDashboardSnapshot();
     _scheduleVpnNotificationSync();
@@ -1783,6 +1752,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   AppProxySummary _withDirectRuntimeProxyState(AppProxySummary proxy) {
+    final currentOutbound = _activeOutboundByTagLookup[proxy.tag];
     final latencyChecking = _latencyCoordinator.isChecking(proxy.tag);
     final latencyInvalidated = _proxyRuntime.isLatencyInvalidated(proxy.tag);
     final runtimeLatency = _runtimeLatencies[proxy.tag];
@@ -1818,7 +1788,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final activeIpChecking =
         activeIpMatches && _activeProxyIp.state == ActiveProxyIpState.checking;
     return proxy.copyWith(
-      ip: activeIpOverride,
+      countryCode: currentOutbound == null
+          ? null
+          : _displayOutboundCountry(currentOutbound),
+      ip: activeIpOverride ?? currentOutbound?.info.externalIp?.trim(),
       ipChecking: activeIpChecking,
       latency: runtimeLatency,
       clearLatency: shouldClearLatency,
@@ -1864,19 +1837,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _proxyChainForTag(normalized) != null ||
           isLowestProxyTag(normalized);
     }
-    for (final proxy in _activeProxiesCache) {
-      if (proxy.tag == normalized) {
-        return true;
-      }
-    }
-    for (final children in _activeGroupChildrenByTagCache.values) {
-      for (final proxy in children) {
-        if (proxy.tag == normalized) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return _proxySummariesByTagCache.containsKey(normalized);
   }
 
   bool _visibleGroupProxyCacheMissingChild(String groupTag, String childTag) {
@@ -2210,6 +2171,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         includeOutboundTags: request.includeOutboundTags,
         logicalSessionId: request.logicalSessionId,
         physicalNetworkEpoch: request.physicalNetworkEpoch,
+        startupLeaseToken: request.startupLeaseToken,
       ),
       cancelTest: (groupTag, targetOutboundTag) =>
           _singboxRuntime.cancelUrlTest(
@@ -4628,6 +4590,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         subscription?.outbounds,
         subscription?.groups,
         subscription?.proxyChains,
+        _runtimeRecovery.lastStartedUrlTestOutboundTags,
       ),
       visibleTags: _userVisibleServerTags,
       testableTags: () => _runtimeRecovery.lastStartedUrlTestOutboundTags,
@@ -4680,6 +4643,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         'latency',
         'urltest_reconcile profile=${_activeSubscription?.id ?? "none"} '
             'expected=${nextState.total} completed=${nextState.completed ?? nextState.tested} '
+            'testable=${nextState.testable} excluded=${nextState.skipped} pending=${nextState.pending} '
             'visibleSuccess=${nextState.working}',
       );
     }
@@ -4822,6 +4786,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'latency',
           'automatic URLTest start reason=$reason scope=${nextScope.name}',
         );
+        if (reason == 'runtime_diagnostics_ready') {
+          return _runStartupGroupUrlTest(nextScope);
+        }
         if (nextScope == AutomaticUrlTestScope.selected) {
           if (_concreteTagsForProxyGroup(_selectedProxyTag).isNotEmpty) {
             return _checkProxyGroup(
@@ -4879,6 +4846,176 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ),
       maxRunAttempts: 1,
     );
+  }
+
+  Future<bool> _runStartupGroupUrlTest(
+    AutomaticUrlTestScope scope, {
+    bool selectionRetryAllowed = true,
+  }) async {
+    if (scope == AutomaticUrlTestScope.none) return Future.value(false);
+    final runtimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
+    final operationGeneration = _runtimeOperations.urlTestGeneration;
+    final networkGeneration = _networkInterfaceGeneration;
+    final epoch = _physicalNetworkEpoch;
+    final selection = _proxySelection.generation;
+    final selectionEpoch = _startupUrlTestSelectionEpoch;
+    final selectedProxyTag = _selectedProxyTag;
+    final subscriptionId = _activeSubscription?.id;
+    final revision = _activeSubscription?.payloadRevision;
+    final selectedMembers = _concreteTagsForProxyGroup(_selectedProxyTag);
+    final target = _currentResolvedActiveOutboundTag()?.trim() ?? '';
+    final tags = scope == AutomaticUrlTestScope.full
+        ? _expectedLatencyTagsForSession('').toList()
+        : selectedMembers.isNotEmpty
+        ? selectedMembers.toList()
+        : [if (target.isNotEmpty) target];
+    bool contextCurrent() =>
+        mounted &&
+        _connected &&
+        _foregroundLifecycleActive &&
+        !_runtimeTransitionInProgress &&
+        _runtimeOperations.diagnosticsReady &&
+        !_latencyCoordinator.isCurrentSessionManual &&
+        runtimeGeneration == _runtimeOperations.nativeRuntimeGeneration &&
+        operationGeneration == _runtimeOperations.urlTestGeneration &&
+        networkGeneration == _networkInterfaceGeneration &&
+        epoch == _physicalNetworkEpoch &&
+        _proxySelection.isCurrentGeneration(selection) &&
+        subscriptionId == _activeSubscription?.id &&
+        revision == _activeSubscription?.payloadRevision;
+    bool current() =>
+        contextCurrent() &&
+        selectionEpoch == _startupUrlTestSelectionEpoch &&
+        selectedProxyTag == _selectedProxyTag &&
+        target == (_currentResolvedActiveOutboundTag()?.trim() ?? '');
+    void replayBorrowed(
+      Map<String, dynamic> reply, {
+      bool reconcileSelection = false,
+    }) {
+      if (!current()) return;
+      final borrowedTag = reply['borrowedTag']?.toString() ?? '';
+      if (!tags.contains(borrowedTag) ||
+          (reply['measuredAtMillis'] as num? ?? 0) <= 0 ||
+          (reply['revision'] as num? ?? 0) <= 0 ||
+          (reply['sessionId'] as num? ?? 0) <= 0) {
+        return;
+      }
+      _applyRuntimeUrlTestResult(
+        RuntimeUrlTestResult(
+          tag: borrowedTag,
+          measuredAtMillis: (reply['measuredAtMillis'] as num).toInt(),
+          delay: (reply['delayMillis'] as num?)?.toInt() ?? 0,
+          status: reply['status']?.toString() ?? '',
+          error: reply['error']?.toString() ?? '',
+          errorCode: reply['errorCode']?.toString() ?? '',
+          revision: (reply['revision'] as num).toInt(),
+          networkGeneration: (reply['networkGeneration'] as num).toInt(),
+          sessionId: (reply['sessionId'] as num).toInt(),
+        ),
+        borrowedStartupResult: reconcileSelection,
+      );
+    }
+
+    var selectionReconciled = false;
+    final success = await runStartupUrlTestHandoff(
+      runtimeGeneration: runtimeGeneration,
+      networkGeneration: networkGeneration,
+      coveredTags: tags,
+      prepare: (coverage) => _singboxRuntime.prepareStartupUrlTest(
+        runtimeGeneration: runtimeGeneration,
+        coveredTags: coverage,
+      ),
+      isCurrent: current,
+      acceptNativeSelection: (reply) {
+        final rawSelections = reply['selectedOutbounds'];
+        if (rawSelections is! Map || rawSelections.isEmpty) return true;
+        final knownGroups = {
+          'select',
+          ...lowestProxyTags,
+          ..._activeGroupByTagLookup.keys,
+        };
+        final nativeSelections = <String, String>{
+          for (final entry in rawSelections.entries)
+            if (knownGroups.contains(entry.key) && entry.value is String)
+              entry.key as String: entry.value as String,
+        };
+        final localSelections = {
+          ..._runtimeGroupSelections,
+          ..._runtimeLowestSelections,
+          'select': _selectedProxyTag,
+        };
+        if (nativeSelections.entries.every(
+          (entry) => localSelections[entry.key] == entry.value,
+        )) {
+          return true;
+        }
+        if (!current()) return false;
+        // A fresh native result must replace an old unavailable marker BEFORE
+        // applying lowest's choice, otherwise that choice gets pruned by the
+        // previous telemetry. Ownership/runtime/network were fenced above.
+        replayBorrowed(reply, reconcileSelection: true);
+        // This is real native selection data, not a fabricated latency event.
+        // The existing groups path retains telemetry and updates derived
+        // caches/selection guards in exactly the same way as the event stream.
+        _applyGroupUpdatesImpl(
+          RuntimeGroupsEvent(
+            runtimeGeneration: runtimeGeneration,
+            networkGeneration: networkGeneration,
+            groups: [
+              for (final entry in nativeSelections.entries)
+                {'tag': entry.key, 'selected': entry.value},
+            ],
+          ),
+        );
+        selectionReconciled = true;
+        return false;
+      },
+      acceptBorrowed: replayBorrowed,
+      runRemaining: (remaining, startupLeaseToken) {
+        if (scope == AutomaticUrlTestScope.full) {
+          return _latencyCoordinator.runFull(
+            reason: 'runtime_diagnostics_ready',
+            mode: 'manual',
+            includeOutboundTags: remaining,
+            startupLeaseToken: startupLeaseToken,
+          );
+        }
+        if (selectedMembers.isNotEmpty) {
+          // The reservation covers the prepared leaf set. Do not prune its
+          // active leaf via the usual group's freshness optimizer before the
+          // native dispatch fence validates that reservation.
+          if (startupLeaseToken > 0) {
+            return _latencyCoordinator.runFull(
+              reason: 'automatic_selected_group_runtime_diagnostics_ready',
+              mode: 'manual',
+              includeOutboundTags: remaining,
+              startupLeaseToken: startupLeaseToken,
+            );
+          }
+          return _latencyCoordinator.runMembers(
+            tags: remaining,
+            reason: 'automatic_selected_group_runtime_diagnostics_ready',
+            force: false,
+            hasFreshResult: _hasFreshUrlTestResult,
+            isAvailable: (tag) => _urlTestProgressResultForTag(tag) == true,
+            isCurrent: current,
+            startupLeaseToken: startupLeaseToken,
+          );
+        }
+        return _latencyCoordinator.runTarget(
+          targetOutboundTag: remaining.single,
+          reason: 'automatic_selected_runtime_diagnostics_ready',
+          force: false,
+          startupLeaseToken: startupLeaseToken,
+        );
+      },
+    );
+    if (selectionReconciled && selectionRetryAllowed && contextCurrent()) {
+      // Recompute both selected coverage and the passive-result target once.
+      // Re-prepare borrows the same native result rather than probing twice.
+      return _runStartupGroupUrlTest(scope, selectionRetryAllowed: false);
+    }
+    return success;
   }
 
   Future<void> _addProxyChain(String detourTag, String targetRef) async {
@@ -7621,11 +7758,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  void _applyRuntimeUrlTestResult(RuntimeUrlTestResult result) {
+  void _applyRuntimeUrlTestResult(
+    RuntimeUrlTestResult result, {
+    bool borrowedStartupResult = false,
+  }) {
     final accepted = _latencyCoordinator.handleCoreResult(
       tag: result.tag,
       sessionId: result.sessionId,
       revision: result.revision,
+      borrowedStartupResult: borrowedStartupResult,
       available:
           result.delay > 0 &&
           result.status.toLowerCase() !=
@@ -8463,6 +8604,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final previousActiveOutboundTag = _connected
         ? _currentResolvedActiveOutboundTag()
         : null;
+    final previousGroupSelections = Map<String, String>.of(
+      _runtimeGroupSelections,
+    );
+    final previousLowestSelections = Map<String, String>.of(
+      _runtimeLowestSelections,
+    );
     _ensureActiveLookupCaches();
 
     final result = _proxyRuntime.applyGroupUpdates(
@@ -8479,6 +8626,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         visibleGroupProxyCacheMissingChild: _visibleGroupProxyCacheMissingChild,
       ),
     );
+    if (!mapEquals(previousGroupSelections, _runtimeGroupSelections) ||
+        !mapEquals(previousLowestSelections, _runtimeLowestSelections)) {
+      _startupUrlTestSelectionEpoch++;
+    }
     _forwardLatencyEvents(result.latencyEvents);
     // Group snapshots also carry individual measurements (including checks
     // initiated by the notification). They use the same freshness gate.
@@ -8833,6 +8984,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     required String subscriptionId,
     required Map<String, ResolvedExternalIpInfo> resolvedByTag,
     required Map<String, String> expectedOutboundKeys,
+    bool retryAllowed = true,
   }) async {
     if (resolvedByTag.isEmpty ||
         !_connected ||
@@ -8844,54 +8996,65 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (latestSubscription == null || latestSubscription.id != subscriptionId) {
       return;
     }
-    var subscriptionChanged = false;
-    final changedTags = <String>{};
-    final updatedSubscription = latestSubscription.copyWith(
-      outbounds: latestSubscription.outbounds
-          .map((outbound) {
-            final resolved = resolvedByTag[outbound.tag];
-            if (resolved == null ||
-                expectedOutboundKeys[outbound.tag] !=
-                    SubscriptionStore.outboundIdentityKey(outbound.config)) {
-              return outbound;
-            }
-            final legacyLocationStoredInCountry =
-                outbound.info.exitCountry == null &&
-                (outbound.info.externalIp?.trim().isNotEmpty ?? false);
-            final inferredSourceCountry = legacyLocationStoredInCountry
-                ? SubscriptionStore.inferCountryCodeFromName(outbound.name)
-                : null;
-            final sourceCountry =
-                inferredSourceCountry ?? outbound.info.country;
-            final nextExitCountry =
-                resolved.countryCode ?? outbound.info.exitCountry;
-            final nextInfo = outbound.info.copyWith(
-              externalIp: resolved.ip,
-              country: sourceCountry,
-              exitCountry: nextExitCountry,
-            );
-            if (nextInfo.externalIp == outbound.info.externalIp &&
-                nextInfo.country == outbound.info.country &&
-                nextInfo.exitCountry == outbound.info.exitCountry) {
-              return outbound;
-            }
-            subscriptionChanged = true;
-            changedTags.add(outbound.tag);
-            return outbound.copyWith(info: nextInfo);
-          })
-          .toList(growable: false),
+    _ensureActiveLookupCaches();
+    final updates = <String, OutboundInfo>{};
+    for (final entry in resolvedByTag.entries) {
+      final outbound = _activeOutboundByTagLookup[entry.key];
+      if (outbound == null ||
+          expectedOutboundKeys[entry.key] !=
+              SubscriptionStore.outboundIdentityKey(outbound.config)) {
+        continue;
+      }
+      final resolved = entry.value;
+      final legacyLocationStoredInCountry =
+          outbound.info.exitCountry == null &&
+          (outbound.info.externalIp?.trim().isNotEmpty ?? false);
+      final inferredSourceCountry = legacyLocationStoredInCountry
+          ? SubscriptionStore.inferCountryCodeFromName(outbound.name)
+          : null;
+      final sourceCountry = inferredSourceCountry ?? outbound.info.country;
+      final nextExitCountry = resolved.countryCode ?? outbound.info.exitCountry;
+      final nextInfo = outbound.info.copyWith(
+        externalIp: resolved.ip,
+        country: sourceCountry,
+        exitCountry: nextExitCountry,
+      );
+      if (nextInfo.externalIp == outbound.info.externalIp &&
+          nextInfo.country == outbound.info.country &&
+          nextInfo.exitCountry == outbound.info.exitCountry) {
+        continue;
+      }
+      updates[outbound.tag] = nextInfo;
+    }
+    if (updates.isEmpty) return;
+    final replacement = await replaceProxyMetadataInBackground(
+      latestSubscription,
+      updates,
     );
-    if (!subscriptionChanged || !mounted) {
+    if (!mounted || !_connected || _markAllServersRussia) return;
+    if (!identical(_activeSubscription, latestSubscription)) {
+      if (retryAllowed && _activeSubscription?.id == subscriptionId) {
+        await _applyResolvedExternalIpInfos(
+          subscriptionId: subscriptionId,
+          resolvedByTag: resolvedByTag,
+          expectedOutboundKeys: expectedOutboundKeys,
+          retryAllowed: false,
+        );
+      }
       return;
     }
-    setState(() {
-      _subscriptions = _replaceSubscription(updatedSubscription);
-      _rebuildDerivedCaches();
-    });
+    final updatedSubscription = replacement.subscription;
+    final changedTags = updates.keys.toSet();
+    // Composition did not change. Swap the worker-built metadata indexes and
+    // notify only affected rows instead of rebuilding the full proxy catalog.
+    _subscriptions = _replaceSubscription(updatedSubscription);
+    _activeLookupSubscription = updatedSubscription;
+    _activeOutboundByTagLookup = replacement.outboundByTag;
+    _activeVisibleOutboundsLookup = replacement.visibleOutbounds;
+    _publishProxyRuntimeVisualStatesForUrlTestTags(changedTags);
+    _applyRuntimeStateToDerivedCaches();
     final sourceCountriesByTag = <String, String?>{
-      for (final outbound in updatedSubscription.outbounds)
-        if (changedTags.contains(outbound.tag))
-          outbound.tag: outbound.info.country,
+      for (final entry in updates.entries) entry.key: entry.value.country,
     };
     await SubscriptionStore.saveOutboundRuntimeInfoInBackground(
       updatedSubscription.id,

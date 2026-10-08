@@ -294,23 +294,35 @@ class _ProxySheetHeader extends StatelessWidget {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (showTested)
-                                    Text(
-                                      progressState.isPaused
-                                          ? l10n.proxiesCheckPaused
-                                          : l10n.proxiesProgressTested(
-                                              progressState.tested,
-                                              progressState.total,
+                                  if (showTested || progressState.skipped > 0)
+                                    Tooltip(
+                                      message: progressState.skipped > 0
+                                          ? l10n.proxiesProgressSkippedExplanation
+                                          : '',
+                                      child: Text(
+                                        !showTested
+                                            ? l10n.proxiesProgressSkipped(
+                                                progressState.skipped,
+                                              )
+                                            : progressState.isPaused
+                                            ? l10n.proxiesCheckPaused
+                                            : l10n.proxiesProgressTested(
+                                                    progressState.tested,
+                                                    progressState.testable,
+                                                  ) +
+                                                  (progressState.skipped > 0
+                                                      ? ' · ${l10n.proxiesProgressSkipped(progressState.skipped)}'
+                                                      : ''),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            color: theme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
+                                      ),
                                     ),
                                   const SizedBox(height: 3),
                                   _ProxyTestProgressBar(

@@ -69,6 +69,12 @@ object SingboxController {
     private val runtimeGeneration = AtomicLong(0)
     private val runtimeStartGeneration = AtomicLong(0)
     private val networkGeneration = AtomicLong(0)
+    val currentNetworkGeneration: Long get() = networkGeneration.get()
+    private val urlTestAttribution = NativeUrlTestAttribution()
+    private val urlTestRequestSequence = AtomicLong()
+    private val notificationLatencyCache = java.util.concurrent.ConcurrentHashMap<String, NativeLatencyResult>()
+    internal fun cachedNotificationLatency(tag: String, runtime: Long, network: Long, selection: Long): NativeLatencyResult? =
+        notificationLatencyCache[tag]?.takeIf { it.runtime == runtime && it.network == network && it.selection == selection }
     private val stopWaiterLock = Any()
     private val stopWaiters = mutableListOf<(Boolean) -> Unit>()
 
@@ -148,7 +154,6 @@ object SingboxController {
 
     private fun createCommandClientHandler(epoch: Long) = object : CommandClientHandler {
         private val groupResults = GroupResultCache()
-        private val urlTestSessionNetworkGenerations = HashMap<Long, Long>()
         override fun connected() {
             handleCommandClientConnected(epoch)
         }
@@ -179,7 +184,9 @@ object SingboxController {
             // Capture before iterating: large provider groups can take long
             // enough for a handover to happen while this snapshot is encoded.
             val eventNetworkGeneration = networkGeneration.get()
+            val eventRuntimeGeneration = activeRuntimeGeneration
             val groups = mutableListOf<Map<String, Any?>>()
+            val notificationResults = mutableListOf<Map<String, Any?>>()
             val selectedGroups = mutableListOf<String>()
             var itemCount = 0
             val uniqueItemTags = mutableSetOf<String>()
@@ -247,12 +254,7 @@ object SingboxController {
                     // A notification action can outlive Flutter's event sink.
                     // Feed its targeted URLTest from the same native stream that
                     // backs the proxy list, never from a synthetic TCP probe.
-                    MeowBoxService.publishNotificationUrlTestResult(
-                        tag = item.tag,
-                        delayMillis = delay.toLong(),
-                        timeSeconds = time,
-                        status = status,
-                    )
+                    notificationResults += result
                 }
                 groups += mapOf(
                     "tag" to group.tag,
@@ -280,16 +282,21 @@ object SingboxController {
                     log("warning", "urltest_high_delay $summary")
                 }
             }
-            if (commandClientLifecycle.acceptsEvents(epoch)) {
+            if (commandClientLifecycle.acceptsEvents(epoch) && eventRuntimeGeneration == activeRuntimeGeneration && eventNetworkGeneration == networkGeneration.get()) {
                 // Keep tile-only notification actions on the actual selected
                 // leaf, including core-restored and nested auto-group choices.
-                MeowBoxService.publishNotificationSelectedOutbounds(groups)
+                MeowBoxService.publishNotificationSelectedOutbounds(groups, eventRuntimeGeneration, eventNetworkGeneration)
+                for (result in notificationResults) MeowBoxService.publishNotificationUrlTestResult(
+                    result["tag"] as? String, result["delay"] as Long, result["time"] as Long,
+                    result["status"] as? String, eventRuntimeGeneration, eventNetworkGeneration,
+                )
+                MeowBoxService.finishNotificationGroupsSnapshot(eventRuntimeGeneration, eventNetworkGeneration)
             }
             emitCoalescedGroups(
                 mapOf(
                     "type" to runtimeEventGroups,
                     "groups" to groups,
-                    "runtimeGeneration" to activeRuntimeGeneration,
+                    "runtimeGeneration" to eventRuntimeGeneration,
                     "networkGeneration" to eventNetworkGeneration,
                 ),
             )
@@ -302,8 +309,8 @@ object SingboxController {
                 "runtimeGeneration" to activeRuntimeGeneration,
             )
             message.result?.let { result ->
-                val eventNetworkGeneration =
-                    urlTestSessionNetworkGenerations[result.sessionID] ?: networkGeneration.get()
+                val context = urlTestAttribution.result(result.sessionID, result.logicalSessionID.orEmpty())
+                val eventNetworkGeneration = context?.network ?: 0L
                 payload["result"] = mapOf(
                     "tag" to result.tag,
                     "measuredAtMillis" to result.measuredAtMillis,
@@ -318,20 +325,33 @@ object SingboxController {
                     "logicalSessionId" to result.logicalSessionID,
                     "physicalNetworkEpoch" to result.physicalNetworkEpoch,
                 )
-                MeowBoxService.publishNotificationUrlTestResult(
+                if (context != null) {
+                    val nativeResult = NativeLatencyResult(context.runtime, context.network, result.tag.orEmpty(),
+                        result.delay.toLong(), result.measuredAtMillis, result.status.orEmpty(), result.revision,
+                        result.sessionID, result.error.orEmpty(), context.selection)
+                    if (context.runtime == activeRuntimeGeneration && context.network == networkGeneration.get() &&
+                        context.selection == MeowBoxService.notificationSelectionEpoch(context.runtime))
+                        notificationLatencyCache[nativeResult.tag] = nativeResult
+                    MeowBoxService.publishNotificationUrlTestResult(
                     tag = result.tag,
                     delayMillis = result.delay.toLong(),
                     timeSeconds = result.measuredAtMillis / 1_000L,
                     status = result.status,
+                    runtimeGeneration = context.runtime,
+                    networkGeneration = context.network,
+                    measuredAtMillis = result.measuredAtMillis,
+                    revision = result.revision,
+                    sessionId = result.sessionID,
+                    error = result.error.orEmpty(),
+                    selectionEpoch = context.selection,
                 )
+                }
             }
             message.session?.let { session ->
-                val eventNetworkGeneration = when (session.state) {
-                    "running" -> urlTestSessionNetworkGenerations.getOrPut(session.sessionID) {
-                        networkGeneration.get()
-                    }
-                    else -> urlTestSessionNetworkGenerations[session.sessionID] ?: networkGeneration.get()
-                }
+                val context = if (session.state == "running")
+                    urlTestAttribution.running(session.sessionID, session.logicalSessionID.orEmpty()) else
+                    urlTestAttribution.result(session.sessionID, session.logicalSessionID.orEmpty())
+                val eventNetworkGeneration = context?.network ?: 0L
                 payload["session"] = mapOf(
                     "sessionId" to session.sessionID,
                     "groupTag" to session.outboundTag,
@@ -349,7 +369,9 @@ object SingboxController {
                     "physicalNetworkEpoch" to session.physicalNetworkEpoch,
                 )
                 if (session.state == "completed" || session.state == "cancelled") {
-                    urlTestSessionNetworkGenerations.remove(session.sessionID)
+                    if (context != null) MeowBoxService.onClientStartupSessionTerminal(
+                        session.logicalSessionID.orEmpty(), context.runtime, context.network,
+                    )
                 }
             }
             if (payload.size > 2) emit(payload)
@@ -368,6 +390,8 @@ object SingboxController {
                     delayMillis = item.urlTestDelay.toLong(),
                     timeSeconds = item.urlTestTime,
                     status = item.urlTestStatus,
+                    runtimeGeneration = activeRuntimeGeneration,
+                    networkGeneration = networkGeneration.get(),
                 )
             }
         }
@@ -535,6 +559,8 @@ object SingboxController {
 
     fun markServiceStarted(mode: String): Long {
         val generation = runtimeGeneration.incrementAndGet()
+        urlTestAttribution.clear()
+        notificationLatencyCache.clear()
         activeRuntimeGeneration = generation
         setRunning(true, mode)
         MeowDiagnostics.log(TAG, "markServiceStarted generation=$generation mode=$mode")
@@ -565,6 +591,8 @@ object SingboxController {
             return
         }
         activeRuntimeGeneration = 0
+        urlTestAttribution.clear()
+        notificationLatencyCache.clear()
         cleanupStandaloneClient()
         // The stop event must still identify the probe that just ended. Dart
         // keeps its URLTest measurements instead of clearing them like a VPN.
@@ -576,6 +604,8 @@ object SingboxController {
     fun forceMarkServiceStopped(reason: String) {
         val previousGeneration = activeRuntimeGeneration
         activeRuntimeGeneration = 0
+        urlTestAttribution.clear()
+        notificationLatencyCache.clear()
         cleanupStandaloneClient()
         setRunning(false, eventRuntimeGeneration = previousGeneration)
         MeowDiagnostics.log(
@@ -935,6 +965,9 @@ object SingboxController {
         includeOutboundTags: List<String> = emptyList(),
         logicalSessionId: String = "",
         physicalNetworkEpoch: Long = 0L,
+        notificationStartup: Boolean = false,
+        notificationStartupToken: Long = 0L,
+        startupLeaseToken: Long = 0L,
         callback: (Result<Unit>) -> Unit,
     ) {
         interactiveUrlTestUntilMs = maxOf(interactiveUrlTestUntilMs,
@@ -945,13 +978,32 @@ object SingboxController {
                 "timeoutMs=$timeoutMillis concurrency=$concurrency deadlineMs=$deadlineMillis",
         )
         val operationGeneration = activeRuntimeGeneration
+        val operationNetworkGeneration = networkGeneration.get()
+        val operationSelectionEpoch = MeowBoxService.notificationSelectionEpoch(operationGeneration)
+        val requestId = logicalSessionId.ifEmpty {
+            "native-${operationGeneration}-${operationNetworkGeneration}-${urlTestRequestSequence.incrementAndGet()}"
+        }
+        var startupClaims = if (notificationStartup || startupLeaseToken != 0L) emptyList() else
+            MeowBoxService.onClientUrlTestRequested(groupTag, targetOutboundTag, includeOutboundTags, excludeOutboundTag, deadlineMillis, requestId)
         commandExecutor.execute {
             var result: Result<Unit> = runCatching {
                 check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
                     "stale runtime before URL test"
                 }
+                check(operationNetworkGeneration == networkGeneration.get()) { "stale network before URL test" }
+                if (notificationStartup && !MeowBoxService.validateNativeStartup(
+                        notificationStartupToken, operationGeneration, operationNetworkGeneration, operationSelectionEpoch,
+                    )) throw StartupUrlTestLeaseExpiredException()
+                if (startupLeaseToken != 0L) {
+                    startupClaims = MeowBoxService.dispatchStartupUrlTest(
+                        startupLeaseToken, operationGeneration, operationNetworkGeneration,
+                        groupTag, targetOutboundTag, includeOutboundTags, excludeOutboundTag, deadlineMillis, requestId,
+                    ) ?: throw StartupUrlTestLeaseExpiredException()
+                }
+                urlTestAttribution.register(requestId, operationGeneration, operationNetworkGeneration,
+                    operationSelectionEpoch)
                 withStandaloneCommandClient { client ->
-                    if (includeOutboundTags.isEmpty() && logicalSessionId.isEmpty()) {
+                    if (includeOutboundTags.isEmpty() && requestId.isEmpty()) {
                         client.urlTestWithMode(
                             groupTag, targetOutboundTag, priorityOutboundTag,
                             excludeOutboundTag, url, timeoutMillis, concurrency,
@@ -970,7 +1022,7 @@ object SingboxController {
                             .put("force", force)
                             .put("mode", mode)
                             .put("includeOutboundTags", org.json.JSONArray(includeOutboundTags))
-                            .put("logicalSessionId", logicalSessionId)
+                            .put("logicalSessionId", requestId)
                             .put("physicalNetworkEpoch", physicalNetworkEpoch.toString())
                             .toString()
                         client.urlTestWithRequestJSON(requestJson)
@@ -981,6 +1033,7 @@ object SingboxController {
                 result = Result.failure(IllegalStateException("stale runtime after URL test"))
             }
             result.onFailure {
+                startupClaims.forEach { (notification, token) -> notification.onClientUrlTestDispatchFailed(token) }
                 val stale = operationGeneration != activeRuntimeGeneration || !running
                 log(
                     if (stale) "debug" else "error",
@@ -1092,8 +1145,13 @@ object SingboxController {
     }
 
     fun noteNetworkGeneration(networkGeneration: Long) {
-        this.networkGeneration.updateAndGet { current ->
+        val previous = this.networkGeneration.getAndUpdate { current ->
             maxOf(current, networkGeneration)
+        }
+        if (networkGeneration > previous) {
+            urlTestAttribution.clear()
+            notificationLatencyCache.clear()
+            MeowBoxService.noteNetworkGeneration(networkGeneration)
         }
     }
 

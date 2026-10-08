@@ -1,9 +1,127 @@
+import 'package:flutter/foundation.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 
 typedef ProxyRuntimeStateResolver =
     ProxyRuntimeVisualState? Function(String tag);
+
+enum ProxyListEntryType { tile, addChain, divider }
+
+class ProxyListEntry {
+  const ProxyListEntry._(this.type, [this.proxy]);
+  const ProxyListEntry.tile(AppProxySummary proxy)
+    : this._(ProxyListEntryType.tile, proxy);
+  const ProxyListEntry.addChain() : this._(ProxyListEntryType.addChain);
+  const ProxyListEntry.divider() : this._(ProxyListEntryType.divider);
+  final ProxyListEntryType type;
+  final AppProxySummary? proxy;
+  Key get key => switch (type) {
+    ProxyListEntryType.tile => ValueKey('proxy-row-${proxy!.tag}'),
+    ProxyListEntryType.addChain => const ValueKey('proxy-add-chain-row'),
+    ProxyListEntryType.divider => const ValueKey('proxy-divider-row'),
+  };
+}
+
+class ProxyListPresentationInput {
+  const ProxyListPresentationInput({
+    required this.proxies,
+    required this.sort,
+    required this.selectedTag,
+    this.canAddChain = false,
+    this.chainTags = const {},
+    this.runtimeStates = const {},
+  });
+  final List<AppProxySummary> proxies;
+  final ProxySort sort;
+  final String selectedTag;
+  final bool canAddChain;
+  final Set<String> chainTags;
+  final Map<String, ProxyRuntimeVisualState> runtimeStates;
+}
+
+class ProxyListPresentation {
+  const ProxyListPresentation(
+    this.items,
+    this.entries,
+    this.indexes,
+    this.workerElapsed,
+  );
+  final List<AppProxySummary> items;
+  final List<ProxyListEntry> entries;
+  final Map<Key, int> indexes;
+  final Duration workerElapsed;
+}
+
+Future<ProxyListPresentation> buildProxyListPresentationInBackground(
+  ProxyListPresentationInput input,
+) => compute(
+  buildProxyListPresentation,
+  input,
+  debugLabel: 'etonify-proxy-list-presentation',
+);
+
+/// Filtering, sorting, section placement and the sliver index share one worker.
+ProxyListPresentation buildProxyListPresentation(
+  ProxyListPresentationInput input,
+) {
+  final timer = Stopwatch()..start();
+  bool pinned(AppProxySummary proxy) =>
+      isLowestProxyTag(proxy.tag) || input.chainTags.contains(proxy.tag);
+  final items = input.proxies
+      .where(
+        (proxy) =>
+            (proxy.parentGroupTag?.isEmpty ?? true) &&
+            (proxy.tag == input.selectedTag ||
+                pinned(proxy) ||
+                shouldShowProxyForSort(
+                  proxy,
+                  input.sort,
+                  runtimeState: input.runtimeStates[proxy.tag],
+                )),
+      )
+      .toList();
+  sortProxySummaries(
+    items,
+    input.sort,
+    prioritizedTag: input.selectedTag,
+    runtimeStateFor: (tag) => input.runtimeStates[tag],
+  );
+  AppProxySummary? selected;
+  final primary = <AppProxySummary>[];
+  final chains = <AppProxySummary>[];
+  final rest = <AppProxySummary>[];
+  for (final proxy in items) {
+    if (selected == null && proxy.tag == input.selectedTag) {
+      selected = proxy;
+    } else if (isLowestProxyTag(proxy.tag)) {
+      primary.add(proxy);
+    } else if (input.chainTags.contains(proxy.tag)) {
+      chains.add(proxy);
+    } else {
+      rest.add(proxy);
+    }
+  }
+  primary.sort(
+    (a, b) => pinnedProxyTagOrder(a.tag).compareTo(pinnedProxyTagOrder(b.tag)),
+  );
+  final hasHeader =
+      (selected != null && pinned(selected)) ||
+      primary.isNotEmpty ||
+      chains.isNotEmpty ||
+      input.canAddChain;
+  final entries = <ProxyListEntry>[
+    if (selected != null) ProxyListEntry.tile(selected),
+    for (final proxy in primary) ProxyListEntry.tile(proxy),
+    for (final proxy in chains) ProxyListEntry.tile(proxy),
+    if (input.canAddChain) const ProxyListEntry.addChain(),
+    if (rest.isNotEmpty && hasHeader) const ProxyListEntry.divider(),
+    for (final proxy in rest) ProxyListEntry.tile(proxy),
+  ];
+  return ProxyListPresentation(items, entries, {
+    for (var i = 0; i < entries.length; i++) entries[i].key: i,
+  }, timer.elapsed);
+}
 
 void sortProxySummaries(
   List<AppProxySummary> items,
@@ -27,7 +145,10 @@ void sortProxySummaries(
         items[index],
         sort: sort,
         keepPinnedFirst: keepPinnedFirst,
-        runtimeState: sort == ProxySort.latency || sort == ProxySort.working
+        runtimeState:
+            sort == ProxySort.latency ||
+                sort == ProxySort.working ||
+                sort == ProxySort.country
             ? runtimeStateFor?.call(items[index].tag)
             : null,
       ),
@@ -61,18 +182,22 @@ void _moveProxyToFront(List<AppProxySummary> items, String tag) {
 
 class _PreparedProxySort {
   _PreparedProxySort(
-    this.proxy, {
+    AppProxySummary source, {
     required ProxySort sort,
     required bool keepPinnedFirst,
     required ProxyRuntimeVisualState? runtimeState,
-  }) : pinned = keepPinnedFirst && isPinnedProxyTag(proxy.tag),
-       pinnedOrder = keepPinnedFirst ? pinnedProxyTagOrder(proxy.tag) : 0,
+  }) : proxy = source,
+       countryCode =
+           runtimeState?.presentation?.countryCode ?? source.countryCode,
+       pinned = keepPinnedFirst && isPinnedProxyTag(source.tag),
+       pinnedOrder = keepPinnedFirst ? pinnedProxyTagOrder(source.tag) : 0,
        latencyRank = sort == ProxySort.latency || sort == ProxySort.working
-           ? _latencyRank(proxy, runtimeState)
+           ? _latencyRank(source, runtimeState)
            : 0,
-       latency = runtimeState == null ? proxy.latency : runtimeState.latency;
+       latency = runtimeState == null ? source.latency : runtimeState.latency;
 
   final AppProxySummary proxy;
+  final String countryCode;
   final bool pinned;
   final int pinnedOrder;
   final int latencyRank;
@@ -92,7 +217,7 @@ class _PreparedProxySort {
     return switch (sort) {
       ProxySort.source => 0,
       ProxySort.name => proxy.displayName.compareTo(other.proxy.displayName),
-      ProxySort.country => proxy.countryCode.compareTo(other.proxy.countryCode),
+      ProxySort.country => countryCode.compareTo(other.countryCode),
       ProxySort.latency || ProxySort.working => _compareLatencyTo(other),
     };
   }

@@ -256,6 +256,7 @@ class UrlTestRequestMessage {
     required this.includeOutboundTags,
     required this.logicalSessionId,
     required this.physicalNetworkEpoch,
+    this.startupLeaseToken = 0,
   });
 
   String groupTag;
@@ -284,6 +285,8 @@ class UrlTestRequestMessage {
 
   int physicalNetworkEpoch;
 
+  int startupLeaseToken;
+
   List<Object?> _toList() {
     return <Object?>[
       groupTag,
@@ -299,6 +302,7 @@ class UrlTestRequestMessage {
       includeOutboundTags,
       logicalSessionId,
       physicalNetworkEpoch,
+      startupLeaseToken,
     ];
   }
 
@@ -321,6 +325,7 @@ class UrlTestRequestMessage {
       includeOutboundTags: (result[10]! as List<Object?>).cast<String>(),
       logicalSessionId: result[11]! as String,
       physicalNetworkEpoch: result[12]! as int,
+      startupLeaseToken: result[13]! as int,
     );
   }
 
@@ -333,7 +338,7 @@ class UrlTestRequestMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode) && _deepEquals(includeOutboundTags, other.includeOutboundTags) && _deepEquals(logicalSessionId, other.logicalSessionId) && _deepEquals(physicalNetworkEpoch, other.physicalNetworkEpoch);
+    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode) && _deepEquals(includeOutboundTags, other.includeOutboundTags) && _deepEquals(logicalSessionId, other.logicalSessionId) && _deepEquals(physicalNetworkEpoch, other.physicalNetworkEpoch) && _deepEquals(startupLeaseToken, other.startupLeaseToken);
   }
 
   @override
@@ -342,7 +347,7 @@ class UrlTestRequestMessage {
 
   @override
   String toString() {
-    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force, mode: $mode, includeOutboundTags: $includeOutboundTags, logicalSessionId: $logicalSessionId, physicalNetworkEpoch: $physicalNetworkEpoch)';
+    return 'UrlTestRequestMessage(groupTag: $groupTag, targetOutboundTag: $targetOutboundTag, priorityOutboundTag: $priorityOutboundTag, excludeOutboundTag: $excludeOutboundTag, url: $url, timeoutMillis: $timeoutMillis, concurrency: $concurrency, deadlineMillis: $deadlineMillis, force: $force, mode: $mode, includeOutboundTags: $includeOutboundTags, logicalSessionId: $logicalSessionId, physicalNetworkEpoch: $physicalNetworkEpoch, startupLeaseToken: $startupLeaseToken)';
   }
 }
 
@@ -1432,6 +1437,26 @@ class SingboxHostApi {
         isNullValid: true,
     )
     ;
+  }
+
+  /// Shares the tile's one startup leaf measurement with the client sweep.
+  Future<Map<String?, Object?>> prepareStartupUrlTest(int runtimeGeneration, List<String> coveredTags) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.prepareStartupUrlTest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[runtimeGeneration, coveredTags]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
   }
 
   Future<void> cancelUrlTest(String groupTag, String targetOutboundTag) async {

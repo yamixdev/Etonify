@@ -52,17 +52,21 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
   late AppUpdateChannel _updateChannel = widget.updateChannel;
   AppUpdateInfo? _pendingAutoInstallInfo;
   bool _resumingAutoInstall = false;
+  AppUpdateDownloadOperation? _downloadOperation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final active = AppUpdateService.instance.activeDownload;
+    if (active != null) unawaited(_attachDownload(active));
     unawaited(_bootstrap());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _downloadOperation?.removeListener(_onDownloadProgress);
     super.dispose();
   }
 
@@ -109,6 +113,11 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
   }
 
   Future<void> _check({required bool manual}) async {
+    final active = AppUpdateService.instance.activeDownload;
+    if (active != null) {
+      unawaited(_attachDownload(active));
+      return;
+    }
     if (_checking || _downloading || _clearingUpdateCache) return;
     await _refreshInstalledVersion();
     if (!mounted || _checking || _downloading || _clearingUpdateCache) return;
@@ -125,6 +134,11 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       channel: _updateChannel,
     );
     if (!mounted) return;
+    final download = AppUpdateService.instance.activeDownload;
+    if (download != null) {
+      unawaited(_attachDownload(download));
+      return;
+    }
     setState(() {
       _result = result;
       _checking = false;
@@ -245,7 +259,12 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
         ),
       ),
     );
-    if (selected == null || selected == _updateChannel || !mounted) return;
+    if (selected == null ||
+        selected == _updateChannel ||
+        !mounted ||
+        AppUpdateService.instance.activeDownload != null) {
+      return;
+    }
     setState(() {
       _updateChannel = selected;
       _result = null;
@@ -378,26 +397,50 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
     bool installAfterDownload = false,
   }) async {
     if (_downloading || _checking || _clearingUpdateCache) return;
+    try {
+      final service = AppUpdateService.instance;
+      final ownsDownload = service.activeDownload == null;
+      final operation = service.startDownload(info);
+      await _attachDownload(
+        operation,
+        installAfterDownload: ownsDownload && installAfterDownload,
+      );
+    } catch (error) {
+      if (mounted) _showDownloadError(info, error);
+    }
+  }
+
+  void _onDownloadProgress() {
+    if (!mounted) return;
+    setState(() => _downloadProgress = _downloadOperation?.progress);
+  }
+
+  Future<void> _attachDownload(
+    AppUpdateDownloadOperation operation, {
+    bool installAfterDownload = false,
+  }) async {
+    if (!mounted || identical(_downloadOperation, operation)) return;
+    _downloadOperation?.removeListener(_onDownloadProgress);
+    _downloadOperation = operation;
+    operation.addListener(_onDownloadProgress);
+    final info = operation.info;
     setState(() {
+      _checking = false;
       _downloading = true;
+      _updateChannel = info.channel;
+      _downloadedFilePath = null;
       _verification = null;
-      _downloadProgress = const AppUpdateDownloadProgress(
-        downloadedBytes: 0,
-        totalBytes: 0,
-        bytesPerSecond: 0,
-        done: false,
+      _downloadProgress = operation.progress;
+      _result = AppUpdateCheckResult(
+        status: AppUpdateStatus.downloading,
+        checkedAt: DateTime.now(),
+        info: info,
       );
     });
     try {
-      await AppUpdateService.instance.downloadUpdate(
-        info,
-        onProgress: (progress) {
-          if (!mounted) return;
-          setState(() => _downloadProgress = progress);
-        },
-      );
-      if (!mounted) return;
-      final filePath = _downloadProgress?.filePath;
+      await operation.completed;
+      if (!mounted || !identical(_downloadOperation, operation)) return;
+      final filePath = operation.progress.filePath;
       final verification = filePath == null
           ? null
           : await AppUpdateService.instance.verifyDownloadedApk(info, filePath);
@@ -417,19 +460,27 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
         await _installDownloaded();
       }
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _result = AppUpdateCheckResult(
-          status: AppUpdateStatus.error,
-          checkedAt: DateTime.now(),
-          info: info,
-          error:
-              remoteDownloadErrorMessage(AppLocalizations.of(context), error) ??
-              error.toString(),
-        );
-      });
+      if (mounted && identical(_downloadOperation, operation)) {
+        _showDownloadError(info, error);
+      }
+    } finally {
+      operation.removeListener(_onDownloadProgress);
+      if (identical(_downloadOperation, operation)) _downloadOperation = null;
     }
+  }
+
+  void _showDownloadError(AppUpdateInfo info, Object error) {
+    setState(() {
+      _downloading = false;
+      _result = AppUpdateCheckResult(
+        status: AppUpdateStatus.error,
+        checkedAt: DateTime.now(),
+        info: info,
+        error:
+            remoteDownloadErrorMessage(AppLocalizations.of(context), error) ??
+            error.toString(),
+      );
+    });
   }
 
   Future<void> _installDownloaded() async {
@@ -448,28 +499,27 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       });
       return;
     }
-    await _refreshDownloadedVerification();
-    if (!mounted) return;
-    if (_verification?.ok == false) {
-      setState(() {
-        _result = AppUpdateCheckResult(
-          status: AppUpdateStatus.error,
-          checkedAt: DateTime.now(),
-          info: _result?.info,
-          error: _verification?.error,
-          downloadedFilePath: path,
-        );
-      });
-      return;
-    }
     setState(() => _installing = true);
     try {
-      final canInstall = await _ensureInstallPermission();
-      if (!canInstall) {
-        setState(() => _installing = false);
+      await _refreshDownloadedVerification();
+      if (!mounted) return;
+      if (_verification?.ok == false) {
+        setState(() {
+          _result = AppUpdateCheckResult(
+            status: AppUpdateStatus.error,
+            checkedAt: DateTime.now(),
+            info: _result?.info,
+            error: _verification?.error,
+            downloadedFilePath: path,
+          );
+        });
         return;
       }
-      await SingboxRuntime.instance.installDownloadedApk();
+      final canInstall = await _ensureInstallPermission();
+      if (!mounted || !canInstall) return;
+      await AppUpdateService.instance.launchInstaller(
+        SingboxRuntime.instance.installDownloadedApk,
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -484,6 +534,8 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
     } finally {
       if (mounted) {
         setState(() => _installing = false);
+      } else {
+        _installing = false;
       }
     }
   }
@@ -581,7 +633,12 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true ||
+        !mounted ||
+        _downloading ||
+        AppUpdateService.instance.activeDownload != null) {
+      return;
+    }
 
     setState(() => _clearingUpdateCache = true);
     final deleted = await AppUpdateService.instance.deleteCachedInstallers(

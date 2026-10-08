@@ -15,6 +15,7 @@ class ProxyRuntimeVisualState {
     this.networkUnavailable = false,
     this.highlighted = false,
     this.selecting = false,
+    this.presentation,
   });
 
   final int? latency;
@@ -26,6 +27,9 @@ class ProxyRuntimeVisualState {
   final bool highlighted;
   final bool selecting;
 
+  /// Latest identity/metadata, resolved only for observed rows and sort batches.
+  final AppProxySummary? presentation;
+
   @override
   bool operator ==(Object other) {
     return other is ProxyRuntimeVisualState &&
@@ -36,7 +40,8 @@ class ProxyRuntimeVisualState {
         other.latencyError == latencyError &&
         other.networkUnavailable == networkUnavailable &&
         other.highlighted == highlighted &&
-        other.selecting == selecting;
+        other.selecting == selecting &&
+        other.presentation == presentation;
   }
 
   @override
@@ -49,6 +54,7 @@ class ProxyRuntimeVisualState {
     networkUnavailable,
     highlighted,
     selecting,
+    presentation,
   );
 }
 

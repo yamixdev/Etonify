@@ -8,6 +8,7 @@ class UrlTestProgressState {
     this.total = 0,
     this.working = 0,
     this.failed = 0,
+    this.skipped = 0,
     this.completed,
   });
 
@@ -21,10 +22,14 @@ class UrlTestProgressState {
   final int total;
   final int working;
   final int failed;
+
+  /// Visible servers absent from the known probe queue, not failed probes.
+  final int skipped;
   final int? completed;
 
   int get tested => (completed ?? working + failed).clamp(0, total);
-  int get pending => (total - tested).clamp(0, total);
+  int get testable => (total - skipped).clamp(0, total);
+  int get pending => (testable - tested).clamp(0, total);
 
   bool get hasResults => total > 0 && (isRunning || isCancelled || tested > 0);
 
@@ -37,6 +42,7 @@ class UrlTestProgressState {
     int? total,
     int? working,
     int? failed,
+    int? skipped,
     int? completed,
   }) {
     return UrlTestProgressState(
@@ -48,6 +54,7 @@ class UrlTestProgressState {
       total: total ?? this.total,
       working: working ?? this.working,
       failed: failed ?? this.failed,
+      skipped: skipped ?? this.skipped,
       completed: completed ?? this.completed,
     );
   }
@@ -65,6 +72,7 @@ class UrlTestProgressState {
           total == other.total &&
           working == other.working &&
           failed == other.failed &&
+          skipped == other.skipped &&
           completed == other.completed;
 
   @override
@@ -77,6 +85,7 @@ class UrlTestProgressState {
     total,
     working,
     failed,
+    skipped,
     completed,
   );
 }
@@ -117,6 +126,7 @@ class UrlTestProgressCounter {
         nextVisibleTags.length == _visibleTags.length &&
         nextVisibleTags.containsAll(_visibleTags)) {
       _catalogKey = catalogKey;
+      _synchronizeExcludedTags(testableTags());
       return;
     }
     reset(
@@ -140,6 +150,21 @@ class UrlTestProgressCounter {
   int _coreCompleted = 0;
   Set<String>? _sweepCompletedTags;
   Set<String> _nativeSweepTags = const {};
+  Set<String> _excludedTags = <String>{};
+
+  void _synchronizeExcludedTags(Set<String> testableTags) {
+    // An empty queue before runtime hydration is not proof of exclusion.
+    _excludedTags = testableTags.isEmpty
+        ? <String>{}
+        : _visibleTags
+              .where(
+                (tag) =>
+                    !testableTags.contains(tag) &&
+                    !(_sweepCompletedTags?.contains(tag) ??
+                        _results.containsKey(tag)),
+              )
+              .toSet();
+  }
 
   void reset({
     required Iterable<String> visibleTags,
@@ -156,6 +181,7 @@ class UrlTestProgressCounter {
     _coreTotal = null;
     _coreCompleted = 0;
     _sweepCompletedTags = null;
+    _synchronizeExcludedTags(testableTags);
     _nativeSweepTags = Set.of(testableTags);
     update(_tags, resultForTag);
     if (includeKnownVisibleResults) {
@@ -167,13 +193,14 @@ class UrlTestProgressCounter {
   void beginSweep({required Set<String> testableTags}) {
     _sweepCompletedTags = <String>{};
     _nativeSweepTags = Set.of(testableTags);
+    _synchronizeExcludedTags(testableTags);
     _additionalCompletedTags.clear();
     _coreTotal = null;
     _coreCompleted = 0;
   }
 
   /// The core reports completed concrete probes. The header can include more
-  /// visible nodes than the queue, so skipped nodes remain pending.
+  /// visible nodes than the queue. Excluded nodes are reported separately.
   void applyCoreSessionSnapshot({required int total, required int completed}) {
     _coreTotal = total < 0 ? 0 : total;
     // A queue with core-only helpers cannot identify how many visible leaves
@@ -193,6 +220,12 @@ class UrlTestProgressCounter {
     for (final tag in changedTags) {
       if (!_visibleTags.contains(tag)) continue;
       final next = resultForTag(tag);
+      if (next != null &&
+          (_sweepCompletedTags == null ||
+              completedTags == null ||
+              completedTags.contains(tag))) {
+        _excludedTags.remove(tag);
+      }
       // UI snapshots may touch a pending row that still has a cached ping.
       // Only accepted terminal measurements advance this sweep.
       if (next != null &&
@@ -232,6 +265,7 @@ class UrlTestProgressCounter {
     // Count only individually measured nodes, not synthetic group rows.
     working: _working,
     failed: _failed,
+    skipped: _excludedTags.length,
     completed: _sweepCompletedTags == null
         ? (_coreTotal == null
               ? null

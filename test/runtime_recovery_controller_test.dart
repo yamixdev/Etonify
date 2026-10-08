@@ -3,9 +3,43 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_recovery_controller.dart';
+import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 
 void main() {
+  test(
+    'unchanged runtime queue does not rescan a 4505-node progress catalog',
+    () {
+      final controller = RuntimeRecoveryController();
+      addTearDown(controller.dispose);
+      controller.cacheStartedBuild(
+        _buildResult(tagsByIndex: {}, urlTestTags: const ['a', 'b']),
+      );
+      final counter = UrlTestProgressCounter();
+      var catalogScans = 0;
+      void sync() => counter.synchronizeCatalog(
+        catalogKey: controller.lastStartedUrlTestOutboundTags,
+        visibleTags: () {
+          catalogScans++;
+          return const ['a', 'b', 'c'];
+        },
+        testableTags: () => controller.lastStartedUrlTestOutboundTags,
+        resultForTag: (_) => null,
+      );
+      for (var i = 0; i < 4505; i++) {
+        sync();
+        counter.update(['a'], (_) => true);
+      }
+      expect(catalogScans, 1);
+      final oldQueue = controller.lastStartedUrlTestOutboundTags;
+      expect(() => oldQueue.add('mutable'), throwsUnsupportedError);
+      controller.clearBuildCache();
+      sync();
+      expect(catalogScans, 2);
+      expect(oldQueue, {'a', 'b'});
+      expect(controller.lastStartedUrlTestOutboundTags, isEmpty);
+    },
+  );
   test('retry generations reject cancelled and stale callbacks', () async {
     final controller = RuntimeRecoveryController(
       retryDelay: const Duration(milliseconds: 1),

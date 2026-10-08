@@ -443,6 +443,15 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String proxiesProgressSkipped(int count) {
+    return 'Исключено: $count';
+  }
+
+  @override
+  String get proxiesProgressSkippedExplanation =>
+      'Эти серверы не входят в очередь проверки текущего ядра. Они не считаются неработающими. Неподдерживаемые и некорректные конфигурации могут быть исключены; доступные подробности есть в логах запуска.';
+
+  @override
   String get proxiesCheckPaused => 'Проверка приостановлена';
 
   @override

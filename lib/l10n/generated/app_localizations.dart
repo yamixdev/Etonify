@@ -872,6 +872,18 @@ abstract class AppLocalizations {
   /// **'Tested {tested} / {total}'**
   String proxiesProgressTested(int tested, int total);
 
+  /// No description provided for @proxiesProgressSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded: {count}'**
+  String proxiesProgressSkipped(int count);
+
+  /// No description provided for @proxiesProgressSkippedExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'These servers are not in the current core\'s probe queue. They are not counted as failed checks. Unsupported or invalid configurations can be excluded; see the startup logs for available details.'**
+  String get proxiesProgressSkippedExplanation;
+
   /// No description provided for @proxiesCheckPaused.
   ///
   /// In en, this message translates to:

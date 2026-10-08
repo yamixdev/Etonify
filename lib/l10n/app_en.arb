@@ -130,6 +130,9 @@
   "autoCheckDisabledNoticeAction": "Got it",
   "proxiesProgressWorking": "Working {working} / {total}",
   "proxiesProgressTested": "Tested {tested} / {total}",
+  "proxiesProgressSkipped": "Excluded: {count}",
+  "@proxiesProgressSkipped": {"placeholders": {"count": {"type": "int"}}},
+  "proxiesProgressSkippedExplanation": "These servers are not in the current core's probe queue. They are not counted as failed checks. Unsupported or invalid configurations can be excluded; see the startup logs for available details.",
   "proxiesCheckPaused": "Check paused",
   "@proxiesProgressTested": {
     "placeholders": {

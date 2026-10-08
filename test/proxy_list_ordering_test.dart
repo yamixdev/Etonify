@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/features/proxies/proxy_list_ordering.dart';
@@ -5,6 +7,104 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 
 void main() {
+  test('latency snapshots preserve unchanged row values', () async {
+    final original = _proxy('a', 'A', latency: 100);
+    final result = await buildProxyListPresentationInBackground(
+      ProxyListPresentationInput(
+        proxies: [original],
+        sort: ProxySort.latency,
+        selectedTag: '',
+        runtimeStates: {
+          'a': ProxyRuntimeVisualState(
+            latency: 90,
+            presentation: original.copyWith(latency: 90),
+          ),
+        },
+      ),
+    );
+    // Objects cross an isolate boundary, so compare their stable row values.
+    expect(result.items.single, original);
+    expect(result.entries.single.proxy, original);
+  });
+  test(
+    'country sorting uses updated row metadata, not its original flag',
+    () async {
+      final a = _proxy('a', 'A', country: 'US');
+      final b = _proxy('b', 'B', country: 'DE');
+      final result = await buildProxyListPresentationInBackground(
+        ProxyListPresentationInput(
+          proxies: [a, b],
+          sort: ProxySort.country,
+          selectedTag: '',
+          runtimeStates: {
+            'a': ProxyRuntimeVisualState(
+              presentation: a.copyWith(countryCode: 'AU'),
+            ),
+          },
+        ),
+      );
+      expect(result.items.map((proxy) => proxy.tag), ['a', 'b']);
+      expect(result.items.first, a);
+    },
+  );
+  test(
+    'background presentation filters leaves, pins selection and indexes rows',
+    () async {
+      final result = await buildProxyListPresentationInBackground(
+        ProxyListPresentationInput(
+          proxies: [
+            _proxy('hidden', 'Hidden').copyWith(parentGroupTag: 'group'),
+            _proxy('failed', 'Failed', unavailable: true),
+            _proxy('fast', 'Fast', latency: 5, fresh: true),
+            _proxy('selected', 'Selected', latency: 80, fresh: true),
+            _proxy(lowestProxyTag, 'Automatic'),
+          ],
+          sort: ProxySort.working,
+          selectedTag: 'selected',
+          canAddChain: true,
+        ),
+      );
+      expect(result.items.map((proxy) => proxy.tag), [
+        'selected',
+        lowestProxyTag,
+        'fast',
+      ]);
+      expect(result.entries.map((entry) => entry.key), [
+        const ValueKey('proxy-row-selected'),
+        const ValueKey('proxy-row-lowest'),
+        const ValueKey('proxy-add-chain-row'),
+        const ValueKey('proxy-divider-row'),
+        const ValueKey('proxy-row-fast'),
+      ]);
+      expect(result.indexes[const ValueKey('proxy-row-fast')], 4);
+    },
+  );
+
+  test(
+    'large background presentation lets the caller process events',
+    () async {
+      var turns = 0;
+      final timer = Timer.periodic(
+        const Duration(milliseconds: 1),
+        (_) => turns++,
+      );
+      try {
+        final result = await buildProxyListPresentationInBackground(
+          ProxyListPresentationInput(
+            proxies: List.generate(4505, (i) => _proxy('node-$i', 'Node $i')),
+            sort: ProxySort.name,
+            selectedTag: 'node-4504',
+          ),
+        );
+        expect(result.items.length, 4505);
+        expect(result.entries.first.proxy?.tag, 'node-4504');
+        expect(result.indexes[const ValueKey('proxy-row-node-4504')], 0);
+        expect(turns, greaterThan(0));
+      } finally {
+        timer.cancel();
+      }
+    },
+  );
   test('source ordering preserves provider order', () {
     final items = [_proxy('b', 'Beta'), _proxy('a', 'Alpha')];
 

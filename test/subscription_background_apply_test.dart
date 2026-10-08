@@ -36,9 +36,10 @@ void main() {
     'background payload uses normal parser and preserves profile name',
     () async {
       await SubscriptionStore.save(profile);
+      final storedProfile = SubscriptionStore.getMetadata(profile.id)!;
       final updated = await SubscriptionStore.applyBackgroundDownload(
         'p',
-        revision: SubscriptionStore.backgroundRevision(profile),
+        revision: SubscriptionStore.backgroundRevision(storedProfile),
         bytes: body,
         headers: const {'profile-title': 'Provider title'},
       );

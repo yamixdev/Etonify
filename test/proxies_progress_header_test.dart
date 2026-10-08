@@ -61,6 +61,24 @@ Widget _buildHeaderTestApp({
 }
 
 void main() {
+  testWidgets('excluded servers are explained after queue completion', (
+    tester,
+  ) async {
+    final progress = ValueNotifier(
+      const UrlTestProgressState(
+        total: 4505,
+        working: 366,
+        completed: 4501,
+        skipped: 4,
+      ),
+    );
+    addTearDown(progress.dispose);
+    await tester.pumpWidget(_buildHeaderTestApp(progressNotifier: progress));
+    await tester.pumpAndSettle();
+    expect(find.text('Работает 366 / 4505'), findsOneWidget);
+    expect(find.text('Исключено: 4'), findsOneWidget);
+    expect(find.textContaining('Проверено'), findsNothing);
+  });
   testWidgets('group or automatic check does not show full-sweep progress', (
     tester,
   ) async {

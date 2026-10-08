@@ -7,6 +7,7 @@ import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
@@ -108,6 +109,217 @@ Widget _page({
 }
 
 void main() {
+  testWidgets(
+    'group selection reprioritizes after scroll ends in source order',
+    (tester) async {
+      final group = _proxy(
+        'Group',
+        children: ['A', 'B'],
+      ).copyWith(selectedChildTag: 'A', selectedChildName: 'A');
+      final store = ProxyRuntimeVisualStore();
+      addTearDown(store.dispose);
+      store.replaceAll({'Group': ProxyRuntimeVisualState(presentation: group)});
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: ProxiesPage(
+              proxies: [group],
+              groupChildrenByTag: {
+                'Group': [_proxy('A'), _proxy('B')],
+              },
+              selectedTag: 'Group',
+              connected: true,
+              progressiveBlurEnabled: false,
+              initialSort: ProxySort.source,
+              runtimeStates: store,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('proxy-open-group-Group')));
+      await tester.pumpAndSettle();
+      final list = find.byKey(const PageStorageKey('proxy-group-list-Group'));
+      final context = tester.element(list);
+      final metrics = tester.widget<ListView>(list).controller!.position;
+      ScrollStartNotification(
+        metrics: metrics,
+        context: context,
+      ).dispatch(context);
+      store.replaceAll({
+        'Group': ProxyRuntimeVisualState(
+          presentation: group.copyWith(
+            selectedChildTag: 'B',
+            selectedChildName: 'B',
+          ),
+        ),
+      });
+      await tester.pump();
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('proxy-row-A'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('proxy-row-B'))).dy,
+        ),
+      );
+      ScrollEndNotification(
+        metrics: metrics,
+        context: context,
+      ).dispatch(context);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('proxy-row-B'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('proxy-row-A'))).dy,
+        ),
+      );
+    },
+  );
+  testWidgets('open group header follows a live selection in source order', (
+    tester,
+  ) async {
+    final group = _proxy(
+      'Group',
+      children: ['A', 'B'],
+    ).copyWith(selectedChildTag: 'A', selectedChildName: 'A');
+    final store = ProxyRuntimeVisualStore();
+    addTearDown(store.dispose);
+    store.replaceAll({'Group': ProxyRuntimeVisualState(presentation: group)});
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: ProxiesPage(
+            proxies: [group],
+            groupChildrenByTag: {
+              'Group': [_proxy('A'), _proxy('B')],
+            },
+            selectedTag: 'Group',
+            connected: true,
+            progressiveBlurEnabled: false,
+            initialSort: ProxySort.source,
+            runtimeStates: store,
+            onSelected: (_) {},
+            onUrlTest: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proxy-open-group-Group')));
+    await tester.pumpAndSettle();
+    expect(find.text('Group · A'), findsOneWidget);
+    store.replaceAll({
+      'Group': ProxyRuntimeVisualState(
+        presentation: group.copyWith(
+          selectedChildTag: 'B',
+          selectedChildName: 'B',
+        ),
+      ),
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Group · B'), findsOneWidget);
+  });
+  testWidgets(
+    'runtime presentation changes one row without replacing its list',
+    (tester) async {
+      final original = _proxy('Node');
+      final store = ProxyRuntimeVisualStore();
+      addTearDown(store.dispose);
+      store.replaceAll({'Node': const ProxyRuntimeVisualState(latency: 42)});
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: ProxiesPage(
+              proxies: [original],
+              selectedTag: '',
+              connected: true,
+              progressiveBlurEnabled: false,
+              runtimeStates: store,
+              onSelected: (_) {},
+              onUrlTest: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      store.replaceAll({
+        'Node': ProxyRuntimeVisualState(
+          latency: 15,
+          presentation: original.copyWith(
+            displayName: 'Updated',
+            countryCode: 'SE',
+          ),
+        ),
+      });
+      await tester.pump();
+      expect(find.text('Updated'), findsOneWidget);
+      expect(find.text('15 ms'), findsOneWidget);
+      expect(
+        tester
+            .widget<CountryFlagBadge>(find.byType(CountryFlagBadge))
+            .countryCode,
+        'SE',
+      );
+    },
+  );
+
+  testWidgets(
+    'large list preparation keeps old rows usable and rejects old profile',
+    (tester) async {
+      var proxies = [_proxy('Original')];
+      var profile = 'first';
+      var selected = '';
+      late StateSetter update;
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return Scaffold(
+                body: ProxiesPage(
+                  profileId: profile,
+                  proxies: proxies,
+                  selectedTag: '',
+                  connected: true,
+                  progressiveBlurEnabled: false,
+                  initialSort: ProxySort.source,
+                  onSelected: (tag) => selected = tag,
+                  onUrlTest: () async {},
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      update(() => proxies = [for (var i = 0; i < 4505; i++) _proxy('New $i')]);
+      await tester.pump();
+      expect(find.text('Original'), findsOneWidget);
+      await tester.tap(find.text('Original'));
+      expect(selected, 'Original');
+      for (var i = 0; i < 150 && find.text('New 0').evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+      expect(find.text('New 0'), findsOneWidget);
+      update(() {
+        profile = 'second';
+        proxies = [for (var i = 0; i < 501; i++) _proxy('Other $i')];
+      });
+      await tester.pump();
+      expect(find.text('New 0'), findsNothing);
+      // Disposing with work pending must not apply a stale result or setState.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 40)),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('provider members stay inside all groups after auto and back', (
     tester,
   ) async {

@@ -8,6 +8,24 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
+Future<void> _waitForPreparedRows(
+  WidgetTester tester,
+  bool Function() ready,
+) async {
+  for (var i = 0; i < 150 && !ready(); i++) {
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+  }
+  await tester.pump();
+  expect(
+    ready(),
+    isTrue,
+    reason: 'Background proxy presentation did not settle',
+  );
+}
+
 void main() {
   testWidgets(
     'compact group rows keep selection and testing separate from opening',
@@ -479,7 +497,10 @@ void main() {
     addTearDown(runtime.dispose);
     runtime.replaceAll({
       for (var i = 0; i < proxies.length; i++)
-        proxies[i].tag: ProxyRuntimeVisualState(latency: 100 + i),
+        proxies[i].tag: ProxyRuntimeVisualState(
+          latency: 100 + i,
+          presentation: proxies[i].copyWith(latency: 100 + i),
+        ),
     });
     await tester.pumpWidget(
       MaterialApp(
@@ -497,11 +518,18 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await _waitForPreparedRows(
+      tester,
+      () => find.byType(ProxyTile).evaluate().isNotEmpty,
+    );
     final before = tester.widget<ListView>(find.byType(ListView));
     expect(find.byType(ProxyTile).evaluate().length, lessThan(30));
     runtime.updateTags({
-      proxies.first.tag: const ProxyRuntimeVisualState(latency: 90),
+      proxies.first.tag: ProxyRuntimeVisualState(
+        latency: 90,
+        presentation: proxies.first.copyWith(latency: 90),
+      ),
     });
     await tester.pump(const Duration(seconds: 1));
     expect(
@@ -517,9 +545,22 @@ void main() {
       90,
     );
     runtime.updateTags({
-      proxies[1].tag: const ProxyRuntimeVisualState(latency: 50),
+      proxies[1].tag: ProxyRuntimeVisualState(
+        latency: 50,
+        presentation: proxies[1].copyWith(latency: 50),
+      ),
     });
     await tester.pump(const Duration(seconds: 1));
+    await _waitForPreparedRows(
+      tester,
+      () =>
+          tester
+              .widgetList<ProxyTile>(find.byType(ProxyTile))
+              .first
+              .proxy
+              .tag ==
+          proxies[1].tag,
+    );
     expect(
       tester.widgetList<ProxyTile>(find.byType(ProxyTile)).first.proxy.tag,
       proxies[1].tag,
@@ -875,6 +916,10 @@ void main() {
     (tester) async {
       final proxies = List.generate(1000, _performanceProxy);
       await tester.pumpWidget(_scrollTestPage(proxies));
+      await _waitForPreparedRows(
+        tester,
+        () => find.byType(ProxyTile).evaluate().isNotEmpty,
+      );
       final viewport = tester.getRect(find.byType(ListView));
       final rows = find
           .byType(ProxyTile, skipOffstage: false)

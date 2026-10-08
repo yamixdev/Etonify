@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
+import 'package:meow_client/app/startup_url_test_handoff.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
@@ -14,6 +16,140 @@ const _testPolicy = LatencyUiPolicy(
 );
 
 void main() {
+  test(
+    'startup reprepare sees released coordinator and dispatches original coverage',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      var prepares = 0;
+      late LatencyCoordinator coordinator;
+      coordinator = _coordinator(
+        capabilities: _v3Capabilities,
+        runTest: (request) async {
+          requests.add(request);
+          if (requests.length == 1) {
+            throw PlatformException(code: 'startup_lease_expired');
+          }
+          coordinator.handleCoreSession(
+            sessionId: 8,
+            groupTag: 'select',
+            targetTag: '',
+            mode: 'manual',
+            state: 'running',
+            terminalReason: '',
+            available: 0,
+          );
+          for (final (index, tag) in request.includeOutboundTags.indexed) {
+            coordinator.handleCoreResult(
+              tag: tag,
+              sessionId: 8,
+              revision: 18 + index,
+              available: true,
+            );
+          }
+          coordinator.handleCoreSession(
+            sessionId: 8,
+            groupTag: 'select',
+            targetTag: '',
+            mode: 'manual',
+            state: 'completed',
+            terminalReason: 'completed',
+            available: 2,
+          );
+        },
+      );
+      addTearDown(coordinator.dispose);
+      final result = await runStartupUrlTestHandoff(
+        runtimeGeneration: 7,
+        networkGeneration: 3,
+        coveredTags: ['leaf', 'other'],
+        prepare: (tags) async {
+          expect(coordinator.canStartSession, isTrue);
+          expect(tags, ['leaf', 'other']);
+          prepares++;
+          return {
+            'valid': true,
+            'runtimeGeneration': 7,
+            'networkGeneration': 3,
+            'borrowedTag': '',
+            'startupLeaseToken': prepares,
+          };
+        },
+        isCurrent: () => true,
+        runRemaining: (tags, token) => coordinator.runFull(
+          reason: 'runtime_diagnostics_ready',
+          includeOutboundTags: tags,
+          startupLeaseToken: token,
+        ),
+      );
+      expect(result, isTrue);
+      expect(prepares, 2);
+      expect(requests.map((request) => request.startupLeaseToken), [1, 2]);
+      expect(requests.map((request) => request.includeOutboundTags), [
+        ['leaf', 'other'],
+        ['leaf', 'other'],
+      ]);
+    },
+  );
+
+  test(
+    'expired parallel startup target releases only its own reservation',
+    () async {
+      final coordinator = _coordinator(
+        capabilities: _v3Capabilities,
+        runTest: (request) async {
+          if (request.targetOutboundTag.isNotEmpty) {
+            throw PlatformException(code: 'startup_lease_expired');
+          }
+        },
+      );
+      addTearDown(coordinator.dispose);
+      final full = coordinator.runFull(reason: 'periodic', mode: 'background');
+      await Future<void>.delayed(Duration.zero);
+      await expectLater(
+        coordinator.runTarget(
+          targetOutboundTag: 'proxy-1',
+          reason: 'startup',
+          startupLeaseToken: 42,
+        ),
+        throwsA(isA<StartupUrlTestLeaseExpired>()),
+      );
+      expect(coordinator.isRunning, isTrue);
+      expect(coordinator.hasActiveTargetCheck('proxy-1'), isFalse);
+      coordinator.cancel();
+      expect(await full, isFalse);
+    },
+  );
+  for (final targeted in [false, true]) {
+    test(
+      'startup expiry propagates only after ${targeted ? "target" : "full"} cleanup',
+      () async {
+        final requests = <LatencyTestRequest>[];
+        final coordinator = _coordinator(
+          capabilities: _v3Capabilities,
+          runTest: (request) async {
+            requests.add(request);
+            throw PlatformException(code: 'startup_lease_expired');
+          },
+        );
+        addTearDown(coordinator.dispose);
+        final attempt = targeted
+            ? coordinator.runTarget(
+                targetOutboundTag: 'proxy-1',
+                reason: 'startup',
+                startupLeaseToken: 42,
+              )
+            : coordinator.runFull(reason: 'startup', startupLeaseToken: 42);
+        await expectLater(attempt, throwsA(isA<StartupUrlTestLeaseExpired>()));
+        expect(requests.single.startupLeaseToken, 42);
+        expect(coordinator.isRunning, isFalse);
+        expect(coordinator.canStartSession, isTrue);
+        expect(coordinator.hasActiveTargetCheck('proxy-1'), isFalse);
+        // An ordinary/manual diagnostic still has the existing boolean failure contract.
+        expect(await coordinator.runFull(reason: 'manual'), isFalse);
+        expect(requests.last.startupLeaseToken, 0);
+      },
+    );
+  }
   for (final (reason, expected) in [
     ('manual', true),
     ('offline_manual', true),
@@ -425,6 +561,38 @@ void main() {
       expect(await sweep, isTrue);
       await wait;
       expect(applyAllowed, isTrue);
+    },
+  );
+
+  test(
+    'validated startup borrow accepts the native leaf before groups arrive',
+    () {
+      final coordinator = _coordinator(
+        runTest: (_) async {},
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'native-leaf-B',
+          sessionId: 41,
+          revision: 9,
+          available: true,
+          borrowedStartupResult: true,
+        ),
+        isTrue,
+      );
+      expect(coordinator.isRunning, isFalse);
+      expect(
+        coordinator.handleCoreResult(
+          tag: 'native-leaf-B',
+          sessionId: 41,
+          revision: 9,
+          available: true,
+          borrowedStartupResult: true,
+        ),
+        isFalse,
+      );
     },
   );
 

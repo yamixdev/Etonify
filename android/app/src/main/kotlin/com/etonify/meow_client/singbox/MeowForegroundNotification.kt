@@ -32,6 +32,7 @@ import org.json.JSONObject
 internal class MeowForegroundNotification(
     private val service: Service,
     private val notificationId: Int,
+    private val latencyTestRunner: ((UrlTestRequest, Boolean, (Result<Unit>) -> Unit) -> Unit)? = null,
 ) {
     companion object {
         const val CHANNEL_ID = "etonify_vpn_status"
@@ -120,7 +121,7 @@ internal class MeowForegroundNotification(
         }
     }
 
-    private data class UrlTestRequest(
+    internal data class UrlTestRequest(
         val groupTag: String,
         val targetOutboundTag: String,
         val priorityOutboundTag: String,
@@ -224,7 +225,9 @@ internal class MeowForegroundNotification(
     private var refreshPending = false
     private var latencyChecking = false
     private var latencyActionGeneration = 0L
+    private var latencyActionStartedAtSeconds = 0L
     private var latencyActionInFlight = false
+    private var measurementNotBeforeSeconds = 0L
     private var latencyTimeoutRunnable: Runnable? = null
     private data class Outbound(
         val type: String,
@@ -234,17 +237,40 @@ internal class MeowForegroundNotification(
     private var configuredOutbounds: Map<String, Outbound>? = null
     private var rootOutboundTag = "select"
     private var selectedOutbounds: Map<String, String> = emptyMap()
+    private var selectedOutboundsReady = false
+    private var startupRuntimeGeneration = 0L
+    private var startupNetworkGeneration = 0L
+    private var tileStartup = false
+    private var startupMeasurementFinished = false
+    @Volatile private var selectionEpoch = 0L
+    val currentSelectionEpoch: Long get() = selectionEpoch
+    private var nativeStartupToken: Long? = null
+    private data class ClientStartupRequest(
+        val id: Long, val runtime: Long, val network: Long,
+        val group: String, val target: String, val included: List<String>, val excluded: String,
+        var ownershipToken: Long? = null,
+        val logicalSessionId: String = "",
+    )
+    private var clientStartupRequest: ClientStartupRequest? = null
+    private var clientRequestSequence = 0L
+    private val startupOwnership = StartupLatencyOwnership()
 
     fun buildForForeground(status: String): Notification {
         synchronized(this) {
             if (status != lifecycleStatus && status in setOf("Starting", "Restarting", "Reloading")) {
                 configuredOutbounds = null
                 selectedOutbounds = emptyMap()
+                selectedOutboundsReady = false
+                clientStartupRequest = null
             }
             if (status == "Connected" && lifecycleStatus != "Connected") {
                 restoreCurrentPingTarget()
             }
             lifecycleStatus = status
+            if (status in setOf("Starting", "Restarting", "Reloading", "Stopping")) {
+                startupRuntimeGeneration = 0L
+                startupOwnership.update(0L, startupNetworkGeneration, "", false, tileStartup)
+            }
             if (!foregroundStarted) {
                 notificationGeneration++
                 trafficRateWindow.reset()
@@ -259,11 +285,26 @@ internal class MeowForegroundNotification(
 
     fun updatePresentation(arguments: Map<*, *>): Boolean {
         synchronized(this) {
-            presentation = Presentation.fromArguments(arguments)
-            if (foregroundStarted && lifecycleStatus == "Connected" &&
-                presentation.urlTestRequest?.targetOutboundTag.isNullOrEmpty()
-            ) {
-                setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
+            val previous = presentation
+            val incoming = Presentation.fromArguments(arguments)
+            if (foregroundStarted && lifecycleStatus == "Connected") {
+                val oldTarget = previous.urlTestRequest?.targetOutboundTag.orEmpty()
+                val nativeTarget = resolveCurrentPingTarget()
+                val target = if (selectedOutboundsReady || incoming.urlTestRequest?.targetOutboundTag.isNullOrEmpty())
+                    nativeTarget else incoming.urlTestRequest.targetOutboundTag
+                val request = (incoming.urlTestRequest ?: previous.urlTestRequest)?.copy(
+                    targetOutboundTag = target, priorityOutboundTag = target, excludeOutboundTag = "",
+                )
+                presentation = incoming.copy(
+                    urlTestRequest = request,
+                    latencyMillis = incoming.latencyMillis ?: previous.latencyMillis.takeIf { target == oldTarget },
+                )
+                // UI attachment commonly has no runtime target yet. It changes
+                // labels/settings, not the native leaf's in-flight ownership.
+                if (target != oldTarget || request == null) setPingTarget(target, clearMeasurement = true)
+                updateStartupContext()
+            } else {
+                presentation = incoming
             }
             persistPresentation(presentation)
             trafficRateWindow.requestImmediateEmission()
@@ -327,6 +368,8 @@ internal class MeowForegroundNotification(
         latencyChecking = false
         latencyActionInFlight = false
         latencyActionGeneration++
+        startupRuntimeGeneration = 0L
+        startupOwnership.update(0L, 0L, "", false, false)
         val pendingTimeout = latencyTimeoutRunnable
         latencyTimeoutRunnable = null
         uplinkTotal = 0L
@@ -343,14 +386,28 @@ internal class MeowForegroundNotification(
         delayMillis: Long,
         timeSeconds: Long,
         status: String?,
+        runtimeGeneration: Long? = null,
+        networkGeneration: Long? = null,
+        measuredAtMillis: Long = timeSeconds * 1_000L,
+        revision: Long = 0L,
+        sessionId: Long = 0L,
+        error: String = "",
+        selectionEpoch: Long? = null,
     ) {
         val normalizedTag = tag?.trim().orEmpty()
         synchronized(this) {
             val request = presentation.urlTestRequest ?: return
-            if (!latencyActionInFlight || normalizedTag != request.targetOutboundTag) {
+            if (runtimeGeneration != null && runtimeGeneration != startupRuntimeGeneration) return
+            if (networkGeneration != null && networkGeneration != startupNetworkGeneration) return
+            if (selectionEpoch != null && selectionEpoch != this.selectionEpoch) return
+            // Legacy group timestamps have only second precision and cannot
+            // distinguish A -> B -> A. Only attributed deltas may repaint
+            // after an authoritative selected leaf has changed.
+            if (selectionEpoch == null && this.selectionEpoch > 0L) return
+            if (!foregroundStarted || lifecycleStatus != "Connected" || normalizedTag != request.targetOutboundTag) {
                 return
             }
-            val actionStartedAtSeconds = latencyActionGeneration
+            val actionStartedAtSeconds = if (latencyActionInFlight) latencyActionStartedAtSeconds else measurementNotBeforeSeconds
             // Cached group snapshots are often delivered immediately after an
             // Activity reattaches. Do not paint one as the answer to a fresh
             // notification action; the core timestamp must be newer than the
@@ -358,19 +415,33 @@ internal class MeowForegroundNotification(
             if (timeSeconds <= 0L || timeSeconds < actionStartedAtSeconds) {
                 return
             }
-            latencyActionInFlight = false
-            latencyChecking = false
-            latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
-            latencyTimeoutRunnable = null
+            val attributed = runtimeGeneration != null && networkGeneration != null && revision > 0L && sessionId > 0L
+            if (nativeStartupToken == null || attributed) {
+                latencyActionInFlight = false
+                latencyChecking = false
+                latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+                latencyTimeoutRunnable = null
+            }
             presentation = presentation.copy(
                 latencyMillis = delayMillis.takeIf { it > 0L },
             )
+            // CommandGroup snapshots have no request identity/revision. They
+            // may repaint, but only a real attributed delta can own startup.
+            if (attributed) {
+                startupOwnership.clientRequest(true)
+                if (startupOwnership.complete(
+                startupRuntimeGeneration, startupNetworkGeneration, normalizedTag,
+                delayMillis.takeIf { it > 0L }, measuredAtMillis, status.orEmpty(), revision, sessionId, error,
+                selectionEpoch ?: this.selectionEpoch,
+                )) startupMeasurementFinished = true
+                clientStartupRequest = null
+            }
             persistPresentation(presentation)
             refreshLocked()
         }
     }
 
-    fun requestLatencyRefresh(): Boolean {
+    fun requestLatencyRefresh(startup: Boolean = false): Boolean {
         val request: UrlTestRequest
         val actionGeneration: Long
         val timeoutCallback: Runnable
@@ -381,8 +452,9 @@ internal class MeowForegroundNotification(
             }
             latencyActionInFlight = true
             latencyChecking = true
-            actionGeneration = System.currentTimeMillis() / 1_000L
-            latencyActionGeneration = actionGeneration
+            if (!startup) nativeStartupToken = null
+            actionGeneration = ++latencyActionGeneration
+            latencyActionStartedAtSeconds = System.currentTimeMillis() / 1_000L
             latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
             timeoutCallback = Runnable { completeLatencyAction(actionGeneration, null) }
             latencyTimeoutRunnable = timeoutCallback
@@ -392,7 +464,13 @@ internal class MeowForegroundNotification(
             timeoutCallback,
             max(request.deadlineMillis.toLong(), DEFAULT_LATENCY_TIMEOUT_MS) + 1_000L,
         )
-        SingboxController.urlTest(
+        val callback: (Result<Unit>) -> Unit = { result ->
+            if (result.isFailure) completeLatencyAction(actionGeneration, null)
+        }
+        val runner = latencyTestRunner
+        if (runner != null) {
+            runner(request, !startup, callback)
+        } else SingboxController.urlTest(
             groupTag = request.groupTag,
             targetOutboundTag = request.targetOutboundTag,
             priorityOutboundTag = request.priorityOutboundTag,
@@ -401,12 +479,11 @@ internal class MeowForegroundNotification(
             timeoutMillis = request.timeoutMillis,
             concurrency = request.concurrency,
             deadlineMillis = request.deadlineMillis,
-            force = true,
-        ) { result ->
-            if (result.isFailure) {
-                completeLatencyAction(actionGeneration, null)
-            }
-        }
+            force = !startup,
+            notificationStartup = startup,
+            notificationStartupToken = if (startup) nativeStartupToken ?: 0L else 0L,
+            callback = callback,
+        )
         return true
     }
 
@@ -420,6 +497,14 @@ internal class MeowForegroundNotification(
             }
             latencyActionInFlight = false
             latencyChecking = false
+            nativeStartupToken?.let { token ->
+                // Dispatch failure and no-result deadline both release the
+                // lease without inventing a core measurement. Later client
+                // work may join the original non-force core request safely.
+                startupOwnership.nativeFailed(token)
+                startupMeasurementFinished = true
+            }
+            nativeStartupToken = null
             latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
             latencyTimeoutRunnable = null
             if (latencyMillis != null) {
@@ -559,16 +644,223 @@ internal class MeowForegroundNotification(
         latencyActionGeneration++
         latencyActionInFlight = false
         latencyChecking = false
+        measurementNotBeforeSeconds = System.currentTimeMillis() / 1_000L
         presentation = presentation.copy(latencyMillis = null, urlTestRequest = request)
         persistPresentation(presentation)
         return true
     }
 
-    fun updateSelectedOutbounds(selected: Map<String, String>) {
+    fun updateSelectedOutbounds(selected: Map<String, String>, runtimeGeneration: Long? = null, networkGeneration: Long? = null, startProbe: Boolean = true) {
         synchronized(this) {
             if (!foregroundStarted || lifecycleStatus !in setOf("Connected", "Waiting for network")) return
+            if (runtimeGeneration != null && runtimeGeneration != startupRuntimeGeneration) return
+            if (networkGeneration != null && networkGeneration != startupNetworkGeneration) return
+            val oldTarget = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
+            val wasReady = selectedOutboundsReady
             selectedOutbounds = selected.toMap()
             if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = false)) refreshLocked()
+            if (wasReady && oldTarget != presentation.urlTestRequest?.targetOutboundTag.orEmpty()) selectionEpoch++
+            selectedOutboundsReady = hasAuthoritativePingTarget()
+            updateStartupContext()
+            if (startProbe) onGroupsSnapshotReady()
+        }
+    }
+
+    fun onRuntimeReady(runtimeGeneration: Long, networkGeneration: Long, tileStartup: Boolean) {
+        synchronized(this) {
+            if (runtimeGeneration != this.startupRuntimeGeneration) {
+                startupMeasurementFinished = false
+                selectionEpoch = 0L
+                selectedOutboundsReady = false
+            }
+            this.startupRuntimeGeneration = runtimeGeneration
+            this.startupNetworkGeneration = networkGeneration
+            this.tileStartup = tileStartup
+            updateStartupContext()
+            requestStartupLatencyIfReady()
+        }
+    }
+
+    fun onNetworkGenerationChanged(networkGeneration: Long) {
+        synchronized(this) {
+            if (networkGeneration == startupNetworkGeneration) return
+            startupNetworkGeneration = networkGeneration
+            selectedOutboundsReady = false
+            setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
+            updateStartupContext()
+            refreshLocked()
+        }
+    }
+
+    private fun updateStartupContext() {
+        startupOwnership.update(
+            startupRuntimeGeneration, startupNetworkGeneration,
+            presentation.urlTestRequest?.targetOutboundTag.orEmpty(),
+            foregroundStarted && lifecycleStatus == "Connected" && selectedOutboundsReady,
+            tileStartup,
+            selectionEpoch,
+        )
+        clientStartupRequest?.takeIf {
+            it.runtime == startupRuntimeGeneration && it.network == startupNetworkGeneration &&
+                coversPingTarget(it.group, it.target, it.included, it.excluded)
+        }?.let { it.ownershipToken = startupOwnership.clientRequest(true) }
+    }
+
+    private fun hasAuthoritativePingTarget(): Boolean {
+        var tag = rootOutboundTag
+        val visited = mutableSetOf<String>()
+        while (tag.isNotEmpty() && visited.add(tag)) {
+            val outbound = configuredOutbounds?.get(tag) ?: return false
+            if (outbound.type !in setOf("selector", "urltest"))
+                return outbound.type !in setOf("direct", "block", "dns", "")
+            tag = selectedOutbounds[tag]?.takeIf { it in outbound.members } ?: return false
+        }
+        return false
+    }
+
+    private fun requestStartupLatencyIfReady() {
+        if (startupMeasurementFinished || latencyActionInFlight) return
+        if (selectedOutboundsReady && lifecycleStatus == "Connected") {
+            val leaf = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
+            SingboxController.cachedNotificationLatency(leaf, startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch)?.let {
+                onUrlTestResult(it.tag, it.delay, it.measuredAtMillis / 1_000L, it.status,
+                    it.runtime, it.network, it.measuredAtMillis, it.revision, it.sessionId, it.error, it.selection)
+            }
+            if (startupMeasurementFinished) return
+        }
+        val token = startupOwnership.claimNative() ?: return
+        nativeStartupToken = token
+        if (!requestLatencyRefresh(startup = true)) {
+            startupOwnership.nativeFailed(token)
+        }
+    }
+
+    fun onGroupsSnapshotReady() {
+        synchronized(this) {
+            requestStartupLatencyIfReady()
+        }
+    }
+
+    fun prepareStartupUrlTest(runtimeGeneration: Long, tags: Set<String>, callback: (Map<String?, Any?>) -> Unit) {
+        synchronized(this) {
+            updateStartupContext()
+            val networkGeneration = startupNetworkGeneration
+            val requestedTarget = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
+            val requestedSelection = selectionEpoch
+            var reservation: Long? = null
+            var delivered = false
+            fun deliver(borrowed: StartupLatencyOwnership.Measurement?, pendingTag: String = "") {
+                val selectedSnapshot = selectedOutbounds.toMap()
+                mainHandler.post {
+                    if (delivered) return@post
+                    delivered = true
+                    callback(mapOf(
+                        "valid" to (runtimeGeneration == startupRuntimeGeneration && networkGeneration == startupNetworkGeneration &&
+                            requestedTarget == presentation.urlTestRequest?.targetOutboundTag.orEmpty() && requestedSelection == selectionEpoch),
+                        "runtimeGeneration" to runtimeGeneration,
+                        "networkGeneration" to networkGeneration,
+                        "borrowedTag" to (borrowed?.tag ?: pendingTag),
+                        "startupLeaseToken" to if (borrowed == null && pendingTag.isEmpty()) (reservation ?: 0L) else 0L,
+                        "delayMillis" to borrowed?.delayMillis,
+                        "measuredAtMillis" to borrowed?.measuredAtMillis,
+                        "status" to borrowed?.status.orEmpty(),
+                        "revision" to borrowed?.revision,
+                        "sessionId" to borrowed?.sessionId,
+                        "error" to borrowed?.error.orEmpty(),
+                        "selectedOutbounds" to selectedSnapshot,
+                    ))
+                }
+            }
+            reservation = startupOwnership.prepareClient(runtimeGeneration, tags) { deliver(it) }
+            if (reservation != null) mainHandler.postDelayed({
+                synchronized(this) {
+                    if (startupOwnership.expireReservation(reservation)) requestStartupLatencyIfReady()
+                }
+            }, 5_000L)
+            // A client-owned manual/full session may outlive the notification
+            // probe budget. Report ownership, not a fabricated measurement.
+            val waitingTag = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
+            mainHandler.postDelayed({ deliver(null, waitingTag.takeIf { it in tags }.orEmpty()) }, 36_000L)
+        }
+    }
+
+    fun onClientUrlTestRequested(group: String, target: String, included: List<String>, excluded: String,
+        deadlineMillis: Int = 20_000, requestId: String = "",
+    ): Long? {
+        synchronized(this) {
+            if (!tileStartup || startupRuntimeGeneration <= 0L ||
+                (selectedOutboundsReady && !coversPingTarget(group, target, included, excluded))
+            ) return null
+            val request = ClientStartupRequest(
+                ++clientRequestSequence, startupRuntimeGeneration, startupNetworkGeneration,
+                group, target, included.toList(), excluded,
+                startupOwnership.clientRequest(true),
+                requestId,
+            )
+            clientStartupRequest = request
+            mainHandler.postDelayed({
+                synchronized(this) {
+                    if (clientStartupRequest?.id != request.id) return@synchronized
+                    request.ownershipToken?.let { token ->
+                        if (startupOwnership.expireClient(token)) {
+                            clientStartupRequest = null
+                            // Non-force native refresh joins a still-capable
+                            // full session; it does not create a parallel leaf.
+                            requestStartupLatencyIfReady()
+                        }
+                    }
+                }
+            }, (if (deadlineMillis > 0) deadlineMillis.toLong() else 120_000L) + 1_000L)
+            return request.id
+        }
+    }
+
+    fun dispatchStartupUrlTest(token: Long, runtime: Long, network: Long, group: String, target: String,
+        included: List<String>, excluded: String, deadlineMillis: Int, requestId: String,
+    ): Long? {
+        synchronized(this) {
+            if (runtime != startupRuntimeGeneration || network != startupNetworkGeneration ||
+                !coversPingTarget(group, target, included, excluded) || !startupOwnership.dispatchClient(token)
+            ) return null
+            return onClientUrlTestRequested(group, target, included, excluded, deadlineMillis, requestId)
+        }
+    }
+
+    fun validateNativeStartup(token: Long, runtime: Long, network: Long, selection: Long): Boolean = synchronized(this) {
+        runtime == startupRuntimeGeneration && network == startupNetworkGeneration &&
+            selection == selectionEpoch && startupOwnership.dispatchNative(token)
+    }
+
+    fun onClientStartupSessionTerminal(requestId: String, runtime: Long, network: Long) {
+        synchronized(this) {
+            val request = clientStartupRequest?.takeIf {
+                requestId.isNotEmpty() && it.logicalSessionId == requestId && it.runtime == runtime && it.network == network
+            } ?: return
+            request.ownershipToken?.let { token ->
+                if (startupOwnership.expireClient(token)) {
+                    clientStartupRequest = null
+                    requestStartupLatencyIfReady()
+                }
+            }
+        }
+    }
+
+    private fun coversPingTarget(group: String, target: String, included: List<String>, excluded: String): Boolean {
+        val leaf = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
+        if (leaf.isEmpty() || excluded == leaf) return false
+        if (target.isNotEmpty()) return target == leaf
+        if (included.isNotEmpty()) return leaf in included
+        val visited = mutableSetOf<String>()
+        fun contains(tag: String): Boolean = tag == leaf ||
+            (visited.add(tag) && configuredOutbounds?.get(tag)?.members.orEmpty().any(::contains))
+        return contains(group)
+    }
+
+    fun onClientUrlTestDispatchFailed(token: Long) {
+        synchronized(this) {
+            val request = clientStartupRequest?.takeIf { it.id == token } ?: return
+            clientStartupRequest = null
+            request.ownershipToken?.let { if (startupOwnership.clientFailed(it)) requestStartupLatencyIfReady() }
         }
     }
 

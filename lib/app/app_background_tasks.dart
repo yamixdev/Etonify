@@ -227,19 +227,74 @@ class ProxyCacheBuildResult {
     required this.displayProxy,
     required this.activeProxies,
     this.groupChildrenByTag = const <String, List<AppProxySummary>>{},
+    this.summariesByTag = const <String, AppProxySummary>{},
     required this.totalTopLevelProxyCount,
     this.includesFullProxyList = true,
     this.unsupportedWireGuardCount = 0,
+    this.workerElapsed = Duration.zero,
   });
 
   final AppProfileSummary? activeProfile;
   final AppProxySummary? displayProxy;
   final List<AppProxySummary> activeProxies;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
+
+  /// Constructed in the worker, so applying a large result is O(1).
+  final Map<String, AppProxySummary> summariesByTag;
   final int totalTopLevelProxyCount;
   final bool includesFullProxyList;
   final int unsupportedWireGuardCount;
+  final Duration workerElapsed;
+
+  ProxyCacheBuildResult withWorkerElapsed(Duration elapsed) =>
+      ProxyCacheBuildResult(
+        activeProfile: activeProfile,
+        displayProxy: displayProxy,
+        activeProxies: activeProxies,
+        groupChildrenByTag: groupChildrenByTag,
+        summariesByTag: summariesByTag,
+        totalTopLevelProxyCount: totalTopLevelProxyCount,
+        includesFullProxyList: includesFullProxyList,
+        unsupportedWireGuardCount: unsupportedWireGuardCount,
+        workerElapsed: elapsed,
+      );
 }
+
+class ProxyMetadataReplacement {
+  const ProxyMetadataReplacement(
+    this.subscription,
+    this.visibleOutbounds,
+    this.outboundByTag,
+  );
+  final Subscription subscription;
+  final List<Outbound> visibleOutbounds;
+  final Map<String, Outbound> outboundByTag;
+}
+
+Future<ProxyMetadataReplacement> replaceProxyMetadataInBackground(
+  Subscription source,
+  Map<String, OutboundInfo> updates,
+) => Isolate.run(() {
+  final outbounds = [
+    for (final outbound in source.outbounds)
+      if (updates[outbound.tag] case final info?)
+        outbound.copyWith(info: info)
+      else
+        outbound,
+  ];
+  final visible = <Outbound>[];
+  final byTag = <String, Outbound>{};
+  for (final outbound in outbounds) {
+    if (outbound.info.deleted) continue;
+    byTag[outbound.tag] = outbound;
+    if (outbound.config['_group_only'] != true) visible.add(outbound);
+  }
+  return ProxyMetadataReplacement(
+    source.copyWith(outbounds: outbounds),
+    visible,
+    byTag,
+  );
+}, debugName: 'etonify-proxy-metadata');
 
 class SingboxConfigBuildInput {
   const SingboxConfigBuildInput({
@@ -428,10 +483,11 @@ class StartupValidationResult {
 Future<ProxyCacheBuildResult> buildProxyCacheInBackground(
   ProxyCacheBuildInput input,
 ) {
-  return Isolate.run(
-    () => buildProxyCache(input),
-    debugName: 'meow-proxy-cache',
-  );
+  return Isolate.run(() {
+    final timer = Stopwatch()..start();
+    final result = buildProxyCache(input);
+    return result.withWorkerElapsed(timer.elapsed);
+  }, debugName: 'meow-proxy-cache');
 }
 
 /// Builds the compact state required by the home screen.
@@ -442,10 +498,11 @@ Future<ProxyCacheBuildResult> buildProxyCacheInBackground(
 Future<ProxyCacheBuildResult> buildHomeProxyCacheInBackground(
   ProxyCacheBuildInput input,
 ) {
-  return Isolate.run(
-    () => buildHomeProxyCache(input),
-    debugName: 'meow-home-proxy-cache',
-  );
+  return Isolate.run(() {
+    final timer = Stopwatch()..start();
+    final result = buildHomeProxyCache(input);
+    return result.withWorkerElapsed(timer.elapsed);
+  }, debugName: 'meow-home-proxy-cache');
 }
 
 ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
@@ -482,6 +539,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     activeProfile: activeProfile,
     displayProxy: displayProxy,
     activeProxies: const <AppProxySummary>[],
+    summariesByTag: {displayProxy.tag: displayProxy},
     totalTopLevelProxyCount: catalog.candidateTags.length,
     includesFullProxyList: false,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
@@ -894,6 +952,12 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     displayProxy: displayProxy,
     activeProxies: topLevelSummaries,
     groupChildrenByTag: groupChildrenByTag,
+    summariesByTag: {
+      for (final proxy in topLevelSummaries) proxy.tag: proxy,
+      for (final children in groupChildrenByTag.values)
+        for (final proxy in children) proxy.tag: proxy,
+      displayProxy.tag: displayProxy,
+    },
     totalTopLevelProxyCount: topLevelSummaries.length,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
   );

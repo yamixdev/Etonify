@@ -4,6 +4,81 @@ import 'package:meow_client/models/subscription.dart';
 
 void main() {
   test(
+    'metadata worker preserves configs and indexes updated visible nodes',
+    () async {
+      final source = Subscription(
+        id: 'metadata',
+        name: 'Metadata',
+        url: '',
+        outbounds: const [
+          Outbound(
+            tag: 'a',
+            name: 'A',
+            config: {'type': 'vless', 'uuid': 'secret'},
+          ),
+          Outbound(
+            tag: 'helper',
+            name: 'Helper',
+            config: {'type': 'vless', '_group_only': true},
+          ),
+          Outbound(
+            tag: 'deleted',
+            name: 'Deleted',
+            config: {'type': 'vless'},
+            info: OutboundInfo(deleted: true),
+          ),
+        ],
+      );
+      final result = await replaceProxyMetadataInBackground(source, {
+        'a': const OutboundInfo(exitCountry: 'SE', externalIp: '203.0.113.1'),
+      });
+      expect(result.subscription.outbounds.first.config['uuid'], 'secret');
+      expect(result.subscription.outbounds.first.info.exitCountry, 'SE');
+      expect(source.outbounds.first.info.exitCountry, isNull);
+      expect(result.visibleOutbounds.map((node) => node.tag), ['a']);
+      expect(result.outboundByTag.keys, ['a', 'helper']);
+      expect(
+        identical(
+          result.outboundByTag['a'],
+          result.subscription.outbounds.first,
+        ),
+        isTrue,
+      );
+    },
+  );
+  test(
+    'background result indexes nested children and selected display',
+    () async {
+      final source = Subscription(
+        id: 'indexed',
+        name: 'Indexed',
+        url: '',
+        selectedProxyTag: 'a',
+        outbounds: const [
+          Outbound(tag: 'a', name: 'A', config: {'type': 'vless'}),
+          Outbound(tag: 'b', name: 'B', config: {'type': 'vless'}),
+        ],
+        groups: const [
+          SubscriptionGroup(
+            tag: 'auto',
+            name: 'Auto',
+            outboundTags: ['a', 'b'],
+          ),
+        ],
+      );
+      final result = await buildProxyCacheInBackground(_input(source));
+      expect(result.summariesByTag.keys, containsAll(['a', 'b', 'auto']));
+      expect(
+        identical(result.summariesByTag['a'], result.displayProxy),
+        isTrue,
+      );
+      expect(result.summariesByTag['b']?.parentGroupTag, 'auto');
+      final home = await buildHomeProxyCacheInBackground(_input(source));
+      expect(home.summariesByTag.keys, ['a']);
+      expect(home.activeProxies, isEmpty);
+    },
+  );
+  test(
     'large presentation snapshots are reused and invalidated by identity',
     () async {
       final cache = ProxyPresentationSnapshotCache();

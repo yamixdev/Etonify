@@ -130,6 +130,9 @@
   "autoCheckDisabledNoticeAction": "Понятно",
   "proxiesProgressWorking": "Работает {working} / {total}",
   "proxiesProgressTested": "Проверено {tested} / {total}",
+  "proxiesProgressSkipped": "Исключено: {count}",
+  "@proxiesProgressSkipped": {"placeholders": {"count": {"type": "int"}}},
+  "proxiesProgressSkippedExplanation": "Эти серверы не входят в очередь проверки текущего ядра. Они не считаются неработающими. Неподдерживаемые и некорректные конфигурации могут быть исключены; доступные подробности есть в логах запуска.",
   "proxiesCheckPaused": "Проверка приостановлена",
   "@proxiesProgressTested": {
     "placeholders": {

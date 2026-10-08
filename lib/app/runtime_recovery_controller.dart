@@ -42,6 +42,7 @@ class RuntimeRecoveryController {
   Map<int, String>? _proxyOutboundTagsByIndex;
   Map<String, dynamic>? _lastStartedConfig;
   Set<String> _lastStartedUrlTestOutboundTags = <String>{};
+  Set<String>? _lastStartedUrlTestOutboundTagsSnapshot;
 
   /// Tags excluded from the running set but still present in
   /// [_lastStartedConfig], i.e. not yet removed by a mutation or a rebuild.
@@ -53,7 +54,9 @@ class RuntimeRecoveryController {
   Set<String> get excludedOutboundTags =>
       Set<String>.unmodifiable(_excludedOutboundTags);
   Set<String> get lastStartedUrlTestOutboundTags =>
-      Set<String>.unmodifiable(_lastStartedUrlTestOutboundTags);
+      _lastStartedUrlTestOutboundTagsSnapshot ??= Set<String>.unmodifiable(
+        _lastStartedUrlTestOutboundTags,
+      );
 
   void dispose() {
     cancelRetry();
@@ -96,6 +99,7 @@ class RuntimeRecoveryController {
   }
 
   void cacheStartedBuild(SingboxConfigBuildResult build) {
+    _lastStartedUrlTestOutboundTagsSnapshot = null;
     _proxyOutboundTagsByIndex = Map<int, String>.from(
       build.plan.proxyOutboundTagsByIndex,
     );
@@ -113,6 +117,7 @@ class RuntimeRecoveryController {
   }
 
   void clearBuildCache() {
+    _lastStartedUrlTestOutboundTagsSnapshot = null;
     _proxyOutboundTagsByIndex = null;
     _lastStartedConfig = null;
     _lastStartedUrlTestOutboundTags.clear();
@@ -184,6 +189,7 @@ class RuntimeRecoveryController {
     if (excludedTag != null) {
       _pendingMutationExcludedTags.remove(excludedTag);
       _lastStartedUrlTestOutboundTags.remove(excludedTag);
+      _lastStartedUrlTestOutboundTagsSnapshot = null;
     }
     _lastStartedConfig = Map<String, dynamic>.from(mutation.config);
     _proxyOutboundTagsByIndex = Map<int, String>.from(

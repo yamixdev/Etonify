@@ -1,6 +1,7 @@
 part of 'proxies_page.dart';
 
-enum _ProxyListEntryType { tile, addChain, divider }
+typedef _ProxyListEntryType = ProxyListEntryType;
+typedef _ProxyListEntry = ProxyListEntry;
 
 class _ProxyChainSelection {
   const _ProxyChainSelection({
@@ -287,22 +288,4 @@ class _AddProxyChainSheetState extends State<_AddProxyChainSheet> {
       ),
     );
   }
-}
-
-class _ProxyListEntry {
-  const _ProxyListEntry._(this.type, [this.proxy]);
-
-  const _ProxyListEntry.tile(AppProxySummary proxy)
-    : this._(_ProxyListEntryType.tile, proxy);
-  const _ProxyListEntry.addChain() : this._(_ProxyListEntryType.addChain);
-  const _ProxyListEntry.divider() : this._(_ProxyListEntryType.divider);
-
-  final _ProxyListEntryType type;
-  final AppProxySummary? proxy;
-
-  Key get key => switch (type) {
-    _ProxyListEntryType.tile => ValueKey('proxy-row-${proxy!.tag}'),
-    _ProxyListEntryType.addChain => const ValueKey('proxy-add-chain-row'),
-    _ProxyListEntryType.divider => const ValueKey('proxy-divider-row'),
-  };
 }
