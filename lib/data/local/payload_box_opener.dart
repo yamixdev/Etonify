@@ -1,4 +1,5 @@
 import 'package:hive_ce/hive.dart';
+import 'dart:io';
 import 'package:meow_client/logging/app_log_store.dart';
 
 /// Opens the encrypted payload box lazily.
@@ -16,6 +17,7 @@ Future<LazyBox<dynamic>> openPayloadBox({
   final box = await Hive.openLazyBox<dynamic>(
     name,
     encryptionCipher: cipher,
+    crashRecovery: !Platform.isWindows,
     compactionStrategy: shouldCompactPayloadBox,
   );
   final elapsedMs = watch.elapsedMilliseconds;

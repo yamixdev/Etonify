@@ -5,10 +5,11 @@ bool shouldAutoConnectOnLaunch({
   required bool hasActiveProfile,
   required bool vpnInboundEnabled,
   required bool runtimeActive,
+  bool isWindows = false,
 }) =>
     enabled &&
     onboardingCompleted &&
     legalAccepted &&
     hasActiveProfile &&
-    vpnInboundEnabled &&
+    (isWindows || vpnInboundEnabled) &&
     !runtimeActive;

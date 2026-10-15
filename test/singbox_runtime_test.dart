@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+import 'package:meow_client/platform/windows/desktop_runtime_client.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
@@ -46,26 +48,43 @@ void main() {
   });
 
   group('SingboxRuntime non-Android guards', () {
-    test('prepareVpn returns !requiresVpn on non-Android', () async {
-      expect(
-        await SingboxRuntime.instance.prepareVpn(requiresVpn: true),
-        isFalse,
-      );
-      expect(
-        await SingboxRuntime.instance.prepareVpn(requiresVpn: false),
-        isTrue,
-      );
-    });
+    test(
+      'prepareVpn preserves non-Android guard except independent Windows local mode',
+      () async {
+        expect(
+          await SingboxRuntime.instance.prepareVpn(requiresVpn: true),
+          Platform.isWindows ? isTrue : isFalse,
+        );
+        expect(
+          await SingboxRuntime.instance.prepareVpn(requiresVpn: false),
+          isTrue,
+        );
+      },
+    );
 
     test('vpnPermissionGranted returns true on non-Android', () async {
       expect(await SingboxRuntime.instance.vpnPermissionGranted(), isTrue);
     });
 
     test('getConfigPath returns null on non-Android', () async {
+      if (Platform.isWindows) {
+        await expectLater(
+          SingboxRuntime.instance.getConfigPath(),
+          throwsA(isA<DesktopRuntimeException>()),
+        );
+        return;
+      }
       expect(await SingboxRuntime.instance.getConfigPath(), isNull);
     });
 
     test('status returns empty map on non-Android', () async {
+      if (Platform.isWindows) {
+        await expectLater(
+          SingboxRuntime.instance.status(),
+          throwsA(isA<DesktopRuntimeException>()),
+        );
+        return;
+      }
       expect(await SingboxRuntime.instance.status(), isEmpty);
     });
 
@@ -80,7 +99,9 @@ void main() {
             maxBytes: 1024,
             timeout: const Duration(seconds: 5),
           ),
-          throwsUnsupportedError,
+          Platform.isWindows
+              ? throwsA(isA<DesktopRuntimeException>())
+              : throwsUnsupportedError,
         );
       },
     );

@@ -219,6 +219,7 @@ class SubscriptionStore {
           : await Hive.openBox<dynamic>(
               _metaBoxName,
               encryptionCipher: SecureHiveStorage.cipher,
+              crashRecovery: !Platform.isWindows,
               compactionStrategy: shouldCompactMetadataBox,
             );
       _payloadJournalBox = await openPayloadBox(

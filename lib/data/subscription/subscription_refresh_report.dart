@@ -1,4 +1,5 @@
 import 'package:hive_ce/hive.dart';
+import 'dart:io';
 import 'package:meow_client/data/local/secure_hive_storage.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 
@@ -56,6 +57,7 @@ class SubscriptionRefreshReports {
       return await Hive.openBox<dynamic>(
         'subscription_refresh_reports_v1',
         encryptionCipher: SecureHiveStorage.cipher,
+        crashRecovery: !Platform.isWindows,
       );
     } catch (_) {
       _opening = null;

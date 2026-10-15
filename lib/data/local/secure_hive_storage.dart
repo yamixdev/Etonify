@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:pointycastle/export.dart';
+import 'package:meow_client/core/platform/app_data_paths.dart';
+import 'package:meow_client/platform/windows/windows_storage_key.dart';
 
 /// AES-256-GCM encryption for Hive frames.
 ///
@@ -102,13 +104,45 @@ class SecureHiveStorage {
   static HiveCipher? _cipher;
   static bool _initialized = false;
   static Future<void>? _initialization;
+  static String? _windowsKeyFingerprint;
 
   static HiveCipher? get cipher => _cipher;
 
-  /// Loads the data key protected by Android Keystore.
-  ///
-  /// Android must never silently fall back to plaintext. Non-Android builds
-  /// remain unencrypted because Etonify's production target is Android.
+  /// Windows bootstrap must complete before any Hive box is opened.
+  static Future<void> initWindows(
+    AppDataPaths paths, {
+    required bool portable,
+  }) async {
+    final inFlight = _initialization;
+    if (inFlight != null) return inFlight;
+    final operation = () async {
+      final key = await WindowsStorageKey.loadOrCreate(
+        paths,
+        portable: portable,
+      );
+      final fingerprint = sha256.convert(key).toString();
+      if (_initialized) {
+        if (_windowsKeyFingerprint != fingerprint) {
+          throw StateError(
+            'Storage key changed during this process. Restart after restoring the complete folder.',
+          );
+        }
+        return;
+      }
+      _cipher = HiveAesGcmCipher(key);
+      _windowsKeyFingerprint = fingerprint;
+      _initialized = true;
+    }();
+    _initialization = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_initialization, operation)) _initialization = null;
+    }
+  }
+
+  /// Android must never silently fall back to plaintext. Windows is prepared
+  /// explicitly by bootstrap; other platforms retain their existing behavior.
   static Future<void> init() async {
     if (_initialized) return;
     final inFlight = _initialization;
@@ -126,6 +160,8 @@ class SecureHiveStorage {
         }
         final key = base64Decode(encoded);
         _cipher = HiveAesGcmCipher(key);
+      } else if (Platform.isWindows) {
+        throw StateError('Windows encrypted storage bootstrap is required.');
       }
       _initialized = true;
     }();

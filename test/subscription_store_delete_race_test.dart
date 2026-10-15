@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -11,6 +12,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     tempDir = await Directory.systemTemp.createTemp('meow-client-hive-test-');
+    await bootstrapWindowsStorageFixture(tempDir);
     Hive.init(tempDir.path);
     await SubscriptionStore.init();
   });

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:meow_client/core/platform/app_data_paths.dart';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -1323,6 +1324,8 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   Future<_RussiaRouteStoragePaths> _storagePaths() async {
     final baseDirPath = Platform.isAndroid
         ? await AndroidFilesDir.ensureInitialized()
+        : Platform.isWindows
+        ? AppDataPaths.current.ruleSetRoot
         : Directory.systemTemp.path;
     final base = Directory('$baseDirPath/route-data/russia-v2ray-rules-dat');
     return _RussiaRouteStoragePaths(

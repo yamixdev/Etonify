@@ -1,4 +1,5 @@
 #include "flutter_window.h"
+#include "desktop_storage.h"
 
 #include <optional>
 
@@ -25,6 +26,9 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  RegisterDesktopStorage(flutter_controller_->engine()->messenger());
+  desktop_channels_ = std::make_unique<DesktopChannels>(
+      GetHandle(), flutter_controller_->engine()->messenger());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +44,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  desktop_channels_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -51,6 +56,7 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (desktop_channels_ && desktop_channels_->HandleMessage(message)) return 0;
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -63,7 +69,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_FONTCHANGE:
-      flutter_controller_->engine()->ReloadSystemFonts();
+      if (flutter_controller_) flutter_controller_->engine()->ReloadSystemFonts();
       break;
   }
 

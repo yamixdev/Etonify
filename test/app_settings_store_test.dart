@@ -1,11 +1,227 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
+import 'package:hive_ce/src/backend/vm/storage_backend_vm.dart';
+import 'package:hive_ce/src/box/box_base_impl.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
+import 'package:meow_client/platform/windows/desktop_preferences.dart';
+import 'package:flutter/services.dart';
+import 'package:meow_client/core/platform/app_data_paths.dart';
+import 'package:meow_client/data/local/secure_hive_storage.dart';
+import 'package:meow_client/platform/windows/desktop_contract.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+class _SettingsTestPaths extends PathProviderPlatform {
+  _SettingsTestPaths(this.path);
+  final String path;
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+// Observe real Hive disk writes/fsync through its existing backend testing hook.
+// Encoding, box state, saveState and flushing remain the production code paths.
+class _CountingSettingsFile extends Fake implements RandomAccessFile {
+  _CountingSettingsFile(this.delegate);
+  final RandomAccessFile delegate;
+  int flushCalls = 0;
+  @override
+  Future<RandomAccessFile> flush() async {
+    flushCalls++;
+    return delegate.flush();
+  }
+
+  @override
+  Future<RandomAccessFile> writeFrom(
+    List<int> buffer, [
+    int start = 0,
+    int? end,
+  ]) => delegate.writeFrom(buffer, start, end);
+  @override
+  Future<RandomAccessFile> setPosition(int position) =>
+      delegate.setPosition(position);
+  @override
+  Future<RandomAccessFile> truncate(int length) => delegate.truncate(length);
+  @override
+  Future<int> length() => delegate.length();
+  @override
+  Future<void> close() => delegate.close();
+}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'unchanged Hive settings do not write or flush Windows namespace',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'etonify-settings-noop-',
+      );
+      final originalPaths = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = _SettingsTestPaths(directory.path);
+      HiveAppSettingsStore? store;
+      StorageBackendVm? backend;
+      RandomAccessFile? originalFile;
+      try {
+        if (Platform.isWindows) {
+          const channel = MethodChannel('etonify/windows_storage');
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, (call) async => null);
+          final paths = await AppDataPaths.resolve(
+            DesktopLaunchContext(
+              installationId: 'fixture',
+              distribution: DesktopDistribution.portable,
+              dataRoot: directory.path,
+              startedAtLogin: false,
+              minimized: false,
+              ownerPid: 1,
+            ),
+          );
+          await SecureHiveStorage.initWindows(paths, portable: true);
+        }
+        store = await HiveAppSettingsStore.open();
+        final state = (await store.loadState()).copyWith(
+          windowsUnknown: {
+            'future': {
+              'items': ['one', 'two'],
+              'empty': null,
+            },
+          },
+        );
+        await store.saveState(state);
+        final box =
+            Hive.box<dynamic>(AppSettingsStore.boxName) as BoxBaseImpl<dynamic>;
+        // ignore: invalid_use_of_protected_member
+        backend = box.backend as StorageBackendVm;
+        originalFile = backend.writeRaf;
+        final observed = _CountingSettingsFile(originalFile);
+        backend.writeRaf = observed;
+        final fileLength = await observed.length();
+        await store.saveState(await store.loadState());
+        expect(
+          observed.flushCalls,
+          0,
+          reason:
+              'content-identical Windows maps must not schedule putAll/flush',
+        );
+        expect(await observed.length(), fileLength);
+
+        final current = await store.loadState();
+        await store.saveState(
+          current.copyWith(
+            windowsModes: current.windowsModes.copyWith(tunEnabled: true),
+          ),
+        );
+        expect(observed.flushCalls, 1);
+        expect((await store.loadState()).windowsModes.tunEnabled, true);
+        expect(await observed.length(), greaterThan(fileLength));
+        await store.saveState(await store.loadState());
+        expect(observed.flushCalls, 1);
+
+        await store.saveState(
+          current.copyWith(
+            windowsModes: current.windowsModes.copyWith(tunEnabled: true),
+            windowsUnknown: {
+              'future': {
+                'items': ['one', 'changed'],
+                'empty': null,
+              },
+            },
+          ),
+        );
+        expect(observed.flushCalls, 2);
+        expect((await store.loadState()).windowsUnknown, {
+          'future': {
+            'items': ['one', 'changed'],
+            'empty': null,
+          },
+        });
+      } finally {
+        if (backend != null && originalFile != null) {
+          backend.writeRaf = originalFile;
+        }
+        await store?.close();
+        await Hive.close();
+        PathProviderPlatform.instance = originalPaths;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel('etonify/windows_storage'),
+              null,
+            );
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+  test('Windows namespace survives settings and backup round trips', () {
+    final store = _TestSettingsStore();
+    final original = store.mapState({
+      'windows': {
+        'modes': {'tunEnabled': true, 'futureMode': 7},
+        'presentation': {'proxyListStyle': 'comfortable', 'futureStyle': 9},
+        'futureNamespace': {'value': 11},
+      },
+    });
+    final restored = store.mapState(store.stateToMap(original));
+    final imported = store.mergeSafeImportMap(
+      store.mapState({}),
+      store.stateToSafeExportMap(restored),
+    );
+    expect(store.stateToMap(imported)['windows'], isA<Map<String, dynamic>>());
+    final block = store.stateToMap(imported)['windows'] as Map<String, dynamic>;
+    expect((block['modes'] as Map)['tunEnabled'], true);
+    expect((block['modes'] as Map)['futureMode'], 7);
+    expect((block['presentation'] as Map)['proxyListStyle'], 'comfortable');
+    expect(block['futureNamespace'], {'value': 11});
+    expect(imported.vpnInboundEnabled, original.vpnInboundEnabled);
+    final controller = AppSettingsController()..applyState(imported);
+    controller.hapticEnabled = false;
+    final saved = controller.toState(
+      onboardingCompleted: false,
+      acceptedLegalVersion: '',
+      acceptedLegalAtMillis: null,
+      activeProfileId: '',
+      selectedProxyTag: '',
+    );
+    expect(store.stateToMap(saved)['windows'], block);
+    expect(saved.hapticEnabled, false);
+    expect(saved.copyWith(localeCode: 'ru').windowsModes.tunEnabled, true);
+    expect(saved.copyWith(localeCode: 'ru').windowsUnknown, {
+      'futureNamespace': {'value': 11},
+    });
+  });
+  test('Android fixture retains defaults without Windows namespace', () async {
+    final store = _TestSettingsStore();
+    final android = store.mapState({
+      'vpn_inbound_enabled': '1',
+      'proxy_inbound_enabled': '0',
+      'vpn_mtu': '1500',
+    });
+    expect(android.vpnInboundEnabled, true);
+    expect(android.proxyInboundEnabled, false);
+    expect(android.vpnMtu, 1500);
+    expect(android.windowsModes.tunEnabled, false);
+    expect(android.windowsModes.launchMinimized, true);
+    expect(android.windowsPresentation.proxyListStyle, ProxyListStyle.compact);
+    final memory = MemoryAppSettingsStore(android);
+    final changed = android.copyWith(
+      windowsModes: android.windowsModes.copyWith(tunEnabled: true),
+      windowsPresentation: android.windowsPresentation.copyWith(
+        proxyListStyle: ProxyListStyle.comfortable,
+      ),
+    );
+    await memory.saveState(changed);
+    final restored = await memory.loadState();
+    expect(restored.windowsModes.tunEnabled, true);
+    expect(
+      restored.windowsPresentation.proxyListStyle,
+      ProxyListStyle.comfortable,
+    );
+    expect(restored.vpnInboundEnabled, true);
+    await memory.close();
+  });
   test(
     'legacy split import replaces active bank and preserves migration metadata',
     () {

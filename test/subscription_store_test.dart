@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
@@ -19,6 +20,7 @@ void main() {
     previousHttpOverrides = HttpOverrides.current;
     HttpOverrides.global = _PassthroughHttpOverrides();
     tempDir = await Directory.systemTemp.createTemp('meow-client-hive-');
+    await bootstrapWindowsStorageFixture(tempDir);
     Hive.init(tempDir.path);
     await SubscriptionStore.init();
   });

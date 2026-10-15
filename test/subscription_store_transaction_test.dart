@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:hive_ce/src/backend/vm/storage_backend_vm.dart';
 import 'package:hive_ce/src/box/box_base_impl.dart';
@@ -81,6 +82,7 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     directory = await Directory.systemTemp.createTemp('etonify-transaction-');
+    await bootstrapWindowsStorageFixture(directory);
     Hive.init(directory.path);
     await SubscriptionStore.init();
     await SubscriptionStore.save(_original);

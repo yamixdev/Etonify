@@ -76,6 +76,8 @@ class EtonifyBackupService {
     r'"encryption"\s*:\s*"(encrypted|plain)"',
   );
 
+  /// Exports allowlisted preferences, including inert foreign-platform
+  /// namespaces. Device storage keys/roots are never part of this envelope.
   String buildSettingsExport({
     required AppSettingsStore store,
     required AppSettingsState state,

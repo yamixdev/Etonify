@@ -57,6 +57,12 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+option(ETONIFY_NATIVE_TESTS "Build native transport/storage harnesses in CI" OFF)
+if(ETONIFY_NATIVE_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

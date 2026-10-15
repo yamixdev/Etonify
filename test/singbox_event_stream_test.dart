@@ -19,11 +19,11 @@ void main() {
         calls.add(call.method);
         return null;
       });
-      final runtime = SingboxRuntime.instance;
+      final events = SingboxRuntime.androidEvents;
       final uiEvents = <Map<String, dynamic>>[];
       final lifecycleEvents = <Map<String, dynamic>>[];
-      final ui = runtime.events.listen(uiEvents.add);
-      final lifecycle = runtime.events.listen(lifecycleEvents.add);
+      final ui = events.listen(uiEvents.add);
+      final lifecycle = events.listen(lifecycleEvents.add);
       addTearDown(() async {
         await lifecycle.cancel();
         await ui.cancel();
@@ -58,7 +58,7 @@ void main() {
       });
       expect(uiEvents.last['type'], 'groups');
       final stopEvents = <Map<String, dynamic>>[];
-      final stop = runtime.events.listen(stopEvents.add);
+      final stop = events.listen(stopEvents.add);
       await emit({'type': 'state', 'running': false});
       expect(stopEvents.single['running'], isFalse);
       expect(uiEvents.last['running'], isFalse);

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 
 void main() {
@@ -231,6 +232,7 @@ void main() {
 
 Future<T> _withIsolatedRouteStorage<T>(Future<T> Function() action) async {
   final root = await Directory.systemTemp.createTemp('etonify-route-test-');
+  await bootstrapWindowsStorageFixture(root);
   try {
     return await IOOverrides.runZoned(
       action,

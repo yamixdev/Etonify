@@ -1,9 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
+import 'dart:io';
+import 'package:hive_ce/hive.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  setUpAll(() async {
+    final directory = await Directory.systemTemp.createTemp(
+      'etonify-update-layout-',
+    );
+    await bootstrapWindowsStorageFixture(directory);
+    addTearDown(() async {
+      await Hive.close();
+      await directory.delete(recursive: true);
+    });
+  });
   testWidgets('OTA setting title uses the shared settings title styling', (
     tester,
   ) async {

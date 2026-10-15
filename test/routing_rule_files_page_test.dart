@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:io';
+import 'support/windows_storage_fixture.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/features/settings/routing_rule_files_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 void main() {
+  setUpAll(() async {
+    final directory = await Directory.systemTemp.createTemp(
+      'etonify-route-page-',
+    );
+    await bootstrapWindowsStorageFixture(directory);
+    addTearDown(() => directory.delete(recursive: true));
+  });
   testWidgets('route page unlocks after an update started on another page', (
     tester,
   ) async {

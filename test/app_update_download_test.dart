@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
@@ -81,6 +82,7 @@ void main() {
 
   setUpAll(() async {
     root = await Directory.systemTemp.createTemp('etonify-update-download-');
+    await bootstrapWindowsStorageFixture(root);
     oldPaths = PathProviderPlatform.instance;
     PathProviderPlatform.instance = _UpdatePaths(root.path);
     oldHttp = HttpOverrides.current;

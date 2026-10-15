@@ -4,6 +4,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
+import 'package:meow_client/platform/windows/desktop_preferences.dart';
 
 const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
@@ -88,6 +89,11 @@ class AppSettingsChange {
 }
 
 class AppSettingsController {
+  // Pass through the separate desktop namespace at this shared save boundary.
+  DesktopModePreferences windowsModes = DesktopModePreferences.defaults;
+  DesktopPresentationPreferences windowsPresentation =
+      DesktopPresentationPreferences.defaults;
+  Map<String, Object?> windowsUnknown = const {};
   int coreConfigSchemaVersion = 0;
   CoreSettings coreSettings = const CoreSettings();
   bool coreSettingsNoticeAcknowledged = false;
@@ -203,6 +209,9 @@ class AppSettingsController {
     required String selectedProxyTag,
   }) {
     return AppSettingsState(
+      windowsModes: windowsModes,
+      windowsPresentation: windowsPresentation,
+      windowsUnknown: windowsUnknown,
       coreConfigSchemaVersion: coreConfigSchemaVersion,
       coreSettings: coreSettings,
       coreSettingsNoticeAcknowledged: coreSettingsNoticeAcknowledged,
@@ -287,6 +296,9 @@ class AppSettingsController {
     AppSettingsState state, {
     bool progressiveBlurEnabledOverride = false,
   }) {
+    windowsModes = state.windowsModes;
+    windowsPresentation = state.windowsPresentation;
+    windowsUnknown = state.windowsUnknown;
     coreConfigSchemaVersion = state.coreConfigSchemaVersion;
     coreSettings = state.coreSettings;
     coreSettingsNoticeAcknowledged = state.coreSettingsNoticeAcknowledged;

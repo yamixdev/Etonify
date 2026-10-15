@@ -93,6 +93,7 @@ import 'package:meow_client/features/welcome/welcome_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/platform/quick_settings_tile_installer.dart';
+import 'package:meow_client/platform/windows/windows_storage_error.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
@@ -158,6 +159,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _backgroundSubscriptionSyncInFlight = false;
   bool _ownsStore = false;
   bool _ready = false;
+  bool _storageBootstrapFailed = false;
   bool _launchAutoConnectAttempted = false;
   bool _onboardingCompleted = false;
   String _acceptedLegalVersion = '';
@@ -2869,6 +2871,32 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _bootstrap() async {
+    try {
+      await _bootstrapInternal();
+    } catch (error, stackTrace) {
+      if (!Platform.isWindows) rethrow;
+      _showWindowsStorageFailure(error, stackTrace);
+    }
+  }
+
+  void _showWindowsStorageFailure(Object error, StackTrace stackTrace) {
+    // Do not persist a partially hydrated state after storage failed. This
+    // also keeps disposal from reading providers for a pending debounce.
+    _saveStateDebounceTimer?.cancel();
+    _saveStateDebounceTimer = null;
+    AppLogStore.error(
+      'Windows storage',
+      'Storage startup failed: $error\n$stackTrace',
+    );
+    if (mounted) {
+      setState(() {
+        _storageBootstrapFailed = true;
+        _ready = false;
+      });
+    }
+  }
+
+  Future<void> _bootstrapInternal() async {
     final bootstrapStopwatch = Stopwatch()..start();
     late final AppBootstrapResult bootstrap;
     try {
@@ -2881,6 +2909,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (!mounted) {
         return;
       }
+      if (Platform.isWindows) rethrow;
       setState(() {
         _ready = true;
       });
@@ -2988,8 +3017,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
       // until Flutter has presented the home screen.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          unawaited(SubscriptionStore.ensurePayloadReady());
-          unawaited(_ensureActiveSubscriptionHydratedForRuntime());
+          if (Platform.isWindows) {
+            unawaited(() async {
+              try {
+                await SubscriptionStore.ensurePayloadReady();
+                await _ensureActiveSubscriptionHydratedForRuntime();
+              } catch (error, stackTrace) {
+                _showWindowsStorageFailure(error, stackTrace);
+              }
+            }());
+          } else {
+            unawaited(SubscriptionStore.ensurePayloadReady());
+            unawaited(_ensureActiveSubscriptionHydratedForRuntime());
+          }
         }
       });
     }
@@ -3043,20 +3083,47 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
+  Future<void> _retryWindowsStorage() async {
+    try {
+      final ownedStore = _ownsStore ? _store : null;
+      if (ownedStore != null) {
+        await _stateSaveQueue.idle;
+        await ownedStore.close();
+        _store = null;
+        _ownsStore = false;
+      }
+      await SubscriptionStore.close();
+      if (!mounted) return;
+      setState(() => _storageBootstrapFailed = false);
+      await _bootstrap();
+    } catch (error, stackTrace) {
+      _showWindowsStorageFailure(error, stackTrace);
+    }
+  }
+
   Future<void> _maybeAutoConnectOnLaunch() async {
-    if (_splitRoutingResetSession.suppressAutoConnect) return;
-    if (_launchAutoConnectAttempted || !Platform.isAndroid) return;
+    if (!Platform.isWindows && _splitRoutingResetSession.suppressAutoConnect) {
+      return;
+    }
+    if (_launchAutoConnectAttempted ||
+        (!Platform.isAndroid && !Platform.isWindows)) {
+      return;
+    }
     _launchAutoConnectAttempted = true;
-    if (!_settings.autoConnectOnLaunch) return;
+    final enabled = Platform.isWindows
+        ? _settings.windowsModes.connectOnLaunch
+        : _settings.autoConnectOnLaunch;
+    if (!enabled) return;
     await _syncRuntimeState();
     if (!mounted ||
         !shouldAutoConnectOnLaunch(
-          enabled: _settings.autoConnectOnLaunch,
+          enabled: enabled,
           onboardingCompleted: _onboardingCompleted,
           legalAccepted: _legalAccepted,
           hasActiveProfile: _activeProfileId.isNotEmpty,
           vpnInboundEnabled: _vpnInboundEnabled,
           runtimeActive: _runtimeActiveOrRequested,
+          isWindows: Platform.isWindows,
         )) {
       return;
     }
@@ -4135,12 +4202,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     _trimRuntimeStartMemory('before_runtime_start');
 
-    if (!_vpnInboundEnabled && !_proxyInboundEnabled) {
+    if (!Platform.isWindows && !_vpnInboundEnabled && !_proxyInboundEnabled) {
       _showAppSnackBar(AppLocalizations.of(context).inboundNoneEnabled);
       return;
     }
 
-    if (_vpnInboundEnabled &&
+    if (!Platform.isWindows &&
+        _vpnInboundEnabled &&
         _splitRoutingMode != SplitRoutingMode.disabled &&
         normalizeSplitRoutingPackages(_splitRoutingPackages).isEmpty) {
       _showAppSnackBar(AppLocalizations.of(context).splitRoutingEmptyWhitelist);
@@ -4155,7 +4223,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       });
 
       final granted = await _singboxRuntime.prepareVpn(
-        requiresVpn: _vpnInboundEnabled,
+        requiresVpn: Platform.isWindows
+            ? _settings.windowsModes.tunEnabled
+            : _vpnInboundEnabled,
       );
       if (!_manualRuntimeStartCurrent(startGeneration)) {
         return;
@@ -9463,7 +9533,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       locale: _locale,
       progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
       hapticEnabled: _hapticEnabled,
-      home: _buildAppHome(),
+      home: _storageBootstrapFailed
+          ? WindowsStorageErrorScreen(onRetry: _retryWindowsStorage)
+          : _buildAppHome(),
       onDynamicColorSchemesChanged: _updateDynamicColorSchemes,
     );
   }

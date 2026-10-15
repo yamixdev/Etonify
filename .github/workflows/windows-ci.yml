@@ -1,0 +1,164 @@
+name: Etonify · Windows checks
+
+on:
+  push:
+    branches: [main, master, develop]
+    tags-ignore: ["**"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      create_draft:
+        description: "Attach successful Windows check bundle to a separate draft prerelease"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.5"
+  GO_VERSION: "1.27.1"
+
+jobs:
+  windows-x64:
+    name: Windows x64 compile and native checks (not a release)
+    runs-on: windows-2022
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout pinned client
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize only our pinned core and NAT fork
+        run: |
+          git submodule update --init -- etonify-core
+          if ($LASTEXITCODE -ne 0) { throw 'Core checkout failed' }
+          git -C etonify-core submodule update --init -- third_party/sing-tun
+          if ($LASTEXITCODE -ne 0) { throw 'NAT fork checkout failed' }
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: etonify-core/go.sum
+      - name: Resolve Dart dependencies and localization
+        run: |
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed' }
+          flutter gen-l10n
+          if ($LASTEXITCODE -ne 0) { throw 'Localization failed' }
+      - name: Analyze and test Dart
+        run: |
+          flutter analyze --fatal-infos
+          if ($LASTEXITCODE -ne 0) { throw 'Dart analysis failed' }
+          flutter test --no-pub
+          if ($LASTEXITCODE -ne 0) { throw 'Dart tests failed' }
+      - name: Core desktop and daemon tests
+        working-directory: etonify-core
+        run: |
+          go test ./experimental/etonifydesktop ./daemon -count=1 -timeout 180s
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+      - name: Build own core with complete Windows feature tags
+        working-directory: etonify-core
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          $tags = (Get-Content release/DEFAULT_BUILD_TAGS_WINDOWS -Raw).Trim()
+          $version = (Get-Content release/ETONIFY_VERSION -Raw).Trim()
+          $shared = (Get-Content release/LDFLAGS -Raw).Trim()
+          New-Item -ItemType Directory -Force dist | Out-Null
+          go build -trimpath -tags "$tags" -ldflags "-X github.com/sagernet/sing-box/constant.Version=$version $shared -s -w -buildid=" -o dist/etonify-desktop.exe ./cmd/etonify-desktop
+          if ($LASTEXITCODE -ne 0) { throw 'Windows agent compile failed' }
+          (Get-FileHash dist/etonify-desktop.exe -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content dist/etonify-desktop.sha256 -Encoding ascii
+          $metadata = [ordered]@{
+            clientCommit = (git -C .. rev-parse HEAD)
+            coreCommit = (git rev-parse HEAD)
+            coreVersion = $version
+            buildTags = $tags
+            goVersion = (go version)
+            cronetCommit = (Get-Content .github/CRONET_GO_VERSION -Raw).Trim()
+            acceptance = 'compile-and-IPC-only; TUN/system-proxy/installer/updater and Windows 10/11 traffic unverified'
+          }
+          $metadata | ConvertTo-Json | Set-Content dist/source-provenance.json -Encoding utf8
+      - name: Fetch exact pinned Naive runtime library
+        run: |
+          $pin = (Get-Content etonify-core/.github/CRONET_GO_VERSION -Raw).Trim()
+          if ($pin -notmatch '^[0-9a-f]{40}$') { throw 'Invalid Cronet source pin' }
+          $source = Join-Path $env:RUNNER_TEMP 'etonify-cronet'
+          git init "$source"
+          git -C "$source" remote add origin https://github.com/sagernet/cronet-go.git
+          git -C "$source" sparse-checkout set --no-cone /lib/windows_amd64/libcronet.dll
+          git -C "$source" fetch --depth=1 --filter=blob:none origin "$pin"
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Cronet fetch failed' }
+          git -C "$source" checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0 -or (git -C "$source" rev-parse HEAD) -ne $pin) { throw 'Cronet pin mismatch' }
+          Copy-Item "$source/lib/windows_amd64/libcronet.dll" etonify-core/dist/
+      - name: Compile Flutter Windows release (CI only)
+        run: |
+          flutter build windows --release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows client compile failed' }
+      - name: Build and run real native harnesses
+        run: |
+          cmake -S windows -B build/windows/x64 -DETONIFY_NATIVE_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Native harness configure failed' }
+          cmake --build build/windows/x64 --config Release --target desktop_pipe_test desktop_storage_test
+          if ($LASTEXITCODE -ne 0) { throw 'Native harness compile failed' }
+          Copy-Item etonify-core/dist/etonify-desktop.exe, etonify-core/dist/etonify-desktop.sha256, etonify-core/dist/libcronet.dll build/windows/x64/tests/Release/
+          ctest --test-dir build/windows/x64 -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw 'Native harness failed' }
+      - name: Stage unsigned compile-check bundle
+        run: |
+          $bundle = 'build/windows/x64/runner/Release'
+          Copy-Item etonify-core/dist/etonify-desktop.exe, etonify-core/dist/etonify-desktop.sha256, etonify-core/dist/libcronet.dll, etonify-core/dist/source-provenance.json "$bundle/"
+          Copy-Item etonify-core/LICENSE "$bundle/CORE-LICENSE.txt"
+          'CI check bundle, not a release. TUN, system proxy, installer/updater and Win10/11 traffic acceptance are not completed.' | Set-Content "$bundle/CI-NOT-A-RELEASE.txt" -Encoding utf8
+      - name: Upload unsigned check bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-x64-check-${{ github.run_number }}
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows-draft:
+    name: Create Windows-only draft (never publish)
+    if: github.event_name == 'workflow_dispatch' && inputs.create_draft
+    needs: windows-x64
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download successful bundle and create draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GH_REPO" \
+            --name "windows-x64-check-${{ github.run_number }}" --dir bundle
+          archive="Etonify-Windows-x64-preview-${{ github.run_number }}.zip"
+          (cd bundle && zip -qr "../$archive" .)
+          tag="windows-preview-$GITHUB_RUN_ID"
+          if gh release view "$tag" --repo "$GH_REPO" --json isDraft > release-state.json 2>/dev/null; then
+            test "$(jq -r .isDraft release-state.json)" = true
+          else
+            gh release create "$tag" --repo "$GH_REPO" --target "$GITHUB_SHA" \
+              --draft --prerelease --title "Windows x64 preview · build ${{ github.run_number }}" \
+              --notes "Unsigned development build for Windows x64. Native CI checks passed; this is not a stable release. TUN, system proxy, installer/updater and full Windows 10/11 traffic acceptance are not completed. Separate from Android releases."
+          fi
+          gh release upload "$tag" "$archive" --repo "$GH_REPO" --clobber

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
@@ -20,6 +21,7 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     tempDir = await Directory.systemTemp.createTemp('subscriptions-page-');
+    await bootstrapWindowsStorageFixture(tempDir);
     Hive.init(tempDir.path);
     await SubscriptionStore.init();
     SubscriptionFetcher.configureAppVersion('0.3.7');

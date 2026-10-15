@@ -1,4 +1,4 @@
-import 'dart:io' show InternetAddress, InternetAddressType, Platform;
+import 'dart:io' show File, InternetAddress, InternetAddressType, Platform;
 import 'dart:math';
 import 'dart:convert';
 import 'package:meow_client/models/core_settings.dart';
@@ -10,6 +10,8 @@ import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 
 import 'package:meow_client/data/local/secure_hive_storage.dart';
+import 'package:meow_client/platform/windows/desktop_preferences.dart';
+import 'package:meow_client/core/platform/app_data_paths.dart';
 
 enum AppThemePreference { system, light, dark, amoled }
 
@@ -143,6 +145,10 @@ List<String> normalizeSplitRoutingPackages(Iterable<String> values) {
 
 class AppSettingsState {
   const AppSettingsState({
+    this.windowsModes = DesktopModePreferences.defaults,
+    this.windowsPresentation = DesktopPresentationPreferences.defaults,
+    this.windowsUnknown = const {},
+    this.foreignPlatformNamespaces = const {},
     this.coreConfigSchemaVersion = 0,
     this.coreSettings = const CoreSettings(),
     this.coreSettingsNoticeAcknowledged = false,
@@ -219,6 +225,10 @@ class AppSettingsState {
     this.experimentalFakeIpEnabled = false,
   });
 
+  final DesktopModePreferences windowsModes;
+  final DesktopPresentationPreferences windowsPresentation;
+  final Map<String, Object?> windowsUnknown;
+  final Map<String, Object?> foreignPlatformNamespaces;
   final int coreConfigSchemaVersion;
   final CoreSettings coreSettings;
   final bool coreSettingsNoticeAcknowledged;
@@ -295,6 +305,10 @@ class AppSettingsState {
   final bool experimentalFakeIpEnabled;
 
   AppSettingsState copyWith({
+    DesktopModePreferences? windowsModes,
+    DesktopPresentationPreferences? windowsPresentation,
+    Map<String, Object?>? windowsUnknown,
+    Map<String, Object?>? foreignPlatformNamespaces,
     int? coreConfigSchemaVersion,
     CoreSettings? coreSettings,
     bool? coreSettingsNoticeAcknowledged,
@@ -371,6 +385,11 @@ class AppSettingsState {
     bool? experimentalFakeIpEnabled,
   }) {
     return AppSettingsState(
+      windowsModes: windowsModes ?? this.windowsModes,
+      windowsPresentation: windowsPresentation ?? this.windowsPresentation,
+      windowsUnknown: windowsUnknown ?? this.windowsUnknown,
+      foreignPlatformNamespaces:
+          foreignPlatformNamespaces ?? this.foreignPlatformNamespaces,
       coreConfigSchemaVersion:
           coreConfigSchemaVersion ?? this.coreConfigSchemaVersion,
       coreSettings: coreSettings ?? this.coreSettings,
@@ -616,6 +635,10 @@ abstract class AppSettingsStore {
   Future<void> close();
 
   static const Set<String> safeExportKeys = {
+    'windows',
+    'android',
+    'linux',
+    'macos',
     _coreSettingsKey,
     _localeCodeKey,
     _themePreferenceKey,
@@ -715,6 +738,22 @@ abstract class AppSettingsStore {
   }
 
   AppSettingsState mapState(Map<String, dynamic> map) {
+    Map<String, Object?> stringMap(Object? raw) {
+      if (raw is String) {
+        try {
+          raw = jsonDecode(raw);
+        } on FormatException {
+          return {};
+        }
+      }
+      if (raw is! Map) return {};
+      return {
+        for (final entry in raw.entries)
+          if (entry.key is String) entry.key as String: entry.value,
+      };
+    }
+
+    final windows = stringMap(map['windows']);
     bool boolValue(String key, {required bool defaultValue}) {
       final raw = map[key]?.toString();
       if (raw == null) {
@@ -767,6 +806,19 @@ abstract class AppSettingsStore {
     );
 
     return AppSettingsState(
+      foreignPlatformNamespaces: Map<String, Object?>.unmodifiable({
+        for (final key in ['android', 'linux', 'macos'])
+          if (map[key] is Map) key: map[key],
+      }),
+      windowsModes: DesktopModePreferences.fromMap(stringMap(windows['modes'])),
+      windowsPresentation: DesktopPresentationPreferences.fromMap(
+        stringMap(windows['presentation']),
+      ),
+      windowsUnknown: Map<String, Object?>.unmodifiable({
+        for (final entry in windows.entries)
+          if (entry.key != 'modes' && entry.key != 'presentation')
+            entry.key: entry.value,
+      }),
       coreConfigSchemaVersion:
           int.tryParse(map[_coreConfigSchemaVersionKey]?.toString() ?? '') ?? 0,
       coreSettings: CoreSettings.decode(map[_coreSettingsKey]),
@@ -1025,6 +1077,14 @@ abstract class AppSettingsStore {
 
   Map<String, dynamic> stateToMap(AppSettingsState state) {
     return {
+      'windows': {
+        ...state.windowsUnknown,
+        'modes': state.windowsModes.toMap(),
+        'presentation': state.windowsPresentation.toMap(),
+      },
+      for (final key in ['android', 'linux', 'macos'])
+        if (state.foreignPlatformNamespaces.containsKey(key))
+          key: state.foreignPlatformNamespaces[key],
       _coreConfigSchemaVersionKey: state.coreConfigSchemaVersion.toString(),
       _coreSettingsKey: jsonEncode(state.coreSettings.toMap()),
       _coreSettingsNoticeKey: state.coreSettingsNoticeAcknowledged ? '1' : '0',
@@ -1143,6 +1203,8 @@ class HiveAppSettingsStore extends AppSettingsStore {
     if (Platform.isAndroid) {
       final filesDir = await AndroidFilesDir.ensureInitialized();
       Hive.init('$filesDir/meow_hive');
+    } else if (Platform.isWindows) {
+      Hive.init(AppDataPaths.current.hiveRoot);
     } else {
       await Hive.initFlutter('meow_hive');
     }
@@ -1165,13 +1227,16 @@ class HiveAppSettingsStore extends AppSettingsStore {
       return HiveAppSettingsStore._(box);
     }
 
+    Box<dynamic>? openedBox;
     try {
       final stopwatch = Stopwatch()..start();
       final box = await Hive.openBox<dynamic>(
         AppSettingsStore.boxName,
         encryptionCipher: SecureHiveStorage.cipher,
+        crashRecovery: !Platform.isWindows,
         compactionStrategy: shouldCompactAppSettingsBox,
       );
+      openedBox = box;
       await _migrateLegacyBox(box);
       stopwatch.stop();
       await HiveStorageDiagnostics.logBoxOnce(
@@ -1181,6 +1246,13 @@ class HiveAppSettingsStore extends AppSettingsStore {
       );
       return HiveAppSettingsStore._(box);
     } catch (error, stackTrace) {
+      if (openedBox?.isOpen == true) {
+        try {
+          await openedBox!.close();
+        } catch (_) {
+          /* Preserve the source failure. */
+        }
+      }
       AppLogStore.error(
         'settings storage',
         'Failed to open Hive settings box: $error\n$stackTrace',
@@ -1209,8 +1281,25 @@ class HiveAppSettingsStore extends AppSettingsStore {
 
     final legacyBox = Hive.isBoxOpen(AppSettingsStore.legacyBoxName)
         ? Hive.box<dynamic>(AppSettingsStore.legacyBoxName)
-        : await Hive.openBox<dynamic>(AppSettingsStore.legacyBoxName);
+        : await Hive.openBox<dynamic>(
+            AppSettingsStore.legacyBoxName,
+            crashRecovery: !Platform.isWindows,
+          );
+    final journal = Platform.isWindows
+        ? File('${AppDataPaths.current.stagingRoot}/settings-migration.json')
+        : null;
     try {
+      if (journal != null) {
+        await journal.writeAsString(
+          jsonEncode({
+            'state': 'copying',
+            'source': AppSettingsStore.legacyBoxName,
+            'destination': AppSettingsStore.boxName,
+            'sourceRetained': true,
+          }),
+          flush: true,
+        );
+      }
       if (legacyBox.isNotEmpty) {
         final legacyValues = Map<dynamic, dynamic>.from(legacyBox.toMap());
         final missingValues = <dynamic, dynamic>{
@@ -1221,6 +1310,11 @@ class HiveAppSettingsStore extends AppSettingsStore {
           await secureBox.putAll(missingValues);
           await secureBox.flush();
         }
+        if (missingValues.entries.any(
+          (entry) => !_sameSettingsValue(secureBox.get(entry.key), entry.value),
+        )) {
+          throw StateError('Encrypted settings copy verification failed.');
+        }
         if (legacyValues.keys.any((key) => !secureBox.containsKey(key))) {
           throw StateError('Encrypted settings migration was incomplete.');
         }
@@ -1230,12 +1324,25 @@ class HiveAppSettingsStore extends AppSettingsStore {
     }
 
     // Removal happens only after the encrypted copy was flushed and verified.
-    await Hive.deleteBoxFromDisk(AppSettingsStore.legacyBoxName);
+    if (!Platform.isWindows) {
+      await Hive.deleteBoxFromDisk(AppSettingsStore.legacyBoxName);
+    }
     await secureBox.put(
       AppSettingsStore.storageSchemaVersionKey,
       AppSettingsStore.storageSchemaVersion,
     );
     await secureBox.flush();
+    if (journal != null) {
+      await journal.writeAsString(
+        jsonEncode({
+          'state': 'copied',
+          'source': AppSettingsStore.legacyBoxName,
+          'destination': AppSettingsStore.boxName,
+          'sourceRetained': true,
+        }),
+        flush: true,
+      );
+    }
   }
 
   @override
@@ -1259,7 +1366,7 @@ class HiveAppSettingsStore extends AppSettingsStore {
     final toPut = <String, dynamic>{};
     for (final entry in map.entries) {
       final current = _box.get(entry.key);
-      if (current != entry.value) {
+      if (!_sameSettingsValue(current, entry.value)) {
         toPut[entry.key] = entry.value;
       }
     }
@@ -1279,6 +1386,30 @@ class HiveAppSettingsStore extends AppSettingsStore {
 
   @override
   Future<void> close() => _box.close();
+}
+
+// Hive reconstructs nested maps/lists on read; identity equality would turn
+// content-identical Windows settings into a write and fsync on every save.
+bool _sameSettingsValue(Object? first, Object? second) {
+  if (identical(first, second)) return true;
+  if (first is Map && second is Map) {
+    if (first.length != second.length) return false;
+    for (final entry in first.entries) {
+      if (!second.containsKey(entry.key) ||
+          !_sameSettingsValue(entry.value, second[entry.key])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (first is List && second is List) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (!_sameSettingsValue(first[index], second[index])) return false;
+    }
+    return true;
+  }
+  return first == second;
 }
 
 final Expando<Future<void>> _urlTestMigrationInFlight = Expando<Future<void>>(

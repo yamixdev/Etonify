@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:meow_client/platform/windows/windows_storage_bootstrap.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
@@ -70,7 +72,8 @@ class AppBootstrapController {
     CoreCapabilitiesLoader? loadCoreCapabilities,
     AdBlockStatusLoader? loadAdBlockStatus,
     RussiaRouteStatusLoader? loadRussiaRouteStatus,
-  }) : _initializeHive = initializeHive ?? HiveAppSettingsStore.initHive,
+  }) : _initializeHive =
+           initializeHive ?? WindowsStorageBootstrap.initializeHive,
        _initializeSubscriptions =
            initializeSubscriptions ?? SubscriptionStore.initForBootstrap,
        _openSettingsStore = openSettingsStore ?? HiveAppSettingsStore.open,
@@ -112,27 +115,37 @@ class AppBootstrapController {
         final storeFuture = providedStore == null
             ? _openSettingsStore()
             : Future<AppSettingsStore>.value(providedStore);
-        await subscriptionInitFuture;
-        store = await storeFuture;
         ownsStore = providedStore == null;
+        // Await both even if one fails. A late owned-store success must be
+        // available to cleanup; a second failing future must be observed.
+        await Future.wait<Object?>([
+          subscriptionInitFuture,
+          storeFuture.then((opened) {
+            store = opened;
+            return opened;
+          }),
+        ]);
       }
-      state = await store.loadState();
+      state = await store!.loadState();
     } catch (error, stackTrace) {
       AppLogStore.error(
         'bootstrap',
-        'Failed to bootstrap app, using in-memory defaults: '
+        '${Platform.isWindows && !usesInMemoryStore ? "Windows storage startup stopped" : "Failed to bootstrap app, using in-memory defaults"}: '
             '$error\n$stackTrace',
       );
-      if (providedStore == null && store != null) {
+      final failedOwnedStore = store;
+      if (providedStore == null && failedOwnedStore != null) {
         try {
-          await store.close();
+          await failedOwnedStore.close();
         } catch (_) {}
       }
+      if (Platform.isWindows && !usesInMemoryStore) rethrow;
       store = MemoryAppSettingsStore();
       ownsStore = providedStore == null;
       state = _fallbackSettingsState();
     }
 
+    final loadedStore = store!;
     final appVersionInfo = await appVersionInfoFuture;
     if (state.splitRoutingSchemaVersion < 1) {
       state = state.copyWith(
@@ -146,7 +159,7 @@ class AppBootstrapController {
       );
       // Persist before touching the native VPN. A crash must not repeat the
       // reset or lose the pending notice/auto-connect interlock.
-      await store.saveState(state);
+      await loadedStore.saveState(state);
     }
     // The native capability bridge is needed for migration planning, but it
     // must not compete with encrypted Hive I/O during cold start. On slower
@@ -178,7 +191,7 @@ class AppBootstrapController {
     }
 
     return AppBootstrapResult(
-      store: store,
+      store: loadedStore,
       ownsStore: ownsStore,
       state: state,
       adBlockStatus: adBlockStatus,

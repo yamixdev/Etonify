@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:meow_client/core/platform/app_data_paths.dart';
 import 'dart:isolate';
 import 'dart:typed_data';
 
@@ -319,6 +320,8 @@ class AdBlockRuleSetService {
   Future<_AdBlockStoragePaths> _storagePaths() async {
     final baseDirPath = Platform.isAndroid
         ? await AndroidFilesDir.ensureInitialized()
+        : Platform.isWindows
+        ? AppDataPaths.current.ruleSetRoot
         : Directory.systemTemp.path;
     final base = Directory('$baseDirPath/adblock');
     return _AdBlockStoragePaths(

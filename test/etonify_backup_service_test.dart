@@ -3,9 +3,41 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
 
 void main() {
   const service = EtonifyBackupService();
+  test(
+    'settings envelope preserves foreign namespaces without local storage secrets',
+    () {
+      final store = MemoryAppSettingsStore();
+      final state = store.mapState({
+        'android': {
+          'unknown': ['future'],
+        },
+        'windows': {
+          'future': {'flag': true},
+        },
+        'storage.key': 'local-secret',
+        'dataRoot': 'local-root',
+      });
+      final content = service.buildSettingsExport(
+        store: store,
+        state: state,
+        clientVersion: '0.3.9',
+      );
+      final restored = service.parseSettingsExport(
+        bytes: utf8.encode(content),
+        currentClientVersion: '0.3.9',
+      );
+      expect(restored.settings['android'], {
+        'unknown': ['future'],
+      });
+      expect((restored.settings['windows'] as Map)['future'], {'flag': true});
+      expect(content, isNot(contains('local-secret')));
+      expect(content, isNot(contains('local-root')));
+    },
+  );
 
   Subscription sampleSubscription() {
     return const Subscription(

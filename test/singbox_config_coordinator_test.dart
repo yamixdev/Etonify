@@ -640,7 +640,7 @@ SingboxConfigCoordinator _coordinator({
           'recordedServiceAlive': true,
           'runtimeIntentFresh': true,
         },
-    readConfigPath: readConfigPath,
+    readConfigPath: readConfigPath ?? () async => null,
     allowRuntimeApply: allowRuntimeApply,
     fullServiceRestartDebounce: fullServiceRestartDebounce,
   );

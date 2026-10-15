@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_api.g.dart' as pigeon;
+import 'package:meow_client/platform/windows/desktop_runtime_client.dart';
+import 'package:meow_client/platform/windows/desktop_preferences.dart';
+import 'package:meow_client/platform/windows/windows_runtime_adapter.dart';
+import 'package:meow_client/platform/windows/method_channel_desktop_transport.dart';
 
 @visibleForTesting
 List<Map<String, dynamic>> normalizePigeonMapListForTest(Object? value) {
@@ -86,7 +91,45 @@ class NetworkInterfaceSnapshot {
 }
 
 class SingboxRuntime {
-  SingboxRuntime._();
+  SingboxRuntime._()
+    : _windowsOverride = false,
+      _windows = WindowsRuntimeAdapter(
+        client: Platform.isWindows
+            ? DesktopRuntimeClient(transport: MethodChannelDesktopTransport())
+            : DesktopRuntimeClient.unavailable(),
+        modes: () => DesktopModePreferences.defaults,
+      );
+
+  SingboxRuntime.windows({
+    required DesktopRuntimeClient client,
+    required DesktopModePreferences Function() modes,
+  }) : _windowsOverride = true,
+       _windows = WindowsRuntimeAdapter(client: client, modes: modes);
+
+  final bool _windowsOverride;
+  WindowsRuntimeAdapter _windows;
+  bool get _isWindows => _windowsOverride || Platform.isWindows;
+  DesktopRuntimeClient get windowsClient => _windows.client;
+  bool _eventsAccessed = false;
+  void bindWindowsRuntime({
+    required DesktopRuntimeClient client,
+    required DesktopModePreferences Function() modes,
+  }) {
+    if (!identical(client, _windows.client)) {
+      if (_eventsAccessed) {
+        throw StateError(
+          'Bind Windows transport before subscribing to runtime events',
+        );
+      }
+      _windows = WindowsRuntimeAdapter(client: client, modes: modes);
+    } else {
+      _windows.bindModes(modes);
+    }
+  }
+
+  Future<void> _windowsVoid(String method, Map<String, Object?> payload) async {
+    await _windows.invoke(method, payload);
+  }
 
   static final SingboxRuntime instance = SingboxRuntime._();
 
@@ -95,12 +138,25 @@ class SingboxRuntime {
     'meow_client/singbox_events',
   );
 
+  /// Shared legacy native source used by Android's production facade.
+  /// Platform-specific consumers can select this source independently from
+  /// the current host's Windows runtime routing.
+  static Stream<Map<String, dynamic>> get androidEvents => _androidEvents;
+  static final Stream<Map<String, dynamic>> _androidEvents = _events
+      .receiveBroadcastStream()
+      .map((event) => Map<String, dynamic>.from(event as Map));
+
   // EventChannel installs one binary-message handler per channel name. All
   // consumers must share this broadcast stream: a separate stream per getter
   // call replaces that handler, and cancelling it disconnects other consumers.
-  late final Stream<Map<String, dynamic>> events = _events
-      .receiveBroadcastStream()
-      .map((event) => Map<String, dynamic>.from(event as Map));
+  Stream<Map<String, dynamic>> get events {
+    _eventsAccessed = true;
+    return _runtimeEvents;
+  }
+
+  late final Stream<Map<String, dynamic>> _runtimeEvents = _isWindows
+      ? _windows.events
+      : androidEvents;
 
   Map<String, dynamic> _normalizeMap(Object? value) {
     if (value is! Map) {
@@ -123,6 +179,13 @@ class SingboxRuntime {
   }
 
   Future<bool> prepareVpn({required bool requiresVpn}) async {
+    if (_isWindows) {
+      if (!_windows.modes.tunEnabled) return true;
+      if (!(await _windows.client.snapshot()).capabilities.tun) {
+        throw UnsupportedError('Windows runtime does not support tun');
+      }
+      return true;
+    }
     if (!Platform.isAndroid) {
       return !requiresVpn;
     }
@@ -130,6 +193,10 @@ class SingboxRuntime {
   }
 
   Future<bool> vpnPermissionGranted() async {
+    if (_isWindows) {
+      return !_windows.modes.tunEnabled ||
+          (await _windows.client.snapshot()).capabilities.tun;
+    }
     if (!Platform.isAndroid) {
       return true;
     }
@@ -138,6 +205,7 @@ class SingboxRuntime {
   }
 
   Future<void> start({required String config, required bool useVpn}) {
+    if (_isWindows) return _windowsVoid('start', {'config': config});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -145,6 +213,7 @@ class SingboxRuntime {
   }
 
   Future<void> startPrepared({required bool useVpn}) {
+    if (_isWindows) return _windowsVoid('startPrepared', {});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -152,11 +221,13 @@ class SingboxRuntime {
   }
 
   Future<void> startProbe(String config) {
+    if (_isWindows) return _windowsVoid('startProbe', {'config': config});
     if (!Platform.isAndroid) return Future<void>.value();
     return _hostApi.startProbe(config);
   }
 
   Future<void> stopProbe() {
+    if (_isWindows) return _windowsVoid('stopProbe', {});
     if (!Platform.isAndroid) return Future<void>.value();
     return _hostApi.stopProbe();
   }
@@ -166,6 +237,12 @@ class SingboxRuntime {
     required bool useVpn,
     bool restartCore = false,
   }) {
+    if (_isWindows) {
+      return _windowsVoid('applyConfig', {
+        'config': config,
+        'restartCore': restartCore,
+      });
+    }
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -176,6 +253,9 @@ class SingboxRuntime {
     required bool useVpn,
     bool restartCore = false,
   }) {
+    if (_isWindows) {
+      return _windowsVoid('applyPreparedConfig', {'restartCore': restartCore});
+    }
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -183,6 +263,9 @@ class SingboxRuntime {
   }
 
   Future<String?> getConfigPath() async {
+    if (_isWindows) {
+      return (await _windows.invoke('getConfigPath', {}))['path'] as String?;
+    }
     if (!Platform.isAndroid) {
       return null;
     }
@@ -238,6 +321,7 @@ class SingboxRuntime {
   }
 
   Future<void> reload() {
+    if (_isWindows) return _windowsVoid('reload', {});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -326,6 +410,7 @@ class SingboxRuntime {
   }
 
   Future<void> stop({String reason = 'unspecified'}) {
+    if (_isWindows) return _windowsVoid('stop', {'reason': reason});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -336,6 +421,12 @@ class SingboxRuntime {
     required String groupTag,
     required String outboundTag,
   }) {
+    if (_isWindows) {
+      return _windowsVoid('selectOutbound', {
+        'groupTag': groupTag,
+        'outboundTag': outboundTag,
+      });
+    }
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -358,6 +449,24 @@ class SingboxRuntime {
     int physicalNetworkEpoch = 0,
     int startupLeaseToken = 0,
   }) {
+    if (_isWindows) {
+      return _windowsVoid('urlTest', {
+        'groupTag': groupTag,
+        'targetOutboundTag': targetOutboundTag,
+        'priorityOutboundTag': priorityOutboundTag,
+        'excludeOutboundTag': excludeOutboundTag,
+        'url': url,
+        'timeoutMillis': timeoutMillis,
+        'concurrency': concurrency,
+        'deadlineMillis': deadlineMillis,
+        'force': force,
+        'mode': mode,
+        'includeOutboundTags': includeOutboundTags,
+        'logicalSessionId': logicalSessionId,
+        'physicalNetworkEpoch': physicalNetworkEpoch,
+        'startupLeaseToken': startupLeaseToken,
+      });
+    }
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -385,6 +494,12 @@ class SingboxRuntime {
     required String groupTag,
     String targetOutboundTag = '',
   }) {
+    if (_isWindows) {
+      return _windowsVoid('cancelUrlTest', {
+        'groupTag': groupTag,
+        'targetOutboundTag': targetOutboundTag,
+      });
+    }
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
@@ -395,6 +510,12 @@ class SingboxRuntime {
     required int runtimeGeneration,
     required List<String> coveredTags,
   }) async {
+    if (_isWindows) {
+      return _windows.invoke('prepareStartupUrlTest', {
+        'runtimeGeneration': runtimeGeneration,
+        'coveredTags': coveredTags,
+      });
+    }
     if (!Platform.isAndroid) return const {};
     try {
       return _normalizeMap(
@@ -406,6 +527,7 @@ class SingboxRuntime {
   }
 
   Future<Map<String, dynamic>> status() async {
+    if (_isWindows) return _windows.invoke('status', {});
     if (!Platform.isAndroid) {
       return const {};
     }
@@ -419,6 +541,11 @@ class SingboxRuntime {
   Future<Map<String, dynamic>> lookupOutboundExternalInfo({
     required String outboundTag,
   }) async {
+    if (_isWindows) {
+      return _windows.invoke('lookupOutboundExternalInfo', {
+        'outboundTag': outboundTag.trim(),
+      });
+    }
     if (!Platform.isAndroid) {
       return const {};
     }
@@ -442,6 +569,15 @@ class SingboxRuntime {
     required int maxBytes,
     required Duration timeout,
   }) async {
+    if (_isWindows) {
+      return _windows.invoke('fetchUrlViaOutbound', {
+        'outboundTag': outboundTag.trim(),
+        'url': uri.toString(),
+        'headers': headers,
+        'maxBytes': maxBytes,
+        'timeoutMillis': timeout.inMilliseconds,
+      });
+    }
     if (!Platform.isAndroid) {
       throw UnsupportedError(
         'Outbound HTTP fetch is only available on Android.',
@@ -470,6 +606,17 @@ class SingboxRuntime {
   }
 
   Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async {
+    if (_isWindows) {
+      final value = await _windows.invoke('getNetworkInterfaceState', {});
+      return NetworkInterfaceSnapshot(
+        available: value['available'] == true,
+        interfaceName: value['interfaceName'] as String? ?? '',
+        interfaceIndex: (value['interfaceIndex'] as num?)?.toInt() ?? -1,
+        generation: (value['generation'] as num?)?.toInt() ?? 0,
+        reason: value['reason'] as String? ?? 'unavailable',
+        updatedAtMillis: (value['updatedAtMillis'] as num?)?.toInt() ?? 0,
+      );
+    }
     if (!Platform.isAndroid) {
       return NetworkInterfaceSnapshot.unavailable;
     }
@@ -720,6 +867,7 @@ class SingboxRuntime {
   }
 
   Future<String?> getCoreVersion() async {
+    if (_isWindows) return (await _windows.client.snapshot()).coreVersion;
     if (!Platform.isAndroid) {
       return null;
     }
@@ -733,6 +881,14 @@ class SingboxRuntime {
   }
 
   Future<LibboxCapabilities> getCoreCapabilities() async {
+    if (_isWindows) {
+      try {
+        final value = await _windows.invoke('getCoreCapabilities', {});
+        return LibboxCapabilities.parseStrict(jsonEncode(value));
+      } on Object {
+        return LibboxCapabilities.incompatible;
+      }
+    }
     if (!Platform.isAndroid) {
       return LibboxCapabilities.bundledLegacy;
     }
@@ -751,6 +907,7 @@ class SingboxRuntime {
   }
 
   Future<void> checkConfig(String config) {
+    if (_isWindows) return _windowsVoid('checkConfig', {'config': config});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }

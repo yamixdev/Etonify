@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
@@ -13,6 +14,7 @@ void main() {
     directory = await Directory.systemTemp.createTemp(
       'etonify-background-test',
     );
+    await bootstrapWindowsStorageFixture(directory);
     Hive.init(directory.path);
     await SubscriptionStore.init();
   });

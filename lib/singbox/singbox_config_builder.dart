@@ -11,8 +11,17 @@ import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/core_settings_config.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
+import 'package:meow_client/platform/windows/desktop_preferences.dart';
+import 'package:meow_client/platform/windows/windows_config_policy.dart';
 
 class SingboxConfigBuilder {
+  /// Apply at the runtime boundary, after cached/background Android-compatible
+  /// composition, using current Windows modes rather than cached preferences.
+  static Map<String, Object?> adaptForWindows(
+    Map<String, Object?> config,
+    DesktopModePreferences modes,
+  ) => WindowsConfigPolicy.apply(config, modes);
+
   // Etonify downloads rule data and OTA files with Dart's HttpClient. In
   // include-package split routing, the app itself would otherwise bypass the
   // selected VPN. This is an internal TUN entry only and is never shown as a

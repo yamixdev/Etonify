@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
@@ -91,6 +92,11 @@ void main() {
       loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
     );
 
+    if (Platform.isWindows) {
+      await expectLater(controller.load(), throwsA(isA<StateError>()));
+      expect(failingStore.closed, isTrue);
+      return;
+    }
     final result = await controller.load();
 
     expect(failingStore.closed, isTrue);
@@ -114,6 +120,26 @@ void main() {
     expect(result.appVersionInfo.versionCode, 0);
     expect(result.coreCapabilities, same(LibboxCapabilities.incompatible));
   });
+  test(
+    'late owned settings store is closed after subscription startup fails',
+    () async {
+      final settings = Completer<AppSettingsStore>();
+      final failedStore = _FailingSettingsStore();
+      final failure = StateError('subscription storage unavailable');
+      final controller = AppBootstrapController(
+        fallbackClientVersionLabel: '0.3.0',
+        initializeHive: () async {},
+        initializeSubscriptions: () async => throw failure,
+        openSettingsStore: () => settings.future,
+      );
+      final result = expectLater(controller.load(), throwsA(same(failure)));
+      await Future<void>.delayed(Duration.zero);
+      settings.complete(failedStore);
+      await result;
+      expect(failedStore.closed, isTrue);
+    },
+    skip: !Platform.isWindows,
+  );
 
   test('opens encrypted storage before the core capability bridge', () async {
     final order = <String>[];

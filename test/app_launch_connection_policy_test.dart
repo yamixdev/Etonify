@@ -2,6 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_launch_connection_policy.dart';
 
 void main() {
+  test(
+    'Windows local-proxy-only launch does not require Android VPN inbound',
+    () {
+      expect(
+        shouldAutoConnectOnLaunch(
+          enabled: true,
+          onboardingCompleted: true,
+          legalAccepted: true,
+          hasActiveProfile: true,
+          vpnInboundEnabled: false,
+          runtimeActive: false,
+          isWindows: true,
+        ),
+        true,
+      );
+    },
+  );
   test('auto-connect only starts an idle configured VPN on launch', () {
     expect(
       shouldAutoConnectOnLaunch(
