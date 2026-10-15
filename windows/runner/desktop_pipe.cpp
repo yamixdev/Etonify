@@ -230,7 +230,12 @@ void DesktopPipe::Open(const DesktopPipeLaunch& launch) {
   // The sidecar binds co-packaged files, not a signature or a trust boundary
   // against a user who can rewrite the portable directory. B3 never uses it.
   const auto identity = IdentityOf(GetCurrentProcess());
-  const std::string logon(identity.logon.begin(), identity.logon.end());
+  std::string logon;
+  logon.reserve(identity.logon.size());
+  for (const wchar_t character : identity.logon) {
+    Require(static_cast<uint32_t>(character) <= 0x7f);
+    logon.push_back(static_cast<char>(character));
+  }
   const auto logon_hash = Hash(nullptr, &logon);
   std::array<uint8_t, 32> nonce{};
   Require(BCryptGenRandom(nullptr, nonce.data(), static_cast<ULONG>(nonce.size()), BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0);

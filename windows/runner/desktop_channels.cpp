@@ -59,7 +59,7 @@ const Value& Field(const Map& map, const char* name) {
 int64_t Lease(const Map& map) {
   const auto& value = Field(map, "lease");
   if (const auto* wide = std::get_if<int64_t>(&value)) return *wide;
-  if (const auto* small = std::get_if<int32_t>(&value)) return *small;
+  if (const auto* int32_value = std::get_if<int32_t>(&value)) return *int32_value;
   throw std::runtime_error("Invalid transport lease");
 }
 DesktopPipeLaunch Launch() {
