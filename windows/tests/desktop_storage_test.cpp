@@ -42,7 +42,7 @@ int main() {
     const auto restored = Call("unprotectKey", encrypted);
     if (!restored.success || std::get<std::vector<uint8_t>>(restored.value) != key) throw std::runtime_error("actual_user_dpapi_roundtrip");
     auto corrupt = encrypted;
-    std::fill(corrupt.begin(), corrupt.end(), 0);
+    std::fill(corrupt.begin(), corrupt.end(), uint8_t{0});
     const auto failed = Call("unprotectKey", corrupt);
     if (!failed.error || failed.success) throw std::runtime_error("storage_key_dpapi_failure_is_not_plaintext");
     std::cout << "native DPAPI tests passed; cross-user/ACL/reparse acceptance remains UNVERIFIED\n";
