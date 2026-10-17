@@ -72,6 +72,8 @@ class SettingsGeneralPage extends StatelessWidget {
     this.onSendHwidToProvidersChanged,
     this.currentAutoConnectOnLaunch = false,
     this.onAutoConnectOnLaunchChanged,
+    this.currentHomeNavigationMode = HomeNavigationMode.panel,
+    this.onHomeNavigationModeChanged,
     this.showQuickSettingsTileAction = false,
     this.onAddQuickSettingsTile,
     this.showBatteryOptimizationSettings = false,
@@ -98,6 +100,8 @@ class SettingsGeneralPage extends StatelessWidget {
   final ValueChanged<bool>? onSendHwidToProvidersChanged;
   final bool currentAutoConnectOnLaunch;
   final ValueChanged<bool>? onAutoConnectOnLaunchChanged;
+  final HomeNavigationMode currentHomeNavigationMode;
+  final ValueChanged<HomeNavigationMode>? onHomeNavigationModeChanged;
   final bool showQuickSettingsTileAction;
   final VoidCallback? onAddQuickSettingsTile;
   final bool showBatteryOptimizationSettings;
@@ -270,6 +274,11 @@ class SettingsGeneralPage extends StatelessWidget {
                     value: currentAutoConnectOnLaunch,
                     onChanged: onAutoConnectOnLaunchChanged,
                   ),
+                  if (onHomeNavigationModeChanged != null)
+                    _HomeNavigationTile(
+                      value: currentHomeNavigationMode,
+                      onChanged: onHomeNavigationModeChanged!,
+                    ),
                   if (showBatteryOptimizationSettings)
                     const BatteryOptimizationTile(),
                   if (showQuickSettingsTileAction)
@@ -347,6 +356,60 @@ class SettingsGeneralPage extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Section label
 // ---------------------------------------------------------------------------
+
+class _HomeNavigationTile extends StatefulWidget {
+  const _HomeNavigationTile({required this.value, required this.onChanged});
+  final HomeNavigationMode value;
+  final ValueChanged<HomeNavigationMode> onChanged;
+
+  @override
+  State<_HomeNavigationTile> createState() => _HomeNavigationTileState();
+}
+
+class _HomeNavigationTileState extends State<_HomeNavigationTile> {
+  late var _value = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _HomeNavigationTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _value = widget.value;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    String label(HomeNavigationMode value) => value == HomeNavigationMode.tabs
+        ? l10n.homeNavigationTabs
+        : l10n.homeNavigationPanel;
+    return ListTile(
+      key: const ValueKey('home-navigation-setting'),
+      leading: SettingsLeadingIcon(
+        icon: Icons.view_agenda_outlined,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(l10n.homeNavigationTitle),
+      subtitle: Text(label(_value)),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () async {
+        final value = await showModalBottomSheet<HomeNavigationMode>(
+          context: context,
+          showDragHandle: true,
+          builder: (_) => _RadioSheet<HomeNavigationMode>(
+            title: l10n.homeNavigationTitle,
+            current: _value,
+            items: [
+              for (final value in HomeNavigationMode.values)
+                RadioChoice(value: value, label: label(value)),
+            ],
+          ),
+        );
+        if (!mounted || value == null || value == _value) return;
+        widget.onChanged(value);
+        setState(() => _value = value);
+      },
+    );
+  }
+}
 
 class _AutoConnectTile extends StatefulWidget {
   const _AutoConnectTile({required this.value, required this.onChanged});

@@ -88,6 +88,8 @@ class HomePresentationCallbacks {
     required this.openChangelog,
     required this.openTrafficDashboard,
     this.refreshActiveSubscription,
+    this.openProxies,
+    this.openProxyGroup,
   });
 
   final VoidCallback toggleConnection;
@@ -99,6 +101,8 @@ class HomePresentationCallbacks {
   final VoidCallback openChangelog;
   final VoidCallback openTrafficDashboard;
   final Future<void> Function()? refreshActiveSubscription;
+  final VoidCallback? openProxies;
+  final ValueChanged<String>? openProxyGroup;
 
   HomeViewActions toViewActions() {
     return HomeViewActions(
@@ -111,6 +115,8 @@ class HomePresentationCallbacks {
       openChangelog: openChangelog,
       openTrafficDashboard: openTrafficDashboard,
       refreshActiveSubscription: refreshActiveSubscription,
+      openProxies: openProxies,
+      openProxyGroup: openProxyGroup,
     );
   }
 }
@@ -121,12 +127,14 @@ class HomePresentationBuilder {
   final HomePresentationData data;
   final HomePresentationCallbacks callbacks;
 
-  Widget build({required ProxyPanelMetrics panelMetrics}) {
+  Widget build({ProxyPanelMetrics? panelMetrics, bool tabbed = false}) {
     return HomePage(
       state: data.toViewState(),
       actions: callbacks.toViewActions(),
-      bottomInset: panelMetrics.bottomInset + proxyPanelMinHeight + 20,
-      showActiveProxyFooter: false,
+      bottomInset: tabbed
+          ? 12
+          : (panelMetrics?.bottomInset ?? 0) + proxyPanelMinHeight + 20,
+      showActiveProxyFooter: tabbed,
     );
   }
 }

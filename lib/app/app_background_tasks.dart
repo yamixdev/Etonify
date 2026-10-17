@@ -48,6 +48,31 @@ class ProxyCacheBuildInput {
 
 enum ProxyCacheBuildScope { home, full }
 
+class ProxyServerCatalogCache {
+  WeakReference<Subscription>? _source;
+  Set<String> _tags = const {};
+
+  void seed(Subscription source, Set<String> tags) {
+    _source = WeakReference(source);
+    _tags = tags;
+  }
+
+  Set<String> tagsFor(Subscription? source) {
+    if (source == null) {
+      _source = null;
+      return _tags = const {};
+    }
+    final previous = _source?.target;
+    if (previous?.id != source.id ||
+        !identical(previous?.outbounds, source.outbounds) ||
+        !identical(previous?.groups, source.groups)) {
+      _tags = source.concreteServerTags;
+    }
+    _source = WeakReference(source);
+    return _tags;
+  }
+}
+
 /// Retains only the active subscription's presentation snapshot. Latency
 /// refreshes must not repeatedly traverse every full outbound on the UI isolate.
 class ProxyPresentationSnapshotCache {
@@ -232,6 +257,7 @@ class ProxyCacheBuildResult {
     this.includesFullProxyList = true,
     this.unsupportedWireGuardCount = 0,
     this.workerElapsed = Duration.zero,
+    this.concreteServerTags = const <String>{},
   });
 
   final AppProfileSummary? activeProfile;
@@ -245,6 +271,7 @@ class ProxyCacheBuildResult {
   final bool includesFullProxyList;
   final int unsupportedWireGuardCount;
   final Duration workerElapsed;
+  final Set<String> concreteServerTags;
 
   ProxyCacheBuildResult withWorkerElapsed(Duration elapsed) =>
       ProxyCacheBuildResult(
@@ -257,6 +284,7 @@ class ProxyCacheBuildResult {
         includesFullProxyList: includesFullProxyList,
         unsupportedWireGuardCount: unsupportedWireGuardCount,
         workerElapsed: elapsed,
+        concreteServerTags: concreteServerTags,
       );
 }
 
@@ -528,12 +556,14 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
       .toList(growable: false);
   final catalog = ProxySelectionCatalog(visibleOutbounds, subscription.groups);
   final selectableOutbounds = catalog.standaloneOutbounds;
-  final activeProfile = _buildProfileSummary(subscription);
+  final concreteTags = subscription.concreteServerTags;
+  final activeProfile = _buildProfileSummary(subscription, concreteTags.length);
   final displayProxy = _buildHomeDisplayProxy(
     input,
     subscription,
     visibleOutbounds,
     selectableOutbounds,
+    concreteTags,
   );
   return ProxyCacheBuildResult(
     activeProfile: activeProfile,
@@ -543,6 +573,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     totalTopLevelProxyCount: catalog.candidateTags.length,
     includesFullProxyList: false,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
+    concreteServerTags: concreteTags,
   );
 }
 
@@ -551,6 +582,7 @@ AppProxySummary _buildHomeDisplayProxy(
   Subscription subscription,
   List<Outbound> visibleOutbounds,
   List<Outbound> selectableOutbounds,
+  Set<String> concreteTags,
 ) {
   final selectedTag = input.selectedProxyTag.trim();
   final outboundByTag = <String, Outbound>{
@@ -559,7 +591,6 @@ AppProxySummary _buildHomeDisplayProxy(
   final groupByTag = <String, SubscriptionGroup>{
     for (final group in subscription.groups) group.tag: group,
   };
-  final concreteTags = subscription.concreteServerTags;
   final leafTagsByGroup = <String, List<String>>{};
   List<String> groupLeafTags(String tag) => leafTagsByGroup.putIfAbsent(
     tag,
@@ -773,7 +804,8 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     );
   }
 
-  final activeProfile = _buildProfileSummary(subscription);
+  final concreteTags = subscription.concreteServerTags;
+  final activeProfile = _buildProfileSummary(subscription, concreteTags.length);
   final unsupportedWireGuardCount = subscription.outbounds
       .where((outbound) => !outbound.info.deleted)
       .where((outbound) => isWireGuardOutboundConfig(outbound.config))
@@ -785,7 +817,6 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   final groupsByTag = {
     for (final group in subscription.groups) group.tag: group,
   };
-  final concreteTags = subscription.concreteServerTags;
   final outboundByTag = {
     for (final outbound in visibleOutbounds) outbound.tag: outbound,
   };
@@ -960,6 +991,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     },
     totalTopLevelProxyCount: topLevelSummaries.length,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
+    concreteServerTags: concreteTags,
   );
 }
 
@@ -1250,7 +1282,10 @@ StartupValidationResult validateStartupOutbounds(StartupValidationInput input) {
   );
 }
 
-AppProfileSummary _buildProfileSummary(Subscription subscription) {
+AppProfileSummary _buildProfileSummary(
+  Subscription subscription,
+  int serverCount,
+) {
   final info = subscription.info;
   return AppProfileSummary(
     id: subscription.id,
@@ -1258,7 +1293,7 @@ AppProfileSummary _buildProfileSummary(Subscription subscription) {
     consumed: info?.consumed.toDouble() ?? 0,
     total: info?.total?.toDouble() ?? 0,
     remainingDays: info?.remainingDays,
-    outboundsCount: subscription.concreteServerCount,
+    outboundsCount: serverCount,
     sourceLabel: '',
   );
 }

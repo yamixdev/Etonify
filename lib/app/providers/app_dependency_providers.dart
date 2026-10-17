@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
@@ -46,6 +47,16 @@ final appSettingsControllerProvider = Provider<AppSettingsController>(
   (ref) => AppSettingsController(),
   name: 'appSettingsControllerProvider',
 );
+
+final appBootstrapControllerProvider =
+    Provider.family<AppBootstrapController, String>((ref, fallbackVersion) {
+      final runtime = ref.read(singboxRuntimeProvider);
+      return AppBootstrapController(
+        fallbackClientVersionLabel: fallbackVersion,
+        loadAppVersionInfo: runtime.getAppVersionInfo,
+        loadCoreCapabilities: runtime.getCoreCapabilities,
+      );
+    });
 
 final subscriptionRuntimeControllerProvider =
     Provider<SubscriptionRuntimeController>(

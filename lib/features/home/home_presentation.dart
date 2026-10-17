@@ -55,6 +55,8 @@ class HomeViewActions {
     this.openTrafficDashboard,
     this.refreshActiveProxyIp,
     this.refreshActiveSubscription,
+    this.openProxies,
+    this.openProxyGroup,
   });
 
   final VoidCallback toggleConnection;
@@ -66,4 +68,6 @@ class HomeViewActions {
   final VoidCallback? openTrafficDashboard;
   final VoidCallback? refreshActiveProxyIp;
   final Future<void> Function()? refreshActiveSubscription;
+  final VoidCallback? openProxies;
+  final ValueChanged<String>? openProxyGroup;
 }

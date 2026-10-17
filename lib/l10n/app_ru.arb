@@ -1,4 +1,8 @@
 {
+  "homeTabTitle": "Главная",
+  "homeNavigationTitle": "Навигация на главной",
+  "homeNavigationPanel": "Выдвижная панель",
+  "homeNavigationTabs": "Нижние вкладки",
   "coreConfigActive": "Активен",
   "coreConfigUntrackedDescription": "Ядро работает. В этой сессии приложения нет записи о запуске его конфигурации.",
   "experimentalNetworkSection": "Сеть",

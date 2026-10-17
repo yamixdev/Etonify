@@ -137,6 +137,7 @@ class AppSettingsController {
       NotificationTrafficDisplayMode.speed;
   int notificationTrafficRefreshSeconds = 2;
   bool hideServerIp = false;
+  HomeNavigationMode homeNavigationMode = HomeNavigationMode.panel;
   bool sendHwidToProviders = true;
   String proxySort = 'source';
   bool progressiveBlurEnabled = false;
@@ -229,6 +230,7 @@ class AppSettingsController {
       notificationTrafficDisplayMode: notificationTrafficDisplayMode,
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp,
+      homeNavigationMode: homeNavigationMode,
       sendHwidToProviders: sendHwidToProviders,
       hwidDefaultNoticeShown: hwidDefaultNoticeShown,
       progressiveBlurEnabled: progressiveBlurEnabled,
@@ -310,6 +312,7 @@ class AppSettingsController {
     notificationTrafficDisplayMode = state.notificationTrafficDisplayMode;
     notificationTrafficRefreshSeconds = state.notificationTrafficRefreshSeconds;
     hideServerIp = state.hideServerIp;
+    homeNavigationMode = state.homeNavigationMode;
     sendHwidToProviders = state.sendHwidToProviders;
     hwidDefaultNoticeShown = state.hwidDefaultNoticeShown;
     SubscriptionFetcher.configureHwidSharing(sendHwidToProviders);
@@ -877,6 +880,12 @@ class AppSettingsController {
       return const AppSettingsChange.none();
     }
     autoConnectOnLaunch = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setHomeNavigationMode(HomeNavigationMode value) {
+    if (homeNavigationMode == value) return const AppSettingsChange.none();
+    homeNavigationMode = value;
     return const AppSettingsChange(changed: true);
   }
 

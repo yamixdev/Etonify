@@ -7,6 +7,40 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 
 void main() {
+  test(
+    'browser search filters selected roots and never exposes nested leaves',
+    () {
+      final result = buildProxyListPresentation(
+        ProxyListPresentationInput(
+          proxies: [
+            _proxy('selected', 'Selected'),
+            _proxy('sweden', 'Sweden'),
+            _proxy('hidden', 'Sweden hidden').copyWith(parentGroupTag: 'auto'),
+          ],
+          sort: ProxySort.source,
+          selectedTag: 'selected',
+          searchQuery: ' SWEDEN ',
+        ),
+      );
+      expect(result.items.map((p) => p.tag), ['sweden']);
+    },
+  );
+
+  test(
+    'flat browser group includes its explicit children without root sections',
+    () {
+      final result = buildProxyListPresentation(
+        ProxyListPresentationInput(
+          proxies: [_proxy('child', 'Child').copyWith(parentGroupTag: 'auto')],
+          sort: ProxySort.source,
+          selectedTag: '',
+          groupMembers: true,
+        ),
+      );
+      expect(result.entries.map((e) => e.proxy?.tag), ['child']);
+      expect(result.indexes[const ValueKey('proxy-row-child')], 0);
+    },
+  );
   test('latency snapshots preserve unchanged row values', () async {
     final original = _proxy('a', 'A', latency: 100);
     final result = await buildProxyListPresentationInBackground(

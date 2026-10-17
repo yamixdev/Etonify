@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app.dart';
+import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
@@ -21,6 +22,59 @@ import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 void main() {
+  testWidgets(
+    'saved tab navigation opens an empty browser and switches back without restarting',
+    (tester) async {
+      final state = AppSettingsController()
+          .toState(
+            onboardingCompleted: true,
+            acceptedLegalVersion: '0.2.1',
+            acceptedLegalAtMillis: 1,
+            activeProfileId: '',
+            selectedProxyTag: '',
+          )
+          .copyWith(
+            homeNavigationMode: HomeNavigationMode.tabs,
+            localeCode: 'en',
+            autoCheckNoticeAcknowledged: true,
+            hwidDefaultNoticeShown: true,
+          );
+      final store = MemoryAppSettingsStore(state);
+      await tester.pumpWidget(_TestMeowClient(store: store));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(ProxyPanelShell), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('proxies-tab')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('No servers found'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('General'));
+      await tester.pumpAndSettle();
+      final navigation = find.byKey(const ValueKey('home-navigation-setting'));
+      await tester.ensureVisible(navigation);
+      await tester.tap(navigation);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sliding panel').last);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(ProxyPanelShell), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        (await store.loadState()).homeNavigationMode,
+        HomeNavigationMode.panel,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('renders cloned mobile shell', (tester) async {
     await tester.pumpWidget(
       _TestMeowClient(

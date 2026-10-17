@@ -734,6 +734,40 @@ void main() {
     );
   });
 
+  test('home navigation restores tabs and safely defaults to the panel', () {
+    final store = _TestSettingsStore();
+    for (final value in [null, 'unknown', 'panel']) {
+      final state = store.mapState({'home_navigation_mode': value});
+      expect(store.stateToMap(state)['home_navigation_mode'], 'panel');
+    }
+    final state = store.mapState({'home_navigation_mode': 'tabs'});
+    final controller = AppSettingsController()..applyState(state);
+    final restored = controller.toState(
+      onboardingCompleted: true,
+      acceptedLegalVersion: '',
+      acceptedLegalAtMillis: null,
+      activeProfileId: '',
+      selectedProxyTag: '',
+    );
+    expect(store.stateToMap(restored)['home_navigation_mode'], 'tabs');
+    final change = controller.setHomeNavigationMode(HomeNavigationMode.panel);
+    expect(change.changed, isTrue);
+    expect(
+      AppSettingsImpactRegistry.resolve(change),
+      SettingsRuntimeImpact.uiOnly,
+    );
+    expect(
+      store.stateToSafeExportMap(restored)['home_navigation_mode'],
+      'tabs',
+    );
+    expect(
+      store.stateToMap(
+        state.copyWith(hapticEnabled: false),
+      )['home_navigation_mode'],
+      'tabs',
+    );
+  });
+
   test('stale pre-0.3.7 probe concurrency is rewritten exactly once', () {
     expect(
       AppSettingsStore.migratedUrlTestConcurrency(

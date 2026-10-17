@@ -4,6 +4,75 @@ import 'package:meow_client/models/subscription.dart';
 
 void main() {
   test(
+    'prepared membership invalidates for changed groups and deleted nodes',
+    () {
+      final source = Subscription(
+        id: 'group-cache',
+        name: 'Group',
+        url: '',
+        outbounds: const [
+          Outbound(
+            tag: 'a',
+            name: 'A',
+            config: {'type': 'vless', '_group_only': true},
+          ),
+          Outbound(
+            tag: 'b',
+            name: 'B',
+            config: {'type': 'vless', '_group_only': true},
+          ),
+        ],
+        groups: const [
+          SubscriptionGroup(tag: 'auto', name: 'Auto', outboundTags: ['a']),
+        ],
+      );
+      final cache = ProxyServerCatalogCache()..seed(source, const {'a'});
+      final edited = source.copyWith(
+        groups: const [
+          SubscriptionGroup(tag: 'auto', name: 'Auto', outboundTags: ['b']),
+        ],
+      );
+      expect(cache.tagsFor(edited), {'b'});
+      final deleted = edited.copyWith(
+        outbounds: [
+          edited.outbounds.first,
+          edited.outbounds.last.copyWith(
+            info: const OutboundInfo(deleted: true),
+          ),
+        ],
+      );
+      expect(cache.tagsFor(deleted), isEmpty);
+    },
+  );
+
+  test(
+    'home build computes concrete membership once for display and counters',
+    () {
+      final source = _CountingCatalogSubscription();
+      final result = buildHomeProxyCache(_input(source));
+      expect(result.concreteServerTags, {'a'});
+      expect(result.activeProfile?.outboundsCount, 1);
+      expect(source.traversals, 1);
+    },
+  );
+  test(
+    'prepared membership is reused without traversing subscription on UI',
+    () {
+      final source = _CountingCatalogSubscription();
+      final prepared = Set<String>.unmodifiable({'a'});
+      final cache = ProxyServerCatalogCache()..seed(source, prepared);
+      expect(cache.tagsFor(source), same(prepared));
+      expect(source.traversals, 0);
+      final replacement = source.copyWith(
+        outbounds: const [
+          Outbound(tag: 'b', name: 'B', config: {'type': 'vless'}),
+        ],
+      );
+      expect(cache.tagsFor(replacement), {'b'});
+      expect(cache.tagsFor(null), isEmpty);
+    },
+  );
+  test(
     'metadata worker preserves configs and indexes updated visible nodes',
     () async {
       final source = Subscription(
@@ -67,6 +136,7 @@ void main() {
         ],
       );
       final result = await buildProxyCacheInBackground(_input(source));
+      expect(result.concreteServerTags, {'a', 'b'});
       expect(result.summariesByTag.keys, containsAll(['a', 'b', 'auto']));
       expect(
         identical(result.summariesByTag['a'], result.displayProxy),
@@ -74,6 +144,7 @@ void main() {
       );
       expect(result.summariesByTag['b']?.parentGroupTag, 'auto');
       final home = await buildHomeProxyCacheInBackground(_input(source));
+      expect(home.concreteServerTags, {'a', 'b'});
       expect(home.summariesByTag.keys, ['a']);
       expect(home.activeProxies, isEmpty);
     },
@@ -229,6 +300,24 @@ void main() {
       originalResult.displayProxy?.endpointLabel,
     );
   });
+}
+
+class _CountingCatalogSubscription extends Subscription {
+  _CountingCatalogSubscription()
+    : super(
+        id: 'catalog',
+        name: 'Catalog',
+        url: '',
+        outbounds: const [
+          Outbound(tag: 'a', name: 'A', config: {'type': 'vless'}),
+        ],
+      );
+  int traversals = 0;
+  @override
+  Set<String> get concreteServerTags {
+    traversals++;
+    return super.concreteServerTags;
+  }
 }
 
 ProxyCacheBuildInput _input(Subscription subscription) {

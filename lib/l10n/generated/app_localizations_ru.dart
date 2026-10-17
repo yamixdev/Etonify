@@ -9,6 +9,18 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
+  String get homeTabTitle => 'Главная';
+
+  @override
+  String get homeNavigationTitle => 'Навигация на главной';
+
+  @override
+  String get homeNavigationPanel => 'Выдвижная панель';
+
+  @override
+  String get homeNavigationTabs => 'Нижние вкладки';
+
+  @override
   String get coreConfigActive => 'Активен';
 
   @override

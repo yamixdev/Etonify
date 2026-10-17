@@ -8,6 +8,102 @@ import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test('deferred core handshake does not hold durable UI state', () async {
+    final core = Completer<LibboxCapabilities>();
+    final controller = AppBootstrapController(
+      fallbackClientVersionLabel: '0.3.9',
+      loadAppVersionInfo: () async => const AppVersionInfo(
+        packageName: '',
+        versionName: '0.3.9',
+        versionCode: 39,
+      ),
+      loadCoreCapabilities: () => core.future,
+    );
+    final result = await controller
+        .load(
+          providedStore: MemoryAppSettingsStore(),
+          deferCoreCapabilities: true,
+        )
+        .timeout(const Duration(seconds: 1));
+    expect(result.coreCapabilities.isCompatible, isFalse);
+    expect(result.pendingCoreConfigMigration, isNull);
+    expect(result.state.localeCode, 'system');
+    core.complete(LibboxCapabilities.bundledLegacy);
+    expect(
+      await result.deferredCoreCapabilities,
+      same(LibboxCapabilities.bundledLegacy),
+    );
+  });
+  test('unanswered version request has a bounded startup wait', () async {
+    final pending = Completer<AppVersionInfo>();
+    final controller = AppBootstrapController(
+      fallbackClientVersionLabel: '0.3.9',
+      loadAppVersionInfo: () => pending.future,
+      loadCoreCapabilities: () async => LibboxCapabilities.bundledLegacy,
+    );
+    final result = await controller
+        .load(providedStore: MemoryAppSettingsStore())
+        .timeout(const Duration(seconds: 2));
+    expect(result.appVersionInfo.versionName, '0.3.9');
+    expect(result.appVersionInfo.versionCode, 0);
+    pending.complete(
+      const AppVersionInfo(
+        packageName: 'stale',
+        versionName: '0.1.0',
+        versionCode: 1,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(result.appVersionInfo.versionCode, 0);
+  });
+
+  test('failed version refresh retains previously verified metadata', () async {
+    var fail = false;
+    final controller = AppBootstrapController(
+      fallbackClientVersionLabel: '0.3.9',
+      loadAppVersionInfo: () async {
+        if (fail) throw StateError('bridge detached');
+        return const AppVersionInfo(
+          packageName: 'com.etonify.meow_client',
+          versionName: '0.3.9',
+          versionCode: 39,
+        );
+      },
+    );
+    await controller.readAppVersionInfo();
+    fail = true;
+    final result = await controller.readAppVersionInfo();
+    expect(result.versionCode, 39);
+    expect(result.packageName, 'com.etonify.meow_client');
+  });
+
+  test(
+    'deferred handshake errors stay incompatible without losing settings',
+    () async {
+      final core = Completer<LibboxCapabilities>();
+      final controller = AppBootstrapController(
+        fallbackClientVersionLabel: '0.3.9',
+        loadAppVersionInfo: () async => const AppVersionInfo(
+          packageName: '',
+          versionName: '0.3.9',
+          versionCode: 39,
+        ),
+        loadCoreCapabilities: () => core.future,
+      );
+      final store = MemoryAppSettingsStore();
+      final result = await controller.load(
+        providedStore: store,
+        deferCoreCapabilities: true,
+      );
+      core.completeError(StateError('engine detached'));
+      expect((await result.deferredCoreCapabilities)!.isCompatible, isFalse);
+      expect(result.store, same(store));
+      expect(
+        (await store.loadState()).coreConfigSchemaVersion,
+        result.state.coreConfigSchemaVersion,
+      );
+    },
+  );
   test(
     'legacy split routing is reset once without disabling auto-connect',
     () async {

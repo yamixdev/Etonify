@@ -8,6 +8,7 @@ import 'package:meow_client/features/home/home_active_proxy.dart';
 import 'package:meow_client/features/home/home_connection_button.dart';
 import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/features/home/home_subscription_card.dart';
+import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
@@ -123,11 +124,13 @@ class HomePage extends StatelessWidget {
                                   constraints.maxHeight * 1.35);
                       return wideLayout
                           ? _buildWideContent(
+                              context,
                               profile,
                               proxy,
                               constraints.maxWidth,
                             )
                           : _buildCompactContent(
+                              context,
                               profile,
                               proxy,
                               connectionOccupied,
@@ -141,6 +144,7 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _buildCompactContent(
+    BuildContext context,
     AppProfileSummary profile,
     AppProxySummary? proxy,
     bool connectionOccupied,
@@ -169,7 +173,7 @@ class HomePage extends StatelessWidget {
                     ),
                   ),
                 ),
-                ?_buildActiveProxyFooter(proxy),
+                ?_buildActiveProxyFooter(context, proxy),
               ],
             ),
           ),
@@ -179,6 +183,7 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _buildWideContent(
+    BuildContext context,
     AppProfileSummary profile,
     AppProxySummary? proxy,
     double maxWidth,
@@ -194,7 +199,8 @@ class HomePage extends StatelessWidget {
             child: Column(
               children: [
                 _buildSubscriptionTile(profile, EdgeInsets.zero),
-                if (_buildActiveProxyFooter(proxy) case final footer?) ...[
+                if (_buildActiveProxyFooter(context, proxy)
+                    case final footer?) ...[
                   const Spacer(),
                   footer,
                 ],
@@ -279,9 +285,45 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget? _buildActiveProxyFooter(AppProxySummary? proxy) {
+  Widget? _buildActiveProxyFooter(
+    BuildContext context,
+    AppProxySummary? proxy,
+  ) {
     if (!showActiveProxyFooter || proxy == null) {
       return null;
+    }
+    if (actions.openProxies != null) {
+      Widget buildCard(ProxyRuntimeVisualState? state) => Material(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: Theme.of(
+              context,
+            ).colorScheme.outlineVariant.withValues(alpha: .5),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ProxyTile(
+          proxy: proxy,
+          runtimeState: state,
+          selected: false,
+          forceBaseInset: true,
+          animate: false,
+          onTap: actions.openProxies!,
+          onTestLatency: connected ? onRefreshLatency : null,
+          onOpenGroup: proxy.isGroup && actions.openProxyGroup != null
+              ? (_) => actions.openProxyGroup!(proxy.tag)
+              : null,
+        ),
+      );
+      final states = runtimeStates;
+      return states == null
+          ? buildCard(null)
+          : ValueListenableBuilder<ProxyRuntimeVisualState?>(
+              valueListenable: states.listenableFor(proxy.tag),
+              builder: (context, state, _) => buildCard(state),
+            );
     }
     if (trafficListenable == null) {
       return ActiveProxyFooter(

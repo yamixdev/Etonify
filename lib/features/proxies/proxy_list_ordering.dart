@@ -29,6 +29,8 @@ class ProxyListPresentationInput {
     required this.sort,
     required this.selectedTag,
     this.canAddChain = false,
+    this.searchQuery = '',
+    this.groupMembers = false,
     this.chainTags = const {},
     this.runtimeStates = const {},
   });
@@ -36,6 +38,8 @@ class ProxyListPresentationInput {
   final ProxySort sort;
   final String selectedTag;
   final bool canAddChain;
+  final String searchQuery;
+  final bool groupMembers;
   final Set<String> chainTags;
   final Map<String, ProxyRuntimeVisualState> runtimeStates;
 }
@@ -66,12 +70,18 @@ ProxyListPresentation buildProxyListPresentation(
   ProxyListPresentationInput input,
 ) {
   final timer = Stopwatch()..start();
+  final query = input.searchQuery.trim().toLowerCase();
   bool pinned(AppProxySummary proxy) =>
       isLowestProxyTag(proxy.tag) || input.chainTags.contains(proxy.tag);
   final items = input.proxies
       .where(
         (proxy) =>
-            (proxy.parentGroupTag?.isEmpty ?? true) &&
+            (input.groupMembers || (proxy.parentGroupTag?.isEmpty ?? true)) &&
+            (query.isEmpty ||
+                '${proxy.displayName} ${proxy.tag} ${proxy.countryCode} '
+                        '${proxy.protocolLabel} ${proxy.endpointLabel}'
+                    .toLowerCase()
+                    .contains(query)) &&
             (proxy.tag == input.selectedTag ||
                 pinned(proxy) ||
                 shouldShowProxyForSort(
@@ -87,6 +97,12 @@ ProxyListPresentation buildProxyListPresentation(
     prioritizedTag: input.selectedTag,
     runtimeStateFor: (tag) => input.runtimeStates[tag],
   );
+  if (input.groupMembers) {
+    final entries = [for (final item in items) ProxyListEntry.tile(item)];
+    return ProxyListPresentation(items, entries, {
+      for (var i = 0; i < entries.length; i++) entries[i].key: i,
+    }, timer.elapsed);
+  }
   AppProxySummary? selected;
   final primary = <AppProxySummary>[];
   final chains = <AppProxySummary>[];

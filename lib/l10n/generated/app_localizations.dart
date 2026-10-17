@@ -98,6 +98,30 @@ abstract class AppLocalizations {
     Locale('ru'),
   ];
 
+  /// No description provided for @homeTabTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeTabTitle;
+
+  /// No description provided for @homeNavigationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Home navigation'**
+  String get homeNavigationTitle;
+
+  /// No description provided for @homeNavigationPanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sliding panel'**
+  String get homeNavigationPanel;
+
+  /// No description provided for @homeNavigationTabs.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom tabs'**
+  String get homeNavigationTabs;
+
   /// No description provided for @coreConfigActive.
   ///
   /// In en, this message translates to:
@@ -932,6 +956,10 @@ abstract class AppLocalizations {
   /// **'Switching'**
   String get proxySwitching;
 
+  /// No description provided for @proxySelectionUnconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed'**
   String get proxySelectionUnconfirmed;
 
   /// No description provided for @proxyUnavailable.

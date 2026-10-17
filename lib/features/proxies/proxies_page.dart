@@ -28,6 +28,7 @@ import 'package:meow_client/features/proxies/proxy_latency_button.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 
 part 'proxies_page_chains.dart';
+part 'proxies_page_browser.dart';
 part 'proxies_page_group_sheet.dart';
 part 'proxies_page_header.dart';
 part 'proxies_page_share.dart';
@@ -426,6 +427,11 @@ class ProxiesPage extends StatefulWidget {
     this.onActiveProxyHideIpChanged,
     this.onActiveProxyIpRefresh,
     this.embedded = false,
+    this.browserMode = false,
+    this.browserActive = true,
+    this.catalogReady = true,
+    this.browserRequest,
+    this.onBackAtRoot,
     this.sheetMetricsListenable,
     this.scrollController,
     this.sheetAtMaxExtent = false,
@@ -476,6 +482,11 @@ class ProxiesPage extends StatefulWidget {
   final ValueChanged<bool>? onActiveProxyHideIpChanged;
   final VoidCallback? onActiveProxyIpRefresh;
   final bool embedded;
+  final bool browserMode;
+  final bool browserActive;
+  final bool catalogReady;
+  final ({int serial, String? groupTag})? browserRequest;
+  final VoidCallback? onBackAtRoot;
   final ValueListenable<ProxyPanelMetrics>? sheetMetricsListenable;
   final ScrollController? scrollController;
   final bool sheetAtMaxExtent;
@@ -537,10 +548,39 @@ class _ProxiesPageState extends State<ProxiesPage> {
   bool _presentationInFlight = false;
   bool _presentationPending = false;
   bool _presentationLoading = false;
-  String? _presentationProfileId;
+  Object? _presentationProfileId;
+  final _browserSearch = TextEditingController();
+  final _browserScroll = ScrollController();
+  final _browserPath = <String>[];
+  final _browserLocations = <String, ({double offset, String query})>{};
+  Timer? _browserSearchTimer;
+  String _browserQuery = '';
+  double? _browserPendingOffset;
+  ({int serial, String? groupTag})? _appliedBrowserRequest;
+  AppProxySummary? _browserBaseGroup;
+  final _browserAncestors = <String, AppProxySummary>{};
+
+  List<AppProxySummary> get _presentationProxies =>
+      widget.browserMode && _browserPath.isNotEmpty
+      ? widget.groupChildrenByTag[_browserPath.last] ?? const []
+      : widget.proxies;
+
+  String get _presentationSelectedTag =>
+      widget.browserMode && _browserPath.isNotEmpty
+      ? _browserGroup?.selectedChildTag ?? widget.selectedTag
+      : widget.selectedTag;
+
+  bool get _canAddChain =>
+      widget.onAddProxyChain != null &&
+      (!widget.browserMode ||
+          (_browserPath.isEmpty &&
+              _browserQuery.isEmpty &&
+              widget.proxies.isNotEmpty));
 
   bool _isProxyChain(AppProxySummary proxy) =>
       widget.isProxyChainTag?.call(proxy.tag) ?? false;
+
+  void _updateBrowser(VoidCallback update) => setState(update);
 
   ProxyPanelMetrics? get _sheetMetrics => widget.sheetMetricsListenable?.value;
 
@@ -553,12 +593,40 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _sort = widget.initialSort;
     widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
     _bindSheetMetricsListenable(widget.sheetMetricsListenable);
+    if (widget.browserMode) _applyBrowserRequest();
     _rebuildVisibleItems();
   }
 
   @override
   void didUpdateWidget(covariant ProxiesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.browserMode) {
+      if (oldWidget.catalogReady &&
+          !widget.catalogReady &&
+          oldWidget.profileId == widget.profileId) {
+        _rememberBrowserLocation();
+        _browserPendingOffset =
+            _browserLocations[_browserLocation]?.offset ?? 0;
+      }
+      if (oldWidget.profileId != widget.profileId) {
+        _browserPath.clear();
+        _browserBaseGroup = null;
+        _browserAncestors.clear();
+        _browserLocations.clear();
+        _appliedBrowserRequest = widget.browserRequest;
+        _restoreBrowserLocation();
+      } else if (_appliedBrowserRequest != widget.browserRequest) {
+        _rememberBrowserLocation();
+        _applyBrowserRequest();
+      }
+      _validateBrowserPath();
+      if (oldWidget.groupChildrenByTag != widget.groupChildrenByTag ||
+          oldWidget.catalogReady != widget.catalogReady ||
+          oldWidget.browserRequest != widget.browserRequest ||
+          (!oldWidget.browserActive && widget.browserActive)) {
+        _rebuildVisibleItems();
+      }
+    }
     if (_groupSheetOpen &&
         (oldWidget.proxies != widget.proxies ||
             oldWidget.groupChildrenByTag != widget.groupChildrenByTag ||
@@ -614,6 +682,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _observedSheetMetrics?.removeListener(_onSheetMetricsChanged);
     _proxySheetHeaderScrollCollapse.dispose();
     _groupPanelSnapshot.dispose();
+    _browserSearchTimer?.cancel();
+    _browserSearch.dispose();
+    _browserScroll.dispose();
     super.dispose();
   }
 
@@ -718,6 +789,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   void _onRuntimeStatesChanged() {
+    if (widget.browserMode &&
+        _browserPath.isNotEmpty &&
+        _visibleEntriesSelectedTagCache != _presentationSelectedTag) {
+      _proxyDataRefreshPending = true;
+    }
     if (!mounted ||
         (widget.embedded && !_embeddedListActivated) ||
         (!_proxyDataRefreshPending &&
@@ -772,18 +848,31 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   bool _rebuildVisibleItems() {
+    if (widget.browserMode && !widget.catalogReady) {
+      ++_presentationGeneration;
+      _presentationPending = false;
+      _presentationLoading = true;
+      _visibleItems = const [];
+      _invalidateVisibleEntries();
+      return false;
+    }
     if (widget.embedded && !_embeddedListActivated) {
       _visibleItems = const <AppProxySummary>[];
       _invalidateVisibleEntries();
       return false;
     }
     ++_presentationGeneration;
-    if (_presentationProfileId != widget.profileId) {
+    final scope = (
+      widget.profileId,
+      widget.browserMode ? _browserPath.lastOrNull : null,
+    );
+    if (_presentationProfileId != scope) {
       _visibleItems = const [];
       _invalidateVisibleEntries();
     }
-    _presentationProfileId = widget.profileId;
-    if (widget.proxies.length >= 500) {
+    _presentationProfileId = scope;
+    final proxies = _presentationProxies;
+    if (proxies.length >= 500) {
       _presentationLoading = _visibleItems.isEmpty;
       _presentationPending = true;
       unawaited(_prepareLargePresentation());
@@ -794,16 +883,18 @@ class _ProxiesPageState extends State<ProxiesPage> {
     return _applyPresentation(
       buildProxyListPresentation(
         ProxyListPresentationInput(
-          proxies: widget.proxies,
+          proxies: proxies,
           sort: _sort,
-          selectedTag: widget.selectedTag,
-          canAddChain: widget.onAddProxyChain != null,
+          selectedTag: _presentationSelectedTag,
+          canAddChain: _canAddChain,
+          searchQuery: widget.browserMode ? _browserQuery : '',
+          groupMembers: widget.browserMode && _browserPath.isNotEmpty,
           chainTags: {
-            for (final proxy in widget.proxies)
+            for (final proxy in proxies)
               if (_isProxyChain(proxy)) proxy.tag,
           },
           runtimeStates: {
-            for (final proxy in widget.proxies)
+            for (final proxy in proxies)
               proxy.tag: ?widget.runtimeStates?.valueFor(proxy.tag),
           },
         ),
@@ -819,10 +910,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
         _presentationPending = false;
         final generation = _presentationGeneration;
         final preparationTimer = Stopwatch()..start();
-        final proxies = widget.proxies;
+        final proxies = _presentationProxies;
         final sort = _sort;
-        final selectedTag = widget.selectedTag;
-        final canAddChain = widget.onAddProxyChain != null;
+        final selectedTag = _presentationSelectedTag;
+        final canAddChain = _canAddChain;
+        final query = widget.browserMode ? _browserQuery : '';
+        final groupMembers = widget.browserMode && _browserPath.isNotEmpty;
         final chainPredicate = widget.isProxyChainTag;
         final runtimeStates = widget.runtimeStates;
         final states = <String, ProxyRuntimeVisualState>{};
@@ -848,6 +941,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
             sort: sort,
             selectedTag: selectedTag,
             canAddChain: canAddChain,
+            searchQuery: query,
+            groupMembers: groupMembers,
             chainTags: chains,
             runtimeStates: states,
           ),
@@ -893,13 +988,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
   bool _applyPresentation(ProxyListPresentation result) {
     final changed =
         !listEquals(_visibleItems, result.items) ||
-        _visibleEntriesSelectedTagCache != widget.selectedTag ||
-        _visibleEntriesCanAddChainCache != (widget.onAddProxyChain != null);
+        _visibleEntriesSelectedTagCache != _presentationSelectedTag ||
+        _visibleEntriesCanAddChainCache != _canAddChain;
     _visibleItems = result.items;
     _visibleEntriesCache = result.entries;
     _visibleEntryIndexes = result.indexes;
-    _visibleEntriesSelectedTagCache = widget.selectedTag;
-    _visibleEntriesCanAddChainCache = widget.onAddProxyChain != null;
+    _visibleEntriesSelectedTagCache = _presentationSelectedTag;
+    _visibleEntriesCanAddChainCache = _canAddChain;
+    if (widget.browserMode) _restoreBrowserScrollAfterLayout();
     return changed;
   }
 
@@ -968,6 +1064,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   Future<void> _openGroupOutbounds(AppProxySummary group, Rect _) async {
+    if (widget.browserMode) {
+      _openBrowserGroup(group);
+      return;
+    }
     final children = _groupChildren(group);
     if (children.isEmpty) {
       return;
@@ -1074,6 +1174,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     final l10n = AppLocalizations.of(context);
 
     final theme = Theme.of(context);
+    if (widget.browserMode) return _buildBrowser(context, l10n);
     if (widget.embedded) {
       final sheetMetricsListenable = widget.sheetMetricsListenable;
       final list = _buildEmbeddedProxyList(context: context, l10n: l10n);
@@ -1435,9 +1536,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
               proxy: proxy,
               identityChild: identity,
               runtimeState: state,
-              selected: proxy.tag == widget.selectedTag,
+              selected: proxy.tag == _presentationSelectedTag,
               highlighted: proxy.highlighted,
-              animate: !widget.embedded,
+              animate: !widget.embedded && !widget.browserMode,
+              forceBaseInset: widget.browserMode,
               onTap: () => widget.onSelected(proxy.tag),
               onTestLatency: widget.connected && widget.onProxyUrlTest != null
                   ? () => unawaited(widget.onProxyUrlTest!(proxy.tag))

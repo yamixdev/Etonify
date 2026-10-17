@@ -28,6 +28,7 @@ class AppBootstrapResult {
     required this.coreCapabilities,
     required this.pendingCoreConfigMigration,
     required this.usesInMemoryStore,
+    this.deferredCoreCapabilities,
   });
 
   final AppSettingsStore store;
@@ -39,6 +40,7 @@ class AppBootstrapResult {
   final LibboxCapabilities coreCapabilities;
   final CoreConfigMigrationResult? pendingCoreConfigMigration;
   final bool usesInMemoryStore;
+  final Future<LibboxCapabilities>? deferredCoreCapabilities;
 }
 
 /// Optional rule-set status loaded after the first application frame.
@@ -96,8 +98,12 @@ class AppBootstrapController {
   final CoreCapabilitiesLoader _loadCoreCapabilities;
   final AdBlockStatusLoader _loadAdBlockStatus;
   final RussiaRouteStatusLoader _loadRussiaRouteStatus;
+  AppVersionInfo? _verifiedAppVersionInfo;
 
-  Future<AppBootstrapResult> load({AppSettingsStore? providedStore}) async {
+  Future<AppBootstrapResult> load({
+    AppSettingsStore? providedStore,
+    bool deferCoreCapabilities = false,
+  }) async {
     AppSettingsStore? store;
     var ownsStore = false;
     late AppSettingsState state;
@@ -164,13 +170,18 @@ class AppBootstrapController {
     // The native capability bridge is needed for migration planning, but it
     // must not compete with encrypted Hive I/O during cold start. On slower
     // devices that contention was visible as a blank 1–3 second launch.
-    final coreCapabilities = await _readCoreCapabilities();
-    final migration = CoreConfigMigration.plan(
-      state: state,
-      capabilities: coreCapabilities,
-    );
+    final coreCapabilitiesFuture = _readCoreCapabilities();
+    final coreCapabilities = deferCoreCapabilities
+        ? LibboxCapabilities.incompatible
+        : await coreCapabilitiesFuture;
+    final migration = deferCoreCapabilities
+        ? null
+        : CoreConfigMigration.plan(
+            state: state,
+            capabilities: coreCapabilities,
+          );
     CoreConfigMigrationResult? pendingCoreConfigMigration;
-    if (migration.requiresValidation) {
+    if (migration != null && migration.requiresValidation) {
       pendingCoreConfigMigration = migration;
       final persistedSchemaVersion = state.coreConfigSchemaVersion;
       state = migration.state.copyWith(
@@ -183,10 +194,10 @@ class AppBootstrapController {
             'to=${migration.state.coreConfigSchemaVersion} '
             'changes=${migration.changes.join(',')}',
       );
-    } else if (migration.status == CoreConfigMigrationStatus.blocked) {
+    } else if (migration?.status == CoreConfigMigrationStatus.blocked) {
       AppLogStore.warning(
         'sing-box',
-        'core config migration blocked: ${migration.blockReason}',
+        'core config migration blocked: ${migration!.blockReason}',
       );
     }
 
@@ -200,6 +211,9 @@ class AppBootstrapController {
       coreCapabilities: coreCapabilities,
       pendingCoreConfigMigration: pendingCoreConfigMigration,
       usesInMemoryStore: usesInMemoryStore,
+      deferredCoreCapabilities: deferCoreCapabilities
+          ? coreCapabilitiesFuture
+          : null,
     );
   }
 
@@ -247,14 +261,19 @@ class AppBootstrapController {
 
   Future<AppVersionInfo> readAppVersionInfo() async {
     try {
-      final info = await _loadAppVersionInfo();
+      final info = await _loadAppVersionInfo().timeout(
+        const Duration(seconds: 1),
+      );
       if (info.versionName.trim().isNotEmpty) {
+        _verifiedAppVersionInfo = info;
         SubscriptionFetcher.configureAppVersion(info.versionName);
         return info;
       }
     } catch (error) {
       AppLogStore.warning('app version', 'Failed to read app version: $error');
     }
+    final verified = _verifiedAppVersionInfo;
+    if (verified != null) return verified;
     SubscriptionFetcher.configureAppVersion(fallbackClientVersionLabel);
     return AppVersionInfo(
       packageName: '',

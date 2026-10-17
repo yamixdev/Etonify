@@ -67,6 +67,7 @@ import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/features/home/home_presentation_builder.dart';
+import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
@@ -126,7 +127,7 @@ class MeowClient extends ConsumerStatefulWidget {
 
 class _MeowClientState extends ConsumerState<MeowClient>
     with WidgetsBindingObserver {
-  static const _fallbackClientVersionLabel = '0.3.3';
+  static const _fallbackClientVersionLabel = '0.3.9';
   static const _requiredLegalVersion = '0.2.1';
   static final RegExp _quickTileCountryCodePattern = RegExp(r'^[A-Z]{2}$');
   static const _lowestProxyTag = lowestProxyTag;
@@ -170,6 +171,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _settingsBackupOperationInFlight = false;
   bool _proxyPanelInteractionActive = false;
   bool _proxyPanelOpen = false;
+  bool _tabbedProxyListRetained = false;
   int _proxyPanelResetGeneration = 0;
   String _clientVersionLabel = _fallbackClientVersionLabel;
   int _clientVersionCode = 0;
@@ -205,6 +207,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int _derivedCacheBuildGeneration = 0;
   final ProxyCacheBuildCoordinator _proxyCacheBuildCoordinator =
       ProxyCacheBuildCoordinator();
+  final ProxyServerCatalogCache _proxyServerCatalog = ProxyServerCatalogCache();
   String? _lastEmptyAfterDropInvalidWarningSubscriptionId;
   String? _lastWireGuardWarningSubscriptionId;
   ActiveProxyIpSnapshot _activeProxyIp = const ActiveProxyIpSnapshot.idle();
@@ -231,6 +234,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final ProxyRuntimeController _proxyRuntime = ProxyRuntimeController();
   late final LatencyCoordinator _latencyCoordinator;
   CoreConfigMigrationResult? _pendingCoreConfigMigration;
+  Future<LibboxCapabilities>? _startupCoreReady;
   SplitRoutingResetSession _splitRoutingResetSession = SplitRoutingResetSession(
     pending: false,
   );
@@ -592,6 +596,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (mounted && generation == _derivedCacheBuildGeneration) {
           final applyStopwatch = Stopwatch()..start();
           setState(() {
+            _proxyServerCatalog.seed(subscription, result.concreteServerTags);
             _activeProfileCache = result.activeProfile;
             _displayProxyCache = result.displayProxy;
             _activeProxiesCache = result.activeProxies;
@@ -673,11 +678,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _scheduleProxyListCacheRelease() {
     _cancelScheduledProxyListCacheRelease();
+    if (_tabbedProxyListRetained) return;
     if (!_fullProxyListCacheReady || !_isLargeProxyListCache) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _proxyPanelOpen) {
+      if (!mounted || _proxyPanelOpen || _tabbedProxyListRetained) {
         return;
       }
       _proxyRuntimeVisualStates.pruneUnobserved(
@@ -690,7 +696,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         : _largeProxyListCacheReleaseDelay;
     _proxyListCacheReleaseTimer = Timer(releaseDelay, () {
       _proxyListCacheReleaseTimer = null;
-      if (!mounted || _proxyPanelOpen || _proxyPanelInteractionActive) {
+      if (!mounted ||
+          _proxyPanelOpen ||
+          _tabbedProxyListRetained ||
+          _proxyPanelInteractionActive) {
         return;
       }
       _releaseFullProxyListCache(reason: 'panel_closed');
@@ -1299,6 +1308,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _isProxyChainTag(String tag) => _proxyChainForTag(tag) != null;
 
   void _applyProxyCacheBuildResult(ProxyCacheBuildResult result) {
+    final source = _activeSubscription;
+    if (source != null) {
+      _proxyServerCatalog.seed(source, result.concreteServerTags);
+    }
     ++_derivedCacheBuildGeneration;
     _derivedCacheBuildTimer?.cancel();
     _derivedCacheBuildTimer = null;
@@ -2177,8 +2190,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         allowInsecureTls: _allowUntrustedSubscriptionCertificates,
       ),
     );
-    _bootstrapController = AppBootstrapController(
-      fallbackClientVersionLabel: _fallbackClientVersionLabel,
+    _bootstrapController = ref.read(
+      appBootstrapControllerProvider(_fallbackClientVersionLabel),
     );
     _runtimeCommands = RuntimeCommandCoordinator(
       selectOutbound: (groupTag, outboundTag) => _singboxRuntime.selectOutbound(
@@ -2592,6 +2605,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   Future<void> _checkForClientUpdatesIfDue() async {
     await _refreshAppVersionInfo();
+    if (!mounted || (Platform.isAndroid && _clientVersionCode <= 0)) return;
     await _cleanupInstalledUpdateArtifactsIfNeeded(showSnackBar: true);
     final result = await _appUpdateService.checkForUpdates(
       currentVersion: _clientVersionLabel,
@@ -2612,7 +2626,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _cleanupInstalledUpdateArtifactsIfNeeded({
     bool showSnackBar = false,
   }) async {
-    if (_updateCleanupInFlight || _clientVersionLabel.trim().isEmpty) {
+    if (_updateCleanupInFlight ||
+        _clientVersionLabel.trim().isEmpty ||
+        (Platform.isAndroid && _clientVersionCode <= 0)) {
       return;
     }
     _updateCleanupInFlight = true;
@@ -2928,7 +2944,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final bootstrapStopwatch = Stopwatch()..start();
     late final AppBootstrapResult bootstrap;
     try {
-      bootstrap = await _bootstrapController.load(providedStore: widget.store);
+      bootstrap = await _bootstrapController.load(
+        providedStore: widget.store,
+        deferCoreCapabilities: Platform.isAndroid,
+      );
     } catch (error, stackTrace) {
       AppLogStore.error(
         'bootstrap',
@@ -3033,6 +3052,40 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
     });
     _lastAppliedSettingsState = _currentSettingsState();
+    final deferredCore = bootstrap.deferredCoreCapabilities;
+    if (deferredCore != null) {
+      final coreTimer = Stopwatch()..start();
+      _startupCoreReady = deferredCore.then((capabilities) {
+        if (!mounted) return LibboxCapabilities.incompatible;
+        // Plan against current settings, not the pre-frame startup snapshot:
+        // the user can already browse and edit settings during the handshake.
+        final current = _currentSettingsState();
+        final migration = CoreConfigMigration.plan(
+          state: current,
+          capabilities: capabilities,
+        );
+        setState(() {
+          _latencyCoordinator.updateCapabilities(capabilities);
+          if (migration.requiresValidation) {
+            _pendingCoreConfigMigration = migration;
+            ref
+                .read(appSettingsProvider.notifier)
+                .hydrate(
+                  migration.state.copyWith(
+                    coreConfigSchemaVersion: current.coreConfigSchemaVersion,
+                  ),
+                  progressiveBlurEnabledOverride: false,
+                );
+          }
+        });
+        AppLogStore.info(
+          'bootstrap performance',
+          'coreDeferredMs=${coreTimer.elapsedMilliseconds} '
+              'compatible=${capabilities.isCompatible}',
+        );
+        return capabilities;
+      });
+    }
     if (!useInMemoryBootstrap) {
       _scheduleDeferredBootstrapStatuses(
         includeAdBlock: state.adBlockEnabled,
@@ -4208,6 +4261,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _startConnection({required String source}) async {
+    final startupCore = _startupCoreReady;
+    if (startupCore != null) {
+      await startupCore;
+      if (!mounted) return;
+    }
     if (_splitRoutingResetSession.pending) {
       await _handleSplitRoutingReset();
       return;
@@ -4691,9 +4749,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Set<String> _userVisibleServerTags() {
-    final subscription = _activeSubscription;
-    if (subscription == null) return const <String>{};
-    return subscription.concreteServerTags;
+    return _proxyServerCatalog.tagsFor(_activeSubscription);
   }
 
   void _synchronizeUrlTestProgressCatalog() {
@@ -5502,6 +5558,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setHideServerIp(value));
   }
 
+  void _setHomeNavigationMode(HomeNavigationMode value) {
+    if (_settings.homeNavigationMode == value) return;
+    _proxyPanelOpen = false;
+    _tabbedProxyListRetained = false;
+    _applySettingsChange(() => _settings.setHomeNavigationMode(value));
+    _scheduleProxyListCacheRelease();
+  }
+
   void _setAllowUntrustedProxyCertificates(bool value) {
     _applySettingsChange(
       () => _settings.setAllowUntrustedProxyCertificates(value),
@@ -6264,6 +6328,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentHideServerIp: _hideServerIp,
           currentSendHwidToProviders: _settings.sendHwidToProviders,
           currentAutoConnectOnLaunch: _settings.autoConnectOnLaunch,
+          currentHomeNavigationMode: _settings.homeNavigationMode,
+          onHomeNavigationModeChanged:
+              defaultTargetPlatform == TargetPlatform.android
+              ? _setHomeNavigationMode
+              : null,
           onAutoConnectOnLaunchChanged: _setAutoConnectOnLaunch,
           showQuickSettingsTileAction: Platform.isAndroid,
           showBatteryOptimizationSettings: Platform.isAndroid,
@@ -6894,6 +6963,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<bool> _prepareManualUrlTest(String reason) async {
+    final startupCore = _startupCoreReady;
+    if (startupCore != null) {
+      final capabilities = await startupCore;
+      if (!mounted || !capabilities.isCompatible) return false;
+    }
     if (!mounted ||
         !_connected ||
         !_foregroundLifecycleActive ||
@@ -7689,6 +7763,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<LibboxCapabilities> _refreshCoreCapabilities() async {
+    final startupCore = _startupCoreReady;
+    if (startupCore != null) {
+      final capabilities = await startupCore;
+      if (!mounted) return LibboxCapabilities.incompatible;
+      if (identical(_startupCoreReady, startupCore)) _startupCoreReady = null;
+      if (capabilities.isCompatible) return capabilities;
+    }
     final capabilities = await _singboxRuntime.getCoreCapabilities();
     _latencyCoordinator.updateCapabilities(capabilities);
     return capabilities;
@@ -9528,7 +9609,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   Widget _buildHomePresentation(
     BuildContext context, {
-    required ProxyPanelMetrics panelMetrics,
+    ProxyPanelMetrics? panelMetrics,
+    ValueChanged<String?>? openProxies,
   }) {
     final activeSubscription = _activeSubscription;
     final canRefreshActiveSubscription =
@@ -9559,6 +9641,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ),
       ),
       callbacks: HomePresentationCallbacks(
+        openProxies: openProxies == null ? null : () => openProxies(null),
+        openProxyGroup: openProxies,
         toggleConnection: () => unawaited(
           _vpnLifecycleCommands.toggle(source: 'home.connection_button'),
         ),
@@ -9573,15 +9657,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
             ? _refreshActiveSubscription
             : null,
       ),
-    ).build(panelMetrics: panelMetrics);
+    ).build(panelMetrics: panelMetrics, tabbed: openProxies != null);
   }
 
   Widget _buildProxiesPresentation(
     BuildContext context, {
-    required ProxyPanelMetrics panelMetrics,
-    required ValueListenable<ProxyPanelMetrics> panelMetricsListenable,
-    required ScrollController scrollController,
-    required ProxyPanelGestures panelGestures,
+    ProxyPanelMetrics? panelMetrics,
+    ValueListenable<ProxyPanelMetrics>? panelMetricsListenable,
+    ScrollController? scrollController,
+    ProxyPanelGestures? panelGestures,
+    bool browserMode = false,
+    bool browserActive = true,
+    ({int serial, String? groupTag})? browserRequest,
+    VoidCallback? onBackAtRoot,
   }) {
     return ProxiesPresentationBuilder(
       data: ProxiesPresentationData(
@@ -9607,6 +9695,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         runtimeStates: _proxyRuntimeVisualStates,
         proxyListLoading:
             _fullProxyListCacheRequested && !_fullProxyListCacheReady,
+        catalogReady:
+            !browserMode ||
+            _activeProfileCache == null ||
+            _fullProxyListCacheReady,
       ),
       callbacks: ProxiesPresentationCallbacks(
         changeSort: _setProxySort,
@@ -9627,6 +9719,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         changeHideActiveProxyIp: _setHideServerIp,
       ),
     ).build(
+      browserMode: browserMode,
+      browserActive: browserActive,
+      browserRequest: browserRequest,
+      onBackAtRoot: onBackAtRoot,
       panelMetrics: panelMetrics,
       panelMetricsListenable: panelMetricsListenable,
       scrollController: scrollController,
@@ -9650,6 +9746,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Widget _buildAppHome() {
+    if (_ready &&
+        _onboardingCompleted &&
+        _legalAccepted &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        _settings.homeNavigationMode == HomeNavigationMode.tabs) {
+      return TabbedHomeShell(
+        homeBuilder: (context, openProxies) =>
+            _buildHomePresentation(context, openProxies: openProxies),
+        proxiesBuilder: (context, active, back, request) =>
+            _buildProxiesPresentation(
+              context,
+              browserMode: true,
+              browserActive: active,
+              browserRequest: request,
+              onBackAtRoot: back,
+            ),
+        onTabChanged: (proxies) => _proxyPanelOpen = proxies,
+        onProxiesRequested: () {
+          _tabbedProxyListRetained = true;
+          _cancelScheduledProxyListCacheRelease();
+          unawaited(() async {
+            final hydrated =
+                await _ensureActiveSubscriptionHydratedForRuntime();
+            if (mounted && hydrated && _tabbedProxyListRetained) {
+              _ensureFullProxyListCache();
+            }
+          }());
+        },
+      );
+    }
     return ProxyPanelShell(
       ready: _ready,
       onboardingCompleted: _onboardingCompleted && _legalAccepted,

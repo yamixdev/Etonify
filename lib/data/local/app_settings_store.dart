@@ -15,6 +15,8 @@ import 'package:meow_client/core/platform/app_data_paths.dart';
 
 enum AppThemePreference { system, light, dark, amoled }
 
+enum HomeNavigationMode { panel, tabs }
+
 enum TunImplementationPreference { native, system }
 
 enum InboundConnectionMode { vpn, proxy }
@@ -202,6 +204,7 @@ class AppSettingsState {
     required this.urlTestUnavailableCheckIntervalSeconds,
     this.autoCheckServers = false,
     this.autoConnectOnLaunch = false,
+    this.homeNavigationMode = HomeNavigationMode.panel,
     this.autoCheckNoticeAcknowledged = false,
     required this.locationLookupLimit,
     required this.locationLookupTimeoutSeconds,
@@ -282,6 +285,7 @@ class AppSettingsState {
   final int urlTestUnavailableCheckIntervalSeconds;
   final bool autoCheckServers;
   final bool autoConnectOnLaunch;
+  final HomeNavigationMode homeNavigationMode;
   final bool autoCheckNoticeAcknowledged;
   final int locationLookupLimit;
   final int locationLookupTimeoutSeconds;
@@ -362,6 +366,7 @@ class AppSettingsState {
     int? urlTestUnavailableCheckIntervalSeconds,
     bool? autoCheckServers,
     bool? autoConnectOnLaunch,
+    HomeNavigationMode? homeNavigationMode,
     bool? autoCheckNoticeAcknowledged,
     int? locationLookupLimit,
     int? locationLookupTimeoutSeconds,
@@ -464,6 +469,7 @@ class AppSettingsState {
           this.urlTestUnavailableCheckIntervalSeconds,
       autoCheckServers: autoCheckServers ?? this.autoCheckServers,
       autoConnectOnLaunch: autoConnectOnLaunch ?? this.autoConnectOnLaunch,
+      homeNavigationMode: homeNavigationMode ?? this.homeNavigationMode,
       autoCheckNoticeAcknowledged:
           autoCheckNoticeAcknowledged ?? this.autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit ?? this.locationLookupLimit,
@@ -556,6 +562,7 @@ abstract class AppSettingsStore {
   static const _notificationTrafficRefreshSecondsKey =
       'notification_traffic_refresh_seconds';
   static const _hideServerIpKey = 'hide_server_ip';
+  static const _homeNavigationModeKey = 'home_navigation_mode';
   // Local consent: intentionally excluded from safeExportKeys.
   static const _sendHwidToProvidersKey = 'send_hwid_to_providers';
   static const _hwidDefaultNoticeShownKey = 'hwid_default_notice_shown';
@@ -648,6 +655,7 @@ abstract class AppSettingsStore {
     _notificationTrafficDisplayModeKey,
     _notificationTrafficRefreshSecondsKey,
     _hideServerIpKey,
+    _homeNavigationModeKey,
     _proxySortKey,
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
@@ -866,6 +874,9 @@ abstract class AppSettingsStore {
           },
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: boolValue(_hideServerIpKey, defaultValue: false),
+      homeNavigationMode: map[_homeNavigationModeKey] == 'tabs'
+          ? HomeNavigationMode.tabs
+          : HomeNavigationMode.panel,
       sendHwidToProviders: boolValue(
         _sendHwidToProvidersKey,
         defaultValue: true,
@@ -1107,6 +1118,7 @@ abstract class AppSettingsStore {
           .notificationTrafficRefreshSeconds
           .toString(),
       _hideServerIpKey: state.hideServerIp ? '1' : '0',
+      _homeNavigationModeKey: state.homeNavigationMode.name,
       _sendHwidToProvidersKey: state.sendHwidToProviders ? '1' : '0',
       _hwidDefaultNoticeShownKey: state.hwidDefaultNoticeShown ? '1' : '0',
       _progressiveBlurEnabledKey: state.progressiveBlurEnabled ? '1' : '0',

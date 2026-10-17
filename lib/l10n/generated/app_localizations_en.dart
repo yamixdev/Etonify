@@ -9,6 +9,18 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get homeTabTitle => 'Home';
+
+  @override
+  String get homeNavigationTitle => 'Home navigation';
+
+  @override
+  String get homeNavigationPanel => 'Sliding panel';
+
+  @override
+  String get homeNavigationTabs => 'Bottom tabs';
+
+  @override
   String get coreConfigActive => 'Active';
 
   @override

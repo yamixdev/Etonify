@@ -17,6 +17,7 @@ Widget _generalSettingsApp({
   bool autoConnectOnLaunch = false,
   ValueChanged<bool>? onAutoConnectChanged,
   VoidCallback? onAddQuickSettingsTile,
+  ValueChanged<HomeNavigationMode>? onHomeNavigationChanged,
 }) {
   return MaterialApp(
     locale: locale,
@@ -47,6 +48,7 @@ Widget _generalSettingsApp({
       onNotificationTrafficRefreshSecondsChanged:
           onTrafficRefreshChanged ?? (_) {},
       onHideServerIpChanged: (_) {},
+      onHomeNavigationModeChanged: onHomeNavigationChanged,
     ),
   );
 }
@@ -60,6 +62,34 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'navigation picker changes mode immediately without reopening settings',
+    (tester) async {
+      final changes = <HomeNavigationMode>[];
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          onHomeNavigationChanged: changes.add,
+        ),
+      );
+      final entry = find.byKey(const ValueKey('home-navigation-setting'));
+      await tester.ensureVisible(entry);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bottom tabs').last);
+      await tester.pumpAndSettle();
+      expect(changes, [HomeNavigationMode.tabs]);
+      expect(
+        find.descendant(of: entry, matching: find.text('Bottom tabs')),
+        findsOneWidget,
+      );
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sliding panel').last);
+      await tester.pumpAndSettle();
+      expect(changes, [HomeNavigationMode.tabs, HomeNavigationMode.panel]);
+    },
+  );
   testWidgets('general settings exposes launch connect and quick tile action', (
     tester,
   ) async {

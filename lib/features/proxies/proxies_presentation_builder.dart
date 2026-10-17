@@ -31,6 +31,7 @@ class ProxiesPresentationData {
     required this.progressiveBlurEnabled,
     required this.runtimeStates,
     this.proxyListLoading = false,
+    this.catalogReady = true,
   });
 
   final String profileId;
@@ -54,6 +55,7 @@ class ProxiesPresentationData {
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore runtimeStates;
   final bool proxyListLoading;
+  final bool catalogReady;
 
   double get speedBytesPerSecond =>
       connected && trafficAvailable ? downlinkBytesPerSecond.toDouble() : 0;
@@ -113,10 +115,14 @@ class ProxiesPresentationBuilder {
   final ProxiesPresentationCallbacks callbacks;
 
   Widget build({
-    required ProxyPanelMetrics panelMetrics,
-    required ValueListenable<ProxyPanelMetrics> panelMetricsListenable,
-    required ScrollController scrollController,
-    required ProxyPanelGestures panelGestures,
+    ProxyPanelMetrics? panelMetrics,
+    ValueListenable<ProxyPanelMetrics>? panelMetricsListenable,
+    ScrollController? scrollController,
+    ProxyPanelGestures? panelGestures,
+    bool browserMode = false,
+    bool browserActive = true,
+    ({int serial, String? groupTag})? browserRequest,
+    VoidCallback? onBackAtRoot,
   }) {
     return ProxiesPage(
       profileId: data.profileId,
@@ -153,16 +159,21 @@ class ProxiesPresentationBuilder {
       onActiveProxyHideIpChanged: callbacks.changeHideActiveProxyIp,
       runtimeStates: data.runtimeStates,
       loading: data.proxyListLoading,
-      embedded: true,
+      catalogReady: data.catalogReady,
+      embedded: !browserMode,
+      browserMode: browserMode,
+      browserActive: browserActive,
+      browserRequest: browserRequest,
+      onBackAtRoot: onBackAtRoot,
       sheetMetricsListenable: panelMetricsListenable,
       scrollController: scrollController,
-      sheetAtMaxExtent: panelMetrics.atMaxExtent,
-      sheetCanFillScreen: panelMetrics.canFillScreen,
-      sheetExtent: panelMetrics.progress,
+      sheetAtMaxExtent: panelMetrics?.atMaxExtent ?? false,
+      sheetCanFillScreen: panelMetrics?.canFillScreen ?? false,
+      sheetExtent: panelMetrics?.progress ?? 0,
       collapsedSheetExtent: 0,
       expandedHeaderExtent: 1,
       sheetCornerRadius: proxyPanelScreenCornerRadius,
-      onHeaderTap: panelGestures.onHeaderTap,
+      onHeaderTap: panelGestures?.onHeaderTap,
     );
   }
 }

@@ -97,6 +97,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var singboxEventSinkRegistration = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
+    private var startupTasks: StartupTaskRunner? = null
     private val subscriptionNetworkExecutor = Executors.newFixedThreadPool(2)
     private val endpointDnsExecutor = Executors.newFixedThreadPool(2)
     private val appIconExecutor = Executors.newFixedThreadPool(3)
@@ -1592,7 +1593,7 @@ class MainActivity : FlutterFragmentActivity() {
         value.length <= 255 &&
             Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$").matches(value)
 
-    private fun setupSingboxHostApi(binaryMessenger: BinaryMessenger) {
+    private fun setupSingboxHostApi(binaryMessenger: BinaryMessenger, startupTasks: StartupTaskRunner) {
         SingboxHostApi.setUp(
             binaryMessenger,
             object : SingboxHostApi {
@@ -2154,7 +2155,7 @@ class MainActivity : FlutterFragmentActivity() {
                 }
 
                 override fun getCoreCapabilities(callback: (Result<String>) -> Unit) {
-                    callback(Result.success(getEtonifyCoreCapabilities()))
+                    startupTasks.execute({ getEtonifyCoreCapabilities() }, callback)
                 }
 
                 override fun checkConfig(config: String, callback: (Result<Unit>) -> Unit) {
@@ -2249,7 +2250,10 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        setupSingboxHostApi(flutterEngine.dartExecutor.binaryMessenger)
+        startupTasks?.close()
+        val startup = StartupTaskRunner { command -> mainHandler.post(command) }
+        startupTasks = startup
+        setupSingboxHostApi(flutterEngine.dartExecutor.binaryMessenger, startup)
         SubscriptionRefreshJobs.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
@@ -2305,14 +2309,13 @@ class MainActivity : FlutterFragmentActivity() {
             secureStorageMethodChannelName,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
-                "getOrCreateHiveDataKey" -> runCatching {
-                    SecureHiveKeyProvider.getOrCreateDataKey(applicationContext)
-                }.onSuccess(result::success).onFailure { error ->
-                    result.error(
-                        "secure_storage_key_failed",
-                        error.message ?: error.toString(),
-                        null,
-                    )
+                "getOrCreateHiveDataKey" -> {
+                    val appContext = applicationContext
+                    startup.execute({ SecureHiveKeyProvider.getOrCreateDataKey(appContext) }) { key ->
+                        key.onSuccess(result::success).onFailure { error ->
+                            result.error("secure_storage_key_failed", error.message ?: error.toString(), null)
+                        }
+                    }
                 }
                 else -> result.notImplemented()
             }
@@ -2378,6 +2381,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        startupTasks?.close()
+        startupTasks = null
         SingboxHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, null)
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -2389,6 +2394,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
+        startupTasks?.close()
+        startupTasks = null
         val registration = singboxEventSinkRegistration
         singboxEventSinkRegistration = 0L
         if (registration != 0L) {
