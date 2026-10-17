@@ -79,6 +79,11 @@ void main() {
           const MethodChannel('meow_client/deep_link_events'),
           (_) async => null,
         );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('meow_client/singbox_events'),
+          (_) async => null,
+        );
     directory = await Directory.systemTemp.createTemp('etonify-chain-race-');
     await bootstrapWindowsStorageFixture(directory);
     Hive.init(directory.path);
@@ -89,6 +94,14 @@ void main() {
     await SubscriptionStore.close();
     await Hive.close();
     await directory.delete(recursive: true);
+    for (final name in [
+      'meow_client/deep_links',
+      'meow_client/deep_link_events',
+      'meow_client/singbox_events',
+    ]) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(MethodChannel(name), null);
+    }
   });
 
   for (final operation in ['rename', 'remove', 'detour']) {

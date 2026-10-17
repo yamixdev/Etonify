@@ -1,10 +1,6 @@
 name: Etonify · Windows checks
 
 on:
-  push:
-    branches: [main, master, develop]
-    tags-ignore: ["**"]
-  pull_request:
   workflow_dispatch:
     inputs:
       create_draft:

@@ -187,4 +187,25 @@ void main() {
       );
     },
   );
+  test('failed concurrent loads do not poison later recovery', () async {
+    final temp = await Directory.systemTemp.createTemp('etonify-key-recovery-');
+    addTearDown(() => temp.delete(recursive: true));
+    final paths = await resolve(temp.path);
+    final file = File('${paths.userRoot}/storage.key');
+    await file.writeAsBytes([1, 2], flush: true);
+    await Future.wait([
+      for (var i = 0; i < 8; i++)
+        expectLater(
+          WindowsStorageKey.loadOrCreate(paths, portable: true),
+          throwsStateError,
+        ),
+    ]);
+    expect(await file.readAsBytes(), [1, 2]);
+    final restored = List.generate(32, (index) => index);
+    await file.writeAsBytes(restored, flush: true);
+    expect(
+      await WindowsStorageKey.loadOrCreate(paths, portable: true),
+      restored,
+    );
+  });
 }

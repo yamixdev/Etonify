@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -14,7 +15,30 @@ class WindowsStorageKey {
       'Windows DPAPI and has no account isolation: authenticated users who can '
       'reach the folder can read or change its files. Keep the folder and backups private.';
 
+  static final _pendingLoads = <String, Future<void>>{};
+
   static Future<Uint8List> loadOrCreate(
+    AppDataPaths paths, {
+    required bool portable,
+  }) async {
+    final queueKey = Platform.isWindows
+        ? paths.userRoot.toLowerCase()
+        : paths.userRoot;
+    final previous = _pendingLoads[queueKey];
+    final completion = Completer<void>();
+    _pendingLoads[queueKey] = completion.future;
+    try {
+      if (previous != null) await previous;
+      return await _loadOrCreateWithFileLock(paths, portable: portable);
+    } finally {
+      completion.complete();
+      if (identical(_pendingLoads[queueKey], completion.future)) {
+        unawaited(_pendingLoads.remove(queueKey));
+      }
+    }
+  }
+
+  static Future<Uint8List> _loadOrCreateWithFileLock(
     AppDataPaths paths, {
     required bool portable,
   }) async {
