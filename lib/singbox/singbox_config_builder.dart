@@ -293,9 +293,7 @@ class SingboxConfigBuilder {
         : hasProxies
         ? 'dns-remote'
         : 'dns-direct';
-    final dnsRemoteDetour = hasProxies
-        ? _dnsRemoteDetourFor(selectorDefault, selectableTags.toSet())
-        : 'direct';
+    final dnsRemoteDetour = hasProxies ? 'select' : 'direct';
     final dnsDirectDetour = dnsDirectThroughProxy && hasProxies
         ? dnsRemoteDetour
         : 'direct';
@@ -359,6 +357,12 @@ class SingboxConfigBuilder {
               adBlockActive ||
               fakeIpActive)
             'rules': [
+              if (adBlockActive)
+                {
+                  ..._adBlockRejectionMatch(adBlockAllowActive),
+                  'action': 'reject',
+                  'method': 'default',
+                },
               if (russiaRouteDataActive)
                 {
                   'rule_set': 'ru-geosite-ru-blocked',
@@ -402,18 +406,6 @@ class SingboxConfigBuilder {
                   'rule_set': 'social-services',
                   'action': 'route',
                   'server': hasProxies ? 'dns-remote' : 'dns-direct',
-                },
-              if (adBlockAllowActive)
-                {
-                  'rule_set': 'adblock-allow',
-                  'action': 'route',
-                  'server': dnsFinal,
-                },
-              if (adBlockActive)
-                {
-                  'rule_set': 'adblock-block',
-                  'action': 'reject',
-                  'method': 'default',
                 },
               // Keep explicit DNS rules above this catch-all. FakeIP must not
               // become the default resolver because the core itself also
@@ -605,10 +597,11 @@ class SingboxConfigBuilder {
             if (blockLeaks) {'protocol': 'stun', 'action': 'reject'},
             if (bypassLocalNetwork)
               {'ip_is_private': true, 'outbound': 'direct'},
-            if (adBlockAllowActive)
-              {'rule_set': 'adblock-allow', 'outbound': routeFinal},
             if (adBlockActive)
-              {'rule_set': 'adblock-block', 'action': 'reject'},
+              {
+                ..._adBlockRejectionMatch(adBlockAllowActive),
+                'action': 'reject',
+              },
             if (aiServicesActive)
               {
                 'rule_set': 'ai-services',
@@ -665,6 +658,20 @@ class SingboxConfigBuilder {
       multiplexEligibleTags: selectableOutboundTags.toSet(),
     );
     return plan;
+  }
+
+  Map<String, Object> _adBlockRejectionMatch(bool hasAllowRules) {
+    if (!hasAllowRules) {
+      return {'rule_set': 'adblock-block'};
+    }
+    return {
+      'type': 'logical',
+      'mode': 'and',
+      'rules': [
+        {'rule_set': 'adblock-block'},
+        {'rule_set': 'adblock-allow', 'invert': true},
+      ],
+    };
   }
 
   bool _validRuleSetPath(String? path) {
@@ -830,6 +837,13 @@ class SingboxConfigBuilder {
     final config = Map<String, dynamic>.from(outbound.config);
     config.removeWhere((key, _) => key.startsWith('_'));
     _normalizeStableOutboundSchema(config);
+    final domainResolver = config['domain_resolver'];
+    if (domainResolver is Map) {
+      config['domain_resolver'] = Map<String, dynamic>.from(domainResolver)
+        ..['server'] = 'dns-local';
+    } else if (domainResolver != null) {
+      config['domain_resolver'] = 'dns-local';
+    }
     _normalizeServerAddress(config);
     _ensureRealityUtls(
       config,
@@ -847,29 +861,6 @@ class SingboxConfigBuilder {
     }
     config['tcp_multi_path'] = tcpMultiPathEnabled;
     return config;
-  }
-
-  String _dnsRemoteDetourFor(
-    String selectorDefault,
-    Set<String> selectableTags,
-  ) {
-    final subscription = activeSubscription;
-    if (subscription == null) {
-      return 'select';
-    }
-    for (final chain in subscription.proxyChains) {
-      if (chain.tag == selectorDefault) {
-        final detour = chain.detourTag.trim();
-        return selectableTags.contains(detour) ? detour : 'select';
-      }
-    }
-    for (final chain in subscription.proxyChains) {
-      final detour = chain.detourTag.trim();
-      if (selectableTags.contains(detour)) {
-        return detour;
-      }
-    }
-    return 'select';
   }
 
   static Map<String, dynamic>? buildProxyChainOutboundConfig({

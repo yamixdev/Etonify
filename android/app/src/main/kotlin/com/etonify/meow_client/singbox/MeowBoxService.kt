@@ -41,6 +41,7 @@ class MeowBoxService(
         const val ACTION_RESTART_CORE = "com.etonify.meow_client.singbox.RESTART_CORE"
         const val EXTRA_STOP_REASON = "stop_reason"
         const val EXTRA_TILE_START = "tile_start"
+        const val EXTRA_SCHEDULED_RESTART = "scheduled_restart"
         private const val NOTIFICATION_ID = 42
         private const val COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS = 1_000L
         private const val NATIVE_SERVICE_CLOSE_TIMEOUT_MS = 6_000L
@@ -339,11 +340,21 @@ class MeowBoxService(
         var sticky = false
         when (action) {
             ACTION_START -> {
-                tileStartedRuntime = intent.getBooleanExtra(EXTRA_TILE_START, false)
+                val scheduledRestart = intent.getBooleanExtra(EXTRA_SCHEDULED_RESTART, false)
+                if (scheduledRestart && !shouldRestoreStickyStart(currentMode())) {
+                    MeowDiagnostics.log(TAG, "ignoring scheduled restart without fresh runtime intent")
+                    if (!ownsActiveRuntime()) service.stopSelfResult(startId)
+                    return Service.START_NOT_STICKY
+                }
+                if (!scheduledRestart) {
+                    tileStartedRuntime = intent.getBooleanExtra(EXTRA_TILE_START, false)
+                }
                 showForeground("Starting")
                 sticky = true
                 val token = nextStartToken("action_start")
-                submitServiceTask("action_start") { startInternal("action_start", token) }
+                submitServiceTask("action_start") {
+                    startInternal("action_start", token, requireRuntimeIntent = scheduledRestart)
+                }
             }
             ACTION_STOP -> {
                 val reason = intent.getStringExtra(EXTRA_STOP_REASON)?.takeIf { it.isNotBlank() }
@@ -661,7 +672,7 @@ class MeowBoxService(
         }
     }
 
-    private fun startInternal(source: String, token: Long) {
+    private fun startInternal(source: String, token: Long, requireRuntimeIntent: Boolean = false) {
         if (hasClosingRuntime()) {
             MeowDiagnostics.log(TAG, "start blocked by unconfirmed native stop source=$source")
             return
@@ -671,6 +682,11 @@ class MeowBoxService(
             return
         }
         val mode = currentMode()
+        if (requireRuntimeIntent && !shouldRestoreStickyStart(mode)) {
+            MeowDiagnostics.log(TAG, "scheduled restart ignored after runtime intent cleared source=$source")
+            if (!ownsActiveRuntime()) service.stopSelf()
+            return
+        }
         MeowApplication.writeRuntimeIntent(mode, source)
         val alreadyRunning =
             SingboxController.running && SingboxController.serviceMode == mode && commandServer != null

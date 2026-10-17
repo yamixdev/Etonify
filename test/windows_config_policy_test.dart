@@ -141,9 +141,16 @@ void main() {
           if (policy == ProcessRoutingMode.onlySelected) {
             expect(rules[6], {'outbound': 'direct'});
           }
-          if (allow) expect(rules[presetStart]['rule_set'], 'adblock-allow');
-          expect(rules[presetStart + (allow ? 1 : 0)], {
-            'rule_set': 'adblock-block',
+          expect(rules[presetStart], {
+            if (allow) ...{
+              'type': 'logical',
+              'mode': 'and',
+              'rules': [
+                {'rule_set': 'adblock-block'},
+                {'rule_set': 'adblock-allow', 'invert': true},
+              ],
+            } else
+              'rule_set': 'adblock-block',
             'action': 'reject',
           });
         },

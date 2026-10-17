@@ -1867,6 +1867,12 @@ class MainActivity : FlutterFragmentActivity() {
                     callback(Result.success(runtimeStatusMap()))
                 }
 
+                override fun querySelectedOutbounds(callback: (Result<Map<String?, Any?>>) -> Unit) {
+                    SingboxController.querySelectedOutbounds { result ->
+                        callback(result.map { pigeonMap(it) })
+                    }
+                }
+
                 override fun lookupOutboundExternalInfo(
                     outboundTag: String,
                     callback: (Result<Map<String?, Any?>>) -> Unit,

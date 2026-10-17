@@ -87,7 +87,8 @@ class MeowVpnService : VpnService() {
         }
 
         fun cancelScheduledRestart(context: Context, reason: String) {
-            val flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            val flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_ONE_SHOT or
+                PendingIntent.FLAG_IMMUTABLE
             val restartIntent = Intent(context, MeowVpnService::class.java)
                 .setAction(MeowBoxService.ACTION_START)
             val pending = PendingIntent.getForegroundService(
@@ -234,6 +235,7 @@ class MeowVpnService : VpnService() {
         // upstream without rebuilding TUN.
         val restartIntent = Intent(this, MeowVpnService::class.java)
             .setAction(MeowBoxService.ACTION_START)
+            .putExtra(MeowBoxService.EXTRA_SCHEDULED_RESTART, true)
         val flags = PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_ONE_SHOT or
             PendingIntent.FLAG_IMMUTABLE
         val pending = PendingIntent.getForegroundService(

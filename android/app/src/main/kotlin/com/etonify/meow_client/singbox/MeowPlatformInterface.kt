@@ -37,6 +37,8 @@ import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
+import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface as JavaNetworkInterface
@@ -715,32 +717,38 @@ private object MeowLocalResolver : LocalDNSTransport {
         val active = runCatching {
             MeowDefaultNetworkMonitor.requirePhysicalNetwork()
         }.getOrElse {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                runCatching {
-                    val answer = InetAddress.getAllByName(host)
-                    ctx.success(answer.mapNotNull { it.hostAddress }.joinToString("\n"))
-                }.onFailure {
-                    if (it is UnknownHostException) {
-                        ctx.errorCode(RCODE_NXDOMAIN)
-                    } else {
-                        ctx.errnoCode(OsConstants.EIO)
-                    }
-                }
-            } else {
-                ctx.errnoCode(OsConstants.ENETUNREACH)
-            }
+            ctx.errnoCode(OsConstants.ENETUNREACH)
             return
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            runCatching {
-                val answer = InetAddress.getAllByName(host)
-                ctx.success(answer.mapNotNull { it.hostAddress }.joinToString("\n"))
-            }.onFailure {
-                if (it is UnknownHostException) {
-                    ctx.errorCode(RCODE_NXDOMAIN)
-                } else {
-                    ctx.errnoCode(OsConstants.EIO)
+            val completed = AtomicBoolean(false)
+            val pendingQuery = registerPendingQuery(ctx, CancellationSignal(), CountDownLatch(1), completed)
+            try {
+                ctx.onCancel { pendingQuery.cancel(OsConstants.ECANCELED) }
+                if (completed.get()) return
+                runCatching {
+                    active.getAllByName(host).filter { address ->
+                        when {
+                            network?.endsWith("4") == true -> address is Inet4Address
+                            network?.endsWith("6") == true -> address is Inet6Address
+                            else -> true
+                        }
+                    }
+                }.onSuccess { answer ->
+                    if (completed.compareAndSet(false, true)) {
+                        ctx.success(answer.mapNotNull { it.hostAddress }.joinToString("\n"))
+                    }
+                }.onFailure {
+                    if (completed.compareAndSet(false, true)) {
+                        if (it is UnknownHostException) {
+                            ctx.errorCode(RCODE_NXDOMAIN)
+                        } else {
+                            ctx.errnoCode(OsConstants.EIO)
+                        }
+                    }
                 }
+            } finally {
+                pendingQueries.remove(pendingQuery)
             }
             return
         }

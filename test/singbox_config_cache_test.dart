@@ -19,6 +19,143 @@ void main() {
   });
   tearDown(() => directory.deleteSync(recursive: true));
 
+  test(
+    'chain metadata changes invalidate an unchanged payload revision',
+    () async {
+      const chain = SubscriptionProxyChain(
+        tag: 'test-chain',
+        name: 'Chain',
+        targetTag: 'second',
+        detourTag: 'first',
+      );
+      final subscription = _subscription(
+        3,
+      ).copyWith(payloadRevision: 'unchanged', proxyChains: [chain]);
+      await buildOrReuseSingboxConfigInBackground(
+        _input(output: output, subscription: subscription, selected: chain.tag),
+        cachePath: cache,
+      );
+      final changed = await buildOrReuseSingboxConfigInBackground(
+        _input(
+          output: output,
+          selected: chain.tag,
+          subscription: subscription.copyWith(
+            proxyChains: [chain.copyWith(detourTag: 'proxy-2')],
+          ),
+        ),
+        cachePath: cache,
+      );
+      expect(changed.reusedConfig, isFalse);
+      final outbound = (changed.plan.config['outbounds'] as List).singleWhere(
+        (dynamic item) => item['tag'] == chain.tag,
+      );
+      expect(outbound['detour'], 'proxy-2');
+    },
+  );
+
+  test(
+    'profile URLTest settings invalidate an unchanged payload revision',
+    () async {
+      final subscription = _subscription(
+        2,
+      ).copyWith(payloadRevision: 'unchanged');
+      await buildOrReuseSingboxConfigInBackground(
+        _input(output: output, subscription: subscription),
+        cachePath: cache,
+      );
+      final changed = await buildOrReuseSingboxConfigInBackground(
+        _input(
+          output: output,
+          subscription: subscription.copyWith(
+            urlTestConfig: const UrlTestConfig(
+              url: 'https://probe.example.test/',
+            ),
+          ),
+        ),
+        cachePath: cache,
+      );
+      expect(changed.reusedConfig, isFalse);
+      final groups = (changed.plan.config['outbounds'] as List).where(
+        (dynamic item) => item['type'] == 'urltest',
+      );
+      expect(groups, isNotEmpty);
+      expect(
+        groups.every(
+          (dynamic item) => item['url'] == 'https://probe.example.test/',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('deleted servers invalidate an unchanged payload revision', () async {
+    final subscription = _subscription(
+      2,
+    ).copyWith(payloadRevision: 'unchanged');
+    await buildOrReuseSingboxConfigInBackground(
+      _input(output: output, subscription: subscription),
+      cachePath: cache,
+    );
+    final changed = await buildOrReuseSingboxConfigInBackground(
+      _input(
+        output: output,
+        subscription: subscription.copyWith(
+          outbounds: [
+            subscription.outbounds.first,
+            subscription.outbounds.last.copyWith(
+              info: const OutboundInfo(deleted: true),
+            ),
+          ],
+        ),
+      ),
+      cachePath: cache,
+    );
+    expect(changed.reusedConfig, isFalse);
+    expect(
+      (changed.plan.config['outbounds'] as List).any(
+        (dynamic item) => item['tag'] == 'second',
+      ),
+      isFalse,
+    );
+  });
+
+  for (final revision in ['', 'persisted']) {
+    test(
+      'observations do not invalidate config (revision=$revision)',
+      () async {
+        final subscription = _subscription(
+          2,
+        ).copyWith(payloadRevision: revision);
+        await buildOrReuseSingboxConfigInBackground(
+          _input(output: output, subscription: subscription),
+          cachePath: cache,
+        );
+        final observed = subscription.copyWith(
+          lastUpdated: 12345,
+          outbounds: subscription.outbounds
+              .map(
+                (outbound) => outbound.copyWith(
+                  info: const OutboundInfo(
+                    checked: true,
+                    latestPing: 25,
+                    externalIp: '192.0.2.1',
+                    exitCountry: 'DE',
+                  ),
+                ),
+              )
+              .toList(),
+        );
+        expect(
+          (await buildOrReuseSingboxConfigInBackground(
+            _input(output: output, subscription: observed),
+            cachePath: cache,
+          )).reusedConfig,
+          isTrue,
+        );
+      },
+    );
+  }
+
   test('builds and reuses a profile with more than 5000 servers', () async {
     final subscription = _subscription(5001);
     for (var i = 0; i < subscription.outbounds.length; i++) {

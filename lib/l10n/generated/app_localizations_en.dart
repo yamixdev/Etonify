@@ -480,6 +480,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get proxySwitching => 'Switching';
 
   @override
+  String get proxySelectionUnconfirmed => 'Not confirmed';
+
+  @override
   String get proxyUnavailable => 'Unavailable';
 
   @override

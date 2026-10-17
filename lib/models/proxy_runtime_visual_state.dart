@@ -15,6 +15,7 @@ class ProxyRuntimeVisualState {
     this.networkUnavailable = false,
     this.highlighted = false,
     this.selecting = false,
+    this.selectionUnconfirmed = false,
     this.presentation,
   });
 
@@ -26,6 +27,7 @@ class ProxyRuntimeVisualState {
   final bool networkUnavailable;
   final bool highlighted;
   final bool selecting;
+  final bool selectionUnconfirmed;
 
   /// Latest identity/metadata, resolved only for observed rows and sort batches.
   final AppProxySummary? presentation;
@@ -41,6 +43,7 @@ class ProxyRuntimeVisualState {
         other.networkUnavailable == networkUnavailable &&
         other.highlighted == highlighted &&
         other.selecting == selecting &&
+        other.selectionUnconfirmed == selectionUnconfirmed &&
         other.presentation == presentation;
   }
 
@@ -54,6 +57,7 @@ class ProxyRuntimeVisualState {
     networkUnavailable,
     highlighted,
     selecting,
+    selectionUnconfirmed,
     presentation,
   );
 }

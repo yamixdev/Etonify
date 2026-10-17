@@ -162,6 +162,7 @@
   "proxiesTab": "Proxies",
   "proxiesTitle": "Proxies",
   "proxySwitching": "Switching",
+  "proxySelectionUnconfirmed": "Not confirmed",
   "proxyUnavailable": "Unavailable",
   "proxyLatencyNoResult": "No result",
   "proxyLatencyNoResultDescription": "No latency test result is available for this server yet.",

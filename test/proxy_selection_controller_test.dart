@@ -6,6 +6,119 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test(
+    'returning to A during pending B is a user switch not a start guard',
+    () {
+      final controller = ProxySelectionController();
+      addTearDown(controller.dispose);
+      controller.beginRuntimeSelection(
+        tag: 'b',
+        previousTag: 'a',
+        onTimeout: (_) {},
+      );
+      controller.beginRuntimeSelection(
+        tag: 'a',
+        previousTag: 'a',
+        onTimeout: (_) {},
+      );
+      expect(controller.pendingRuntimeSelectionIsStartGuard, isFalse);
+      controller.guardCurrentSelectionForRuntime(
+        tag: 'a',
+        previousTag: 'a',
+        onTimeout: (_) {},
+      );
+      expect(controller.pendingRuntimeSelectionIsStartGuard, isTrue);
+    },
+  );
+  test('root confirmation preserves automatic group instead of its leaf', () {
+    expect(
+      ProxySelectionController.rootSelectionFromSnapshot({
+        'runtimeGeneration': 7,
+        'selectedOutbounds': {'select': 'lowest', 'lowest': 'leaf-b'},
+      }, runtimeGeneration: 7),
+      'lowest',
+    );
+  });
+  test('root confirmation rejects stale runtime and missing root', () {
+    expect(
+      ProxySelectionController.rootSelectionFromSnapshot({
+        'runtimeGeneration': 6,
+        'selectedOutbounds': {'select': 'leaf-b'},
+      }, runtimeGeneration: 7),
+      isNull,
+    );
+    expect(
+      ProxySelectionController.rootSelectionFromSnapshot({
+        'runtimeGeneration': 7,
+        'selectedOutbounds': {'lowest': 'leaf-b'},
+      }, runtimeGeneration: 7),
+      isNull,
+    );
+  });
+  test(
+    'failed runtime switch reconciles to actual root instead of request',
+    () {
+      final controller = ProxySelectionController();
+      addTearDown(controller.dispose);
+      final generation = controller.beginRuntimeSelection(
+        tag: 'leaf-b',
+        previousTag: 'leaf-a',
+        onTimeout: (_) {},
+      );
+      expect(
+        controller.resolveRuntimeSelection(
+          generation: generation,
+          actualTag: 'leaf-a',
+        ),
+        isTrue,
+      );
+      expect(controller.confirmedRuntimeTag, 'leaf-a');
+      expect(controller.runtimeSelectionUnconfirmed, isFalse);
+      expect(controller.hasPendingRuntimeSelection, isFalse);
+    },
+  );
+
+  test('missing root confirmation stays explicitly unconfirmed', () {
+    final controller = ProxySelectionController();
+    addTearDown(controller.dispose);
+    final generation = controller.beginRuntimeSelection(
+      tag: 'leaf-b',
+      previousTag: 'leaf-a',
+      onTimeout: (_) {},
+    );
+    controller.resolveRuntimeSelection(generation: generation, actualTag: null);
+    expect(controller.confirmedRuntimeTag, isNull);
+    expect(controller.runtimeSelectionUnconfirmed, isTrue);
+    expect(controller.hasPendingRuntimeSelection, isFalse);
+    controller.beginLocalSelection();
+    expect(controller.runtimeSelectionUnconfirmed, isFalse);
+  });
+
+  test('late B resolution cannot clear or overwrite newer C selection', () {
+    final controller = ProxySelectionController();
+    addTearDown(controller.dispose);
+    final older = controller.beginRuntimeSelection(
+      tag: 'leaf-b',
+      previousTag: 'leaf-a',
+      onTimeout: (_) {},
+    );
+    final latest = controller.beginRuntimeSelection(
+      tag: 'leaf-c',
+      previousTag: 'leaf-a',
+      onTimeout: (_) {},
+    );
+    expect(
+      controller.resolveRuntimeSelection(
+        generation: older,
+        actualTag: 'leaf-b',
+      ),
+      isFalse,
+    );
+    expect(controller.pendingRuntimeSelectTag, 'leaf-c');
+    controller.resolveRuntimeSelection(generation: latest, actualTag: 'auto');
+    expect(controller.confirmedRuntimeTag, 'auto');
+  });
+
   test('valid selection accepts proxy groups and proxy chains', () {
     final controller = ProxySelectionController();
     addTearDown(controller.dispose);

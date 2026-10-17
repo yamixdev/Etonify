@@ -77,6 +77,8 @@ class RussiaRouteDataStatus {
     this.domainListCommunityUpdatedAtMillis,
     this.domainListCommunityCategoryCount = 0,
     this.domainListCommunityDomainCount = 0,
+    this.domainListCommunityCompilerVersion = 0,
+    this.domainListCommunityCompiledDirectory,
     this.domainListCommunityMetadata =
         const <String, RussiaRouteCategoryMetadata>{},
   });
@@ -105,6 +107,8 @@ class RussiaRouteDataStatus {
       domainListCommunityUpdatedAtMillis = null,
       domainListCommunityCategoryCount = 0,
       domainListCommunityDomainCount = 0,
+      domainListCommunityCompilerVersion = 0,
+      domainListCommunityCompiledDirectory = null,
       domainListCommunityMetadata =
           const <String, RussiaRouteCategoryMetadata>{};
 
@@ -131,6 +135,8 @@ class RussiaRouteDataStatus {
   final int? domainListCommunityUpdatedAtMillis;
   final int domainListCommunityCategoryCount;
   final int domainListCommunityDomainCount;
+  final int domainListCommunityCompilerVersion;
+  final String? domainListCommunityCompiledDirectory;
   final Map<String, RussiaRouteCategoryMetadata> domainListCommunityMetadata;
 
   DateTime? get installedAt => installedAtMillis == null
@@ -294,6 +300,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   static const _domainListCommunityRawBaseUrl =
       'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data';
   static const _maxDomainListCategoryBytes = 2 * 1024 * 1024;
+  static const _domainListCommunityCompilerVersion = 1;
 
   static const _assetGeositeRuBlocked =
       'assets/route_data/russia/geosite-ru-blocked.srs';
@@ -343,6 +350,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   ];
 
   Future<RussiaRouteDataStatus>? _updateInFlight;
+  Future<RussiaRouteDataStatus>? _domainListMigrationInFlight;
   @override
   final ValueNotifier<RussiaRouteUpdateProgress?> progress = ValueNotifier(
     null,
@@ -380,6 +388,28 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<RussiaRouteDataStatus> loadStatus() async {
+    final current = await _loadStatus();
+    final pending = _domainListMigrationInFlight;
+    if (pending != null) return pending;
+    if (!current.available ||
+        current.domainListCommunityCategoryCount == 0 ||
+        current.domainListCommunityCompilerVersion >=
+            _domainListCommunityCompilerVersion ||
+        _updateInFlight != null) {
+      return current;
+    }
+    final future = _migrateCachedDomainLists(current);
+    _domainListMigrationInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_domainListMigrationInFlight, future)) {
+        _domainListMigrationInFlight = null;
+      }
+    }
+  }
+
+  Future<RussiaRouteDataStatus> _loadStatus() async {
     final paths = await _storagePaths();
     final metadataFile = File(paths.metadataPath);
     final geositeBlockedFile = File(paths.geositeRuBlockedPath);
@@ -390,9 +420,6 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     final geoipBlockedFile = File(paths.geoipRuBlockedPath);
     final geoipWhitelistFile = File(paths.geoipRuWhitelistPath);
     final geoipRuFile = File(paths.geoipRuPath);
-    final curatedDirectServicesFile = File(paths.curatedDirectServicesPath);
-    final aiServicesFile = File(paths.aiServicesPath);
-    final socialServicesFile = File(paths.socialServicesPath);
     if (!metadataFile.existsSync() ||
         !_hasUsableRuleSet(geositeBlockedFile) ||
         !_hasUsableRuleSet(geositeAvailableOnlyInsideFile) ||
@@ -405,6 +432,22 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     try {
       final metadata =
           jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
+      final compiledDirectory = metadata['domainListCommunityCompiledDirectory']
+          ?.toString();
+      if (compiledDirectory != null &&
+          !RegExp(
+            r'^domain-list-compiled-[a-zA-Z0-9-]+$',
+          ).hasMatch(compiledDirectory)) {
+        throw const FormatException('Invalid compiled domain-list directory');
+      }
+      final compiledBase = compiledDirectory == null
+          ? File(paths.aiServicesPath).parent.path
+          : '${paths.baseDirectoryPath}/$compiledDirectory';
+      final curatedDirectServicesFile = File(
+        '$compiledBase/ru-direct-services.srs',
+      );
+      final aiServicesFile = File('$compiledBase/ai-services.srs');
+      final socialServicesFile = File('$compiledBase/social-services.srs');
       return RussiaRouteDataStatus(
         available: true,
         sourceName: metadata['sourceName']?.toString() ?? sourceName,
@@ -453,6 +496,12 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
               metadata['domainListCommunityDomainCount']?.toString() ?? '',
             ) ??
             0,
+        domainListCommunityCompilerVersion:
+            int.tryParse(
+              metadata['domainListCommunityCompilerVersion']?.toString() ?? '',
+            ) ??
+            0,
+        domainListCommunityCompiledDirectory: compiledDirectory,
         domainListCommunityMetadata: _categoryMetadataFromJson(
           metadata['domainListCommunityMetadata'],
         ),
@@ -462,8 +511,69 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     }
   }
 
+  Future<RussiaRouteDataStatus> _migrateCachedDomainLists(
+    RussiaRouteDataStatus current,
+  ) async {
+    try {
+      final paths = await _storagePaths();
+      final categoryFiles = await compute(
+        _readCachedDomainListCommunityCategories,
+        paths.domainListCommunitySourceDirectoryPath,
+        debugLabel: 'route-cached-sources-read',
+      );
+      final compiled = await _compileAndInstallDomainLists(
+        paths,
+        categoryFiles,
+      );
+      await _writeMetadata(
+        paths,
+        packageInfo: _InstalledRoutePackageInfo.fromStatus(current),
+        installedAtMillis: current.installedAtMillis ?? 0,
+        lastUpdateCheckAtMillis: current.lastUpdateCheckAtMillis ?? 0,
+        domainListCommunityUpdatedAtMillis:
+            DateTime.now().millisecondsSinceEpoch,
+        domainListCommunityCategoryCount: categoryFiles.length,
+        domainListCommunityDomainCount: compiled.domainCount,
+        domainListCommunityMetadata: current.domainListCommunityMetadata,
+        domainListCommunityCompilerVersion: _domainListCommunityCompilerVersion,
+        domainListCommunityCompiledDirectory: compiled.directory,
+      );
+      return await _loadStatus();
+    } catch (_) {
+      return current;
+    }
+  }
+
+  Future<({String directory, int domainCount})> _compileAndInstallDomainLists(
+    _RussiaRouteStoragePaths paths,
+    Map<String, String> categoryFiles,
+  ) async {
+    final artifacts = await compute(
+      _compileDomainListCommunityArtifacts,
+      categoryFiles,
+      debugLabel: 'route-services-compile',
+    );
+    final directory =
+        'domain-list-compiled-v$_domainListCommunityCompilerVersion-'
+        '${DateTime.now().microsecondsSinceEpoch}';
+    for (final entry in artifacts.entries) {
+      await _writeAtomically(
+        '${paths.baseDirectoryPath}/$directory/${entry.key}',
+        entry.value.ruleSetBytes,
+      );
+    }
+    return (
+      directory: directory,
+      domainCount: artifacts.values.fold<int>(
+        0,
+        (sum, artifact) => sum + artifact.domainCount,
+      ),
+    );
+  }
+
   Future<List<RussiaRouteDataFile>> listInstalledFiles() async {
     final paths = await _storagePaths();
+    final status = await loadStatus();
     final candidates = <_RussiaRouteDataFilePath>[
       _RussiaRouteDataFilePath(
         'geosite-ru-blocked.srs',
@@ -488,10 +598,16 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       _RussiaRouteDataFilePath('geoip-ru.srs', paths.geoipRuPath),
       _RussiaRouteDataFilePath(
         'ru-direct-services.srs',
-        paths.curatedDirectServicesPath,
+        status.curatedDirectServicesPath ?? paths.curatedDirectServicesPath,
       ),
-      _RussiaRouteDataFilePath('ai-services.srs', paths.aiServicesPath),
-      _RussiaRouteDataFilePath('social-services.srs', paths.socialServicesPath),
+      _RussiaRouteDataFilePath(
+        'ai-services.srs',
+        status.aiServicesPath ?? paths.aiServicesPath,
+      ),
+      _RussiaRouteDataFilePath(
+        'social-services.srs',
+        status.socialServicesPath ?? paths.socialServicesPath,
+      ),
     ];
     final installed = <RussiaRouteDataFile>[];
     for (final candidate in candidates) {
@@ -623,6 +739,10 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
           current.domainListCommunityCategoryCount,
       domainListCommunityDomainCount: current.domainListCommunityDomainCount,
       domainListCommunityMetadata: current.domainListCommunityMetadata,
+      domainListCommunityCompilerVersion:
+          current.domainListCommunityCompilerVersion,
+      domainListCommunityCompiledDirectory:
+          current.domainListCommunityCompiledDirectory,
     );
     return RussiaRouteUpdateCheck(
       status: await loadStatus(),
@@ -652,6 +772,11 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     _emitProgress(RussiaRouteUpdateStage.checking);
     final current = await loadStatus();
     if (!force && current.available && !current.needsDailyUpdate) {
+      if (current.domainListCommunityCategoryCount > 0 &&
+          current.domainListCommunityCompilerVersion <
+              _domainListCommunityCompilerVersion) {
+        return _migrateCachedDomainLists(current);
+      }
       return current;
     }
     final paths = await _storagePaths();
@@ -749,14 +874,17 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     var domainListCommunityUpdatedAtMillis =
         current.domainListCommunityUpdatedAtMillis;
     var categoryMetadata = current.domainListCommunityMetadata;
+    var compilerVersion = current.domainListCommunityCompilerVersion;
+    var compiledDirectory = current.domainListCommunityCompiledDirectory;
 
     if (downloaded != null) {
       final compiledFilesAvailable =
-          File(paths.curatedDirectServicesPath).existsSync() &&
-          File(paths.aiServicesPath).existsSync() &&
-          File(paths.socialServicesPath).existsSync();
+          current.curatedDirectServicesPath != null &&
+          current.aiServicesPath != null &&
+          current.socialServicesPath != null;
       final shouldRebuildDomainLists =
           force ||
+          compilerVersion != _domainListCommunityCompilerVersion ||
           shouldRebuildRussiaRouteDomainLists(
             currentDataAvailable: current.available,
             downloadedContentChanged: downloaded.changed,
@@ -766,38 +894,14 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       if (shouldRebuildDomainLists) {
         _emitProgress(RussiaRouteUpdateStage.compiling);
         final categoryFiles = downloaded.categoryFiles;
-        final compiledCuratedDirectServices = await compute(
-          _compileCuratedDirectServicesArtifact,
+        final compiled = await _compileAndInstallDomainLists(
+          paths,
           categoryFiles,
-          debugLabel: 'route-curated-services-compile',
-        );
-        final compiledAiServices = await compute(
-          _compileAiServicesArtifact,
-          categoryFiles,
-          debugLabel: 'route-ai-services-compile',
-        );
-        final compiledSocialServices = await compute(
-          _compileSocialServicesArtifact,
-          categoryFiles,
-          debugLabel: 'route-social-services-compile',
-        );
-        await _writeAtomically(
-          paths.curatedDirectServicesPath,
-          compiledCuratedDirectServices.ruleSetBytes,
-        );
-        await _writeAtomically(
-          paths.aiServicesPath,
-          compiledAiServices.ruleSetBytes,
-        );
-        await _writeAtomically(
-          paths.socialServicesPath,
-          compiledSocialServices.ruleSetBytes,
         );
         downloadedCategoryCount = categoryFiles.length;
-        compiledDomainCount =
-            compiledCuratedDirectServices.domainCount +
-            compiledAiServices.domainCount +
-            compiledSocialServices.domainCount;
+        compiledDomainCount = compiled.domainCount;
+        compilerVersion = _domainListCommunityCompilerVersion;
+        compiledDirectory = compiled.directory;
         domainListCommunityUpdatedAtMillis = nowMillis;
       }
       categoryMetadata = downloaded.metadata;
@@ -819,35 +923,11 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       domainListCommunityCategoryCount: downloadedCategoryCount,
       domainListCommunityDomainCount: compiledDomainCount,
       domainListCommunityMetadata: categoryMetadata,
+      domainListCommunityCompilerVersion: compilerVersion,
+      domainListCommunityCompiledDirectory: compiledDirectory,
     );
 
-    final status = RussiaRouteDataStatus(
-      available: true,
-      sourceName: sourceName,
-      versionTag: packageInfo.versionTag,
-      sourceKind: packageInfo.sourceKind,
-      releaseTag: packageInfo.releaseTag,
-      packageSha256: packageInfo.packageSha256,
-      assetSizeBytes: packageInfo.assetSizeBytes,
-      verifiedAtMillis: packageInfo.verifiedAtMillis,
-      verifiedFiles: packageInfo.verifiedFiles,
-      geositeRuBlockedPath: paths.geositeRuBlockedPath,
-      geositeRuAvailableOnlyInsidePath: paths.geositeRuAvailableOnlyInsidePath,
-      geositeCategoryRuPath: paths.geositeCategoryRuPath,
-      geoipRuBlockedPath: paths.geoipRuBlockedPath,
-      geoipRuWhitelistPath: paths.geoipRuWhitelistPath,
-      geoipRuPath: paths.geoipRuPath,
-      curatedDirectServicesPath: paths.curatedDirectServicesPath,
-      aiServicesPath: paths.aiServicesPath,
-      socialServicesPath: paths.socialServicesPath,
-      installedAtMillis: installedAtMillis,
-      lastUpdateCheckAtMillis: successfulCheckAtMillis,
-      domainListCommunityUpdatedAtMillis:
-          domainListCommunityUpdatedAtMillis ?? nowMillis,
-      domainListCommunityCategoryCount: downloadedCategoryCount,
-      domainListCommunityDomainCount: compiledDomainCount,
-      domainListCommunityMetadata: categoryMetadata,
-    );
+    final status = await _loadStatus();
     _emitProgress(RussiaRouteUpdateStage.complete);
     return status;
   }
@@ -862,6 +942,8 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     required int domainListCommunityDomainCount,
     required Map<String, RussiaRouteCategoryMetadata>
     domainListCommunityMetadata,
+    int domainListCommunityCompilerVersion = 0,
+    String? domainListCommunityCompiledDirectory,
   }) {
     return _writeAtomically(
       paths.metadataPath,
@@ -885,6 +967,10 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
               domainListCommunityUpdatedAtMillis,
           'domainListCommunityCategoryCount': domainListCommunityCategoryCount,
           'domainListCommunityDomainCount': domainListCommunityDomainCount,
+          'domainListCommunityCompilerVersion':
+              domainListCommunityCompilerVersion,
+          'domainListCommunityCompiledDirectory':
+              ?domainListCommunityCompiledDirectory,
           'domainListCommunityMetadata': {
             for (final entry in domainListCommunityMetadata.entries)
               entry.key: entry.value.toJson(),
@@ -1533,6 +1619,39 @@ List<String> _stringListFromJson(Object? value) {
       .toList(growable: false);
 }
 
+Map<String, String> _readCachedDomainListCommunityCategories(String directory) {
+  final files = <String, String>{};
+  final pending = <String>[
+    ...RussiaRouteDataService._curatedDirectServicesCategories,
+    ...RussiaRouteDataService._aiServicesCategories,
+    ...RussiaRouteDataService._socialServicesCategories,
+  ];
+  while (pending.isNotEmpty) {
+    final category = pending.removeLast();
+    if (files.containsKey(category)) continue;
+    final file = File('$directory/${Uri.encodeComponent(category)}.txt');
+    final content = file.readAsStringSync();
+    files[category] = content;
+    for (final rawLine in const LineSplitter().convert(content)) {
+      final line = rawLine.split('#').first.trim();
+      if (line.startsWith('include:')) {
+        pending.add(_parseIncludedCategory(line));
+      }
+    }
+  }
+  return files;
+}
+
+Map<String, _CompiledRuleSetArtifact> _compileDomainListCommunityArtifacts(
+  Map<String, String> categoryFiles,
+) => {
+  'ru-direct-services.srs': _compileCuratedDirectServicesArtifact(
+    categoryFiles,
+  ),
+  'ai-services.srs': _compileAiServicesArtifact(categoryFiles),
+  'social-services.srs': _compileSocialServicesArtifact(categoryFiles),
+};
+
 _CompiledRuleSetArtifact _compileCuratedDirectServicesArtifact(
   Map<String, String> categoryFiles,
 ) {
@@ -1567,36 +1686,60 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
   final exactDomains = <String>{};
   final suffixDomains = <String>{};
   final visiting = <String>{};
-  final visited = <String>{};
-
-  void loadCategory(String category) {
-    if (!visiting.add(category) || visited.contains(category)) {
-      return;
+  List<(_NormalizedRuleDomain, Set<String>)> loadCategory(String category) {
+    if (!visiting.add(category)) {
+      return [];
     }
     final content = categoryFiles[category];
     if (content == null) {
-      visiting.remove(category);
-      return;
+      throw FormatException('Missing domain-list category: $category');
     }
+    final rules = <(_NormalizedRuleDomain, Set<String>)>[];
     for (final rawLine in const LineSplitter().convert(content)) {
       final line = rawLine.split('#').first.trim();
-      if (line.isEmpty || line.contains('@ads') || line.contains('@!cn')) {
+      if (line.isEmpty) {
         continue;
       }
-      if (line.startsWith('include:')) {
-        loadCategory(_parseIncludedCategory(line));
+      final tokens = line.split(RegExp(r'\s+'));
+      final value = tokens.first;
+      final attributes = tokens
+          .skip(1)
+          .where((token) => token.startsWith('@'))
+          .map((token) => token.substring(1))
+          .toSet();
+      if (value.startsWith('include:')) {
+        final included = loadCategory(_parseIncludedCategory(value));
+        rules.addAll(
+          included.where(
+            (rule) => attributes.every(
+              (attribute) => attribute.startsWith('-')
+                  ? !rule.$2.contains(attribute.substring(1))
+                  : rule.$2.contains(attribute),
+            ),
+          ),
+        );
         continue;
       }
-      if (line.startsWith('regexp:') ||
-          line.startsWith('keyword:') ||
-          line.startsWith('geosite:') ||
-          line.startsWith('ext:')) {
+      if (attributes.contains('ads') ||
+          value.startsWith('regexp:') ||
+          value.startsWith('keyword:') ||
+          value.startsWith('geosite:') ||
+          value.startsWith('ext:')) {
         continue;
       }
-      final normalized = _normalizeServiceDomainLine(line);
+      final normalized = _normalizeServiceDomainLine(value);
       if (normalized == null) {
         continue;
       }
+      rules.add((normalized, attributes));
+    }
+    visiting.remove(category);
+    return rules;
+  }
+
+  for (final category in rootCategories) {
+    for (final rule in loadCategory(category)) {
+      final normalized = rule.$1;
       switch (normalized.type) {
         case _RuleDomainType.exact:
           exactDomains.add(normalized.value);
@@ -1604,12 +1747,6 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
           suffixDomains.add(normalized.value);
       }
     }
-    visiting.remove(category);
-    visited.add(category);
-  }
-
-  for (final category in rootCategories) {
-    loadCategory(category);
   }
 
   final exactList = exactDomains.toList()..sort();
@@ -1646,7 +1783,7 @@ _NormalizedRuleDomain? _normalizeServiceDomainLine(String line) {
     final normalized = _normalizeDomainValue(value);
     return normalized == null
         ? null
-        : _NormalizedRuleDomain(_RuleDomainType.exact, normalized);
+        : _NormalizedRuleDomain(_RuleDomainType.suffix, normalized);
   }
   final normalized = _normalizeDomainValue(value);
   return normalized == null

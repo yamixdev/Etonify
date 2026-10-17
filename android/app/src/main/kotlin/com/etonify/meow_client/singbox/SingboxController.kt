@@ -951,6 +951,67 @@ object SingboxController {
         }
     }
 
+    fun querySelectedOutbounds(callback: (Result<Map<String, Any?>>) -> Unit) {
+        val generation = activeRuntimeGeneration
+        commandExecutor.execute {
+            val result = runCatching {
+                check(generation > 0L && generation == activeRuntimeGeneration && running) {
+                    "stale runtime before selector query"
+                }
+                val ready = CountDownLatch(1)
+                val snapshot = java.util.concurrent.atomic.AtomicReference<Map<String, String>?>()
+                val snapshotNetwork = AtomicLong(0L)
+                val handler = object : CommandClientHandler {
+                    override fun connected() = Unit
+                    override fun disconnected(message: String?) { ready.countDown() }
+                    override fun clearLogs() = Unit
+                    override fun initializeClashMode(modeList: StringIterator?, currentMode: String?) = Unit
+                    override fun setDefaultLogLevel(level: Int) = Unit
+                    override fun updateClashMode(newMode: String?) = Unit
+                    override fun writeConnectionEvents(events: io.nekohasekai.libbox.ConnectionEvents?) = Unit
+                    override fun writeURLTestUpdate(message: URLTestUpdate?) = Unit
+                    override fun writeOutbounds(message: OutboundGroupItemIterator?) = Unit
+                    override fun writeLogs(messageList: LogIterator?) = Unit
+                    override fun writeStatus(message: StatusMessage?) = Unit
+                    override fun writeGroups(message: OutboundGroupIterator?) {
+                        if (message == null) return
+                        val sampledNetwork = networkGeneration.get()
+                        val selected = mutableMapOf<String, String>()
+                        while (message.hasNext()) {
+                            val group = message.next()
+                            val tag = group.tag ?: continue
+                            val member = group.selected ?: continue
+                            if (member.isNotBlank()) selected[tag] = member
+                        }
+                        if (snapshot.compareAndSet(null, selected)) snapshotNetwork.set(sampledNetwork)
+                        ready.countDown()
+                    }
+                }
+                val options = CommandClientOptions().apply { addCommand(Libbox.CommandGroup) }
+                val client = Libbox.newCommandClient(handler, options)
+                val deadline = SystemClock.uptimeMillis() + 4_000L
+                val timeout = Runnable {
+                    runCatching { client.disconnect() }
+                    ready.countDown()
+                }
+                mainHandler.postDelayed(timeout, 4_000L)
+                try {
+                    client.connect()
+                    check(ready.await((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0L), TimeUnit.MILLISECONDS)) {
+                        "selector query timed out"
+                    }
+                    check(generation == activeRuntimeGeneration && running) { "stale runtime after selector query" }
+                    val selected = checkNotNull(snapshot.get()) { "selector query disconnected" }
+                    mapOf("runtimeGeneration" to generation, "networkGeneration" to snapshotNetwork.get(), "selectedOutbounds" to selected)
+                } finally {
+                    mainHandler.removeCallbacks(timeout)
+                    runCatching { client.disconnect() }
+                }
+            }
+            mainHandler.post { callback(result) }
+        }
+    }
+
     fun urlTest(
         groupTag: String,
         targetOutboundTag: String,

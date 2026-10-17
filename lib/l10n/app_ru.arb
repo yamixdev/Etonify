@@ -162,6 +162,7 @@
   "proxiesTab": "Прокси",
   "proxiesTitle": "Прокси",
   "proxySwitching": "Переключение",
+  "proxySelectionUnconfirmed": "Не подтверждено",
   "proxyUnavailable": "Недоступен",
   "proxyLatencyNoResult": "Нет данных",
   "proxyLatencyNoResultDescription": "Результат проверки для этого сервера ещё не получен.",

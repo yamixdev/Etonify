@@ -538,6 +538,12 @@ class SingboxRuntime {
     }
   }
 
+  Future<Map<String, dynamic>> querySelectedOutbounds() async {
+    if (_isWindows) return const {};
+    if (!Platform.isAndroid) return const {};
+    return _normalizeMap(await _hostApi.querySelectedOutbounds());
+  }
+
   Future<Map<String, dynamic>> lookupOutboundExternalInfo({
     required String outboundTag,
   }) async {

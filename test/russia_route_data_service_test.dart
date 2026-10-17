@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'support/windows_storage_fixture.dart';
@@ -74,6 +76,186 @@ void main() {
       );
     });
   });
+
+  test(
+    'compiler preserves attributes and selective nested includes in SRS',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final status = await _updateFixture({
+          'category-ai-!cn': '''
+coze.fixture @!cn
+domain:trae.fixture @!cn @extra
+full:api.dola.fixture @!cn
+ads.fixture @ads
+ads2.fixture @ads @!cn
+include:filtered @!cn @-ads
+include:filtered @other
+include:nested @!cn
+''',
+          'filtered': '''
+selected.fixture @!cn
+excluded.fixture
+excluded-ad.fixture @!cn @ads
+other.fixture @other
+''',
+          'nested': 'include:leaf @other\ninclude:category-ai-!cn',
+          'leaf': 'nested.fixture @other @!cn\nnot-nested.fixture @!cn',
+        });
+        expect(await _srsDomains(File(status.aiServicesPath!)), {
+          'suffix:coze.fixture',
+          'suffix:trae.fixture',
+          'exact:api.dola.fixture',
+          'suffix:selected.fixture',
+          'suffix:other.fixture',
+          'suffix:nested.fixture',
+        });
+      });
+    },
+  );
+
+  test(
+    'status migrates cached sources once without network or a daily update',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final installed = await _updateFixture({
+          'category-ai-!cn': 'legacy.fixture',
+        });
+        final manifest = _manifestFile(installed);
+        final metadata =
+            jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+        metadata.remove('domainListCommunityCompilerVersion');
+        metadata['lastUpdateCheckAtMillis'] =
+            DateTime.now().millisecondsSinceEpoch;
+        await manifest.writeAsString(jsonEncode(metadata));
+        final source = File(
+          '${manifest.parent.path}/domain-list-community/category-ai-!cn.txt',
+        );
+        await source.writeAsString('coze.fixture @!cn');
+        final legacyBytes = await File(installed.aiServicesPath!).readAsBytes();
+        final service = RussiaRouteDataService.instance;
+        final migrated = await HttpOverrides.runZoned(
+          () => service.loadStatus(),
+          createHttpClient: (_) =>
+              throw StateError('Migration must stay offline'),
+        );
+        expect(await _srsDomains(File(migrated.aiServicesPath!)), {
+          'suffix:coze.fixture',
+        });
+        expect(migrated.needsDailyUpdate, isFalse);
+        expect(
+          await File(installed.aiServicesPath!).readAsBytes(),
+          legacyBytes,
+        );
+
+        final migratedFile = File(migrated.aiServicesPath!);
+        final sentinel = DateTime(2020);
+        await migratedFile.setLastModified(sentinel);
+        final reloaded = await service.loadStatus();
+        expect(reloaded.aiServicesPath, migrated.aiServicesPath);
+        expect(await migratedFile.lastModified(), sentinel);
+      });
+    },
+  );
+
+  test(
+    'failed cached migration preserves installed data and retries after repair',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final installed = await _updateFixture({
+          'category-ai-!cn': 'working.fixture',
+        });
+        final manifest = _manifestFile(installed);
+        final metadata =
+            jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+        metadata.remove('domainListCommunityCompilerVersion');
+        await manifest.writeAsString(jsonEncode(metadata));
+        final before = await manifest.readAsString();
+        final source = File(
+          '${manifest.parent.path}/domain-list-community/category-ai-!cn.txt',
+        );
+        await source.writeAsString('include:missing-fixture');
+
+        final failed = await RussiaRouteDataService.instance.loadStatus();
+        expect(failed.available, isTrue);
+        expect(await _srsDomains(File(failed.aiServicesPath!)), {
+          'suffix:working.fixture',
+        });
+        expect(await manifest.readAsString(), before);
+
+        await source.writeAsString('repaired.fixture @!cn');
+        final repaired = await RussiaRouteDataService.instance.loadStatus();
+        expect(await _srsDomains(File(repaired.aiServicesPath!)), {
+          'suffix:repaired.fixture',
+        });
+      });
+    },
+  );
+
+  test(
+    '304 update recompiles an old compiler version and then reuses SRS',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final installed = await _updateFixture({
+          'category-ai-!cn': 'old.fixture',
+        });
+        final manifest = _manifestFile(installed);
+        final metadata =
+            jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+        metadata.remove('domainListCommunityCompilerVersion');
+        await manifest.writeAsString(jsonEncode(metadata));
+        await File(
+          '${manifest.parent.path}/domain-list-community/category-ai-!cn.txt',
+        ).writeAsString('updated.fixture @!cn');
+        Future<RussiaRouteDataStatus> updateNotModified() =>
+            HttpOverrides.runZoned(
+              () => RussiaRouteDataService.instance.ensureUpdated(),
+              createHttpClient: (_) =>
+                  _RouteFixtureHttpClient({}, notModified: true),
+            );
+
+        final updated = await updateNotModified();
+        expect(await _srsDomains(File(updated.aiServicesPath!)), {
+          'suffix:updated.fixture',
+        });
+        expect(updated.aiServicesPath, isNot(installed.aiServicesPath));
+        final file = File(updated.aiServicesPath!);
+        final sentinel = DateTime(2020);
+        await file.setLastModified(sentinel);
+        final unchanged = await updateNotModified();
+        expect(unchanged.aiServicesPath, updated.aiServicesPath);
+        expect(await file.lastModified(), sentinel);
+      });
+    },
+  );
+
+  test(
+    'fresh data still migrates through ensureUpdated without network',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final installed = await _updateFixture({
+          'category-ai-!cn': 'old.fixture',
+        });
+        final manifest = _manifestFile(installed);
+        final metadata =
+            jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+        metadata.remove('domainListCommunityCompilerVersion');
+        metadata['lastUpdateCheckAtMillis'] =
+            DateTime.now().millisecondsSinceEpoch;
+        await manifest.writeAsString(jsonEncode(metadata));
+        await File(
+          '${manifest.parent.path}/domain-list-community/category-ai-!cn.txt',
+        ).writeAsString('fresh.fixture @!cn');
+        final updated = await HttpOverrides.runZoned(
+          () => RussiaRouteDataService.instance.ensureUpdated(),
+          createHttpClient: (_) =>
+              throw StateError('Fresh cached migration must stay offline'),
+        );
+        expect(await _srsDomains(File(updated.aiServicesPath!)), {
+          'suffix:fresh.fixture',
+        });
+      });
+    },
+  );
 
   test('domain-list normalization keeps domains and rejects invalid rules', () {
     expect(normalizeRussiaRouteDomainForTest('..Example.COM..'), 'example.com');
@@ -228,6 +410,173 @@ void main() {
     expect(extracting.stage, RussiaRouteUpdateStage.extractingPackage);
     expect(extracting.isRetryingWithoutVpn, isFalse);
   });
+}
+
+File _manifestFile(RussiaRouteDataStatus status) => File(
+  '${File(status.geositeRuBlockedPath!).parent.parent.path}/manifest.json',
+);
+
+Future<RussiaRouteDataStatus> _updateFixture(
+  Map<String, String> categories,
+) async {
+  await RussiaRouteDataService.instance.ensureBundledInstalled();
+  return HttpOverrides.runZoned(
+    () => RussiaRouteDataService.instance.ensureUpdated(),
+    createHttpClient: (_) => _RouteFixtureHttpClient(categories),
+  );
+}
+
+class _RouteFixtureHttpClient implements HttpClient {
+  _RouteFixtureHttpClient(this.categories, {this.notModified = false});
+  final Map<String, String> categories;
+  final bool notModified;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async {
+    if (url.host == 'api.github.com') {
+      return _RouteFixtureRequest('', HttpStatus.notFound);
+    }
+    if (url.host != 'raw.githubusercontent.com' ||
+        !url.path.startsWith('/v2fly/domain-list-community/master/data/')) {
+      throw StateError('Unexpected fixture request: $url');
+    }
+    return _RouteFixtureRequest(
+      categories[url.pathSegments.last] ?? 'base.fixture',
+      notModified ? HttpStatus.notModified : HttpStatus.ok,
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+  @override
+  set connectionTimeout(Duration? value) {}
+  @override
+  set idleTimeout(Duration value) {}
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RouteFixtureRequest implements HttpClientRequest {
+  _RouteFixtureRequest(this.content, this.status);
+  final String content;
+  final int status;
+  @override
+  final _RouteFixtureHeaders headers = _RouteFixtureHeaders();
+  @override
+  set followRedirects(bool value) {}
+  @override
+  Future<HttpClientResponse> close() async {
+    if (status == HttpStatus.notModified &&
+        headers.values['If-None-Match'] != '"fixture"') {
+      throw StateError('304 fixture requires a conditional request');
+    }
+    return _RouteFixtureResponse(
+      status == HttpStatus.notModified ? [] : utf8.encode(content),
+      status,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RouteFixtureResponse extends Stream<List<int>>
+    implements HttpClientResponse {
+  _RouteFixtureResponse(this.bytes, this.statusCode);
+  final List<int> bytes;
+  @override
+  final int statusCode;
+  @override
+  int get contentLength => bytes.length;
+  @override
+  final HttpHeaders headers = _RouteFixtureHeaders();
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => Stream.value(bytes).listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RouteFixtureHeaders implements HttpHeaders {
+  final values = <String, Object>{};
+  @override
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {
+    values[name] = value;
+  }
+
+  @override
+  void forEach(void Function(String, List<String>) action) =>
+      action('etag', ['"fixture"']);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+Future<Set<String>> _srsDomains(File file) async {
+  final bytes = await file.readAsBytes();
+  expect(bytes.take(4), [0x53, 0x52, 0x53, 2]);
+  final body = Uint8List.fromList(ZLibDecoder().convert(bytes.sublist(4)));
+  var offset = 0;
+  int readVarint() {
+    var result = 0;
+    var shift = 0;
+    while (true) {
+      final value = body[offset++];
+      result |= (value & 0x7f) << shift;
+      if (value < 128) return result;
+      shift += 7;
+    }
+  }
+
+  final rules = readVarint();
+  if (rules == 0) return {};
+  expect(rules, 1);
+  expect(body[offset++], 0);
+  expect(body[offset++], 2);
+  expect(body[offset++], 0);
+  List<int> readBitmap() {
+    final length = readVarint();
+    final view = ByteData.sublistView(body);
+    return List.generate(length, (_) {
+      final word = view.getUint64(offset);
+      offset += 8;
+      return word;
+    });
+  }
+
+  final leaves = readBitmap();
+  final bitmap = readBitmap();
+  final labelCount = readVarint();
+  final labels = body.sublist(offset, offset + labelCount);
+  bool bit(List<int> words, int index) =>
+      (words[index >> 6] & (1 << (index & 63))) != 0;
+  final queue = <String>[''];
+  final result = <String>{};
+  var label = 0;
+  var bitmapIndex = 0;
+  for (var node = 0; node < queue.length; node++) {
+    final key = queue[node];
+    if (bit(leaves, node)) {
+      final domain = String.fromCharCodes(key.codeUnits.reversed);
+      result.add(
+        domain.startsWith('\n')
+            ? 'suffix:${domain.substring(1)}'
+            : 'exact:$domain',
+      );
+    }
+    while (!bit(bitmap, bitmapIndex++)) {
+      queue.add('$key${String.fromCharCode(labels[label++])}');
+    }
+  }
+  return result;
 }
 
 Future<T> _withIsolatedRouteStorage<T>(Future<T> Function() action) async {

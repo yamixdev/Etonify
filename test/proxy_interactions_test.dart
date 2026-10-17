@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
@@ -510,10 +511,10 @@ void main() {
     final row = tester.getRect(find.byType(ProxyTile));
     await tester.tapAt(Offset(row.right - 170, area.center.dy));
     expect(opened, 0);
-    expect(selected, 0);
+    expect(selected, 1);
     await tester.tap(action);
     expect(opened, 1);
-    expect(selected, 0);
+    expect(selected, 1);
     await tester.drag(action, const Offset(0, -80));
     await tester.pumpAndSettle();
     expect(opened, 1);
@@ -757,12 +758,155 @@ void main() {
     expect(selections, ['leaf', 'Nested']);
   });
 
-  testWidgets('only flag/name selects; whitespace and swipe are inert', (
+  testWidgets(
+    'row whitespace and protocol select; ping and swipe are separate',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(393, 873));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      var selected = 0;
+      var tested = 0;
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: ProxyTile(
+                proxy: _proxy('Node'),
+                selected: false,
+                onTap: () => selected++,
+                onTestLatency: () => tested++,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final tile = tester.getRect(find.byType(ProxyTile));
+      await tester.tapAt(Offset(tile.right - 180, tile.center.dy));
+      await tester.tapAt(Offset(tile.left + 25, tile.top + 2));
+      expect(selected, 2);
+      await tester.tap(find.text('Node'));
+      expect(selected, 3);
+      await tester.tapAt(Offset(tile.left + 30, tile.center.dy));
+      expect(selected, 4);
+      await tester.tap(find.text('42 ms'));
+      expect(tested, 1);
+      expect(selected, 4);
+      await tester.tap(find.text('vless'));
+      expect(selected, 5);
+      await tester.drag(find.text('Node'), const Offset(0, -80));
+      await tester.pumpAndSettle();
+      expect(selected, 5);
+    },
+  );
+
+  testWidgets('compact row keeps visible press feedback without animations', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(393, 873));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const boundaryKey = ValueKey('press-feedback');
+    await tester.pumpWidget(
+      _app(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: ProxyTile(
+                proxy: _proxy('Node'),
+                selected: false,
+                animate: false,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(boundaryKey),
+    );
+    Future<List<int>> pixels() async {
+      final image = await boundary.toImage();
+      try {
+        return (await image.toByteData())!.buffer.asUint8List().toList();
+      } finally {
+        image.dispose();
+      }
+    }
+
+    final idle = await tester.runAsync(pixels);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Node')),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 100));
+    final pressed = await tester.runAsync(pixels);
+    expect(pressed, isNot(orderedEquals(idle!)));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('long press on row space acts once without selecting', (
+    tester,
+  ) async {
     var selected = 0;
+    var held = 0;
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: ProxyTile(
+              proxy: _proxy('Node'),
+              selected: false,
+              animate: false,
+              onTap: () => selected++,
+              onLongPress: () => held++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tile = tester.getRect(find.byType(ProxyTile));
+    await tester.longPressAt(Offset(tile.right - 170, tile.center.dy));
+    expect(held, 1);
+    expect(selected, 0);
+  });
+
+  testWidgets('disabled ping and space outside a row never select', (
+    tester,
+  ) async {
+    var selected = 0;
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: ProxyTile(
+              proxy: _proxy('Node'),
+              selected: false,
+              animate: false,
+              onTap: () => selected++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tile = tester.getRect(find.byType(ProxyTile));
+    await tester.tap(find.text('42 ms'));
+    await tester.tapAt(Offset(tile.center.dx, tile.bottom + 8));
+    await tester.tapAt(Offset(tile.left + 1, tile.center.dy));
+    expect(selected, 0);
+  });
+
+  testWidgets('holding the ping action does not trigger the row hold action', (
+    tester,
+  ) async {
+    var selected = 0;
+    var held = 0;
     var tested = 0;
     await tester.pumpWidget(
       _app(
@@ -772,7 +916,9 @@ void main() {
             child: ProxyTile(
               proxy: _proxy('Node'),
               selected: false,
+              animate: false,
               onTap: () => selected++,
+              onLongPress: () => held++,
               onTestLatency: () => tested++,
             ),
           ),
@@ -780,22 +926,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final tile = tester.getRect(find.byType(ProxyTile));
-    await tester.tapAt(Offset(tile.right - 180, tile.center.dy));
-    await tester.tapAt(Offset(tile.left + 25, tile.top + 2));
+    await tester.longPress(find.text('42 ms'));
+    expect(held, 0);
     expect(selected, 0);
-    await tester.tap(find.text('Node'));
-    expect(selected, 1);
-    await tester.tapAt(Offset(tile.left + 30, tile.center.dy));
-    expect(selected, 2);
-    await tester.tap(find.text('42 ms'));
-    expect(tested, 1);
-    expect(selected, 2);
-    await tester.tap(find.text('vless'));
-    expect(selected, 2);
-    await tester.drag(find.text('Node'), const Offset(0, -80));
-    await tester.pumpAndSettle();
-    expect(selected, 2);
+    expect(tested, 0);
   });
 
   testWidgets('group subtitle opens without selecting; name still selects', (

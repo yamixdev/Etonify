@@ -49,6 +49,7 @@ class ProxyTile extends StatelessWidget {
     final hasLatencyError = latencyError?.trim().isNotEmpty == true;
     final highlighted = state?.highlighted ?? this.highlighted;
     final selecting = state?.selecting ?? false;
+    final selectionUnconfirmed = state?.selectionUnconfirmed ?? false;
     final hasNoLatencyResult =
         !selecting &&
         !latencyChecking &&
@@ -56,6 +57,8 @@ class ProxyTile extends StatelessWidget {
         latency == null;
     final latencyText = selecting
         ? l10n.proxySwitching
+        : selectionUnconfirmed
+        ? l10n.proxySelectionUnconfirmed
         : latencyChecking
         ? '... ms'
         : latency == null
@@ -65,6 +68,8 @@ class ProxyTile extends StatelessWidget {
         : '$latency ms';
     final delayColor = selecting
         ? theme.colorScheme.primary
+        : selectionUnconfirmed
+        ? theme.colorScheme.error
         : latencyChecking
         ? theme.colorScheme.primary
         : latencyUnavailable
@@ -81,11 +86,19 @@ class ProxyTile extends StatelessWidget {
     final latencyContent = _ProxyLatencyLabel(
       text: latencyText,
       color: delayColor,
-      checking: latencyChecking && !selecting,
-      unavailable: latencyUnavailable && !latencyChecking && !selecting,
+      checking: latencyChecking && !selecting && !selectionUnconfirmed,
+      unavailable:
+          latencyUnavailable &&
+          !latencyChecking &&
+          !selecting &&
+          !selectionUnconfirmed,
       unavailableLabel: l10n.proxyUnavailable,
       emphasized:
-          selecting || latencyFresh || latencyUnavailable || hasLatencyError,
+          selecting ||
+          selectionUnconfirmed ||
+          latencyFresh ||
+          latencyUnavailable ||
+          hasLatencyError,
       animate: animate,
       tooltip: hasLatencyError
           ? _latencyErrorTooltip(latencyError)
@@ -152,11 +165,6 @@ class ProxyTile extends StatelessWidget {
                 Expanded(
                   child: _ProxyTileActions(
                     animate: shouldAnimate,
-                    onTap: onTap,
-                    onLongPress:
-                        onLongPress ??
-                        openGroup ??
-                        (proxy.isGroup ? () {} : null),
                     onOpenGroup: openGroup,
                     child:
                         (proxy.displayName == this.proxy.displayName &&
@@ -183,19 +191,29 @@ class ProxyTile extends StatelessWidget {
         ),
       ],
     );
+    final interactiveRow = Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: ValueKey('proxy-select-${proxy.tag}'),
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        onLongPress: onLongPress ?? openGroup ?? (proxy.isGroup ? () {} : null),
+        child: rowChild,
+      ),
+    );
     if (shouldAnimate) {
       return AnimatedContainer(
         duration: animationDuration,
         curve: Curves.easeOutCubic,
         margin: EdgeInsets.fromLTRB(horizontalInset, 1, 6, 1),
         decoration: decoration,
-        child: rowChild,
+        child: interactiveRow,
       );
     }
     return Container(
       margin: EdgeInsets.fromLTRB(horizontalInset, 1, 6, 1),
       decoration: decoration,
-      child: rowChild,
+      child: interactiveRow,
     );
   }
 }
@@ -205,15 +223,11 @@ class ProxyTile extends StatelessWidget {
 class _ProxyTileActions extends InheritedWidget {
   const _ProxyTileActions({
     required this.animate,
-    required this.onTap,
-    required this.onLongPress,
     required this.onOpenGroup,
     required super.child,
   });
 
-  final VoidCallback onTap;
   final bool animate;
-  final VoidCallback? onLongPress;
   final VoidCallback? onOpenGroup;
 
   static _ProxyTileActions of(BuildContext context) =>
@@ -222,8 +236,7 @@ class _ProxyTileActions extends InheritedWidget {
   @override
   bool updateShouldNotify(_ProxyTileActions oldWidget) =>
       animate != oldWidget.animate ||
-      (onOpenGroup == null) != (oldWidget.onOpenGroup == null) ||
-      (onLongPress == null) != (oldWidget.onLongPress == null);
+      (onOpenGroup == null) != (oldWidget.onOpenGroup == null);
 }
 
 // Passed as ValueListenableBuilder.child so ping-only updates do not rebuild
@@ -245,48 +258,20 @@ class _ProxyTileIdentity extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final actions = context
         .dependOnInheritedWidgetOfExactType<_ProxyTileActions>()!;
-    Widget action({
-      Key? key,
-      required VoidCallback onTap,
-      VoidCallback? onLongPress,
-      required Widget child,
-    }) => actions.animate
-        ? InkWell(
-            key: key,
-            borderRadius: BorderRadius.circular(8),
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: child,
-          )
-        : Semantics(
-            button: true,
-            child: GestureDetector(
-              key: key,
-              behavior: HitTestBehavior.opaque,
-              onTap: onTap,
-              onLongPress: onLongPress,
+    Widget identityPart(Widget child, {double height = 24, Key? key}) =>
+        ConstrainedBox(
+          key: key,
+          constraints: BoxConstraints(minWidth: 44, minHeight: height),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Align(
+              alignment: AlignmentDirectional.bottomStart,
+              widthFactor: 1,
+              heightFactor: 1,
               child: child,
             ),
-          );
-    Widget selectAction(Widget child, {double height = 24, Key? key}) => action(
-      key: key,
-      onTap: () => _ProxyTileActions.of(context).onTap(),
-      onLongPress: actions.onLongPress == null
-          ? null
-          : () => _ProxyTileActions.of(context).onLongPress?.call(),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 44, minHeight: height),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Align(
-            alignment: AlignmentDirectional.bottomStart,
-            widthFactor: 1,
-            heightFactor: 1,
-            child: child,
           ),
-        ),
-      ),
-    );
+        );
     final subtitle = Text(
       subtitleOverride ?? _localizedProxySubtitle(l10n, proxy),
       maxLines: 1,
@@ -297,7 +282,7 @@ class _ProxyTileIdentity extends StatelessWidget {
     );
     return Row(
       children: [
-        selectAction(
+        identityPart(
           SizedBox(
             width: 36,
             height: 48,
@@ -314,7 +299,7 @@ class _ProxyTileIdentity extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              selectAction(
+              identityPart(
                 Text(
                   titleOverride ?? _localizedProxyTitle(l10n, proxy),
                   maxLines: 2,

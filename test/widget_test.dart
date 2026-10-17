@@ -1381,6 +1381,28 @@ void main() {
       await tester.pump();
 
       expect(find.text('Switching'), findsOneWidget);
+
+      runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
+        'proxy-1': ProxyRuntimeVisualState(selectionUnconfirmed: true),
+      });
+      await tester.pump();
+      expect(find.text('Switching'), findsNothing);
+      expect(find.text('Not confirmed'), findsOneWidget);
+
+      for (final state in const [
+        ProxyRuntimeVisualState(
+          selectionUnconfirmed: true,
+          latencyChecking: true,
+        ),
+        ProxyRuntimeVisualState(
+          selectionUnconfirmed: true,
+          latencyUnavailable: true,
+        ),
+      ]) {
+        runtimeStates.replaceAll({'proxy-1': state});
+        await tester.pump();
+        expect(find.text('Not confirmed'), findsOneWidget);
+      }
     },
   );
 

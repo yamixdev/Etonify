@@ -932,6 +932,8 @@ abstract class AppLocalizations {
   /// **'Switching'**
   String get proxySwitching;
 
+  String get proxySelectionUnconfirmed;
+
   /// No description provided for @proxyUnavailable.
   ///
   /// In en, this message translates to:

@@ -2,7 +2,32 @@ part of 'app_background_tasks.dart';
 
 // Bump when config generation/validation semantics change, even if the native
 // contract stays the same. Only one entry is retained, in private app storage.
-const _configCacheSchema = 2;
+const _configCacheSchema = 3;
+
+Map<String, Object?> _subscriptionConfigIdentity(Subscription subscription) => {
+  'id': subscription.id,
+  'revision': subscription.payloadRevision,
+  if (subscription.payloadRevision.isEmpty) ...{
+    'outbounds': [
+      for (final outbound in subscription.outbounds)
+        {'tag': outbound.tag, 'name': outbound.name, 'config': outbound.config},
+    ],
+    'groups': [for (final group in subscription.groups) group.toMap()],
+  },
+  'proxyChains': [for (final chain in subscription.proxyChains) chain.toMap()],
+  'urlTestConfig': subscription.urlTestConfig.toMap(),
+  'outboundPolicy': [
+    for (final outbound in subscription.outbounds)
+      {
+        'tag': outbound.tag,
+        'deleted': outbound.info.deleted,
+        'country': outbound.info.country,
+      },
+  ],
+  'groupCountries': {
+    for (final group in subscription.groups) group.tag: group.country,
+  },
+};
 
 Future<String> singboxConfigFingerprintInBackground(
   SingboxConfigBuildInput input,
@@ -38,13 +63,7 @@ Future<String> _configFingerprint(
   final identity = <String, Object?>{
     'schema': _configCacheSchema,
     'coreSettings': input.coreSettings.toMap(),
-    'activeSubscription': sub == null
-        ? null
-        : (sub.payloadRevision.isNotEmpty
-              ? {'id': sub.id, 'revision': sub.payloadRevision}
-              : sha256
-                    .convert(utf8.encode(jsonEncode(sub.toMap())))
-                    .toString()),
+    'activeSubscription': sub == null ? null : _subscriptionConfigIdentity(sub),
     'selectedProxyTag': selectedProxyTagOverride ?? input.selectedProxyTag,
     'excludedOutboundTags': (input.excludedOutboundTags.toList()..sort()),
     'vpnInboundEnabled': input.vpnInboundEnabled,

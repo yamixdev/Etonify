@@ -847,10 +847,12 @@ class SubscriptionStore {
   /// overwritten by an older screen snapshot. Deleted profiles stay deleted.
   static Future<void> updateMetadata(
     String id,
-    Subscription Function(Subscription current) update,
-  ) async {
+    Subscription Function(Subscription current) update, {
+    bool includePayload = false,
+  }) async {
+    if (includePayload) await ensurePayloadReady();
     await _withSubscriptionWriteLock(id, () async {
-      final current = getMetadata(id);
+      final current = includePayload ? await _getUnlocked(id) : getMetadata(id);
       if (current == null) return;
       final updated = update(current);
       if (updated.id != id) {
@@ -1555,6 +1557,10 @@ class SubscriptionStore {
       final existing = await _getUnlocked(id);
       if (existing == null) {
         throw StateError('Subscription $id not found');
+      }
+      if (existing.payloadRevision != existingBeforeParse.payloadRevision ||
+          existing.rawContent != existingBeforeParse.rawContent) {
+        throw StateError('Subscription $id changed while reparsing');
       }
       final preservedOutbounds = _preserveUserState(
         existing.outbounds,

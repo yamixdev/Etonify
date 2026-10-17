@@ -478,6 +478,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get proxySwitching => 'Переключение';
 
   @override
+  String get proxySelectionUnconfirmed => 'Не подтверждено';
+
+  @override
   String get proxyUnavailable => 'Недоступен';
 
   @override

@@ -19,17 +19,49 @@ class ProxySelectionTimeout {
 class ProxySelectionController {
   static const defaultConfirmationTimeout = Duration(seconds: 12);
 
+  static String? rootSelectionFromSnapshot(
+    Map<String, dynamic> snapshot, {
+    required int runtimeGeneration,
+  }) {
+    if (runtimeGeneration <= 0 ||
+        snapshot['runtimeGeneration'] != runtimeGeneration) {
+      return null;
+    }
+    final selections = snapshot['selectedOutbounds'];
+    if (selections is! Map || selections['select'] is! String) return null;
+    final root = (selections['select'] as String).trim();
+    return root.isEmpty ? null : root;
+  }
+
   int _generation = 0;
   Future<void> _persistenceQueue = Future<void>.value();
   String? _pendingRuntimeSelectTag;
   String? _pendingRuntimeSelectPreviousTag;
   Timer? _pendingRuntimeSelectTimer;
+  String? _confirmedRuntimeTag;
+  bool _runtimeSelectionUnconfirmed = false;
+  bool _pendingRuntimeSelectionIsStartGuard = false;
 
   int get generation => _generation;
   String? get pendingRuntimeSelectTag => _pendingRuntimeSelectTag;
   String? get pendingRuntimeSelectPreviousTag =>
       _pendingRuntimeSelectPreviousTag;
   bool get hasPendingRuntimeSelection => _pendingRuntimeSelectTag != null;
+  bool get pendingRuntimeSelectionIsStartGuard =>
+      _pendingRuntimeSelectionIsStartGuard;
+  String? get confirmedRuntimeTag => _confirmedRuntimeTag;
+  bool get runtimeSelectionUnconfirmed => _runtimeSelectionUnconfirmed;
+
+  bool resolveRuntimeSelection({required int generation, String? actualTag}) {
+    if (!isCurrentGeneration(generation)) return false;
+    final normalized = actualTag?.trim();
+    _confirmedRuntimeTag = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
+    _runtimeSelectionUnconfirmed = _confirmedRuntimeTag == null;
+    _clearPendingRuntimeSelection();
+    return true;
+  }
 
   void dispose() {
     _pendingRuntimeSelectTimer?.cancel();
@@ -37,6 +69,8 @@ class ProxySelectionController {
 
   int beginLocalSelection() {
     _generation++;
+    _confirmedRuntimeTag = null;
+    _runtimeSelectionUnconfirmed = false;
     _clearPendingRuntimeSelection();
     return _generation;
   }
@@ -48,6 +82,7 @@ class ProxySelectionController {
     Duration confirmationTimeout = defaultConfirmationTimeout,
   }) {
     final generation = ++_generation;
+    _runtimeSelectionUnconfirmed = false;
     _setPendingRuntimeSelection(
       generation: generation,
       tag: tag,
@@ -71,6 +106,7 @@ class ProxySelectionController {
       previousTag: previousTag,
       onTimeout: onTimeout,
       confirmationTimeout: confirmationTimeout,
+      isStartGuard: true,
     );
     return generation;
   }
@@ -108,7 +144,10 @@ class ProxySelectionController {
     required String previousTag,
     required void Function(ProxySelectionTimeout timeout) onTimeout,
     required Duration confirmationTimeout,
+    bool isStartGuard = false,
   }) {
+    _runtimeSelectionUnconfirmed = false;
+    _pendingRuntimeSelectionIsStartGuard = isStartGuard;
     _pendingRuntimeSelectTag = tag;
     _pendingRuntimeSelectPreviousTag = previousTag;
     _pendingRuntimeSelectTimer?.cancel();
@@ -198,6 +237,7 @@ class ProxySelectionController {
   }
 
   void _clearPendingRuntimeSelection() {
+    _pendingRuntimeSelectionIsStartGuard = false;
     _pendingRuntimeSelectTimer?.cancel();
     _pendingRuntimeSelectTimer = null;
     _pendingRuntimeSelectTag = null;

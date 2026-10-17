@@ -393,12 +393,36 @@ void _writeDefaultDomainSuffixRule(
 _ParsedAdBlockFilter _parseAdBlockFilter(String content) {
   final blocked = <String>{};
   final allowed = <String>{};
+  final rules = <String>[];
+  final disabledRules = <String>{};
   for (final rawLine in const LineSplitter().convert(content)) {
     final line = rawLine.trim();
     if (line.isEmpty ||
         line.startsWith('!') ||
         line.startsWith('#') ||
         line.startsWith('[')) {
+      continue;
+    }
+    final modifierIndex = line.indexOf(r'$');
+    if (modifierIndex >= 0) {
+      final modifiers = line.substring(modifierIndex + 1).split(',');
+      if (modifiers.contains('badfilter')) {
+        final pattern = line.substring(0, modifierIndex);
+        if (!RegExp(
+          r'^(?:0\.0\.0\.0|127\.0\.0\.1|::|::1)\s+',
+        ).hasMatch(pattern)) {
+          modifiers.removeWhere((modifier) => modifier == 'badfilter');
+          disabledRules.add(
+            modifiers.isEmpty ? pattern : '$pattern\$${modifiers.join(',')}',
+          );
+        }
+        continue;
+      }
+    }
+    rules.add(line);
+  }
+  for (final line in rules) {
+    if (disabledRules.contains(line)) {
       continue;
     }
     final isAllowRule = line.startsWith('@@');
@@ -426,8 +450,7 @@ String? _extractDomain(String line) {
   if (value.startsWith('@@')) {
     value = value.substring(2);
   }
-  if (value.contains(r'$badfilter') ||
-      value.startsWith('/') ||
+  if (value.startsWith('/') ||
       value.contains('##') ||
       value.contains('#@#') ||
       value.contains('#?#')) {

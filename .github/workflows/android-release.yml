@@ -336,12 +336,26 @@ jobs:
           - etonify-v${RELEASE_VERSION}-armeabi-v7a.apk
           EOF
 
+          tag_refs="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${TAG_NAME}" --jq '.[].ref')"
+          if printf '%s\n' "$tag_refs" | grep -Fxq -- "refs/tags/${TAG_NAME}"; then
+            tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG_NAME}" --jq '.sha')"
+            if [ "$tag_sha" != "$GITHUB_SHA" ]; then
+              echo "::error::Release tag ${TAG_NAME} points to ${tag_sha}, but APKs were built from ${GITHUB_SHA}"
+              exit 1
+            fi
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/tags/${TAG_NAME}" -f "sha=${GITHUB_SHA}"
+          fi
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release edit "$TAG_NAME" --title "$RELEASE_TITLE" --notes-file "$notes_file"
+            gh release edit "$TAG_NAME" --target "$GITHUB_SHA" --title "$RELEASE_TITLE" --notes-file "$notes_file"
             gh release upload "$TAG_NAME" build/release-apks/*.apk build/release-apks/etonify-update.json --clobber
           else
             gh release create "$TAG_NAME" build/release-apks/*.apk build/release-apks/etonify-update.json \
               --draft \
+              --verify-tag \
+              --target "$GITHUB_SHA" \
               --title "$RELEASE_TITLE" \
               --notes-file "$notes_file"
           fi

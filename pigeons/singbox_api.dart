@@ -337,6 +337,9 @@ abstract class SingboxHostApi {
   Map<String?, Object?> status();
 
   @asyncCallback
+  Map<String?, Object?> querySelectedOutbounds();
+
+  @asyncCallback
   Map<String?, Object?> lookupOutboundExternalInfo(String outboundTag);
 
   @asyncCallback

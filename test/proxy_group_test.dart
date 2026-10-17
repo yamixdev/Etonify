@@ -3319,7 +3319,7 @@ void main() {
       (rule) => rule.containsKey('ip_is_private'),
     );
     final adBlockIndex = routeRules.indexWhere(
-      (rule) => rule['rule_set'] == 'adblock-block',
+      (rule) => rule['action'] == 'reject' && rule['type'] == 'logical',
     );
     final russiaSuffixIndex = routeRules.indexWhere(
       (rule) => rule.containsKey('domain_suffix'),
@@ -3354,8 +3354,9 @@ void main() {
       isTrue,
     );
     final dnsRules = (dns['rules'] as List).cast<Map<dynamic, dynamic>>();
+    expect(dnsRules.first['action'], 'reject');
     expect(
-      dnsRules.first,
+      dnsRules[1],
       allOf([
         containsPair('rule_set', 'ru-geosite-ru-blocked'),
         containsPair('server', 'dns-remote'),
@@ -3379,6 +3380,148 @@ void main() {
         ]),
       ),
     );
+  });
+
+  group('adblock exceptions preserve routing policies', () {
+    late String fixturePath;
+    const subscription = Subscription(
+      id: 'adblock-routing',
+      name: 'Adblock routing',
+      url: '',
+      outbounds: [
+        Outbound(
+          tag: 'node',
+          name: 'Node',
+          config: {
+            'type': 'socks',
+            'server': 'node.example',
+            'server_port': 1080,
+          },
+        ),
+      ],
+    );
+
+    setUp(() async {
+      final directory = await Directory.systemTemp.createTemp(
+        'routing-fixture-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      fixturePath = '${directory.path}/rules.srs';
+      await File(fixturePath).writeAsBytes([0x53, 0x52, 0x53, 2, 0]);
+    });
+
+    test('allowed RU domains retain direct route and RU DNS', () {
+      final config = _defaultBuilder(
+        subscription,
+        useRussiaRouteData: true,
+        adBlockEnabled: true,
+        adBlockBlockRuleSetPath: fixturePath,
+        adBlockAllowRuleSetPath: fixturePath,
+      ).build();
+      const memberships = {'adblock-block', 'adblock-allow'};
+      expect(
+        _domainDecision(config, 'route', 'allowed.ru', memberships),
+        'direct',
+      );
+      expect(
+        _domainDecision(config, 'dns', 'allowed.ru', memberships),
+        'dns-ru-direct',
+      );
+    });
+
+    test('blocked RU domains are rejected by route and DNS', () {
+      final config = _defaultBuilder(
+        subscription,
+        useRussiaRouteData: true,
+        adBlockEnabled: true,
+        adBlockBlockRuleSetPath: fixturePath,
+        adBlockAllowRuleSetPath: fixturePath,
+      ).build();
+      const memberships = {'adblock-block'};
+      expect(
+        _domainDecision(config, 'route', 'blocked.ru', memberships),
+        'reject',
+      );
+      expect(
+        _domainDecision(config, 'dns', 'blocked.ru', memberships),
+        'reject',
+      );
+    });
+
+    for (final preset in [
+      TrafficRulePreset.aiViaVpn,
+      TrafficRulePreset.socialViaVpn,
+    ]) {
+      final tag = preset == TrafficRulePreset.aiViaVpn
+          ? 'ai-services'
+          : 'social-services';
+      test('allowed domains preserve ${preset.name} policies', () {
+        final config = _defaultBuilder(
+          subscription,
+          trafficRulePreset: preset,
+          russiaAiServicesPath: fixturePath,
+          russiaSocialServicesPath: fixturePath,
+          adBlockEnabled: true,
+          adBlockBlockRuleSetPath: fixturePath,
+          adBlockAllowRuleSetPath: fixturePath,
+        ).build();
+        final memberships = {'adblock-block', 'adblock-allow', tag};
+        expect(
+          _domainDecision(config, 'route', 'service.example', memberships),
+          'select',
+        );
+        expect(
+          _domainDecision(config, 'dns', 'service.example', memberships),
+          'dns-remote',
+        );
+        expect(
+          _domainDecision(config, 'route', 'ordinary.example', {
+            'adblock-allow',
+          }),
+          'direct',
+        );
+        expect(
+          _domainDecision(config, 'dns', 'ordinary.example', {'adblock-allow'}),
+          'dns-direct',
+        );
+      });
+      test('blocked domains cannot bypass adblock through ${preset.name}', () {
+        final config = _defaultBuilder(
+          subscription,
+          trafficRulePreset: preset,
+          russiaAiServicesPath: fixturePath,
+          russiaSocialServicesPath: fixturePath,
+          adBlockEnabled: true,
+          adBlockBlockRuleSetPath: fixturePath,
+          adBlockAllowRuleSetPath: fixturePath,
+        ).build();
+        final memberships = {'adblock-block', tag};
+        expect(
+          _domainDecision(config, 'route', 'service.example', memberships),
+          'reject',
+        );
+        expect(
+          _domainDecision(config, 'dns', 'service.example', memberships),
+          'reject',
+        );
+      });
+    }
+
+    test('a missing allow artifact keeps ordinary adblock rejection', () {
+      final config = _defaultBuilder(
+        subscription,
+        adBlockEnabled: true,
+        adBlockBlockRuleSetPath: fixturePath,
+      ).build();
+      expect(
+        _domainDecision(config, 'route', 'blocked.example', {'adblock-block'}),
+        'reject',
+      );
+      expect(
+        _domainDecision(config, 'dns', 'blocked.example', {'adblock-block'}),
+        'reject',
+      );
+    });
   });
 
   test(
@@ -3745,6 +3888,140 @@ void main() {
       routeRules.any((rule) => rule['rule_set'] == 'ru-geosite-ru-blocked'),
       isFalse,
     );
+  });
+
+  group('DNS follows the active traffic selector', () {
+    const subscription = Subscription(
+      id: 'dns-selection',
+      name: 'DNS selection',
+      url: '',
+      groups: [
+        SubscriptionGroup(
+          tag: 'group',
+          name: 'Group',
+          outboundTags: ['ordinary', 'hop-b'],
+        ),
+      ],
+      proxyChains: [
+        SubscriptionProxyChain(
+          tag: 'chain-a',
+          name: 'Chain A',
+          targetTag: 'exit',
+          detourTag: 'hop-a',
+        ),
+        SubscriptionProxyChain(
+          tag: 'chain-b',
+          name: 'Chain B',
+          targetTag: 'exit',
+          detourTag: 'hop-b',
+        ),
+      ],
+      outbounds: [
+        Outbound(
+          tag: 'ordinary',
+          name: 'Ordinary',
+          config: {
+            'type': 'socks',
+            'server': 'ordinary.example',
+            'server_port': 1080,
+            'domain_resolver': 'dns-remote',
+          },
+        ),
+        Outbound(
+          tag: 'hop-a',
+          name: 'Hop A',
+          config: {
+            'type': 'hysteria2',
+            'server': 'hop-a.example',
+            'server_port': 443,
+            'password': 'test-password',
+            'domain_resolver': {
+              'server': 'dns-remote',
+              'strategy': 'ipv4_only',
+              'timeout': '5s',
+            },
+          },
+        ),
+        Outbound(
+          tag: 'hop-b',
+          name: 'Hop B',
+          config: {
+            'type': 'socks',
+            'server': 'hop-b.example',
+            'server_port': 1080,
+          },
+        ),
+        Outbound(
+          tag: 'exit',
+          name: 'Exit',
+          config: {
+            'type': 'vless',
+            'server': 'exit.example',
+            'server_port': 443,
+            'uuid': 'test-uuid',
+            'domain_resolver': 'dns-remote',
+          },
+        ),
+      ],
+    );
+
+    for (final selected in ['ordinary', 'group', 'chain-a', 'chain-b']) {
+      test('$selected does not pin DNS to an unrelated chain entry', () {
+        final config = _defaultBuilder(
+          subscription,
+          selectedProxyTag: selected,
+          dnsDirectThroughProxy: true,
+          dnsDirectResolver: 'tls://direct-dns.example',
+          dnsProxyResolver: 'https://proxy-dns.example/dns-query',
+        ).build();
+        final outbounds = (config['outbounds'] as List)
+            .cast<Map<String, dynamic>>();
+        final selector = outbounds.singleWhere(
+          (outbound) => outbound['tag'] == 'select',
+        );
+        final dns = config['dns'] as Map;
+        final servers = (dns['servers'] as List).cast<Map<String, dynamic>>();
+
+        expect(selector['default'], selected);
+        expect(selector['outbounds'], containsAll(['chain-a', 'chain-b']));
+        expect(dns['final'], 'dns-remote');
+        for (final tag in ['dns-remote', 'dns-direct']) {
+          final server = servers.singleWhere((server) => server['tag'] == tag);
+          expect(server['detour'], 'select');
+          expect(server['domain_resolver'], 'dns-local');
+        }
+      });
+    }
+
+    test('hostname entries bootstrap independently of selected DNS', () {
+      final config = _defaultBuilder(
+        subscription,
+        selectedProxyTag: 'chain-a',
+      ).build();
+      final outbounds = (config['outbounds'] as List)
+          .cast<Map<String, dynamic>>();
+      Map<String, dynamic> outbound(String tag) =>
+          outbounds.singleWhere((outbound) => outbound['tag'] == tag);
+
+      expect(outbound('ordinary')['domain_resolver'], 'dns-local');
+      expect(outbound('hop-a')['domain_resolver'], {
+        'server': 'dns-local',
+        'strategy': 'ipv4_only',
+        'timeout': '5s',
+      });
+      expect(outbound('hop-b').containsKey('domain_resolver'), isFalse);
+      expect((config['route'] as Map)['default_domain_resolver'], 'dns-local');
+      for (final chain in ['chain-a', 'chain-b']) {
+        expect(outbound(chain)['server'], 'exit.example');
+        expect(outbound(chain).containsKey('domain_resolver'), isFalse);
+      }
+      expect(outbound('chain-a')['detour'], 'hop-a');
+      expect(outbound('chain-b')['detour'], 'hop-b');
+      expect(
+        subscription.outbounds[1].config['domain_resolver'],
+        containsPair('server', 'dns-remote'),
+      );
+    });
   });
 
   test('DNS builder supports udp tcp tls https and device resolvers', () {
@@ -4203,6 +4480,43 @@ void main() {
     final dns = config['dns'] as Map<String, dynamic>;
     expect(dns.containsKey('strategy'), isFalse);
   });
+}
+
+String _domainDecision(
+  Map<String, dynamic> config,
+  String section,
+  String domain,
+  Set<String> ruleSetMemberships,
+) {
+  bool matches(Map<dynamic, dynamic> rule) {
+    bool matched;
+    if (rule['type'] == 'logical') {
+      final children = (rule['rules'] as List).cast<Map<dynamic, dynamic>>();
+      matched = rule['mode'] == 'and'
+          ? children.every(matches)
+          : children.any(matches);
+    } else if (rule.containsKey('rule_set')) {
+      final tags = rule['rule_set'] is List
+          ? rule['rule_set'] as List
+          : [rule['rule_set']];
+      matched = tags.any(ruleSetMemberships.contains);
+    } else if (rule.containsKey('domain_suffix')) {
+      matched = (rule['domain_suffix'] as List).any(
+        (suffix) => domain == suffix || domain.endsWith('.$suffix'),
+      );
+    } else {
+      matched = false;
+    }
+    return rule['invert'] == true ? !matched : matched;
+  }
+
+  final policy = config[section] as Map<String, dynamic>;
+  for (final rule in (policy['rules'] as List).cast<Map<dynamic, dynamic>>()) {
+    if (matches(rule)) {
+      return (rule['outbound'] ?? rule['server'] ?? rule['action']) as String;
+    }
+  }
+  return policy['final'] as String;
 }
 
 SingboxConfigBuilder _defaultBuilder(

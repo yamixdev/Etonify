@@ -1083,6 +1083,7 @@ interface SingboxHostApi {
   fun prepareStartupUrlTest(runtimeGeneration: Long, coveredTags: List<String>, callback: (Result<Map<String?, Any?>>) -> Unit)
   fun cancelUrlTest(groupTag: String, targetOutboundTag: String, callback: (Result<Unit>) -> Unit)
   fun status(callback: (Result<Map<String?, Any?>>) -> Unit)
+  fun querySelectedOutbounds(callback: (Result<Map<String?, Any?>>) -> Unit)
   fun lookupOutboundExternalInfo(outboundTag: String, callback: (Result<Map<String?, Any?>>) -> Unit)
   fun getNetworkInterfaceState(callback: (Result<NetworkInterfaceStateMessage>) -> Unit)
   fun exportLogs(content: String, suggestedName: String, callback: (Result<String?>) -> Unit)
@@ -1506,6 +1507,24 @@ interface SingboxHostApi {
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             api.status{ result: Result<Map<String?, Any?>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.querySelectedOutbounds$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.querySelectedOutbounds{ result: Result<Map<String?, Any?>> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))
