@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
+import 'package:meow_client/core/proxy_group_country.dart';
 import 'package:meow_client/app/active_proxy_ip_controller.dart';
 import 'package:meow_client/app/automatic_url_test_policy.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
@@ -107,6 +108,7 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
 typedef _PendingLatestPing = ({
   String profileId,
@@ -282,6 +284,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       const <String, AppProxySummary>{};
   Map<String, List<AppProxySummary>> _activeGroupChildrenByTagCache =
       const <String, List<AppProxySummary>>{};
+  Map<String, String> _groupCountryCodesCache = const {};
   int _activeTopLevelProxiesCount = 0;
   bool _fullProxyListCacheReady = false;
   bool _fullProxyListCacheRequested = false;
@@ -537,6 +540,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _activeProfileCache = null;
       _displayProxyCache = null;
       _activeProxiesCache = const [];
+      _groupCountryCodesCache = const {};
       _setActiveGroupChildrenCache(const <String, List<AppProxySummary>>{});
       _activeTopLevelProxiesCount = 0;
       _fullProxyListCacheReady = false;
@@ -573,6 +577,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _activeProfileCache = null;
       _displayProxyCache = null;
       _activeProxiesCache = const [];
+      _groupCountryCodesCache = const {};
       _setActiveGroupChildrenCache(const <String, List<AppProxySummary>>{});
       _activeTopLevelProxiesCount = 0;
       _fullProxyListCacheReady = false;
@@ -600,6 +605,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
             _activeProfileCache = result.activeProfile;
             _displayProxyCache = result.displayProxy;
             _activeProxiesCache = result.activeProxies;
+            _groupCountryCodesCache = result.groupCountryCodes;
             _setActiveGroupChildrenCache(result.groupChildrenByTag);
             _proxySummariesByTagCache = result.summariesByTag;
             _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
@@ -1319,6 +1325,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _activeProfileCache = result.activeProfile;
     _displayProxyCache = result.displayProxy;
     _activeProxiesCache = result.activeProxies;
+    _groupCountryCodesCache = result.groupCountryCodes;
     _setActiveGroupChildrenCache(result.groupChildrenByTag);
     _proxySummariesByTagCache = result.summariesByTag;
     _activeTopLevelProxiesCount = result.totalTopLevelProxyCount;
@@ -1382,6 +1389,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxyCacheBuildCoordinator.cancelPending();
     _displayProxyCache = null;
     _activeProxiesCache = const [];
+    _groupCountryCodesCache = const {};
     _setActiveGroupChildrenCache(const <String, List<AppProxySummary>>{});
     _activeTopLevelProxiesCount = 0;
     _fullProxyListCacheReady = false;
@@ -1575,10 +1583,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final selectedSummary = selectedChild == null
         ? null
         : _displaySummaryForOutbound(selectedChild);
-    final selectedCountry = selectedSummary?.countryCode.trim() ?? '';
-    final groupCountry = _markAllServersRussia
-        ? 'RU'
-        : _normalizeCountryCode(group.country);
     final selectedChildName = selectedSummary?.protocolLabel;
     final hasSelectedChild =
         selectedChildName != null && selectedChildName.isNotEmpty;
@@ -1586,7 +1590,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return AppProxySummary(
       tag: group.tag,
       displayName: group.name.trim().isEmpty ? group.tag : group.name,
-      countryCode: selectedSummary == null ? groupCountry : selectedCountry,
+      countryCode: groupDisplayCountryCode(
+        fallbackCountryCode:
+            _groupCountryCodesCache[group.tag] ?? group.country,
+        selectedCountryCode: selectedSummary?.countryCode,
+        markAllServersRussia: _markAllServersRussia,
+      ),
       type: 'urltest',
       server: '',
       port: 0,
@@ -9657,7 +9666,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
             ? _refreshActiveSubscription
             : null,
       ),
-    ).build(panelMetrics: panelMetrics, tabbed: openProxies != null);
+    ).build(
+      panelMetrics: panelMetrics,
+      tabbed: openProxies != null,
+      navigationBottomInset: FloatingNavigationInsets.of(context),
+    );
   }
 
   Widget _buildProxiesPresentation(
@@ -9752,6 +9765,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         defaultTargetPlatform == TargetPlatform.android &&
         _settings.homeNavigationMode == HomeNavigationMode.tabs) {
       return TabbedHomeShell(
+        settingsBuilder: _buildSettingsPresentation,
+        effectsEnabled: _effectiveProgressiveBlurEnabled,
         homeBuilder: (context, openProxies) =>
             _buildHomePresentation(context, openProxies: openProxies),
         proxiesBuilder: (context, active, back, request) =>

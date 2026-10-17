@@ -393,7 +393,7 @@ void main() {
 
   for (final country in <String?>[null, 'RU']) {
     test(
-      'selected leaf country overrides provider group country ($country)',
+      'known selected leaf overrides provider country, unknown retains fallback ($country)',
       () {
         final profile = Subscription(
           id: 'country',
@@ -423,13 +423,13 @@ void main() {
         );
         expect(
           buildHomeProxyCache(input).displayProxy?.countryCode,
-          country ?? '',
+          country ?? 'DE',
         );
         expect(
           buildProxyCache(
             input,
           ).activeProxies.firstWhere((node) => node.tag == 'auto').countryCode,
-          country ?? '',
+          country ?? 'DE',
         );
       },
     );

@@ -1,5 +1,13 @@
 {
   "homeTabTitle": "Home",
+  "generalAppearanceTitle": "Appearance",
+  "generalAppearanceSummary": "Language, theme, accent and home navigation",
+  "generalStartupTitle": "Startup and controls",
+  "generalStartupSummary": "Automatic connection, VPN tile and vibration",
+  "generalBackgroundTitle": "Background activity",
+  "generalBackgroundSummary": "Battery optimization and subscription updates",
+  "generalPrivacyTitle": "Privacy",
+  "generalPrivacySummary": "Server addresses and device identification",
   "homeNavigationTitle": "Home navigation",
   "homeNavigationPanel": "Sliding panel",
   "homeNavigationTabs": "Bottom tabs",

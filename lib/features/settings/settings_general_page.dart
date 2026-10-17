@@ -56,7 +56,7 @@ class _AccentOption {
   final List<Color>? previewColors;
 }
 
-class SettingsGeneralPage extends StatelessWidget {
+class SettingsGeneralPage extends StatefulWidget {
   const SettingsGeneralPage({
     super.key,
     required this.currentLocaleCode,
@@ -115,6 +115,84 @@ class SettingsGeneralPage extends StatelessWidget {
   final ValueChanged<int> onNotificationTrafficRefreshSecondsChanged;
   final ValueChanged<bool> onHideServerIpChanged;
 
+  @override
+  State<SettingsGeneralPage> createState() => _SettingsGeneralPageState();
+}
+
+class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
+  final _revision = ValueNotifier(0);
+  final _pageStorage = PageStorageBucket();
+  late var _localeCode = widget.currentLocaleCode;
+  late var _themePreference = widget.currentThemePreference;
+  late var _accentColorHex = widget.currentAccentColorHex;
+  late var _hapticEnabled = widget.currentHapticEnabled;
+  late var _statusNotificationEnabled = widget.currentStatusNotificationEnabled;
+  late var _trafficDisplayMode = widget.currentNotificationTrafficDisplayMode;
+  late var _trafficRefreshSeconds =
+      widget.currentNotificationTrafficRefreshSeconds;
+  late var _hideServerIp = widget.currentHideServerIp;
+  late var _sendHwid = widget.currentSendHwidToProviders;
+  late var _autoConnect = widget.currentAutoConnectOnLaunch;
+  late var _homeNavigationMode = widget.currentHomeNavigationMode;
+
+  @override
+  void didUpdateWidget(covariant SettingsGeneralPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentLocaleCode != widget.currentLocaleCode) {
+      _localeCode = widget.currentLocaleCode;
+    }
+    if (oldWidget.currentThemePreference != widget.currentThemePreference) {
+      _themePreference = widget.currentThemePreference;
+    }
+    if (oldWidget.currentAccentColorHex != widget.currentAccentColorHex) {
+      _accentColorHex = widget.currentAccentColorHex;
+    }
+    if (oldWidget.currentHapticEnabled != widget.currentHapticEnabled) {
+      _hapticEnabled = widget.currentHapticEnabled;
+    }
+    if (oldWidget.currentStatusNotificationEnabled !=
+        widget.currentStatusNotificationEnabled) {
+      _statusNotificationEnabled = widget.currentStatusNotificationEnabled;
+    }
+    if (oldWidget.currentNotificationTrafficDisplayMode !=
+        widget.currentNotificationTrafficDisplayMode) {
+      _trafficDisplayMode = widget.currentNotificationTrafficDisplayMode;
+    }
+    if (oldWidget.currentNotificationTrafficRefreshSeconds !=
+        widget.currentNotificationTrafficRefreshSeconds) {
+      _trafficRefreshSeconds = widget.currentNotificationTrafficRefreshSeconds;
+    }
+    if (oldWidget.currentHideServerIp != widget.currentHideServerIp) {
+      _hideServerIp = widget.currentHideServerIp;
+    }
+    if (oldWidget.currentSendHwidToProviders !=
+        widget.currentSendHwidToProviders) {
+      _sendHwid = widget.currentSendHwidToProviders;
+    }
+    if (oldWidget.currentAutoConnectOnLaunch !=
+        widget.currentAutoConnectOnLaunch) {
+      _autoConnect = widget.currentAutoConnectOnLaunch;
+    }
+    if (oldWidget.currentHomeNavigationMode !=
+        widget.currentHomeNavigationMode) {
+      _homeNavigationMode = widget.currentHomeNavigationMode;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revision.value++;
+    });
+  }
+
+  void _update(VoidCallback change) {
+    change();
+    _revision.value++;
+  }
+
+  @override
+  void dispose() {
+    _revision.dispose();
+    super.dispose();
+  }
+
   String _localeName(AppLocalizations l10n, String code) => switch (code) {
     'en' => l10n.languageEnglish,
     'ru' => l10n.languageRussian,
@@ -128,7 +206,7 @@ class SettingsGeneralPage extends StatelessWidget {
       showDragHandle: true,
       builder: (ctx) => _RadioSheet<String>(
         title: l10n.languageSettingTitle,
-        current: currentLocaleCode,
+        current: _localeCode,
         items: [
           RadioChoice(value: 'system', label: l10n.languageSystem),
           RadioChoice(value: 'en', label: l10n.languageEnglish),
@@ -136,220 +214,333 @@ class SettingsGeneralPage extends StatelessWidget {
         ],
       ),
     );
-    if (result != null) onLocaleChanged(result);
+    if (!mounted || result == null) return;
+    _update(() => _localeCode = result);
+    widget.onLocaleChanged(result);
   }
+
+  Future<void> _openSection(WidgetBuilder builder) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => ValueListenableBuilder<int>(
+            valueListenable: _revision,
+            builder: (context, _, child) => builder(context),
+          ),
+        ),
+      );
+
+  Widget _sectionPage(
+    BuildContext context,
+    String section,
+    String title,
+    List<Widget> children,
+  ) {
+    return ProgressiveBlurScaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Theme(
+        data: settingsTileTheme(context),
+        child: PageStorage(
+          bucket: _pageStorage,
+          child: ListView(
+            key: PageStorageKey('general-$section-scroll'),
+            padding: EdgeInsets.fromLTRB(
+              0,
+              progressiveHeaderTopPadding(context, 12),
+              0,
+              appBottomSafePadding(context, 24),
+            ),
+            children: children,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _group(List<Widget> children) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: SettingsTileGroup(children: children),
+  );
+
+  Widget _entry(
+    BuildContext context, {
+    required String key,
+    required IconData icon,
+    required String title,
+    String? summary,
+    required WidgetBuilder builder,
+  }) => ListTile(
+    key: ValueKey(key),
+    leading: SettingsLeadingIcon(
+      icon: icon,
+      color: Theme.of(context).colorScheme.primary,
+    ),
+    title: Text(title),
+    subtitle: summary == null ? null : Text(summary),
+    trailing: const Icon(Icons.chevron_right_rounded),
+    onTap: () => _openSection(builder),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final cs = theme.colorScheme;
-    return ProgressiveBlurScaffold(
-      appBar: AppBar(title: Text(l10n.generalSectionTitle)),
-      body: Theme(
-        data: settingsTileTheme(context),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            0,
-            progressiveHeaderTopPadding(context, 12),
-            0,
-            appBottomSafePadding(context, 24),
+    return _sectionPage(context, 'hub', l10n.generalSectionTitle, [
+      _group([
+        _entry(
+          context,
+          key: 'general-appearance-entry',
+          icon: Icons.palette_outlined,
+          title: l10n.generalAppearanceTitle,
+          summary: l10n.generalAppearanceSummary,
+          builder: _appearance,
+        ),
+        _entry(
+          context,
+          key: 'general-startup-entry',
+          icon: Icons.power_settings_new_rounded,
+          title: l10n.generalStartupTitle,
+          summary: l10n.generalStartupSummary,
+          builder: _startup,
+        ),
+        _entry(
+          context,
+          key: 'notification-settings-entry',
+          icon: Icons.notifications_none_rounded,
+          title: l10n.notificationSettingsTitle,
+          builder: _notifications,
+        ),
+        _entry(
+          context,
+          key: 'general-background-entry',
+          icon: Icons.sync_rounded,
+          title: l10n.generalBackgroundTitle,
+          summary: l10n.generalBackgroundSummary,
+          builder: _background,
+        ),
+        _entry(
+          context,
+          key: 'general-privacy-entry',
+          icon: Icons.shield_outlined,
+          title: l10n.generalPrivacyTitle,
+          summary: l10n.generalPrivacySummary,
+          builder: _privacy,
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _appearance(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+    return _sectionPage(context, 'appearance', l10n.generalAppearanceTitle, [
+      _group([
+        ListTile(
+          leading: SettingsLeadingIcon(
+            icon: Icons.language_rounded,
+            color: cs.primary,
           ),
+          title: Text(l10n.languageSettingTitle),
+          subtitle: Text(_localeName(l10n, _localeCode)),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => _showLanguagePicker(context),
+        ),
+      ]),
+
+      const Gap(settingsSectionGap),
+
+      // ── Appearance — Theme ──
+      _SectionLabel(label: l10n.appearanceTitle),
+      const Gap(settingsSectionLabelGap),
+      SizedBox(
+        height: 128 + (MediaQuery.textScalerOf(context).scale(14) - 14) * 3,
+        child: ListView(
+          key: const PageStorageKey('general-theme-previews-scroll'),
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           children: [
-            // ── Language ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SettingsTileGroup(
-                children: [
-                  ListTile(
-                    leading: SettingsLeadingIcon(
-                      icon: Icons.language_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(child: Text(l10n.languageSettingTitle)),
-                        const Gap(12),
-                        Text(
-                          _localeName(l10n, currentLocaleCode),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => _showLanguagePicker(context),
-                  ),
-                ],
-              ),
+            _ThemePreviewCard(
+              label: l10n.themeSystem,
+              selected: _themePreference == AppThemePreference.system,
+              onTap: () => _setTheme(AppThemePreference.system),
+              child: const _SystemPreview(),
             ),
-
-            const Gap(settingsSectionGap),
-
-            // ── Appearance — Theme ──
-            _SectionLabel(label: l10n.appearanceTitle),
-            const Gap(settingsSectionLabelGap),
-            SizedBox(
-              height: 128,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  _ThemePreviewCard(
-                    label: l10n.themeSystem,
-                    selected:
-                        currentThemePreference == AppThemePreference.system,
-                    onTap: () =>
-                        onThemePreferenceChanged(AppThemePreference.system),
-                    child: const _SystemPreview(),
-                  ),
-                  const Gap(12),
-                  _ThemePreviewCard(
-                    label: l10n.themeLight,
-                    selected:
-                        currentThemePreference == AppThemePreference.light,
-                    onTap: () =>
-                        onThemePreferenceChanged(AppThemePreference.light),
-                    child: const _MockUI(isDark: false),
-                  ),
-                  const Gap(12),
-                  _ThemePreviewCard(
-                    label: l10n.themeDark,
-                    selected: currentThemePreference == AppThemePreference.dark,
-                    onTap: () =>
-                        onThemePreferenceChanged(AppThemePreference.dark),
-                    child: const _MockUI(isDark: true),
-                  ),
-                  const Gap(12),
-                  _ThemePreviewCard(
-                    label: l10n.themeAmoled,
-                    selected:
-                        currentThemePreference == AppThemePreference.amoled,
-                    onTap: () =>
-                        onThemePreferenceChanged(AppThemePreference.amoled),
-                    child: const _MockUI(isDark: true, isAmoled: true),
-                  ),
-                ],
-              ),
+            const Gap(12),
+            _ThemePreviewCard(
+              label: l10n.themeLight,
+              selected: _themePreference == AppThemePreference.light,
+              onTap: () => _setTheme(AppThemePreference.light),
+              child: const _MockUI(isDark: false),
             ),
-
-            const Gap(settingsSectionGap),
-
-            // ── Accent color (horizontal scroll) ──
-            Builder(
-              builder: (context) {
-                final accentOptions = _buildAccentOptions(dynamicLightScheme);
-                return SizedBox(
-                  height: 48,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: accentOptions.length,
-                    separatorBuilder: (context, index) => const Gap(12),
-                    itemBuilder: (context, index) {
-                      final option = accentOptions[index];
-                      return _AccentSwatch(
-                        color: option.color,
-                        previewColors: option.previewColors,
-                        selected: currentAccentColorHex == option.hex,
-                        onTap: () => onAccentColorChanged(option.hex),
-                      );
-                    },
-                  ),
-                );
-              },
+            const Gap(12),
+            _ThemePreviewCard(
+              label: l10n.themeDark,
+              selected: _themePreference == AppThemePreference.dark,
+              onTap: () => _setTheme(AppThemePreference.dark),
+              child: const _MockUI(isDark: true),
             ),
-
-            const Gap(settingsSectionGap),
-
-            // ── Everyday controls ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SettingsTileGroup(
-                children: [
-                  _AutoConnectTile(
-                    value: currentAutoConnectOnLaunch,
-                    onChanged: onAutoConnectOnLaunchChanged,
-                  ),
-                  if (onHomeNavigationModeChanged != null)
-                    _HomeNavigationTile(
-                      value: currentHomeNavigationMode,
-                      onChanged: onHomeNavigationModeChanged!,
-                    ),
-                  if (showBatteryOptimizationSettings)
-                    const BatteryOptimizationTile(),
-                  if (showQuickSettingsTileAction)
-                    ListTile(
-                      key: const ValueKey('add-quick-settings-tile'),
-                      leading: SettingsLeadingIcon(
-                        icon: Icons.dashboard_customize_rounded,
-                        color: cs.primary,
-                      ),
-                      title: Text(l10n.quickSettingsTileTitle),
-                      subtitle: Text(l10n.quickSettingsTileDescription),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: onAddQuickSettingsTile,
-                    ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.vibration_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.hapticTitle),
-                    value: currentHapticEnabled,
-                    onChanged: onHapticChanged,
-                  ),
-                  ListTile(
-                    key: const ValueKey('notification-settings-entry'),
-                    leading: SettingsLeadingIcon(
-                      icon: Icons.notifications_none_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.notificationSettingsTitle),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (context) => SettingsNotificationPage(
-                          currentStatusNotificationEnabled:
-                              currentStatusNotificationEnabled,
-                          currentTrafficDisplayMode:
-                              currentNotificationTrafficDisplayMode,
-                          currentTrafficRefreshSeconds:
-                              currentNotificationTrafficRefreshSeconds,
-                          onStatusNotificationChanged:
-                              onStatusNotificationChanged,
-                          onTrafficDisplayModeChanged:
-                              onNotificationTrafficDisplayModeChanged,
-                          onTrafficRefreshSecondsChanged:
-                              onNotificationTrafficRefreshSecondsChanged,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SwitchListTile(
-                    secondary: SettingsLeadingIcon(
-                      icon: Icons.visibility_off_rounded,
-                      color: cs.primary,
-                    ),
-                    title: Text(l10n.hideServerIpTitle),
-                    value: currentHideServerIp,
-                    onChanged: onHideServerIpChanged,
-                  ),
-                  _HwidSharingTile(
-                    value: currentSendHwidToProviders,
-                    onChanged: onSendHwidToProvidersChanged,
-                  ),
-                  const SubscriptionBackgroundTile(),
-                ],
-              ),
+            const Gap(12),
+            _ThemePreviewCard(
+              label: l10n.themeAmoled,
+              selected: _themePreference == AppThemePreference.amoled,
+              onTap: () => _setTheme(AppThemePreference.amoled),
+              child: const _MockUI(isDark: true, isAmoled: true),
             ),
           ],
         ),
       ),
-    );
+
+      const Gap(settingsSectionGap),
+
+      // ── Accent color (horizontal scroll) ──
+      Builder(
+        builder: (context) {
+          final accentOptions = _buildAccentOptions(widget.dynamicLightScheme);
+          return SizedBox(
+            height: 48,
+            child: ListView.separated(
+              key: const PageStorageKey('general-accent-colors-scroll'),
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: accentOptions.length,
+              separatorBuilder: (context, index) => const Gap(12),
+              itemBuilder: (context, index) {
+                final option = accentOptions[index];
+                return _AccentSwatch(
+                  color: option.color,
+                  previewColors: option.previewColors,
+                  selected: _accentColorHex == option.hex,
+                  onTap: () {
+                    _update(() => _accentColorHex = option.hex);
+                    widget.onAccentColorChanged(option.hex);
+                  },
+                );
+              },
+            ),
+          );
+        },
+      ),
+
+      const Gap(settingsSectionGap),
+
+      if (widget.onHomeNavigationModeChanged != null)
+        _group([
+          _HomeNavigationTile(
+            value: _homeNavigationMode,
+            onChanged: (value) {
+              _update(() => _homeNavigationMode = value);
+              widget.onHomeNavigationModeChanged!(value);
+            },
+          ),
+        ]),
+    ]);
+  }
+
+  void _setTheme(AppThemePreference value) {
+    _update(() => _themePreference = value);
+    widget.onThemePreferenceChanged(value);
+  }
+
+  Widget _startup(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final cs = Theme.of(context).colorScheme;
+    return _sectionPage(context, 'startup', l10n.generalStartupTitle, [
+      _group([
+        _AutoConnectTile(
+          value: _autoConnect,
+          onChanged: widget.onAutoConnectOnLaunchChanged == null
+              ? null
+              : (value) {
+                  _update(() => _autoConnect = value);
+                  widget.onAutoConnectOnLaunchChanged!(value);
+                },
+        ),
+        if (widget.showQuickSettingsTileAction)
+          ListTile(
+            key: const ValueKey('add-quick-settings-tile'),
+            leading: SettingsLeadingIcon(
+              icon: Icons.dashboard_customize_rounded,
+              color: cs.primary,
+            ),
+            title: Text(l10n.quickSettingsTileTitle),
+            subtitle: Text(l10n.quickSettingsTileDescription),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: widget.onAddQuickSettingsTile,
+          ),
+        SwitchListTile(
+          secondary: SettingsLeadingIcon(
+            icon: Icons.vibration_rounded,
+            color: cs.primary,
+          ),
+          title: Text(l10n.hapticTitle),
+          value: _hapticEnabled,
+          onChanged: (value) {
+            _update(() => _hapticEnabled = value);
+            widget.onHapticChanged(value);
+          },
+        ),
+      ]),
+    ]);
+  }
+
+  Widget _notifications(BuildContext context) => SettingsNotificationPage(
+    currentStatusNotificationEnabled: _statusNotificationEnabled,
+    currentTrafficDisplayMode: _trafficDisplayMode,
+    currentTrafficRefreshSeconds: _trafficRefreshSeconds,
+    onStatusNotificationChanged: (value) {
+      _update(() => _statusNotificationEnabled = value);
+      widget.onStatusNotificationChanged(value);
+    },
+    onTrafficDisplayModeChanged: (value) {
+      _update(() => _trafficDisplayMode = value);
+      widget.onNotificationTrafficDisplayModeChanged(value);
+    },
+    onTrafficRefreshSecondsChanged: (value) {
+      _update(() => _trafficRefreshSeconds = value);
+      widget.onNotificationTrafficRefreshSecondsChanged(value);
+    },
+  );
+
+  Widget _background(BuildContext context) => _sectionPage(
+    context,
+    'background',
+    AppLocalizations.of(context).generalBackgroundTitle,
+    [
+      _group([
+        if (widget.showBatteryOptimizationSettings)
+          const BatteryOptimizationTile(),
+        const SubscriptionBackgroundTile(),
+      ]),
+    ],
+  );
+
+  Widget _privacy(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final cs = Theme.of(context).colorScheme;
+    return _sectionPage(context, 'privacy', l10n.generalPrivacyTitle, [
+      _group([
+        SwitchListTile(
+          key: const ValueKey('hide-server-ip'),
+          secondary: SettingsLeadingIcon(
+            icon: Icons.visibility_off_rounded,
+            color: cs.primary,
+          ),
+          title: Text(l10n.hideServerIpTitle),
+          value: _hideServerIp,
+          onChanged: (value) {
+            _update(() => _hideServerIp = value);
+            widget.onHideServerIpChanged(value);
+          },
+        ),
+        _HwidSharingTile(
+          value: _sendHwid,
+          onChanged: widget.onSendHwidToProvidersChanged == null
+              ? null
+              : (value) {
+                  _update(() => _sendHwid = value);
+                  widget.onSendHwidToProvidersChanged!(value);
+                },
+        ),
+      ]),
+    ]);
   }
 }
 

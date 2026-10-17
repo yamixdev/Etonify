@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/outbound_location.dart';
+import 'package:meow_client/core/proxy_group_country.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
@@ -258,6 +259,7 @@ class ProxyCacheBuildResult {
     this.unsupportedWireGuardCount = 0,
     this.workerElapsed = Duration.zero,
     this.concreteServerTags = const <String>{},
+    this.groupCountryCodes = const <String, String>{},
   });
 
   final AppProfileSummary? activeProfile;
@@ -272,6 +274,7 @@ class ProxyCacheBuildResult {
   final int unsupportedWireGuardCount;
   final Duration workerElapsed;
   final Set<String> concreteServerTags;
+  final Map<String, String> groupCountryCodes;
 
   ProxyCacheBuildResult withWorkerElapsed(Duration elapsed) =>
       ProxyCacheBuildResult(
@@ -285,6 +288,7 @@ class ProxyCacheBuildResult {
         unsupportedWireGuardCount: unsupportedWireGuardCount,
         workerElapsed: elapsed,
         concreteServerTags: concreteServerTags,
+        groupCountryCodes: groupCountryCodes,
       );
 }
 
@@ -555,6 +559,10 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
       .where((outbound) => isSupportedOutboundConfig(outbound.config))
       .toList(growable: false);
   final catalog = ProxySelectionCatalog(visibleOutbounds, subscription.groups);
+  final groupCountryCodes = buildProxyGroupCountryCatalog(
+    visibleOutbounds,
+    subscription.groups,
+  );
   final selectableOutbounds = catalog.standaloneOutbounds;
   final concreteTags = subscription.concreteServerTags;
   final activeProfile = _buildProfileSummary(subscription, concreteTags.length);
@@ -564,6 +572,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     visibleOutbounds,
     selectableOutbounds,
     concreteTags,
+    groupCountryCodes,
   );
   return ProxyCacheBuildResult(
     activeProfile: activeProfile,
@@ -574,6 +583,7 @@ ProxyCacheBuildResult buildHomeProxyCache(ProxyCacheBuildInput input) {
     includesFullProxyList: false,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
     concreteServerTags: concreteTags,
+    groupCountryCodes: groupCountryCodes,
   );
 }
 
@@ -583,6 +593,7 @@ AppProxySummary _buildHomeDisplayProxy(
   List<Outbound> visibleOutbounds,
   List<Outbound> selectableOutbounds,
   Set<String> concreteTags,
+  Map<String, String> groupCountryCodes,
 ) {
   final selectedTag = input.selectedProxyTag.trim();
   final outboundByTag = <String, Outbound>{
@@ -624,13 +635,14 @@ AppProxySummary _buildHomeDisplayProxy(
     final childName = child?.protocolLabel;
     final childCountry = child?.countryCode ?? '';
     final count = groupLeafTags(group.tag).length;
-    final groupCountry = input.markAllServersRussia
-        ? 'RU'
-        : _normalizeCountryCode(group.country);
     return AppProxySummary(
       tag: group.tag,
       displayName: group.name.trim().isEmpty ? group.tag : group.name,
-      countryCode: child == null ? groupCountry : childCountry,
+      countryCode: groupDisplayCountryCode(
+        fallbackCountryCode: groupCountryCodes[group.tag],
+        selectedCountryCode: childCountry,
+        markAllServersRussia: input.markAllServersRussia,
+      ),
       type: 'urltest',
       server: '',
       port: 0,
@@ -817,6 +829,10 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
   final groupsByTag = {
     for (final group in subscription.groups) group.tag: group,
   };
+  final groupCountryCodes = buildProxyGroupCountryCatalog(
+    visibleOutbounds,
+    subscription.groups,
+  );
   final outboundByTag = {
     for (final outbound in visibleOutbounds) outbound.tag: outbound,
   };
@@ -891,6 +907,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
       immediateTags,
       proxySummariesByTag,
       leafTags: leaves,
+      fallbackCountryCode: groupCountryCodes[tag] ?? '',
     );
     buildingGroups.remove(tag);
     builtGroups[tag] = groupSummary;
@@ -992,6 +1009,7 @@ ProxyCacheBuildResult buildProxyCache(ProxyCacheBuildInput input) {
     totalTopLevelProxyCount: topLevelSummaries.length,
     unsupportedWireGuardCount: unsupportedWireGuardCount,
     concreteServerTags: concreteTags,
+    groupCountryCodes: groupCountryCodes,
   );
 }
 
@@ -1598,6 +1616,7 @@ AppProxySummary _buildGroupProxySummary(
   List<String> visibleChildTags,
   Map<String, AppProxySummary> childSummariesByTag, {
   required List<String> leafTags,
+  required String fallbackCountryCode,
 }) {
   final runtimeSelectedTag = resolveRuntimeGroupLeaf(
     {
@@ -1616,9 +1635,6 @@ AppProxySummary _buildGroupProxySummary(
       ? null
       : childSummariesByTag[selectedChildTag];
   final selectedCountry = selectedChild?.countryCode.trim() ?? '';
-  final groupCountry = input.markAllServersRussia
-      ? 'RU'
-      : _normalizeCountryCode(group.country);
   final selectedChildName = selectedChild?.protocolLabel;
   final hasSelectedChild =
       selectedChildName != null && selectedChildName.isNotEmpty;
@@ -1629,7 +1645,11 @@ AppProxySummary _buildGroupProxySummary(
   return AppProxySummary(
     tag: group.tag,
     displayName: group.name.trim().isEmpty ? group.tag : group.name,
-    countryCode: selectedChild == null ? groupCountry : selectedCountry,
+    countryCode: groupDisplayCountryCode(
+      fallbackCountryCode: fallbackCountryCode,
+      selectedCountryCode: selectedCountry,
+      markAllServersRussia: input.markAllServersRussia,
+    ),
     type: 'urltest',
     server: '',
     port: 0,

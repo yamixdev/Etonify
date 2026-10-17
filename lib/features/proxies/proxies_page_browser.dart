@@ -149,7 +149,12 @@ extension _ProxyBrowser on _ProxiesPageState {
             addAutomaticKeepAlives: false,
             addRepaintBoundaries: true,
             findChildIndexCallback: (key) => _visibleEntryIndexes[key],
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+            padding: EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              20 + FloatingNavigationInsets.of(context),
+            ),
             itemCount: entries.length,
             itemBuilder: (context, index) => KeyedSubtree(
               key: entries[index].key,

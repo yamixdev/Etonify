@@ -20,6 +20,7 @@ import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+import 'package:meow_client/widgets/floating_navigation_insets.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
@@ -644,6 +645,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     if (oldWidget.profileId != widget.profileId ||
         oldWidget.selectedTag != widget.selectedTag ||
+        oldWidget.activeProxy?.tag != widget.activeProxy?.tag ||
         oldWidget.isProxyChainTag != widget.isProxyChainTag ||
         oldWidget.runtimeStates != widget.runtimeStates) {
       _proxyDataRefreshPending = false;
@@ -886,6 +888,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
           proxies: proxies,
           sort: _sort,
           selectedTag: _presentationSelectedTag,
+          activeProxy: widget.activeProxy,
           canAddChain: _canAddChain,
           searchQuery: widget.browserMode ? _browserQuery : '',
           groupMembers: widget.browserMode && _browserPath.isNotEmpty,
@@ -913,6 +916,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
         final proxies = _presentationProxies;
         final sort = _sort;
         final selectedTag = _presentationSelectedTag;
+        final activeProxy = widget.activeProxy;
         final canAddChain = _canAddChain;
         final query = widget.browserMode ? _browserQuery : '';
         final groupMembers = widget.browserMode && _browserPath.isNotEmpty;
@@ -940,6 +944,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
             proxies: proxies,
             sort: sort,
             selectedTag: selectedTag,
+            activeProxy: activeProxy,
             canAddChain: canAddChain,
             searchQuery: query,
             groupMembers: groupMembers,
@@ -988,6 +993,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
   bool _applyPresentation(ProxyListPresentation result) {
     final changed =
         !listEquals(_visibleItems, result.items) ||
+        _visibleEntriesCache?.firstOrNull?.proxy !=
+            result.entries.firstOrNull?.proxy ||
         _visibleEntriesSelectedTagCache != _presentationSelectedTag ||
         _visibleEntriesCanAddChainCache != _canAddChain;
     _visibleItems = result.items;
@@ -1164,7 +1171,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
       items,
       _sort,
       keepPinnedFirst: keepLowestFirst,
-      prioritizedTag: widget.selectedTag,
       runtimeStateFor: widget.runtimeStates?.valueFor,
     );
   }
@@ -1528,6 +1534,74 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required _ProxyListEntry entry,
   }) {
     switch (entry.type) {
+      case _ProxyListEntryType.currentChoice:
+        final proxy = widget.activeProxy ?? entry.proxy!;
+        Widget buildChoice(ProxyRuntimeVisualState? state) {
+          final current = state?.presentation ?? proxy;
+          return SizedBox(
+            height: _proxyRowExtent(context),
+            child: Container(
+              key: const ValueKey('proxy-current-choice'),
+              margin: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  CountryFlagBadge(countryCode: current.countryCode, size: 34),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.selectedProxyLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        Text(
+                          _localizedProxyTitle(l10n, current),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          _localizedProxySubtitle(l10n, current),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final states = widget.runtimeStates;
+        return states == null
+            ? buildChoice(null)
+            : ValueListenableBuilder<ProxyRuntimeVisualState?>(
+                valueListenable: states.listenableFor(proxy.tag),
+                builder: (context, state, _) => buildChoice(state),
+              );
       case _ProxyListEntryType.tile:
         final proxy = entry.proxy!;
         final identity = _ProxyTileIdentity(proxy: proxy);

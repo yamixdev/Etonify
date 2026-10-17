@@ -7,6 +7,73 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 
 void main() {
+  test('selection leaves source and sorted presentation rows in place', () {
+    final proxies = [
+      _proxy('b', 'Beta', latency: 20, fresh: true),
+      _proxy('a', 'Alpha', latency: 10, fresh: true),
+      _proxy('c', 'Charlie', latency: 30, fresh: true),
+    ];
+    for (final sort in ProxySort.values) {
+      ProxyListPresentation build(String selected) =>
+          buildProxyListPresentation(
+            ProxyListPresentationInput(
+              proxies: proxies,
+              sort: sort,
+              selectedTag: selected,
+            ),
+          );
+      final before = build('a');
+      final after = build('c');
+      final expected = sort == ProxySort.source || sort == ProxySort.country
+          ? ['b', 'a', 'c']
+          : ['a', 'b', 'c'];
+      expect(before.items.map((p) => p.tag), expected, reason: sort.name);
+      expect(after.items.map((p) => p.tag), expected, reason: sort.name);
+      expect(after.entries.map((e) => e.key), before.entries.map((e) => e.key));
+      expect(after.indexes, before.indexes);
+    }
+  });
+
+  test('group selection never promotes a member above its natural order', () {
+    final result = buildProxyListPresentation(
+      ProxyListPresentationInput(
+        proxies: [_proxy('a', 'Alpha'), _proxy('b', 'Beta')],
+        sort: ProxySort.name,
+        selectedTag: 'b',
+        groupMembers: true,
+      ),
+    );
+    expect(result.items.map((p) => p.tag), ['a', 'b']);
+    expect(result.entries.map((e) => e.proxy!.tag), ['a', 'b']);
+  });
+
+  test(
+    'working filter is independent of selection and header is not a source row',
+    () {
+      final proxies = [
+        _proxy('good', 'Good', latency: 10, fresh: true),
+        _proxy('failed', 'Failed', unavailable: true),
+      ];
+      for (final selected in ['good', 'failed']) {
+        final result = buildProxyListPresentation(
+          ProxyListPresentationInput(
+            proxies: proxies,
+            sort: ProxySort.working,
+            selectedTag: selected,
+          ),
+        );
+        expect(result.items.map((proxy) => proxy.tag), ['good']);
+        expect(
+          result.entries
+              .where((entry) => entry.type == ProxyListEntryType.tile)
+              .map((entry) => entry.proxy!.tag),
+          ['good'],
+        );
+        expect(result.entries.first.type, ProxyListEntryType.currentChoice);
+        expect(result.entries.first.proxy!.tag, selected);
+      }
+    },
+  );
   test(
     'browser search filters selected roots and never exposes nested leaves',
     () {
@@ -82,7 +149,7 @@ void main() {
     },
   );
   test(
-    'background presentation filters leaves, pins selection and indexes rows',
+    'background presentation filters leaves and retains selected source row',
     () async {
       final result = await buildProxyListPresentationInBackground(
         ProxyListPresentationInput(
@@ -99,16 +166,17 @@ void main() {
         ),
       );
       expect(result.items.map((proxy) => proxy.tag), [
-        'selected',
         lowestProxyTag,
         'fast',
+        'selected',
       ]);
       expect(result.entries.map((entry) => entry.key), [
-        const ValueKey('proxy-row-selected'),
+        const ValueKey('proxy-current-choice-row'),
         const ValueKey('proxy-row-lowest'),
         const ValueKey('proxy-add-chain-row'),
         const ValueKey('proxy-divider-row'),
         const ValueKey('proxy-row-fast'),
+        const ValueKey('proxy-row-selected'),
       ]);
       expect(result.indexes[const ValueKey('proxy-row-fast')], 4);
     },
@@ -131,8 +199,12 @@ void main() {
           ),
         );
         expect(result.items.length, 4505);
-        expect(result.entries.first.proxy?.tag, 'node-4504');
-        expect(result.indexes[const ValueKey('proxy-row-node-4504')], 0);
+        expect(result.entries.first.type, ProxyListEntryType.currentChoice);
+        expect(result.entries[1].proxy?.tag, 'node-0');
+        expect(
+          result.indexes[const ValueKey('proxy-row-node-4504')],
+          greaterThan(0),
+        );
         expect(turns, greaterThan(0));
       } finally {
         timer.cancel();

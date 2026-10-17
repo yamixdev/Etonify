@@ -431,7 +431,10 @@ void main() {
       isEmpty,
     );
     for (final title in ['LTE Sweden', 'LTE Netherlands', 'LTE Germany']) {
-      expect(find.text(title), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(ProxyTile), matching: find.text(title)),
+        findsOneWidget,
+      );
     }
     expect(find.textContaining('cand-'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('proxy-open-group-auto-nl')));

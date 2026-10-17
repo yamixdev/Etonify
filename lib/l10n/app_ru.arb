@@ -1,5 +1,13 @@
 {
   "homeTabTitle": "Главная",
+  "generalAppearanceTitle": "Оформление",
+  "generalAppearanceSummary": "Язык, тема, акцент и вид главного экрана",
+  "generalStartupTitle": "Запуск и управление",
+  "generalStartupSummary": "Автоподключение, VPN-плитка и вибрация",
+  "generalBackgroundTitle": "Фоновая работа",
+  "generalBackgroundSummary": "Оптимизация батареи и обновление подписок",
+  "generalPrivacyTitle": "Приватность",
+  "generalPrivacySummary": "Адреса серверов и идентификация устройства",
   "homeNavigationTitle": "Навигация на главной",
   "homeNavigationPanel": "Выдвижная панель",
   "homeNavigationTabs": "Нижние вкладки",

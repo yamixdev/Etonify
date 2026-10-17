@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
+import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -142,12 +143,12 @@ class SettingsPage extends StatelessWidget {
       ),
       body: ListView(
         key: const ValueKey('settings-destinations'),
-        physics: const NeverScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           settingsScreenPadding.left,
           progressiveHeaderTopPadding(context, settingsScreenPadding.top),
           settingsScreenPadding.right,
-          appBottomSafePadding(context, settingsScreenPadding.bottom),
+          appBottomSafePadding(context, settingsScreenPadding.bottom) +
+              FloatingNavigationInsets.of(context),
         ),
         children: [
           SettingsTileGroup(

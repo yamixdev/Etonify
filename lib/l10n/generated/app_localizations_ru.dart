@@ -12,6 +12,33 @@ class AppLocalizationsRu extends AppLocalizations {
   String get homeTabTitle => 'Главная';
 
   @override
+  String get generalAppearanceTitle => 'Оформление';
+
+  @override
+  String get generalAppearanceSummary =>
+      'Язык, тема, акцент и вид главного экрана';
+
+  @override
+  String get generalStartupTitle => 'Запуск и управление';
+
+  @override
+  String get generalStartupSummary => 'Автоподключение, VPN-плитка и вибрация';
+
+  @override
+  String get generalBackgroundTitle => 'Фоновая работа';
+
+  @override
+  String get generalBackgroundSummary =>
+      'Оптимизация батареи и обновление подписок';
+
+  @override
+  String get generalPrivacyTitle => 'Приватность';
+
+  @override
+  String get generalPrivacySummary =>
+      'Адреса серверов и идентификация устройства';
+
+  @override
   String get homeNavigationTitle => 'Навигация на главной';
 
   @override

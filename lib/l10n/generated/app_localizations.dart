@@ -104,6 +104,54 @@ abstract class AppLocalizations {
   /// **'Home'**
   String get homeTabTitle;
 
+  /// No description provided for @generalAppearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get generalAppearanceTitle;
+
+  /// No description provided for @generalAppearanceSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Language, theme, accent and home navigation'**
+  String get generalAppearanceSummary;
+
+  /// No description provided for @generalStartupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Startup and controls'**
+  String get generalStartupTitle;
+
+  /// No description provided for @generalStartupSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic connection, VPN tile and vibration'**
+  String get generalStartupSummary;
+
+  /// No description provided for @generalBackgroundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background activity'**
+  String get generalBackgroundTitle;
+
+  /// No description provided for @generalBackgroundSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimization and subscription updates'**
+  String get generalBackgroundSummary;
+
+  /// No description provided for @generalPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get generalPrivacyTitle;
+
+  /// No description provided for @generalPrivacySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Server addresses and device identification'**
+  String get generalPrivacySummary;
+
   /// No description provided for @homeNavigationTitle.
   ///
   /// In en, this message translates to:

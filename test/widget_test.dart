@@ -50,10 +50,18 @@ void main() {
       expect(find.text('No servers found'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.settings_rounded), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.settings_rounded));
+      expect(
+        find.descendant(
+          of: find.byType(HomePage),
+          matching: find.byIcon(Icons.settings_rounded),
+        ),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const ValueKey('settings-tab')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('General'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('general-appearance-entry')));
       await tester.pumpAndSettle();
       final navigation = find.byKey(const ValueKey('home-navigation-setting'));
       await tester.ensureVisible(navigation);
@@ -614,7 +622,11 @@ void main() {
         ),
       );
 
-      expect(find.text('Lowest'), findsOneWidget);
+      final lowestRow = find.byKey(ValueKey('proxy-row-$lowestProxyTag'));
+      expect(
+        find.descendant(of: lowestRow, matching: find.text('Lowest')),
+        findsOneWidget,
+      );
       expect(find.text('Lowest · open access'), findsNothing);
       expect(find.text('Lowest · unrestricted'), findsNothing);
       expect(find.text('chain · Germany'), findsOneWidget);
@@ -628,7 +640,9 @@ void main() {
       expect(dividerLine, findsOneWidget);
       expect(tester.getSize(dividerLine).height, 1);
 
-      await tester.tap(find.text('Lowest'));
+      await tester.tap(
+        find.descendant(of: lowestRow, matching: find.text('Lowest')),
+      );
       await tester.pump();
       expect(selectedTag, lowestProxyTag);
     },
@@ -816,53 +830,83 @@ void main() {
     expect(stillVisible!(), isFalse);
   });
 
-  testWidgets('selected proxy stays at the top when latency sorting changes', (
-    tester,
-  ) async {
-    final proxies = <AppProxySummary>[
-      _proxy('fast', 'Fast server', latency: 10),
-      _proxy('medium', 'Medium server', latency: 80),
-      _proxy('slow', 'Selected slow server', latency: 900),
-    ];
+  testWidgets(
+    'current choice is above catalog without reordering selected source',
+    (tester) async {
+      final proxies = <AppProxySummary>[
+        _proxy('fast', 'Fast server', latency: 10),
+        _proxy('medium', 'Medium server', latency: 80),
+        _proxy('slow', 'Selected slow server', latency: 900),
+      ];
 
-    Future<void> pumpWithSelection(String selectedTag) {
-      return tester.pumpWidget(
-        MaterialApp(
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: SizedBox(
-              height: 720,
-              child: ProxiesPage(
-                proxies: proxies,
-                selectedTag: selectedTag,
-                connected: false,
-                initialSort: ProxySort.latency,
-                progressiveBlurEnabled: false,
-                onSelected: (_) {},
-                onUrlTest: () async {},
-                embedded: true,
-                sheetAtMaxExtent: true,
-                sheetExtent: 1,
+      Future<void> pumpWithSelection(String selectedTag) {
+        return tester.pumpWidget(
+          MaterialApp(
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: SizedBox(
+                height: 720,
+                child: ProxiesPage(
+                  proxies: proxies,
+                  selectedTag: selectedTag,
+                  connected: false,
+                  initialSort: ProxySort.latency,
+                  progressiveBlurEnabled: false,
+                  onSelected: (_) {},
+                  onUrlTest: () async {},
+                  embedded: true,
+                  sheetAtMaxExtent: true,
+                  sheetExtent: 1,
+                ),
               ),
             ),
           ),
-        ),
+        );
+      }
+
+      await pumpWithSelection('slow');
+      final fastRow = find.byKey(const ValueKey('proxy-row-fast'));
+      final slowRow = find.byKey(const ValueKey('proxy-row-slow'));
+      final mediumRow = find.byKey(const ValueKey('proxy-row-medium'));
+      final choice = find.byKey(const ValueKey('proxy-current-choice'));
+      expect(
+        tester.getTopLeft(choice).dy,
+        lessThan(tester.getTopLeft(fastRow).dy),
       );
-    }
+      expect(
+        find.descendant(
+          of: choice,
+          matching: find.text('Selected slow server'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(fastRow).dy,
+        lessThan(tester.getTopLeft(mediumRow).dy),
+      );
+      expect(
+        tester.getTopLeft(mediumRow).dy,
+        lessThan(tester.getTopLeft(slowRow).dy),
+      );
+      final originalPositions = [
+        tester.getTopLeft(fastRow),
+        tester.getTopLeft(mediumRow),
+        tester.getTopLeft(slowRow),
+      ];
 
-    await pumpWithSelection('slow');
-    expect(
-      tester.getTopLeft(find.text('Selected slow server')).dy,
-      lessThan(tester.getTopLeft(find.text('Fast server')).dy),
-    );
-
-    await pumpWithSelection('medium');
-    expect(
-      tester.getTopLeft(find.text('Medium server')).dy,
-      lessThan(tester.getTopLeft(find.text('Fast server')).dy),
-    );
-  });
+      await pumpWithSelection('medium');
+      expect(
+        find.descendant(of: choice, matching: find.text('Medium server')),
+        findsOneWidget,
+      );
+      expect([
+        tester.getTopLeft(fastRow),
+        tester.getTopLeft(mediumRow),
+        tester.getTopLeft(slowRow),
+      ], originalPositions);
+    },
+  );
 
   testWidgets('collapsed proxy panel releases mounted runtime rows', (
     tester,
@@ -948,7 +992,13 @@ void main() {
     );
 
     expect(find.byType(CountryFlagBadge), findsWidgets);
-    expect(find.text('proxy 1'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('proxy-row-proxy-1')),
+        matching: find.text('proxy 1'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('proxy sheet header crossfades active proxy and title', (
@@ -1382,7 +1432,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump();
 
-      expect(find.text('Healthy'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('proxy-row-healthy')),
+          matching: find.text('Healthy'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Failed'), findsNothing);
 
       runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
@@ -1495,7 +1551,16 @@ void main() {
       tester.getSize(find.byType(ProxyTile).first).height,
       greaterThanOrEqualTo(48),
     );
-    await tester.tapAt(tester.getCenter(find.byType(CountryFlagBadge).first));
+    await tester.tapAt(
+      tester.getCenter(
+        find
+            .descendant(
+              of: find.byType(ProxyTile).first,
+              matching: find.byType(CountryFlagBadge),
+            )
+            .first,
+      ),
+    );
     expect(selected, 'proxy-1');
   });
 

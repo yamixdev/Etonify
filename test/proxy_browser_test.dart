@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
@@ -7,6 +9,17 @@ import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
+
+class _CountingRuntimeStore extends ProxyRuntimeVisualStore {
+  int reads = 0;
+
+  @override
+  ProxyRuntimeVisualState? valueFor(String tag) {
+    reads++;
+    return super.valueFor(tag);
+  }
+}
 
 AppProxySummary _proxy(String tag, {List<String> children = const []}) =>
     AppProxySummary(
@@ -34,9 +47,10 @@ Widget _app(
   Widget page, {
   TextScaler? scaler,
   Brightness brightness = Brightness.light,
+  Locale locale = const Locale('en'),
 }) => MaterialApp(
   theme: ThemeData(brightness: brightness),
-  locale: const Locale('en'),
+  locale: locale,
   supportedLocales: AppLocalizations.supportedLocales,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   builder: scaler == null
@@ -60,6 +74,9 @@ ProxiesPage _page({
   bool loading = false,
   bool active = true,
   bool catalogReady = true,
+  String selectedTag = '',
+  AppProxySummary? activeProxy,
+  ProxySort initialSort = ProxySort.source,
 }) => ProxiesPage(
   profileId: profileId,
   proxies:
@@ -77,7 +94,9 @@ ProxiesPage _page({
         ],
         'Nested': [_proxy('Deep').copyWith(parentGroupTag: 'Nested')],
       },
-  selectedTag: '',
+  selectedTag: selectedTag,
+  activeProxy: activeProxy,
+  initialSort: initialSort,
   connected: true,
   progressiveBlurEnabled: false,
   browserMode: true,
@@ -94,6 +113,407 @@ ProxiesPage _page({
 );
 
 void main() {
+  testWidgets(
+    'nested active summary arrival and removal update header structure',
+    (tester) async {
+      final leaf = _proxy('Leaf').copyWith(parentGroupTag: 'Auto');
+      final proxies = [
+        _proxy('Auto', children: ['Leaf']),
+        _proxy('Other'),
+      ];
+      final groups = {
+        'Auto': [leaf],
+      };
+      Widget page(AppProxySummary? active) => _app(
+        _page(
+          proxies: proxies,
+          groups: groups,
+          selectedTag: 'Leaf',
+          activeProxy: active,
+        ),
+      );
+      await tester.pumpWidget(page(null));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('proxy-current-choice')), findsNothing);
+      await tester.pumpWidget(page(leaf));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('proxy-current-choice')),
+        findsOneWidget,
+      );
+      expect(find.text('Leaf'), findsOneWidget);
+      expect(find.byKey(const ValueKey('proxy-select-Leaf')), findsNothing);
+      await tester.pumpWidget(page(null));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('proxy-current-choice')), findsNothing);
+    },
+  );
+
+  for (final count in [20, 500]) {
+    testWidgets('active IP update does not prepare $count rows during a drag', (
+      tester,
+    ) async {
+      final proxies = [
+        for (var i = 0; i < count; i++)
+          _proxy('Server $i').copyWith(latency: i + 10),
+      ];
+      final groups = <String, List<AppProxySummary>>{};
+      final states = _CountingRuntimeStore();
+      addTearDown(states.dispose);
+      Widget page(AppProxySummary active) => _app(
+        _page(
+          proxies: proxies,
+          groups: groups,
+          states: states,
+          selectedTag: 'Server 0',
+          activeProxy: active,
+          initialSort: ProxySort.latency,
+        ),
+      );
+      await tester.pumpWidget(page(proxies.first));
+      for (
+        var i = 0;
+        i < 120 &&
+            find
+                .byKey(const ValueKey('proxy-current-choice'))
+                .evaluate()
+                .isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+      final list = find.byKey(const ValueKey('proxy-browser-list'));
+      final gesture = await tester.startGesture(tester.getCenter(list));
+      await gesture.moveBy(const Offset(0, -35));
+      await tester.pump();
+      states.replaceAll({
+        'Server 0': const ProxyRuntimeVisualState(
+          latency: 9999,
+          latencyFresh: true,
+        ),
+      });
+      await tester.pump(const Duration(seconds: 1));
+      final readsBefore = states.reads;
+      final controller = tester.widget<ListView>(list).controller!;
+      final offsetBefore = controller.offset;
+      final source = find.byKey(const ValueKey('proxy-select-Server 0'));
+      final rectBefore = tester.getRect(source);
+      await tester.pumpWidget(page(proxies.first.copyWith(ip: '192.0.2.10')));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(states.reads, readsBefore);
+      expect(controller.offset, offsetBefore);
+      expect(tester.getRect(source), rectBefore);
+      await gesture.up();
+      await tester.pump(const Duration(seconds: 1));
+    });
+  }
+
+  testWidgets(
+    'last proxy stays above floating navigation and can be selected',
+    (tester) async {
+      tester.view.physicalSize = const Size(393, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final selected = <String>[];
+      final proxies = [for (var i = 0; i < 80; i++) _proxy('Server $i')];
+      await tester.pumpWidget(
+        _app(
+          MediaQuery(
+            data: const MediaQueryData(
+              size: Size(393, 800),
+              padding: EdgeInsets.only(bottom: 24),
+              viewPadding: EdgeInsets.only(bottom: 24),
+            ),
+            child: TabbedHomeShell(
+              homeBuilder: (_, open) => const SizedBox.expand(),
+              proxiesBuilder: (_, active, back, request) => _page(
+                proxies: proxies,
+                groups: {},
+                selectedTag: 'Server 0',
+                select: selected.add,
+                active: active,
+                back: back,
+                request: request,
+              ),
+              settingsBuilder: (_) => const SizedBox.expand(),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('proxies-tab')));
+      await tester.pumpAndSettle();
+      final list = find.byKey(const ValueKey('proxy-browser-list'));
+      final controller = tester.widget<ListView>(list).controller!;
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      final last = find.byKey(const ValueKey('proxy-select-Server 79'));
+      expect(
+        tester.getRect(last).bottom,
+        lessThanOrEqualTo(tester.getRect(find.byType(NavigationBar)).top),
+      );
+      await tester.tap(last);
+      expect(selected, ['Server 79']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('background presentation refreshes current choice metadata', (
+    tester,
+  ) async {
+    final proxies = [for (var i = 0; i < 500; i++) _proxy('Server $i')];
+    final groups = <String, List<AppProxySummary>>{};
+    Future<void> waitFor(Finder target) async {
+      for (var i = 0; i < 120; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 5)),
+        );
+        await tester.pump(const Duration(milliseconds: 1));
+        if (target.evaluate().isNotEmpty) return;
+      }
+      expect(target, findsOneWidget);
+    }
+
+    await tester.pumpWidget(
+      _app(
+        _page(
+          proxies: proxies,
+          groups: groups,
+          selectedTag: 'Server 0',
+          activeProxy: proxies.first,
+        ),
+      ),
+    );
+    await waitFor(find.byKey(const ValueKey('proxy-current-choice')));
+    await tester.pumpWidget(
+      _app(
+        _page(
+          proxies: proxies,
+          groups: groups,
+          selectedTag: 'Server 0',
+          activeProxy: proxies.first.copyWith(
+            displayName: 'Updated current choice',
+          ),
+        ),
+      ),
+    );
+    await waitFor(find.text('Updated current choice'));
+    expect(find.byKey(const ValueKey('proxy-select-Server 0')), findsOneWidget);
+  });
+
+  testWidgets('group header identity updates without preparing its catalog', (
+    tester,
+  ) async {
+    final group = _proxy(
+      'lowest',
+      children: ['Leaf'],
+    ).copyWith(selectedChildName: 'Old member');
+    final proxies = [group, _proxy('Other')];
+    final groups = <String, List<AppProxySummary>>{};
+    final states = _CountingRuntimeStore();
+    addTearDown(states.dispose);
+    Widget page(AppProxySummary active) => _app(
+      _page(
+        proxies: proxies,
+        groups: groups,
+        states: states,
+        selectedTag: 'lowest',
+        activeProxy: active,
+      ),
+    );
+    await tester.pumpWidget(page(group));
+    await tester.pumpAndSettle();
+    final readsBefore = states.reads;
+    await tester.pumpWidget(
+      page(group.copyWith(countryCode: 'FR', selectedChildName: 'New member')),
+    );
+    await tester.pump();
+    final header = find.byKey(const ValueKey('proxy-current-choice'));
+    expect(
+      find.descendant(of: header, matching: find.text('Lowest · New member')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<CountryFlagBadge>(
+            find.descendant(
+              of: header,
+              matching: find.byType(CountryFlagBadge),
+            ),
+          )
+          .countryCode,
+      'FR',
+    );
+    expect(states.reads, readsBefore);
+  });
+  testWidgets(
+    'selected source row exposes its selected state to accessibility',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _app(
+          _page(
+            proxies: [_proxy('First'), _proxy('Selected')],
+            groups: {},
+            selectedTag: 'Selected',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final data = tester
+          .getSemantics(find.byKey(const ValueKey('proxy-select-Selected')))
+          .getSemanticsData();
+      expect(data.flagsCollection.isSelected, Tristate.isTrue);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'current choice fits a long Russian group at 320px and 200% text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final group = _proxy(
+        'Очень длинная группа автоматического выбора сервера',
+        children: ['Leaf'],
+      );
+      await tester.pumpWidget(
+        _app(
+          _page(
+            proxies: [group],
+            groups: {
+              group.tag: [_proxy('Leaf')],
+            },
+            selectedTag: group.tag,
+            activeProxy: group,
+          ),
+          scaler: TextScaler.linear(2),
+          locale: const Locale('ru'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('proxy-current-choice')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'root shows current choice without moving or duplicating source',
+    (tester) async {
+      final proxies = [_proxy('First'), _proxy('Selected'), _proxy('Last')];
+      await tester.pumpWidget(
+        _app(_page(proxies: proxies, groups: {}, selectedTag: 'Selected')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('proxy-current-choice')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('proxy-select-Selected')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('proxy-select-First'))).dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const ValueKey('proxy-select-Selected')))
+              .dy,
+        ),
+      );
+      expect(
+        tester
+            .widget<ProxyTile>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is ProxyTile && widget.proxy.tag == 'Selected',
+              ),
+            )
+            .selected,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'nested current choice is header only and disappears inside group',
+    (tester) async {
+      final leaf = _proxy('Leaf').copyWith(parentGroupTag: 'Auto');
+      await tester.pumpWidget(
+        _app(_page(selectedTag: 'Leaf', activeProxy: leaf)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('proxy-current-choice')),
+        findsOneWidget,
+      );
+      expect(find.text('Leaf'), findsOneWidget);
+      expect(find.byKey(const ValueKey('proxy-select-Leaf')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('proxy-open-group-Auto')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('proxy-current-choice')), findsNothing);
+      expect(find.byKey(const ValueKey('proxy-select-Leaf')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'selecting a scrolled row preserves its position and scroll offset',
+    (tester) async {
+      final proxies = [for (var i = 0; i < 100; i++) _proxy('Server $i')];
+      var selected = 'Server 0';
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) => _page(
+              proxies: proxies,
+              groups: {},
+              selectedTag: selected,
+              select: (tag) => setState(() => selected = tag),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final list = find.byKey(const ValueKey('proxy-browser-list'));
+      await tester.drag(list, const Offset(0, -650));
+      await tester.pumpAndSettle();
+      final tile = find.byType(ProxyTile).hitTestable().first;
+      final tag = tester.widget<ProxyTile>(tile).proxy.tag;
+      final row = find.byKey(ValueKey('proxy-select-$tag'));
+      final beforeRect = tester.getRect(row);
+      final controller = tester.widget<ListView>(list).controller!;
+      final beforeOffset = controller.offset;
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(selected, tag);
+      expect(controller.offset, beforeOffset);
+      expect(tester.getRect(row), beforeRect);
+      expect(find.byKey(ValueKey('proxy-select-$tag')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('proxy-current-choice')).hitTestable(),
+        findsNothing,
+      );
+      await tester.drag(list, const Offset(0, 1800));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('proxy-current-choice')),
+          matching: find.text(tag),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
   testWidgets('search keyboard does not overflow the retained home page', (
     tester,
   ) async {
@@ -293,6 +713,9 @@ void main() {
         ),
       );
       expect(tile('One').selected, isTrue);
+      final firstPosition = tester.getRect(
+        find.byKey(const ValueKey('proxy-select-One')),
+      );
       states.replaceAll({
         'Auto': ProxyRuntimeVisualState(
           presentation: group.copyWith(selectedChildTag: 'Two'),
@@ -301,6 +724,10 @@ void main() {
       await tester.pumpAndSettle(const Duration(milliseconds: 120));
       expect(tile('Two').selected, isTrue);
       expect(tile('One').selected, isFalse);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('proxy-select-One'))),
+        firstPosition,
+      );
     },
   );
 
@@ -386,7 +813,11 @@ void main() {
       expect(opens, 1);
       await tester.tap(find.byKey(const ValueKey('proxy-open-group-Auto')));
       expect(groups, ['Auto']);
-      await tester.tap(find.byKey(const ValueKey('proxy-latency-action-Auto')));
+      expect(
+        find.byKey(const ValueKey('proxy-latency-action-Auto')),
+        findsNothing,
+      );
+      await tester.tap(find.byType(ActiveProxyDelayIndicator));
       expect(pings, 1);
       expect(opens, 1);
       expect(groups, ['Auto']);

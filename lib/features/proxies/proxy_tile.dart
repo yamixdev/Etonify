@@ -193,12 +193,16 @@ class ProxyTile extends StatelessWidget {
     );
     final interactiveRow = Material(
       type: MaterialType.transparency,
-      child: InkWell(
-        key: ValueKey('proxy-select-${proxy.tag}'),
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        onLongPress: onLongPress ?? openGroup ?? (proxy.isGroup ? () {} : null),
-        child: rowChild,
+      child: Semantics(
+        selected: selected,
+        child: InkWell(
+          key: ValueKey('proxy-select-${proxy.tag}'),
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          onLongPress:
+              onLongPress ?? openGroup ?? (proxy.isGroup ? () {} : null),
+          child: rowChild,
+        ),
       ),
     );
     if (shouldAnimate) {

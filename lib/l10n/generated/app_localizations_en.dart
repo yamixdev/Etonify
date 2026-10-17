@@ -12,6 +12,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeTabTitle => 'Home';
 
   @override
+  String get generalAppearanceTitle => 'Appearance';
+
+  @override
+  String get generalAppearanceSummary =>
+      'Language, theme, accent and home navigation';
+
+  @override
+  String get generalStartupTitle => 'Startup and controls';
+
+  @override
+  String get generalStartupSummary =>
+      'Automatic connection, VPN tile and vibration';
+
+  @override
+  String get generalBackgroundTitle => 'Background activity';
+
+  @override
+  String get generalBackgroundSummary =>
+      'Battery optimization and subscription updates';
+
+  @override
+  String get generalPrivacyTitle => 'Privacy';
+
+  @override
+  String get generalPrivacySummary =>
+      'Server addresses and device identification';
+
+  @override
   String get homeNavigationTitle => 'Home navigation';
 
   @override

@@ -127,14 +127,19 @@ class HomePresentationBuilder {
   final HomePresentationData data;
   final HomePresentationCallbacks callbacks;
 
-  Widget build({ProxyPanelMetrics? panelMetrics, bool tabbed = false}) {
+  Widget build({
+    ProxyPanelMetrics? panelMetrics,
+    bool tabbed = false,
+    double navigationBottomInset = 12,
+  }) {
     return HomePage(
       state: data.toViewState(),
       actions: callbacks.toViewActions(),
       bottomInset: tabbed
-          ? 12
+          ? navigationBottomInset
           : (panelMetrics?.bottomInset ?? 0) + proxyPanelMinHeight + 20,
       showActiveProxyFooter: tabbed,
+      showSettingsAction: !tabbed,
     );
   }
 }

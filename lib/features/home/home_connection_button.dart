@@ -32,10 +32,14 @@ class _ConnectionButtonState extends State<ConnectionButton> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final buttonTheme =
-        theme.extension<ConnectionButtonTheme>() ?? ConnectionButtonTheme.light;
+        theme.extension<ConnectionButtonTheme>() ??
+        (dark ? ConnectionButtonTheme.dark : ConnectionButtonTheme.light);
     final buttonColor = widget.connected
         ? buttonTheme.connectedColor!
+        : dark
+        ? Colors.white
         : buttonTheme.idleColor!;
     final busyLabel = widget.statusLabel.trim().isNotEmpty
         ? widget.statusLabel
@@ -65,7 +69,9 @@ class _ConnectionButtonState extends State<ConnectionButton> {
               width: _kConnectionButtonSize,
               height: _kConnectionButtonSize,
               child: Material(
-                color: Colors.white,
+                color: dark
+                    ? theme.colorScheme.surfaceContainerHigh
+                    : Colors.white,
                 child: InkWell(
                   onTap: widget.connecting ? null : widget.onTap,
                   child: Padding(

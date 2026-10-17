@@ -18,6 +18,13 @@ Widget _generalSettingsApp({
   ValueChanged<bool>? onAutoConnectChanged,
   VoidCallback? onAddQuickSettingsTile,
   ValueChanged<HomeNavigationMode>? onHomeNavigationChanged,
+  ValueChanged<bool>? onHapticChanged,
+  ValueChanged<bool>? onHideIpChanged,
+  ValueChanged<AppThemePreference>? onThemeChanged,
+  ValueChanged<String>? onAccentChanged,
+  ValueChanged<String>? onLocaleChanged,
+  bool hapticEnabled = true,
+  ValueChanged<bool>? onStatusChanged,
 }) {
   return MaterialApp(
     locale: locale,
@@ -27,7 +34,7 @@ Widget _generalSettingsApp({
       currentLocaleCode: locale.languageCode,
       currentThemePreference: AppThemePreference.system,
       currentAccentColorHex: 'default',
-      currentHapticEnabled: true,
+      currentHapticEnabled: hapticEnabled,
       currentStatusNotificationEnabled: statusNotificationEnabled,
       currentNotificationTrafficDisplayMode: trafficDisplayMode,
       currentNotificationTrafficRefreshSeconds: 2,
@@ -38,19 +45,27 @@ Widget _generalSettingsApp({
       onAutoConnectOnLaunchChanged: onAutoConnectChanged,
       showQuickSettingsTileAction: onAddQuickSettingsTile != null,
       onAddQuickSettingsTile: onAddQuickSettingsTile,
-      onLocaleChanged: (_) {},
-      onThemePreferenceChanged: (_) {},
-      onAccentColorChanged: (_) {},
-      onHapticChanged: (_) {},
-      onStatusNotificationChanged: (_) {},
+      onLocaleChanged: onLocaleChanged ?? (_) {},
+      onThemePreferenceChanged: onThemeChanged ?? (_) {},
+      onAccentColorChanged: onAccentChanged ?? (_) {},
+      onHapticChanged: onHapticChanged ?? (_) {},
+      onStatusNotificationChanged: onStatusChanged ?? (_) {},
       onNotificationTrafficDisplayModeChanged:
           onTrafficDisplayChanged ?? (_) {},
       onNotificationTrafficRefreshSecondsChanged:
           onTrafficRefreshChanged ?? (_) {},
-      onHideServerIpChanged: (_) {},
+      onHideServerIpChanged: onHideIpChanged ?? (_) {},
       onHomeNavigationModeChanged: onHomeNavigationChanged,
     ),
   );
+}
+
+Future<void> _openGeneralSection(WidgetTester tester, String section) async {
+  final entry = find.byKey(ValueKey('general-$section-entry'));
+  await tester.ensureVisible(entry);
+  await tester.pumpAndSettle();
+  await tester.tap(entry);
+  await tester.pumpAndSettle();
 }
 
 Future<void> _openNotificationSettings(WidgetTester tester) async {
@@ -63,6 +78,339 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 
 void main() {
   testWidgets(
+    'notification selections survive closing and reopening the section',
+    (tester) async {
+      final statuses = <bool>[];
+      final modes = <NotificationTrafficDisplayMode>[];
+      final refreshes = <int>[];
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          onStatusChanged: statuses.add,
+          onTrafficDisplayChanged: modes.add,
+          onTrafficRefreshChanged: refreshes.add,
+        ),
+      );
+      await _openNotificationSettings(tester);
+      tester.widget<Slider>(find.byType(Slider)).onChanged!(7);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('notification-traffic-display-setting')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Total transferred'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(SwitchListTile, 'Notification status'),
+      );
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await _openNotificationSettings(tester);
+      expect(tester.widget<Slider>(find.byType(Slider)).value, 7);
+      expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, 'Notification status'),
+            )
+            .value,
+        isFalse,
+      );
+      expect(find.text('Total transferred'), findsOneWidget);
+      expect(statuses, [false]);
+      expect(modes, [NotificationTrafficDisplayMode.total]);
+      expect(refreshes, [7]);
+    },
+  );
+
+  testWidgets('open sections receive parent property changes', (tester) async {
+    final hapticEnabled = ValueNotifier(true);
+    addTearDown(hapticEnabled.dispose);
+    await tester.pumpWidget(
+      ValueListenableBuilder<bool>(
+        valueListenable: hapticEnabled,
+        builder: (context, value, child) => _generalSettingsApp(
+          statusNotificationEnabled: true,
+          hapticEnabled: value,
+        ),
+      ),
+    );
+    await _openGeneralSection(tester, 'startup');
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Vibration'),
+          )
+          .value,
+      isTrue,
+    );
+    hapticEnabled.value = false;
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Vibration'),
+          )
+          .value,
+      isFalse,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'startup');
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Vibration'),
+          )
+          .value,
+      isFalse,
+    );
+  });
+
+  testWidgets('appearance callbacks keep their selections after system back', (
+    tester,
+  ) async {
+    final themes = <AppThemePreference>[];
+    final accents = <String>[];
+    final locales = <String>[];
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        onThemeChanged: themes.add,
+        onAccentChanged: accents.add,
+        onLocaleChanged: locales.add,
+      ),
+    );
+    await _openGeneralSection(tester, 'appearance');
+    await tester.tap(find.text('Dark'));
+    await tester.pumpAndSettle();
+    final swatches = find.byWidgetPredicate(
+      (widget) =>
+          widget is GestureDetector &&
+          widget.child is AnimatedContainer &&
+          (widget.child! as AnimatedContainer).constraints?.maxWidth == 48,
+    );
+    await tester.tap(swatches.at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Russian'));
+    await tester.pumpAndSettle();
+    expect(themes, [AppThemePreference.dark]);
+    expect(accents, ['2D5BFF']);
+    expect(locales, ['ru']);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'appearance');
+    expect(find.text('Russian'), findsOneWidget);
+    final darkCard = tester.widget<AnimatedContainer>(
+      find
+          .descendant(
+            of: find
+                .ancestor(
+                  of: find.text('Dark'),
+                  matching: find.byType(GestureDetector),
+                )
+                .first,
+            matching: find.byType(AnimatedContainer),
+          )
+          .first,
+    );
+    expect(
+      ((darkCard.decoration! as BoxDecoration).border! as Border).top.width,
+      2.5,
+    );
+    final blueSwatch = tester.widget<GestureDetector>(swatches.at(1));
+    expect(
+      (((blueSwatch.child! as AnimatedContainer).decoration! as BoxDecoration)
+                  .border!
+              as Border)
+          .top
+          .width,
+      3,
+    );
+  });
+
+  testWidgets('appearance scroll survives setting updates and reopening', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 450);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final changes = <HomeNavigationMode>[];
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        onHomeNavigationChanged: changes.add,
+      ),
+    );
+    await _openGeneralSection(tester, 'appearance');
+    final entry = find.byKey(const ValueKey('home-navigation-setting'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    final scrollable = find.byKey(
+      const PageStorageKey('general-appearance-scroll'),
+    );
+    final state = tester.state<ScrollableState>(
+      find.descendant(of: scrollable, matching: find.byType(Scrollable)).first,
+    );
+    final offset = state.position.pixels;
+    expect(offset, greaterThan(0));
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bottom tabs').last);
+    await tester.pumpAndSettle();
+    expect(state.position.pixels, offset);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'appearance');
+    final reopened = tester.state<ScrollableState>(
+      find.descendant(of: scrollable, matching: find.byType(Scrollable)).first,
+    );
+    expect(reopened.position.pixels, offset);
+    expect(
+      find.descendant(of: entry, matching: find.text('Bottom tabs')),
+      findsOneWidget,
+    );
+    expect(changes, [HomeNavigationMode.tabs]);
+  });
+
+  testWidgets(
+    'general hub opens five focused sections without inline controls',
+    (tester) async {
+      await tester.pumpWidget(
+        _generalSettingsApp(statusNotificationEnabled: true),
+      );
+      await tester.pumpAndSettle();
+      for (final section in [
+        'appearance',
+        'startup',
+        'background',
+        'privacy',
+      ]) {
+        expect(find.byKey(ValueKey('general-$section-entry')), findsOneWidget);
+      }
+      expect(
+        find.byKey(const ValueKey('notification-settings-entry')),
+        findsOneWidget,
+      );
+      expect(find.byType(SwitchListTile), findsNothing);
+      await _openGeneralSection(tester, 'background');
+      expect(find.text('Subscription updates'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('general-appearance-entry')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('startup and privacy values survive changes and reopening', (
+    tester,
+  ) async {
+    final haptics = <bool>[];
+    final hiddenIps = <bool>[];
+    final hwids = <bool>[];
+    final connections = <bool>[];
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        onHapticChanged: haptics.add,
+        onHideIpChanged: hiddenIps.add,
+        onHwidChanged: hwids.add,
+        onAutoConnectChanged: connections.add,
+      ),
+    );
+    await _openGeneralSection(tester, 'startup');
+    await tester.tap(find.byKey(const ValueKey('auto-connect-on-launch')));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Vibration'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'startup');
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const ValueKey('auto-connect-on-launch')),
+          )
+          .value,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Vibration'),
+          )
+          .value,
+      isFalse,
+    );
+    expect(connections, [true]);
+    expect(haptics, [false]);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'privacy');
+    await tester.tap(find.byKey(const ValueKey('hide-server-ip')));
+    await tester.tap(find.byKey(const ValueKey('send-hwid-to-providers')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'privacy');
+    expect(
+      tester
+          .widget<SwitchListTile>(find.byKey(const ValueKey('hide-server-ip')))
+          .value,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const ValueKey('send-hwid-to-providers')),
+          )
+          .value,
+      isFalse,
+    );
+    expect(hiddenIps, [true]);
+    expect(hwids, [false]);
+  });
+
+  testWidgets(
+    'general sections fit narrow screens with enlarged Russian text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          locale: const Locale('ru'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final section in [
+        'appearance',
+        'startup',
+        'privacy',
+        'background',
+      ]) {
+        await _openGeneralSection(tester, section);
+        expect(tester.takeException(), isNull);
+        expect(
+          Navigator.of(tester.element(find.byType(Scaffold).last)).canPop(),
+          isTrue,
+          reason: section,
+        );
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+  testWidgets(
     'navigation picker changes mode immediately without reopening settings',
     (tester) async {
       final changes = <HomeNavigationMode>[];
@@ -72,6 +420,7 @@ void main() {
           onHomeNavigationChanged: changes.add,
         ),
       );
+      await _openGeneralSection(tester, 'appearance');
       final entry = find.byKey(const ValueKey('home-navigation-setting'));
       await tester.ensureVisible(entry);
       await tester.tap(entry);
@@ -102,6 +451,7 @@ void main() {
         onAddQuickSettingsTile: () => tileRequests++,
       ),
     );
+    await _openGeneralSection(tester, 'startup');
     final autoConnect = find.byKey(const ValueKey('auto-connect-on-launch'));
     await tester.ensureVisible(autoConnect);
     await tester.tap(autoConnect);
@@ -130,6 +480,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openGeneralSection(tester, 'privacy');
       final tile = find.byKey(const ValueKey('send-hwid-to-providers'));
       await tester.ensureVisible(tile);
       await tester.pumpAndSettle();
@@ -177,17 +528,16 @@ void main() {
     await tester.pumpWidget(
       _generalSettingsApp(statusNotificationEnabled: true),
     );
-    final notification = find.byKey(
-      const ValueKey('notification-settings-entry'),
-    );
-    await tester.ensureVisible(notification);
+    await _openGeneralSection(tester, 'startup');
+    final autoConnect = find.byKey(const ValueKey('auto-connect-on-launch'));
+    await tester.ensureVisible(autoConnect);
     await tester.pumpAndSettle();
 
     final vibrationCard = find
         .ancestor(of: find.text('Vibration'), matching: find.byType(Card))
         .first;
     final notificationCard = find
-        .ancestor(of: notification, matching: find.byType(Card))
+        .ancestor(of: autoConnect, matching: find.byType(Card))
         .first;
     expect(
       vibrationCard.evaluate().single,
@@ -200,16 +550,19 @@ void main() {
     expect(vibrationTile.subtitle, isNull);
   });
 
-  testWidgets('language value is shown alongside its title', (tester) async {
+  testWidgets('language value remains readable below its title', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _generalSettingsApp(statusNotificationEnabled: true),
     );
     await tester.pumpAndSettle();
+    await _openGeneralSection(tester, 'appearance');
 
     final languageTile = tester.widget<ListTile>(
       find.ancestor(of: find.text('Language'), matching: find.byType(ListTile)),
     );
-    expect(languageTile.subtitle, isNull);
+    expect((languageTile.subtitle! as Text).data, 'English');
     expect(find.text('English'), findsOneWidget);
   });
 

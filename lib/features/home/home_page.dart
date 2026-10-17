@@ -6,9 +6,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/features/home/home_active_proxy.dart';
 import 'package:meow_client/features/home/home_connection_button.dart';
+import 'package:meow_client/features/home/home_current_proxy_card.dart';
 import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/features/home/home_subscription_card.dart';
-import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
@@ -25,12 +25,14 @@ class HomePage extends StatelessWidget {
     required this.actions,
     required this.bottomInset,
     this.showActiveProxyFooter = true,
+    this.showSettingsAction = true,
   });
 
   final HomeViewState state;
   final HomeViewActions actions;
   final double bottomInset;
   final bool showActiveProxyFooter;
+  final bool showSettingsAction;
 
   bool get connected => state.connected;
   bool get connecting => state.connecting;
@@ -87,14 +89,15 @@ class HomePage extends StatelessWidget {
           onOpenChangelog: onOpenChangelog,
         ),
         actions: [
-          IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: theme.colorScheme.surfaceContainerHigh,
+          if (showSettingsAction)
+            IconButton(
+              style: IconButton.styleFrom(
+                backgroundColor: theme.colorScheme.surfaceContainerHigh,
+              ),
+              onPressed: onOpenSettings,
+              tooltip: AppLocalizations.of(context).settingsTitle,
+              icon: const Icon(Icons.settings_rounded),
             ),
-            onPressed: onOpenSettings,
-            tooltip: AppLocalizations.of(context).settingsTitle,
-            icon: const Icon(Icons.settings_rounded),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: IconButton(
@@ -293,29 +296,12 @@ class HomePage extends StatelessWidget {
       return null;
     }
     if (actions.openProxies != null) {
-      Widget buildCard(ProxyRuntimeVisualState? state) => Material(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: Theme.of(
-              context,
-            ).colorScheme.outlineVariant.withValues(alpha: .5),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: ProxyTile(
-          proxy: proxy,
-          runtimeState: state,
-          selected: false,
-          forceBaseInset: true,
-          animate: false,
-          onTap: actions.openProxies!,
-          onTestLatency: connected ? onRefreshLatency : null,
-          onOpenGroup: proxy.isGroup && actions.openProxyGroup != null
-              ? (_) => actions.openProxyGroup!(proxy.tag)
-              : null,
-        ),
+      Widget buildCard(ProxyRuntimeVisualState? state) => HomeCurrentProxyCard(
+        proxy: state?.presentation ?? proxy,
+        onTap: actions.openProxies!,
+        onOpenGroup: proxy.isGroup && actions.openProxyGroup != null
+            ? () => actions.openProxyGroup!(proxy.tag)
+            : null,
       );
       final states = runtimeStates;
       return states == null

@@ -6,17 +6,22 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 typedef ProxyRuntimeStateResolver =
     ProxyRuntimeVisualState? Function(String tag);
 
-enum ProxyListEntryType { tile, addChain, divider }
+enum ProxyListEntryType { currentChoice, tile, addChain, divider }
 
 class ProxyListEntry {
   const ProxyListEntry._(this.type, [this.proxy]);
   const ProxyListEntry.tile(AppProxySummary proxy)
     : this._(ProxyListEntryType.tile, proxy);
+  const ProxyListEntry.currentChoice(AppProxySummary proxy)
+    : this._(ProxyListEntryType.currentChoice, proxy);
   const ProxyListEntry.addChain() : this._(ProxyListEntryType.addChain);
   const ProxyListEntry.divider() : this._(ProxyListEntryType.divider);
   final ProxyListEntryType type;
   final AppProxySummary? proxy;
   Key get key => switch (type) {
+    ProxyListEntryType.currentChoice => const ValueKey(
+      'proxy-current-choice-row',
+    ),
     ProxyListEntryType.tile => ValueKey('proxy-row-${proxy!.tag}'),
     ProxyListEntryType.addChain => const ValueKey('proxy-add-chain-row'),
     ProxyListEntryType.divider => const ValueKey('proxy-divider-row'),
@@ -28,6 +33,7 @@ class ProxyListPresentationInput {
     required this.proxies,
     required this.sort,
     required this.selectedTag,
+    this.activeProxy,
     this.canAddChain = false,
     this.searchQuery = '',
     this.groupMembers = false,
@@ -37,6 +43,7 @@ class ProxyListPresentationInput {
   final List<AppProxySummary> proxies;
   final ProxySort sort;
   final String selectedTag;
+  final AppProxySummary? activeProxy;
   final bool canAddChain;
   final String searchQuery;
   final bool groupMembers;
@@ -82,8 +89,7 @@ ProxyListPresentation buildProxyListPresentation(
                         '${proxy.protocolLabel} ${proxy.endpointLabel}'
                     .toLowerCase()
                     .contains(query)) &&
-            (proxy.tag == input.selectedTag ||
-                pinned(proxy) ||
+            (pinned(proxy) ||
                 shouldShowProxyForSort(
                   proxy,
                   input.sort,
@@ -94,7 +100,6 @@ ProxyListPresentation buildProxyListPresentation(
   sortProxySummaries(
     items,
     input.sort,
-    prioritizedTag: input.selectedTag,
     runtimeStateFor: (tag) => input.runtimeStates[tag],
   );
   if (input.groupMembers) {
@@ -103,14 +108,16 @@ ProxyListPresentation buildProxyListPresentation(
       for (var i = 0; i < entries.length; i++) entries[i].key: i,
     }, timer.elapsed);
   }
-  AppProxySummary? selected;
+  final selected =
+      input.activeProxy ??
+      input.proxies
+          .where((proxy) => proxy.tag == input.selectedTag)
+          .firstOrNull;
   final primary = <AppProxySummary>[];
   final chains = <AppProxySummary>[];
   final rest = <AppProxySummary>[];
   for (final proxy in items) {
-    if (selected == null && proxy.tag == input.selectedTag) {
-      selected = proxy;
-    } else if (isLowestProxyTag(proxy.tag)) {
+    if (isLowestProxyTag(proxy.tag)) {
       primary.add(proxy);
     } else if (input.chainTags.contains(proxy.tag)) {
       chains.add(proxy);
@@ -122,12 +129,9 @@ ProxyListPresentation buildProxyListPresentation(
     (a, b) => pinnedProxyTagOrder(a.tag).compareTo(pinnedProxyTagOrder(b.tag)),
   );
   final hasHeader =
-      (selected != null && pinned(selected)) ||
-      primary.isNotEmpty ||
-      chains.isNotEmpty ||
-      input.canAddChain;
+      primary.isNotEmpty || chains.isNotEmpty || input.canAddChain;
   final entries = <ProxyListEntry>[
-    if (selected != null) ProxyListEntry.tile(selected),
+    if (selected != null) ProxyListEntry.currentChoice(selected),
     for (final proxy in primary) ProxyListEntry.tile(proxy),
     for (final proxy in chains) ProxyListEntry.tile(proxy),
     if (input.canAddChain) const ProxyListEntry.addChain(),

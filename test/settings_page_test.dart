@@ -62,22 +62,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('settings destinations stay fixed and remain tappable', (
-    tester,
-  ) async {
-    var generalCalls = 0;
-    await tester.pumpWidget(_settingsApp(onOpenGeneral: () => generalCalls++));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'settings destinations scroll on short screens and remain tappable',
+    (tester) async {
+      var generalCalls = 0;
+      tester.view.physicalSize = const Size(360, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        _settingsApp(onOpenGeneral: () => generalCalls++),
+      );
+      await tester.pumpAndSettle();
 
-    final destinations = tester.widget<ListView>(
-      find.byKey(const ValueKey('settings-destinations')),
-    );
-    expect(destinations.physics, isA<NeverScrollableScrollPhysics>());
+      final destinations = find.byKey(const ValueKey('settings-destinations'));
+      await tester.drag(destinations, const Offset(0, -900));
+      await tester.pumpAndSettle();
+      expect(find.text('About').hitTestable(), findsOneWidget);
+      await tester.drag(destinations, const Offset(0, 900));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('General'));
-    await tester.pump();
-    expect(generalCalls, 1);
-  });
+      await tester.tap(find.text('General'));
+      await tester.pump();
+      expect(generalCalls, 1);
+    },
+  );
 
   testWidgets('settings menu exposes import, export, and reset', (
     tester,
