@@ -18,6 +18,9 @@ Widget _generalSettingsApp({
   ValueChanged<bool>? onAutoConnectChanged,
   VoidCallback? onAddQuickSettingsTile,
   ValueChanged<HomeNavigationMode>? onHomeNavigationChanged,
+  HomeNavigationMode homeNavigationMode = HomeNavigationMode.panel,
+  ValueChanged<BottomNavigationStyle>? onBottomNavigationStyleChanged,
+  BottomNavigationStyle bottomNavigationStyle = BottomNavigationStyle.floating,
   ValueChanged<bool>? onHapticChanged,
   ValueChanged<bool>? onHideIpChanged,
   ValueChanged<AppThemePreference>? onThemeChanged,
@@ -56,6 +59,9 @@ Widget _generalSettingsApp({
           onTrafficRefreshChanged ?? (_) {},
       onHideServerIpChanged: onHideIpChanged ?? (_) {},
       onHomeNavigationModeChanged: onHomeNavigationChanged,
+      currentHomeNavigationMode: homeNavigationMode,
+      currentBottomNavigationStyle: bottomNavigationStyle,
+      onBottomNavigationStyleChanged: onBottomNavigationStyleChanged,
     ),
   );
 }
@@ -77,6 +83,74 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('open appearance follows externally restored bottom bar style', (
+    tester,
+  ) async {
+    final style = ValueNotifier(BottomNavigationStyle.floating);
+    addTearDown(style.dispose);
+    await tester.pumpWidget(
+      ValueListenableBuilder<BottomNavigationStyle>(
+        valueListenable: style,
+        builder: (_, value, child) => _generalSettingsApp(
+          statusNotificationEnabled: true,
+          homeNavigationMode: HomeNavigationMode.tabs,
+          bottomNavigationStyle: value,
+          onBottomNavigationStyleChanged: (_) {},
+        ),
+      ),
+    );
+    await _openGeneralSection(tester, 'appearance');
+    final entry = find.byKey(const ValueKey('bottom-navigation-style-setting'));
+    expect(entry, findsOneWidget);
+    style.value = BottomNavigationStyle.docked;
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: entry, matching: find.text('Docked')),
+      findsOneWidget,
+    );
+  });
+  testWidgets(
+    'bottom bar style appears only for tabs and updates immediately',
+    (tester) async {
+      final changes = <BottomNavigationStyle>[];
+      await tester.pumpWidget(
+        _generalSettingsApp(
+          statusNotificationEnabled: true,
+          onHomeNavigationChanged: (_) {},
+          onBottomNavigationStyleChanged: changes.add,
+        ),
+      );
+      await _openGeneralSection(tester, 'appearance');
+      final style = find.byKey(
+        const ValueKey('bottom-navigation-style-setting'),
+      );
+      expect(style, findsNothing);
+      final navigation = find.byKey(const ValueKey('home-navigation-setting'));
+      await tester.ensureVisible(navigation);
+      await tester.tap(navigation);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bottom tabs').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(style);
+      await tester.tap(style);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Docked').last);
+      await tester.pumpAndSettle();
+      expect(changes, [BottomNavigationStyle.docked]);
+      expect(
+        find.descendant(of: style, matching: find.text('Docked')),
+        findsOneWidget,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await _openGeneralSection(tester, 'appearance');
+      await tester.ensureVisible(style);
+      expect(
+        find.descendant(of: style, matching: find.text('Docked')),
+        findsOneWidget,
+      );
+    },
+  );
   testWidgets(
     'notification selections survive closing and reopening the section',
     (tester) async {

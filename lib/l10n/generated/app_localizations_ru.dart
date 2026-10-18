@@ -48,6 +48,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get homeNavigationTabs => 'Нижние вкладки';
 
   @override
+  String get bottomNavigationStyleTitle => 'Стиль нижней панели';
+
+  @override
+  String get bottomNavigationStyleFloating => 'Плавающая';
+
+  @override
+  String get bottomNavigationStyleDocked => 'Закреплённая';
+
+  @override
   String get coreConfigActive => 'Активен';
 
   @override

@@ -260,10 +260,7 @@ extension _ProxyBrowser on _ProxiesPageState {
   ) => IconButton(
     key: const ValueKey('proxy-browser-test'),
     tooltip: running ? l10n.cancel : l10n.urlTestTitle,
-    onPressed:
-        group != null &&
-            !running &&
-            (!widget.connected || widget.onProxyUrlTest == null)
+    onPressed: group != null && !running && widget.onProxyUrlTest == null
         ? null
         : () => unawaited(
             running || group == null

@@ -3,6 +3,63 @@ import 'package:meow_client/app/offline_url_test_session.dart';
 
 void main() {
   test(
+    'chain probe does not add a duplicate server to the catalog counter',
+    () {
+      final session = OfflineUrlTestSession(
+        id: 'chain',
+        fingerprint: 'config',
+        physicalNetworkEpoch: 1,
+        tags: {'chain'},
+        visibleTags: {'a', 'b'},
+        initialResults: const {'a': true},
+        isUserSweep: false,
+      )..runOffline();
+      session.accept(
+        tag: 'chain',
+        delayMillis: 40,
+        available: true,
+        logicalSessionId: 'chain',
+        physicalNetworkEpoch: 1,
+      );
+      expect(session.progress.total, 2);
+      expect(session.progress.working, 1);
+      expect(session.pendingTags, isEmpty);
+      expect(session.phase, OfflineUrlTestPhase.completed);
+    },
+  );
+  test(
+    'row probe replaces availability without sweep progress or suppression',
+    () {
+      final session = OfflineUrlTestSession(
+        id: 'row',
+        fingerprint: 'config',
+        physicalNetworkEpoch: 1,
+        tags: {'a'},
+        visibleTags: {'a', 'b', 'c'},
+        initialResults: const {'a': true, 'b': true},
+        isUserSweep: false,
+      )..runOffline();
+      expect(session.progress.showCheckProgress, isFalse);
+      expect(session.progress.total, 3);
+      session.accept(
+        tag: 'a',
+        delayMillis: 0,
+        available: false,
+        logicalSessionId: 'row',
+        physicalNetworkEpoch: 1,
+      );
+      expect(session.progress.working, 1);
+      expect(session.progress.failed, 1);
+      expect(
+        session.suppressesAutomaticCheck(
+          reason: 'selection',
+          physicalNetworkEpoch: 1,
+        ),
+        isFalse,
+      );
+    },
+  );
+  test(
     'offline progress keeps the full catalog when the queue skips a leaf',
     () {
       final session = OfflineUrlTestSession(

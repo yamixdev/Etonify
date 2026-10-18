@@ -26,6 +26,7 @@ import 'package:meow_client/app/latency_coordinator.dart';
 import 'package:meow_client/app/latency_dependencies.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
+import 'package:meow_client/app/offline_url_test_requests.dart';
 import 'package:meow_client/app/physical_network_transition.dart';
 import 'package:meow_client/app/proxy_runtime_controller.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
@@ -258,6 +259,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final PendingRuntimeUrlTestResults _pendingUrlTestResults =
       PendingRuntimeUrlTestResults();
   OfflineUrlTestSession? _offlineUrlTestSession;
+  final _offlineUrlTestRequests = OfflineUrlTestRequests();
   bool _offlineProgressPublished = false;
   ProbeConfigBuildResult? _offlineProbeConfig;
   bool _offlineProbeRunning = false;
@@ -4320,6 +4322,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
     SingboxConfigBuildResult? build;
     _runtimeIntent.markRuntimeDesired();
+    _offlineUrlTestRequests.cancelPending();
     try {
       setState(() {
         _setConnectionPhase(AppConnectionPhase.preparing);
@@ -5575,6 +5578,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _scheduleProxyListCacheRelease();
   }
 
+  void _setBottomNavigationStyle(BottomNavigationStyle value) {
+    _applySettingsChange(() => _settings.setBottomNavigationStyle(value));
+  }
+
   void _setAllowUntrustedProxyCertificates(bool value) {
     _applySettingsChange(
       () => _settings.setAllowUntrustedProxyCertificates(value),
@@ -6338,6 +6345,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentSendHwidToProviders: _settings.sendHwidToProviders,
           currentAutoConnectOnLaunch: _settings.autoConnectOnLaunch,
           currentHomeNavigationMode: _settings.homeNavigationMode,
+          currentBottomNavigationStyle: _settings.bottomNavigationStyle,
+          onBottomNavigationStyleChanged:
+              defaultTargetPlatform == TargetPlatform.android
+              ? _setBottomNavigationStyle
+              : null,
           onHomeNavigationModeChanged:
               defaultTargetPlatform == TargetPlatform.android
               ? _setHomeNavigationMode
@@ -6934,6 +6946,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _urlTestCancelled = true;
       _latencyCoordinator.cancel();
       if (!_connected) ++_offlineStartGeneration;
+      _offlineUrlTestRequests.cancelPending();
       final offlineSession = _offlineUrlTestSession;
       if (offlineSession != null && !offlineSession.isTerminal) {
         offlineSession.cancel();
@@ -7024,7 +7037,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  Future<void> _startOfflineUrlTest() async {
+  Future<void> _startOfflineUrlTest({Set<String>? requestedTags}) {
+    final subscriptionId = _activeSubscription?.id;
+    final revision = _activeSubscription?.payloadRevision;
+    final epoch = _physicalNetworkEpoch;
+    final selection = _proxySelection.generation;
+    bool current() =>
+        mounted &&
+        !_connected &&
+        !_runtimeTransitionInProgress &&
+        !_runtimeDesiredByUser &&
+        _foregroundLifecycleActive &&
+        !_automaticSubscriptionApplyInFlight &&
+        _activeSubscription?.id == subscriptionId &&
+        _activeSubscription?.payloadRevision == revision &&
+        _physicalNetworkEpoch == epoch &&
+        _proxySelection.generation == selection;
+    return _offlineUrlTestRequests.run(
+      tags: requestedTags,
+      isCurrent: current,
+      execute: () => _executeOfflineUrlTest(
+        requestedTags: requestedTags,
+        isCurrent: current,
+      ),
+    );
+  }
+
+  Future<void> _executeOfflineUrlTest({
+    Set<String>? requestedTags,
+    required bool Function() isCurrent,
+  }) async {
     final generation = ++_offlineStartGeneration;
     _urlTestInFlightNotifier.value = true;
     try {
@@ -7040,13 +7082,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final probe = await _configCoordinator.buildProbeConfig(
         validateConfig: false,
       );
-      if (!mounted || generation != _offlineStartGeneration) return;
+      if (!mounted || generation != _offlineStartGeneration || !isCurrent()) {
+        return;
+      }
       if (probe == null) {
         throw StateError('Subscription changed during probe build');
       }
       final visible = _userVisibleServerTags();
       final tags = probe.build.plan.urlTestOutboundTags
-          .where(visible.contains)
+          .where(
+            (tag) =>
+                visible.contains(tag) ||
+                (requestedTags?.contains(tag) == true &&
+                    _proxyChainForTag(tag) != null),
+          )
+          .where((tag) => requestedTags == null || requestedTags.contains(tag))
           .toSet();
       if (tags.isEmpty) {
         throw StateError('No checkable servers in this profile');
@@ -7063,6 +7113,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         fingerprint: probe.probeFingerprint,
         physicalNetworkEpoch: _physicalNetworkEpoch,
         tags: tags,
+        isUserSweep: requestedTags == null,
         visibleTags: visible,
         initialResults: {
           for (final tag in visible)
@@ -7148,7 +7199,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     final completed = await _latencyCoordinator.runFull(
-      reason: 'offline_manual',
+      reason: session.isUserSweep ? 'offline_manual' : 'manual_offline_row',
       includeOutboundTags: tags.toList(growable: false),
       logicalSessionId: session.id,
       physicalNetworkEpoch: session.physicalNetworkEpoch,
@@ -7185,6 +7236,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<bool> _cancelOfflineProbeForConfigChange(String reason) async {
+    _offlineUrlTestRequests.cancelPending();
     ++_offlineStartGeneration;
     final session = _offlineUrlTestSession;
     session?.fail(reason);
@@ -7254,6 +7306,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runProxyUrlTest(String tag) async {
+    if (!_connected) {
+      if (!_foregroundLifecycleActive || _automaticSubscriptionApplyInFlight) {
+        return;
+      }
+      final startupCore = _startupCoreReady;
+      if (startupCore != null && !(await startupCore).isCompatible) return;
+      if (!mounted || !await _ensureActiveSubscriptionHydratedForRuntime()) {
+        return;
+      }
+      _ensureActiveLookupCaches();
+      final members = _concreteTagsForProxyGroup(tag).toSet();
+      if (members.isEmpty &&
+          (_activeOutboundByTagLookup.containsKey(tag) ||
+              _proxyChainForTag(tag) != null)) {
+        members.add(tag);
+      }
+      if (members.isEmpty) return;
+      _haptic();
+      _groupUrlTestScheduler.cancel();
+      await _startOfflineUrlTest(requestedTags: members);
+      return;
+    }
+    final pendingTarget = latencyTargetTag(tag, _runtimeGroupSelections);
+    if (_concreteTagsForProxyGroup(tag).isEmpty &&
+        pendingTarget != null &&
+        (_latencyCoordinator.hasActiveTargetCheck(pendingTarget) ||
+            (_latencyCoordinator.kind == LatencySessionKind.targeted &&
+                _latencyCoordinator.isChecking(pendingTarget)))) {
+      return;
+    }
     if (!await _prepareManualUrlTest('manual_row')) return;
     _ensureActiveLookupCaches();
     if (!_activeOutboundByTagLookup.containsKey(tag) &&
@@ -9765,6 +9847,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         defaultTargetPlatform == TargetPlatform.android &&
         _settings.homeNavigationMode == HomeNavigationMode.tabs) {
       return TabbedHomeShell(
+        bottomNavigationStyle: _settings.bottomNavigationStyle,
         settingsBuilder: _buildSettingsPresentation,
         effectsEnabled: _effectiveProgressiveBlurEnabled,
         homeBuilder: (context, openProxies) =>

@@ -1111,9 +1111,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                   runtimeStates: widget.runtimeStates,
                   routeAnimation: animation,
                   onSelected: widget.onSelected,
-                  onProxyUrlTest: widget.connected
-                      ? widget.onProxyUrlTest
-                      : null,
+                  onProxyUrlTest: widget.onProxyUrlTest,
                   onVisibleProxyNeedsLocation: widget.connected
                       ? widget.onVisibleProxyNeedsLocation
                       : null,
@@ -1264,18 +1262,17 @@ class _ProxiesPageState extends State<ProxiesPage> {
                 ),
               ),
             ),
-            if (widget.connected)
-              Positioned(
-                right: 24,
-                bottom: footerHeight + 24,
-                child: widget.urlTestInFlightListenable != null
-                    ? ValueListenableBuilder<bool>(
-                        valueListenable: widget.urlTestInFlightListenable!,
-                        builder: (context, inFlight, _) =>
-                            _buildUrlTestFab(l10n, inFlight),
-                      )
-                    : _buildUrlTestFab(l10n, widget.urlTestInFlight),
-              ),
+            Positioned(
+              right: 24,
+              bottom: footerHeight + 24,
+              child: widget.urlTestInFlightListenable != null
+                  ? ValueListenableBuilder<bool>(
+                      valueListenable: widget.urlTestInFlightListenable!,
+                      builder: (context, inFlight, _) =>
+                          _buildUrlTestFab(l10n, inFlight),
+                    )
+                  : _buildUrlTestFab(l10n, widget.urlTestInFlight),
+            ),
           ],
         ),
       ),
@@ -1543,10 +1540,17 @@ class _ProxiesPageState extends State<ProxiesPage> {
             child: Container(
               key: const ValueKey('proxy-current-choice'),
               margin: const EdgeInsets.fromLTRB(6, 4, 6, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
+                color: Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withValues(alpha: .32),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: .75),
+                ),
               ),
               child: Row(
                 children: [
@@ -1584,12 +1588,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.check_circle_rounded,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 22,
-                  ),
                 ],
               ),
             ),
@@ -1615,7 +1613,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
               animate: !widget.embedded && !widget.browserMode,
               forceBaseInset: widget.browserMode,
               onTap: () => widget.onSelected(proxy.tag),
-              onTestLatency: widget.connected && widget.onProxyUrlTest != null
+              onTestLatency: widget.onProxyUrlTest != null
                   ? () => unawaited(widget.onProxyUrlTest!(proxy.tag))
                   : null,
               onLongPress: proxy.isGroup

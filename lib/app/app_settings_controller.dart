@@ -138,6 +138,7 @@ class AppSettingsController {
   int notificationTrafficRefreshSeconds = 2;
   bool hideServerIp = false;
   HomeNavigationMode homeNavigationMode = HomeNavigationMode.panel;
+  BottomNavigationStyle bottomNavigationStyle = BottomNavigationStyle.floating;
   bool sendHwidToProviders = true;
   String proxySort = 'source';
   bool progressiveBlurEnabled = false;
@@ -231,6 +232,7 @@ class AppSettingsController {
       notificationTrafficRefreshSeconds: notificationTrafficRefreshSeconds,
       hideServerIp: hideServerIp,
       homeNavigationMode: homeNavigationMode,
+      bottomNavigationStyle: bottomNavigationStyle,
       sendHwidToProviders: sendHwidToProviders,
       hwidDefaultNoticeShown: hwidDefaultNoticeShown,
       progressiveBlurEnabled: progressiveBlurEnabled,
@@ -313,6 +315,7 @@ class AppSettingsController {
     notificationTrafficRefreshSeconds = state.notificationTrafficRefreshSeconds;
     hideServerIp = state.hideServerIp;
     homeNavigationMode = state.homeNavigationMode;
+    bottomNavigationStyle = state.bottomNavigationStyle;
     sendHwidToProviders = state.sendHwidToProviders;
     hwidDefaultNoticeShown = state.hwidDefaultNoticeShown;
     SubscriptionFetcher.configureHwidSharing(sendHwidToProviders);
@@ -886,6 +889,12 @@ class AppSettingsController {
   AppSettingsChange setHomeNavigationMode(HomeNavigationMode value) {
     if (homeNavigationMode == value) return const AppSettingsChange.none();
     homeNavigationMode = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setBottomNavigationStyle(BottomNavigationStyle value) {
+    if (bottomNavigationStyle == value) return const AppSettingsChange.none();
+    bottomNavigationStyle = value;
     return const AppSettingsChange(changed: true);
   }
 

@@ -86,6 +86,81 @@ HomePage _home({
 );
 
 void main() {
+  testWidgets(
+    'central ping grows for large text instead of clipping its digits',
+    (tester) async {
+      var refreshes = 0;
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: Center(
+              child: ActiveProxyDelayIndicator(
+                connected: true,
+                proxy: _proxy,
+                onRefresh: () => refreshes++,
+              ),
+            ),
+          ),
+          textScale: 2,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final indicator = find.byType(ActiveProxyDelayIndicator);
+      expect(tester.getSize(indicator).height, greaterThanOrEqualTo(56));
+      await tester.tap(indicator);
+      expect(refreshes, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reduced motion shows the mini-card immediately without a slide',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: HomeCurrentProxyCard(proxy: _proxy, onTap: () {}),
+          ),
+        ),
+      );
+      final card = find.byKey(const ValueKey('home-current-proxy-card'));
+      expect(
+        find.ancestor(
+          of: card,
+          matching: find.byType(TweenAnimationBuilder<double>),
+        ),
+        findsNothing,
+      );
+      expect(card.hitTestable(), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'mini-card enters gradually and ping updates do not replay entrance',
+    (tester) async {
+      final states = ProxyRuntimeVisualStore();
+      addTearDown(states.dispose);
+      await tester.pumpWidget(_app(_home(states: states)));
+      final card = find.byKey(const ValueKey('home-current-proxy-card'));
+      final opacity = find
+          .ancestor(of: card, matching: find.byType(Opacity))
+          .first;
+      expect(opacity, findsOneWidget);
+      expect(tester.widget<Opacity>(opacity).opacity, lessThan(1));
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(tester.widget<Opacity>(opacity).opacity, inExclusiveRange(0, 1));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(opacity).opacity, 1);
+      states.replaceAll({
+        'auto': const ProxyRuntimeVisualState(latency: 83, latencyFresh: true),
+      });
+      await tester.pump();
+      expect(tester.widget<Opacity>(opacity).opacity, 1);
+      expect(find.byType(ActiveProxyDelayIndicator), findsOneWidget);
+    },
+  );
+
   testWidgets('home removes mini-card ping but keeps central ping clickable', (
     tester,
   ) async {

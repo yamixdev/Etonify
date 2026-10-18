@@ -35,6 +35,7 @@ void main() {
           )
           .copyWith(
             homeNavigationMode: HomeNavigationMode.tabs,
+            bottomNavigationStyle: BottomNavigationStyle.docked,
             localeCode: 'en',
             autoCheckNoticeAcknowledged: true,
             hwidDefaultNoticeShown: true,
@@ -43,6 +44,7 @@ void main() {
       await tester.pumpWidget(_TestMeowClient(store: store));
       await tester.pumpAndSettle();
       expect(find.byType(NavigationBar), findsOneWidget);
+      expect(tester.getRect(find.byType(NavigationBar)).width, 800);
       expect(find.byType(ProxyPanelShell), findsNothing);
       await tester.tap(find.byKey(const ValueKey('proxies-tab')));
       await tester.pumpAndSettle();
@@ -63,6 +65,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('general-appearance-entry')));
       await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('bottom-navigation-style-setting')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Floating').last);
+      await tester.pumpAndSettle();
       final navigation = find.byKey(const ValueKey('home-navigation-setting'));
       await tester.ensureVisible(navigation);
       await tester.tap(navigation);
@@ -79,6 +87,10 @@ void main() {
       expect(
         (await store.loadState()).homeNavigationMode,
         HomeNavigationMode.panel,
+      );
+      expect(
+        (await store.loadState()).bottomNavigationStyle,
+        BottomNavigationStyle.floating,
       );
       expect(tester.takeException(), isNull);
     },

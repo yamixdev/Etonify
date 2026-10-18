@@ -49,6 +49,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNavigationTabs => 'Bottom tabs';
 
   @override
+  String get bottomNavigationStyleTitle => 'Bottom bar style';
+
+  @override
+  String get bottomNavigationStyleFloating => 'Floating';
+
+  @override
+  String get bottomNavigationStyleDocked => 'Docked';
+
+  @override
   String get coreConfigActive => 'Active';
 
   @override

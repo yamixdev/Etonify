@@ -74,6 +74,8 @@ class SettingsGeneralPage extends StatefulWidget {
     this.onAutoConnectOnLaunchChanged,
     this.currentHomeNavigationMode = HomeNavigationMode.panel,
     this.onHomeNavigationModeChanged,
+    this.currentBottomNavigationStyle = BottomNavigationStyle.floating,
+    this.onBottomNavigationStyleChanged,
     this.showQuickSettingsTileAction = false,
     this.onAddQuickSettingsTile,
     this.showBatteryOptimizationSettings = false,
@@ -102,6 +104,8 @@ class SettingsGeneralPage extends StatefulWidget {
   final ValueChanged<bool>? onAutoConnectOnLaunchChanged;
   final HomeNavigationMode currentHomeNavigationMode;
   final ValueChanged<HomeNavigationMode>? onHomeNavigationModeChanged;
+  final BottomNavigationStyle currentBottomNavigationStyle;
+  final ValueChanged<BottomNavigationStyle>? onBottomNavigationStyleChanged;
   final bool showQuickSettingsTileAction;
   final VoidCallback? onAddQuickSettingsTile;
   final bool showBatteryOptimizationSettings;
@@ -134,6 +138,7 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
   late var _sendHwid = widget.currentSendHwidToProviders;
   late var _autoConnect = widget.currentAutoConnectOnLaunch;
   late var _homeNavigationMode = widget.currentHomeNavigationMode;
+  late var _bottomNavigationStyle = widget.currentBottomNavigationStyle;
 
   @override
   void didUpdateWidget(covariant SettingsGeneralPage oldWidget) {
@@ -176,6 +181,10 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
     if (oldWidget.currentHomeNavigationMode !=
         widget.currentHomeNavigationMode) {
       _homeNavigationMode = widget.currentHomeNavigationMode;
+    }
+    if (oldWidget.currentBottomNavigationStyle !=
+        widget.currentBottomNavigationStyle) {
+      _bottomNavigationStyle = widget.currentBottomNavigationStyle;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _revision.value++;
@@ -421,15 +430,27 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
 
       const Gap(settingsSectionGap),
 
-      if (widget.onHomeNavigationModeChanged != null)
+      if (widget.onHomeNavigationModeChanged != null ||
+          (_homeNavigationMode == HomeNavigationMode.tabs &&
+              widget.onBottomNavigationStyleChanged != null))
         _group([
-          _HomeNavigationTile(
-            value: _homeNavigationMode,
-            onChanged: (value) {
-              _update(() => _homeNavigationMode = value);
-              widget.onHomeNavigationModeChanged!(value);
-            },
-          ),
+          if (widget.onHomeNavigationModeChanged != null)
+            _HomeNavigationTile(
+              value: _homeNavigationMode,
+              onChanged: (value) {
+                _update(() => _homeNavigationMode = value);
+                widget.onHomeNavigationModeChanged!(value);
+              },
+            ),
+          if (_homeNavigationMode == HomeNavigationMode.tabs &&
+              widget.onBottomNavigationStyleChanged != null)
+            _BottomNavigationStyleTile(
+              value: _bottomNavigationStyle,
+              onChanged: (value) {
+                _update(() => _bottomNavigationStyle = value);
+                widget.onBottomNavigationStyleChanged!(value);
+              },
+            ),
         ]),
     ]);
   }
@@ -597,6 +618,51 @@ class _HomeNavigationTileState extends State<_HomeNavigationTile> {
         if (!mounted || value == null || value == _value) return;
         widget.onChanged(value);
         setState(() => _value = value);
+      },
+    );
+  }
+}
+
+class _BottomNavigationStyleTile extends StatelessWidget {
+  const _BottomNavigationStyleTile({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final BottomNavigationStyle value;
+  final ValueChanged<BottomNavigationStyle> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    String label(BottomNavigationStyle style) =>
+        style == BottomNavigationStyle.docked
+        ? l10n.bottomNavigationStyleDocked
+        : l10n.bottomNavigationStyleFloating;
+    return ListTile(
+      key: const ValueKey('bottom-navigation-style-setting'),
+      leading: SettingsLeadingIcon(
+        icon: Icons.view_week_outlined,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(l10n.bottomNavigationStyleTitle),
+      subtitle: Text(label(value)),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () async {
+        final selected = await showModalBottomSheet<BottomNavigationStyle>(
+          context: context,
+          showDragHandle: true,
+          builder: (_) => _RadioSheet<BottomNavigationStyle>(
+            title: l10n.bottomNavigationStyleTitle,
+            current: value,
+            items: [
+              for (final style in BottomNavigationStyle.values)
+                RadioChoice(value: style, label: label(style)),
+            ],
+          ),
+        );
+        if (!context.mounted || selected == null || selected == value) return;
+        onChanged(selected);
       },
     );
   }

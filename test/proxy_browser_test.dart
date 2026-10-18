@@ -10,6 +10,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+import 'package:meow_client/theme/app_theme.dart';
 
 class _CountingRuntimeStore extends ProxyRuntimeVisualStore {
   int reads = 0;
@@ -113,6 +114,39 @@ ProxiesPage _page({
 );
 
 void main() {
+  testWidgets('current choice uses accent outline without a circular check', (
+    tester,
+  ) async {
+    final theme = buildAppTheme(Brightness.dark);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: _page(
+          proxies: [_proxy('Selected')],
+          groups: {},
+          selectedTag: 'Selected',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(const ValueKey('proxy-current-choice'));
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.byIcon(Icons.check_circle_rounded),
+      ),
+      findsNothing,
+    );
+    final decoration =
+        tester.widget<Container>(card).decoration! as BoxDecoration;
+    expect(decoration.border, isNotNull);
+    final border = decoration.border! as Border;
+    expect(border.top.color.a, greaterThanOrEqualTo(.65));
+    expect(find.byKey(const ValueKey('proxy-select-Selected')), findsOneWidget);
+  });
+
   testWidgets(
     'nested active summary arrival and removal update header structure',
     (tester) async {

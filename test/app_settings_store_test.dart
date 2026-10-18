@@ -55,6 +55,30 @@ class _CountingSettingsFile extends Fake implements RandomAccessFile {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
+    'bottom navigation style survives storage and safe backup roundtrip',
+    () {
+      final store = MemoryAppSettingsStore();
+      final state = store.mapState({'bottom_navigation_style': 'docked'});
+      expect(store.stateToMap(state)['bottom_navigation_style'], 'docked');
+      expect(
+        store.stateToSafeExportMap(state)['bottom_navigation_style'],
+        'docked',
+      );
+      final imported = store.mergeSafeImportMap(
+        store.mapState({}),
+        store.stateToSafeExportMap(state),
+      );
+      expect(imported.bottomNavigationStyle, BottomNavigationStyle.docked);
+      for (final value in [null, '', 'future-style']) {
+        final fallback = store.mapState({'bottom_navigation_style': value});
+        expect(
+          store.stateToMap(fallback)['bottom_navigation_style'],
+          'floating',
+        );
+      }
+    },
+  );
+  test(
     'unchanged Hive settings do not write or flush Windows namespace',
     () async {
       final directory = await Directory.systemTemp.createTemp(

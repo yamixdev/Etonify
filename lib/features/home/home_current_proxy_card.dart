@@ -68,13 +68,13 @@ class HomeCurrentProxyCard extends StatelessWidget {
     );
     final openGroup = proxy.isGroup ? onOpenGroup : null;
 
-    return Material(
+    final card = Material(
       key: const ValueKey('home-current-proxy-card'),
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: .5),
+          color: theme.colorScheme.primary.withValues(alpha: .7),
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -140,6 +140,24 @@ class HomeCurrentProxyCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+    if (MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      return card;
+    }
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('home-current-proxy-entrance-${proxy.tag}'),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      child: card,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 6 * (1 - value)),
+          child: child,
         ),
       ),
     );

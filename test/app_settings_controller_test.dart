@@ -8,6 +8,42 @@ import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 
 void main() {
   test(
+    'bottom navigation style applies saved state without runtime restart',
+    () async {
+      final store = MemoryAppSettingsStore();
+      final controller = AppSettingsController();
+      controller.applyState(
+        (await store.loadState()).copyWith(
+          bottomNavigationStyle: BottomNavigationStyle.docked,
+        ),
+      );
+      expect(controller.bottomNavigationStyle, BottomNavigationStyle.docked);
+      final change = controller.setBottomNavigationStyle(
+        BottomNavigationStyle.floating,
+      );
+      expect(change.changed, isTrue);
+      expect(change.restartRuntime, isFalse);
+      expect(
+        controller
+            .toState(
+              onboardingCompleted: false,
+              acceptedLegalVersion: '',
+              acceptedLegalAtMillis: null,
+              activeProfileId: '',
+              selectedProxyTag: '',
+            )
+            .bottomNavigationStyle,
+        BottomNavigationStyle.floating,
+      );
+      expect(
+        controller
+            .setBottomNavigationStyle(BottomNavigationStyle.floating)
+            .changed,
+        isFalse,
+      );
+    },
+  );
+  test(
     'split routing applies mode and both lists as one validated restart',
     () {
       final controller = AppSettingsController();

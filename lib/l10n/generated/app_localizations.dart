@@ -170,6 +170,24 @@ abstract class AppLocalizations {
   /// **'Bottom tabs'**
   String get homeNavigationTabs;
 
+  /// No description provided for @bottomNavigationStyleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom bar style'**
+  String get bottomNavigationStyleTitle;
+
+  /// No description provided for @bottomNavigationStyleFloating.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating'**
+  String get bottomNavigationStyleFloating;
+
+  /// No description provided for @bottomNavigationStyleDocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Docked'**
+  String get bottomNavigationStyleDocked;
+
   /// No description provided for @coreConfigActive.
   ///
   /// In en, this message translates to:

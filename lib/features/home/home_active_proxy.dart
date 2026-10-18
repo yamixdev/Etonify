@@ -93,8 +93,8 @@ class ActiveProxyDelayIndicator extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(20),
             onTap: hidden ? null : onRefresh,
-            child: SizedBox(
-              height: 40,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 8,

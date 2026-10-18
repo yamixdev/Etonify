@@ -17,6 +17,8 @@ enum AppThemePreference { system, light, dark, amoled }
 
 enum HomeNavigationMode { panel, tabs }
 
+enum BottomNavigationStyle { floating, docked }
+
 enum TunImplementationPreference { native, system }
 
 enum InboundConnectionMode { vpn, proxy }
@@ -205,6 +207,7 @@ class AppSettingsState {
     this.autoCheckServers = false,
     this.autoConnectOnLaunch = false,
     this.homeNavigationMode = HomeNavigationMode.panel,
+    this.bottomNavigationStyle = BottomNavigationStyle.floating,
     this.autoCheckNoticeAcknowledged = false,
     required this.locationLookupLimit,
     required this.locationLookupTimeoutSeconds,
@@ -286,6 +289,7 @@ class AppSettingsState {
   final bool autoCheckServers;
   final bool autoConnectOnLaunch;
   final HomeNavigationMode homeNavigationMode;
+  final BottomNavigationStyle bottomNavigationStyle;
   final bool autoCheckNoticeAcknowledged;
   final int locationLookupLimit;
   final int locationLookupTimeoutSeconds;
@@ -367,6 +371,7 @@ class AppSettingsState {
     bool? autoCheckServers,
     bool? autoConnectOnLaunch,
     HomeNavigationMode? homeNavigationMode,
+    BottomNavigationStyle? bottomNavigationStyle,
     bool? autoCheckNoticeAcknowledged,
     int? locationLookupLimit,
     int? locationLookupTimeoutSeconds,
@@ -470,6 +475,8 @@ class AppSettingsState {
       autoCheckServers: autoCheckServers ?? this.autoCheckServers,
       autoConnectOnLaunch: autoConnectOnLaunch ?? this.autoConnectOnLaunch,
       homeNavigationMode: homeNavigationMode ?? this.homeNavigationMode,
+      bottomNavigationStyle:
+          bottomNavigationStyle ?? this.bottomNavigationStyle,
       autoCheckNoticeAcknowledged:
           autoCheckNoticeAcknowledged ?? this.autoCheckNoticeAcknowledged,
       locationLookupLimit: locationLookupLimit ?? this.locationLookupLimit,
@@ -563,6 +570,7 @@ abstract class AppSettingsStore {
       'notification_traffic_refresh_seconds';
   static const _hideServerIpKey = 'hide_server_ip';
   static const _homeNavigationModeKey = 'home_navigation_mode';
+  static const _bottomNavigationStyleKey = 'bottom_navigation_style';
   // Local consent: intentionally excluded from safeExportKeys.
   static const _sendHwidToProvidersKey = 'send_hwid_to_providers';
   static const _hwidDefaultNoticeShownKey = 'hwid_default_notice_shown';
@@ -656,6 +664,7 @@ abstract class AppSettingsStore {
     _notificationTrafficRefreshSecondsKey,
     _hideServerIpKey,
     _homeNavigationModeKey,
+    _bottomNavigationStyleKey,
     _proxySortKey,
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
@@ -877,6 +886,9 @@ abstract class AppSettingsStore {
       homeNavigationMode: map[_homeNavigationModeKey] == 'tabs'
           ? HomeNavigationMode.tabs
           : HomeNavigationMode.panel,
+      bottomNavigationStyle: map[_bottomNavigationStyleKey] == 'docked'
+          ? BottomNavigationStyle.docked
+          : BottomNavigationStyle.floating,
       sendHwidToProviders: boolValue(
         _sendHwidToProvidersKey,
         defaultValue: true,
@@ -1119,6 +1131,7 @@ abstract class AppSettingsStore {
           .toString(),
       _hideServerIpKey: state.hideServerIp ? '1' : '0',
       _homeNavigationModeKey: state.homeNavigationMode.name,
+      _bottomNavigationStyleKey: state.bottomNavigationStyle.name,
       _sendHwidToProvidersKey: state.sendHwidToProviders ? '1' : '0',
       _hwidDefaultNoticeShownKey: state.hwidDefaultNoticeShown ? '1' : '0',
       _progressiveBlurEnabledKey: state.progressiveBlurEnabled ? '1' : '0',

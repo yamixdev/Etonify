@@ -28,10 +28,11 @@ class OfflineUrlTestSession {
     required this.fingerprint,
     required this.physicalNetworkEpoch,
     required Set<String> tags,
+    this.isUserSweep = true,
     Set<String>? visibleTags,
     Map<String, bool> initialResults = const {},
   }) : _tags = Set<String>.of(tags),
-       _visibleTags = Set<String>.of(visibleTags ?? tags)..addAll(tags) {
+       _visibleTags = Set<String>.of(visibleTags ?? tags) {
     for (final entry in initialResults.entries) {
       if (!_visibleTags.contains(entry.key)) continue;
       _latestResults[entry.key] = entry.value;
@@ -45,6 +46,7 @@ class OfflineUrlTestSession {
 
   final String id;
   final String fingerprint;
+  final bool isUserSweep;
   final Set<String> _tags;
   // A runtime can skip an unusable leaf without changing the catalog size.
   // Only _tags own queue completion; the header uses the full visible set.
@@ -77,7 +79,7 @@ class OfflineUrlTestSession {
     isCancelled: phase == OfflineUrlTestPhase.cancelled,
     isPaused: phase == OfflineUrlTestPhase.pausingForVpn,
     isOfflineSession: true,
-    showCheckProgress: !isTerminal,
+    showCheckProgress: isUserSweep && !isTerminal,
     total: total,
     working: working,
     failed: failed,
@@ -88,6 +90,7 @@ class OfflineUrlTestSession {
     required String reason,
     required int physicalNetworkEpoch,
   }) =>
+      isUserSweep &&
       phase == OfflineUrlTestPhase.completed &&
       this.physicalNetworkEpoch == physicalNetworkEpoch &&
       (reason == 'runtime_diagnostics_ready' ||
@@ -115,14 +118,16 @@ class OfflineUrlTestSession {
       available: available,
     );
     final previous = _latestResults[tag];
-    if (previous == true) _working--;
-    if (previous == false) _failed--;
-    _latestResults[tag] = available;
-    if (available) {
-      _working++;
-    } else {
-      _failed++;
+    if (_visibleTags.contains(tag)) {
+      if (previous == true) _working--;
+      if (previous == false) _failed--;
+      if (available) {
+        _working++;
+      } else {
+        _failed++;
+      }
     }
+    _latestResults[tag] = available;
     if (_measurements.length == _tags.length) {
       phase = OfflineUrlTestPhase.completed;
     }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -110,6 +112,173 @@ Widget _page({
 }
 
 void main() {
+  for (final browserMode in [false, true]) {
+    for (final connected in [false, true]) {
+      testWidgets(
+        'ping targets stay independent in ${browserMode ? 'browser' : 'legacy'} '
+        'root and nested groups with connected=$connected',
+        (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = const Size(393, 873);
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final selected = <String>[];
+          final tested = <String>[];
+          final pending = Completer<void>();
+          addTearDown(() => pending.complete());
+          final states = ProxyRuntimeVisualStore();
+          addTearDown(states.dispose);
+          final root = _proxy('Root', children: ['Nested']);
+          final nested = _proxy(
+            'Nested',
+            children: ['Error', 'Checking'],
+          ).copyWith(clearLatency: true);
+          final error = _proxy('Error').copyWith(
+            clearLatency: true,
+            latencyUnavailable: true,
+            latencyError: 'Connection refused',
+          );
+          await tester.pumpWidget(
+            _app(
+              Scaffold(
+                body: ProxiesPage(
+                  proxies: [root],
+                  groupChildrenByTag: {
+                    'Root': [nested],
+                    'Nested': [
+                      error,
+                      _proxy('Checking').copyWith(clearLatency: true),
+                      ...List.generate(30, (i) => _proxy('Node $i')),
+                    ],
+                  },
+                  selectedTag: '',
+                  connected: connected,
+                  browserMode: browserMode,
+                  progressiveBlurEnabled: false,
+                  hapticEnabled: false,
+                  runtimeStates: states,
+                  onSelected: selected.add,
+                  onUrlTest: () async {},
+                  onProxyUrlTest: (tag) {
+                    tested.add(tag);
+                    return pending.future;
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          Finder action(String tag) =>
+              find.byKey(ValueKey('proxy-latency-action-$tag')).last;
+          Future<void> tapTextAndSpace(String tag) async {
+            final target = action(tag);
+            final bounds = tester.getRect(target);
+            expect(bounds.width, 72);
+            expect(bounds.height, greaterThanOrEqualTo(48));
+            await tester.tap(
+              find.descendant(of: target, matching: find.byType(Text)),
+            );
+            await tester.pump();
+            await tester.tapAt(Offset(bounds.left + 2, bounds.center.dy));
+            await tester.pump();
+          }
+
+          await tapTextAndSpace('Root');
+          expect(tested, ['Root', 'Root']);
+          expect(selected, isEmpty);
+          expect(
+            find.byKey(const ValueKey('proxy-open-group-Nested')),
+            findsNothing,
+          );
+          await tester.longPress(action('Root'));
+          await tester.pumpAndSettle();
+          expect(tested, ['Root', 'Root']);
+          expect(selected, isEmpty);
+          expect(
+            find.byKey(const ValueKey('proxy-open-group-Nested')),
+            findsNothing,
+          );
+
+          await tester.tap(find.byKey(const ValueKey('proxy-open-group-Root')));
+          await tester.pumpAndSettle();
+          await tapTextAndSpace('Nested');
+          expect(tested, ['Root', 'Root', 'Nested', 'Nested']);
+          expect(selected, isEmpty);
+          expect(
+            find.byKey(const ValueKey('proxy-latency-action-Error')),
+            findsNothing,
+          );
+          if (browserMode) {
+            await tester.tap(find.byKey(const ValueKey('proxy-browser-test')));
+            expect(tested.last, 'Root');
+          }
+          await tester.tap(
+            find.byKey(const ValueKey('proxy-open-group-Nested')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.descendant(
+              of: action('Error'),
+              matching: find.byKey(const ValueKey('proxy-latency-unavailable')),
+            ),
+          );
+          expect(tested.last, 'Error');
+          expect(selected, isEmpty);
+
+          states.replaceAll({
+            'Checking': const ProxyRuntimeVisualState(latencyChecking: true),
+          });
+          await tester.pump();
+          final checking = action('Checking');
+          await tester.tap(
+            find.descendant(
+              of: checking,
+              matching: find.byType(ProxyLatencyDots),
+            ),
+          );
+          await tester.tap(checking);
+          expect(tested.sublist(tested.length - 2), ['Checking', 'Checking']);
+          expect(selected, isEmpty);
+          final beforeScroll = tested.length;
+          final list = browserMode
+              ? find.byKey(const ValueKey('proxy-browser-list'))
+              : find.byKey(const PageStorageKey('proxy-group-list-Nested'));
+          final controller = tester.widget<ListView>(list).controller!;
+          final beforeOffset = controller.offset;
+          await tester.drag(checking, const Offset(0, -120));
+          await tester.pump(const Duration(seconds: 1));
+          expect(controller.offset, greaterThan(beforeOffset));
+          expect(tested.length, beforeScroll);
+          expect(selected, isEmpty);
+          await tester.pumpWidget(const SizedBox());
+          await tester.pump();
+        },
+      );
+    }
+  }
+
+  testWidgets('legacy global latency test is available while disconnected', (
+    tester,
+  ) async {
+    var tested = 0;
+    await tester.pumpWidget(
+      _app(
+        ProxiesPage(
+          proxies: [_proxy('Node')],
+          selectedTag: '',
+          connected: false,
+          progressiveBlurEnabled: false,
+          onSelected: (_) {},
+          onUrlTest: () async => tested++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FloatingActionButton));
+    expect(tested, 1);
+  });
+
   testWidgets(
     'group selection reprioritizes after scroll ends in source order',
     (tester) async {
