@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -83,6 +85,52 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('open appearance follows externally restored navigation mode', (
+    tester,
+  ) async {
+    final mode = ValueNotifier(HomeNavigationMode.panel);
+    addTearDown(mode.dispose);
+    await tester.pumpWidget(
+      ValueListenableBuilder<HomeNavigationMode>(
+        valueListenable: mode,
+        builder: (_, value, child) => _generalSettingsApp(
+          statusNotificationEnabled: true,
+          homeNavigationMode: value,
+          onHomeNavigationChanged: (_) {},
+        ),
+      ),
+    );
+    await _openGeneralSection(tester, 'appearance');
+    final entry = find.byKey(const ValueKey('navigation-preview-floating'));
+    await tester.ensureVisible(entry);
+    mode.value = HomeNavigationMode.tabs;
+    await tester.pumpAndSettle();
+    expect(
+      tester
+              .getSemantics(entry)
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
+    );
+    mode.value = HomeNavigationMode.panel;
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('navigation-preview-panel')),
+    );
+    expect(
+      tester
+              .getSemantics(
+                find.byKey(const ValueKey('navigation-preview-panel')),
+              )
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
+    );
+  });
   testWidgets('open appearance follows externally restored bottom bar style', (
     tester,
   ) async {
@@ -100,17 +148,32 @@ void main() {
       ),
     );
     await _openGeneralSection(tester, 'appearance');
-    final entry = find.byKey(const ValueKey('bottom-navigation-style-setting'));
+    final entry = find.byKey(const ValueKey('navigation-preview-docked'));
     expect(entry, findsOneWidget);
+    await tester.ensureVisible(entry);
+    expect(
+      tester
+              .getSemantics(entry)
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isFalse,
+    );
     style.value = BottomNavigationStyle.docked;
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: entry, matching: find.text('Docked')),
-      findsOneWidget,
+      tester
+              .getSemantics(entry)
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
     );
   });
   testWidgets(
-    'bottom bar style appears only for tabs and updates immediately',
+    'navigation gallery updates both preferences and keeps selection on reopen',
     (tester) async {
       final changes = <BottomNavigationStyle>[];
       await tester.pumpWidget(
@@ -121,33 +184,26 @@ void main() {
         ),
       );
       await _openGeneralSection(tester, 'appearance');
-      final style = find.byKey(
-        const ValueKey('bottom-navigation-style-setting'),
-      );
-      expect(style, findsNothing);
-      final navigation = find.byKey(const ValueKey('home-navigation-setting'));
-      await tester.ensureVisible(navigation);
-      await tester.tap(navigation);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Bottom tabs').last);
-      await tester.pumpAndSettle();
+      final style = find.byKey(const ValueKey('navigation-preview-docked'));
+      expect(style, findsOneWidget);
       await tester.ensureVisible(style);
       await tester.tap(style);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Docked').last);
+      await tester.tap(style);
       await tester.pumpAndSettle();
       expect(changes, [BottomNavigationStyle.docked]);
-      expect(
-        find.descendant(of: style, matching: find.text('Docked')),
-        findsOneWidget,
-      );
       await tester.pageBack();
       await tester.pumpAndSettle();
       await _openGeneralSection(tester, 'appearance');
       await tester.ensureVisible(style);
       expect(
-        find.descendant(of: style, matching: find.text('Docked')),
-        findsOneWidget,
+        tester
+                .getSemantics(style)
+                .getSemanticsData()
+                .flagsCollection
+                .isSelected ==
+            Tristate.isTrue,
+        isTrue,
       );
     },
   );
@@ -321,7 +377,7 @@ void main() {
       ),
     );
     await _openGeneralSection(tester, 'appearance');
-    final entry = find.byKey(const ValueKey('home-navigation-setting'));
+    final entry = find.byKey(const ValueKey('navigation-preview-floating'));
     await tester.ensureVisible(entry);
     await tester.pumpAndSettle();
     final scrollable = find.byKey(
@@ -334,8 +390,6 @@ void main() {
     expect(offset, greaterThan(0));
     await tester.tap(entry);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Bottom tabs').last);
-    await tester.pumpAndSettle();
     expect(state.position.pixels, offset);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -345,8 +399,13 @@ void main() {
     );
     expect(reopened.position.pixels, offset);
     expect(
-      find.descendant(of: entry, matching: find.text('Bottom tabs')),
-      findsOneWidget,
+      tester
+              .getSemantics(entry)
+              .getSemanticsData()
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue,
+      isTrue,
     );
     expect(changes, [HomeNavigationMode.tabs]);
   });
@@ -485,7 +544,7 @@ void main() {
     },
   );
   testWidgets(
-    'navigation picker changes mode immediately without reopening settings',
+    'navigation gallery switches between panel and floating without a sheet',
     (tester) async {
       final changes = <HomeNavigationMode>[];
       await tester.pumpWidget(
@@ -495,20 +554,14 @@ void main() {
         ),
       );
       await _openGeneralSection(tester, 'appearance');
-      final entry = find.byKey(const ValueKey('home-navigation-setting'));
+      final entry = find.byKey(const ValueKey('navigation-preview-floating'));
       await tester.ensureVisible(entry);
       await tester.tap(entry);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Bottom tabs').last);
-      await tester.pumpAndSettle();
       expect(changes, [HomeNavigationMode.tabs]);
-      expect(
-        find.descendant(of: entry, matching: find.text('Bottom tabs')),
-        findsOneWidget,
-      );
-      await tester.tap(entry);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sliding panel').last);
+      final panel = find.byKey(const ValueKey('navigation-preview-panel'));
+      await tester.ensureVisible(panel);
+      await tester.tap(panel);
       await tester.pumpAndSettle();
       expect(changes, [HomeNavigationMode.tabs, HomeNavigationMode.panel]);
     },

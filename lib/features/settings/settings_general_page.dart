@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_notification_page.dart';
+import 'package:meow_client/features/settings/navigation_preview_gallery.dart';
 import 'package:meow_client/features/settings/battery_optimization_tile.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/subscription_background_tile.dart';
@@ -431,27 +432,26 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
       const Gap(settingsSectionGap),
 
       if (widget.onHomeNavigationModeChanged != null ||
-          (_homeNavigationMode == HomeNavigationMode.tabs &&
-              widget.onBottomNavigationStyleChanged != null))
-        _group([
-          if (widget.onHomeNavigationModeChanged != null)
-            _HomeNavigationTile(
-              value: _homeNavigationMode,
-              onChanged: (value) {
-                _update(() => _homeNavigationMode = value);
-                widget.onHomeNavigationModeChanged!(value);
-              },
-            ),
-          if (_homeNavigationMode == HomeNavigationMode.tabs &&
-              widget.onBottomNavigationStyleChanged != null)
-            _BottomNavigationStyleTile(
-              value: _bottomNavigationStyle,
-              onChanged: (value) {
-                _update(() => _bottomNavigationStyle = value);
-                widget.onBottomNavigationStyleChanged!(value);
-              },
-            ),
-        ]),
+          widget.onBottomNavigationStyleChanged != null) ...[
+        _SectionLabel(label: l10n.navigationGalleryTitle),
+        const Gap(settingsSectionLabelGap),
+        NavigationPreviewGallery(
+          mode: _homeNavigationMode,
+          style: _bottomNavigationStyle,
+          onModeChanged: widget.onHomeNavigationModeChanged == null
+              ? null
+              : (value) {
+                  _update(() => _homeNavigationMode = value);
+                  widget.onHomeNavigationModeChanged!(value);
+                },
+          onStyleChanged: widget.onBottomNavigationStyleChanged == null
+              ? null
+              : (value) {
+                  _update(() => _bottomNavigationStyle = value);
+                  widget.onBottomNavigationStyleChanged!(value);
+                },
+        ),
+      ],
     ]);
   }
 
@@ -568,105 +568,6 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
 // ---------------------------------------------------------------------------
 // Section label
 // ---------------------------------------------------------------------------
-
-class _HomeNavigationTile extends StatefulWidget {
-  const _HomeNavigationTile({required this.value, required this.onChanged});
-  final HomeNavigationMode value;
-  final ValueChanged<HomeNavigationMode> onChanged;
-
-  @override
-  State<_HomeNavigationTile> createState() => _HomeNavigationTileState();
-}
-
-class _HomeNavigationTileState extends State<_HomeNavigationTile> {
-  late var _value = widget.value;
-
-  @override
-  void didUpdateWidget(covariant _HomeNavigationTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) _value = widget.value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    String label(HomeNavigationMode value) => value == HomeNavigationMode.tabs
-        ? l10n.homeNavigationTabs
-        : l10n.homeNavigationPanel;
-    return ListTile(
-      key: const ValueKey('home-navigation-setting'),
-      leading: SettingsLeadingIcon(
-        icon: Icons.view_agenda_outlined,
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      title: Text(l10n.homeNavigationTitle),
-      subtitle: Text(label(_value)),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () async {
-        final value = await showModalBottomSheet<HomeNavigationMode>(
-          context: context,
-          showDragHandle: true,
-          builder: (_) => _RadioSheet<HomeNavigationMode>(
-            title: l10n.homeNavigationTitle,
-            current: _value,
-            items: [
-              for (final value in HomeNavigationMode.values)
-                RadioChoice(value: value, label: label(value)),
-            ],
-          ),
-        );
-        if (!mounted || value == null || value == _value) return;
-        widget.onChanged(value);
-        setState(() => _value = value);
-      },
-    );
-  }
-}
-
-class _BottomNavigationStyleTile extends StatelessWidget {
-  const _BottomNavigationStyleTile({
-    required this.value,
-    required this.onChanged,
-  });
-
-  final BottomNavigationStyle value;
-  final ValueChanged<BottomNavigationStyle> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    String label(BottomNavigationStyle style) =>
-        style == BottomNavigationStyle.docked
-        ? l10n.bottomNavigationStyleDocked
-        : l10n.bottomNavigationStyleFloating;
-    return ListTile(
-      key: const ValueKey('bottom-navigation-style-setting'),
-      leading: SettingsLeadingIcon(
-        icon: Icons.view_week_outlined,
-        color: Theme.of(context).colorScheme.primary,
-      ),
-      title: Text(l10n.bottomNavigationStyleTitle),
-      subtitle: Text(label(value)),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () async {
-        final selected = await showModalBottomSheet<BottomNavigationStyle>(
-          context: context,
-          showDragHandle: true,
-          builder: (_) => _RadioSheet<BottomNavigationStyle>(
-            title: l10n.bottomNavigationStyleTitle,
-            current: value,
-            items: [
-              for (final style in BottomNavigationStyle.values)
-                RadioChoice(value: style, label: label(style)),
-            ],
-          ),
-        );
-        if (!context.mounted || selected == null || selected == value) return;
-        onChanged(selected);
-      },
-    );
-  }
-}
 
 class _AutoConnectTile extends StatefulWidget {
   const _AutoConnectTile({required this.value, required this.onChanged});

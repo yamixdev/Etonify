@@ -42,6 +42,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get homeNavigationTitle => 'Навигация на главной';
 
   @override
+  String get navigationGalleryTitle => 'Навигация';
+
+  @override
+  String get navigationGalleryDocked => 'Нижняя навигация';
+
+  @override
+  String get navigationGalleryFloating => 'Плавающая навигация';
+
+  @override
+  String get navigationExperimentalBadge => 'Экспериментально';
+
+  @override
   String get homeNavigationPanel => 'Выдвижная панель';
 
   @override

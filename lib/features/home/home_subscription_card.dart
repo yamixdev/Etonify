@@ -151,7 +151,7 @@ class HomeSubscriptionCard extends StatelessWidget {
                               ),
                             ),
                             const Gap(12),
-                            Flexible(
+                            Expanded(
                               child: Tooltip(
                                 message: remainingText,
                                 child: Text(

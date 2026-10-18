@@ -8,6 +8,87 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
 void main() {
+  for (final style in BottomNavigationStyle.values) {
+    testWidgets('navigation blends with page background ${style.name}', (
+      tester,
+    ) async {
+      final theme = ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xff1b1c1d),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: TabbedHomeShell(
+            bottomNavigationStyle: style,
+            homeBuilder: (_, open) => const Text('Home body'),
+            proxiesBuilder: (_, active, back, request) =>
+                const Text('Proxies body'),
+            settingsBuilder: (_) => const Text('Settings body'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final surface = tester.widget<Material>(
+        find
+            .ancestor(
+              of: find.byType(NavigationBar),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      final rendered = Color.alphaBlend(
+        surface.color!,
+        theme.scaffoldBackgroundColor,
+      );
+      expect(
+        (rendered.computeLuminance() -
+                theme.scaffoldBackgroundColor.computeLuminance())
+            .abs(),
+        lessThan(.007),
+      );
+      if (style == BottomNavigationStyle.docked) {
+        expect(surface.color, theme.scaffoldBackgroundColor);
+        final decorations = tester.widgetList<DecoratedBox>(
+          find.ancestor(
+            of: find.byType(NavigationBar),
+            matching: find.byType(DecoratedBox),
+          ),
+        );
+        expect(
+          decorations.where(
+            (widget) =>
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).border != null,
+          ),
+          isEmpty,
+        );
+      }
+    });
+  }
+
+  testWidgets(
+    'tab content fades promptly and interrupts without losing state',
+    (tester) async {
+      await tester.pumpWidget(_scrubApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('proxies-tab')));
+      await tester.pump();
+      final content = find.byKey(const ValueKey('home-tab-content-transition'));
+      expect(content, findsOneWidget);
+      expect(tester.widget<FadeTransition>(content).opacity.value, lessThan(1));
+      expect(find.text('Proxies body').hitTestable(), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(find.byKey(const ValueKey('settings-tab')));
+      await tester.pump();
+      expect(find.text('Settings body').hitTestable(), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.widget<FadeTransition>(content).opacity.value, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'docked surface spans landscape while destinations avoid unsafe edges',
     (tester) async {

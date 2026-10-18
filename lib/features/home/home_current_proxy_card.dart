@@ -60,6 +60,7 @@ class HomeCurrentProxyCard extends StatelessWidget {
     final title = _title(l10n);
     final subtitle = Text(
       _subtitle(l10n),
+      textAlign: TextAlign.center,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.bodySmall?.copyWith(
@@ -81,20 +82,22 @@ class HomeCurrentProxyCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
+          constraints: const BoxConstraints(minHeight: 60, maxWidth: 300),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 CountryFlagBadge(countryCode: proxy.countryCode, size: 34),
                 const SizedBox(width: 12),
-                Expanded(
+                Flexible(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
                         title,
+                        textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
@@ -108,7 +111,7 @@ class HomeCurrentProxyCard extends StatelessWidget {
                             key: ValueKey('proxy-open-group-${proxy.tag}'),
                             onPressed: openGroup,
                             style: TextButton.styleFrom(
-                              alignment: AlignmentDirectional.centerStart,
+                              alignment: Alignment.center,
                               foregroundColor:
                                   theme.colorScheme.onSurfaceVariant,
                               minimumSize: const Size(48, 48),
@@ -145,19 +148,22 @@ class HomeCurrentProxyCard extends StatelessWidget {
     );
     if (MediaQuery.disableAnimationsOf(context) ||
         MediaQuery.accessibleNavigationOf(context)) {
-      return card;
+      return Align(heightFactor: 1, child: card);
     }
-    return TweenAnimationBuilder<double>(
-      key: ValueKey('home-current-proxy-entrance-${proxy.tag}'),
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
-      child: card,
-      builder: (context, value, child) => Opacity(
-        opacity: value,
-        child: Transform.translate(
-          offset: Offset(0, 6 * (1 - value)),
-          child: child,
+    return Align(
+      heightFactor: 1,
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey('home-current-proxy-entrance-${proxy.tag}'),
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        child: card,
+        builder: (context, value, child) => Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 6 * (1 - value)),
+            child: child,
+          ),
         ),
       ),
     );

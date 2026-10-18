@@ -71,17 +71,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('general-appearance-entry')));
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('bottom-navigation-style-setting')),
+      final floating = find.byKey(
+        const ValueKey('navigation-preview-floating'),
       );
+      await tester.ensureVisible(floating);
+      await tester.tap(floating);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Floating').last);
-      await tester.pumpAndSettle();
-      final navigation = find.byKey(const ValueKey('home-navigation-setting'));
-      await tester.ensureVisible(navigation);
-      await tester.tap(navigation);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sliding panel').last);
+      final panel = find.byKey(const ValueKey('navigation-preview-panel'));
+      await tester.ensureVisible(panel);
+      await tester.tap(panel);
       await tester.pumpAndSettle();
       await tester.pageBack();
       await tester.pumpAndSettle();

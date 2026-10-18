@@ -158,6 +158,30 @@ abstract class AppLocalizations {
   /// **'Home navigation'**
   String get homeNavigationTitle;
 
+  /// No description provided for @navigationGalleryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation'**
+  String get navigationGalleryTitle;
+
+  /// No description provided for @navigationGalleryDocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom navigation'**
+  String get navigationGalleryDocked;
+
+  /// No description provided for @navigationGalleryFloating.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating navigation'**
+  String get navigationGalleryFloating;
+
+  /// No description provided for @navigationExperimentalBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental'**
+  String get navigationExperimentalBadge;
+
   /// No description provided for @homeNavigationPanel.
   ///
   /// In en, this message translates to:

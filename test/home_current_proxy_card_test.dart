@@ -8,6 +8,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/theme/app_theme.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 const _proxy = AppProxySummary(
   tag: 'auto',
@@ -86,6 +87,29 @@ HomePage _home({
 );
 
 void main() {
+  testWidgets('mini-card and its short content stay compact and centered', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(_app(_home()));
+    await tester.pumpAndSettle();
+    final card = tester.getRect(
+      find.byKey(const ValueKey('home-current-proxy-card')),
+    );
+    final flag = tester.getRect(find.byType(CountryFlagBadge).last);
+    final title = tester.getRect(find.text('Sweden server'));
+    final subtitle = tester.getRect(find.text('VLESS').last);
+    final content = flag.expandToInclude(title).expandToInclude(subtitle);
+    expect(card.width, lessThanOrEqualTo(300));
+    expect(card.center.dx, closeTo(196.5, 1));
+    expect(content.center.dx, closeTo(card.center.dx, 1));
+    expect(title.center.dx, closeTo(subtitle.center.dx, 1));
+    expect(card.height, greaterThanOrEqualTo(48));
+  });
+
   testWidgets(
     'central ping grows for large text instead of clipping its digits',
     (tester) async {

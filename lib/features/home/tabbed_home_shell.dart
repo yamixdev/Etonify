@@ -35,12 +35,36 @@ class TabbedHomeShell extends StatefulWidget {
   State<TabbedHomeShell> createState() => _TabbedHomeShellState();
 }
 
-class _TabbedHomeShellState extends State<TabbedHomeShell> {
+class _TabbedHomeShellState extends State<TabbedHomeShell>
+    with SingleTickerProviderStateMixin {
+  late final _contentTransition = AnimationController(
+    vsync: this,
+    value: 1,
+    duration: const Duration(milliseconds: 120),
+  );
+  late final _contentOpacity = _contentTransition
+      .drive(CurveTween(curve: Curves.easeOutCubic))
+      .drive(Tween<double>(begin: .75, end: 1));
   var _index = 0;
   var _proxiesMounted = false;
   var _settingsMounted = false;
   var _serial = 0;
   ({int serial, String? groupTag})? _request;
+
+  @override
+  void dispose() {
+    _contentTransition.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      _contentTransition.value = 1;
+    }
+  }
 
   @override
   void didUpdateWidget(covariant TabbedHomeShell oldWidget) {
@@ -62,6 +86,13 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
       if (index == 1) _proxiesMounted = true;
       if (index == 2) _settingsMounted = true;
     });
+    if (widget.effectsEnabled &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        !MediaQuery.accessibleNavigationOf(context)) {
+      _contentTransition.forward(from: 0);
+    } else {
+      _contentTransition.value = 1;
+    }
     widget.onTabChanged?.call(index == 1);
   }
 
@@ -117,39 +148,37 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
       ],
     );
     final surface = Material(
-      color: theme.colorScheme.surfaceContainerHigh.withValues(
-        alpha: !docked && effects ? .88 : 1,
-      ),
+      color: docked
+          ? theme.scaffoldBackgroundColor
+          : Color.alphaBlend(
+              theme.colorScheme.onSurface.withValues(alpha: .025),
+              theme.scaffoldBackgroundColor,
+            ).withValues(alpha: effects ? .94 : 1),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
       shape: docked
           ? null
           : StadiumBorder(
               side: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: .5),
+                color: theme.colorScheme.onSurface.withValues(
+                  alpha: media.highContrast ? .6 : .08,
+                ),
               ),
             ),
       child: Padding(
         padding: EdgeInsets.only(bottom: docked ? media.viewPadding.bottom : 0),
-        child: DecoratedBox(
-          decoration: docked
-              ? BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: theme.colorScheme.outlineVariant),
-                  ),
-                )
-              : const BoxDecoration(),
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: docked ? media.viewPadding.left : 0,
-              right: docked ? media.viewPadding.right : 0,
-            ),
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              removeBottom: true,
-              removeLeft: true,
-              removeRight: true,
-              child: navigation,
-            ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: docked ? media.viewPadding.left : 0,
+            right: docked ? media.viewPadding.right : 0,
+          ),
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            removeBottom: true,
+            removeLeft: true,
+            removeRight: true,
+            child: navigation,
           ),
         ),
       ),
@@ -168,42 +197,47 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
             builder: (context) => Stack(
               fit: StackFit.expand,
               children: [
-                IndexedStack(
-                  index: _index,
-                  children: [
-                    ExcludeFocus(
-                      excluding: _index != 0,
-                      child: TickerMode(
-                        enabled: _index == 0,
-                        child: widget.homeBuilder(context, _openProxies),
+                FadeTransition(
+                  key: const ValueKey('home-tab-content-transition'),
+                  opacity: _contentOpacity,
+                  alwaysIncludeSemantics: true,
+                  child: IndexedStack(
+                    index: _index,
+                    children: [
+                      ExcludeFocus(
+                        excluding: _index != 0,
+                        child: TickerMode(
+                          enabled: _index == 0,
+                          child: widget.homeBuilder(context, _openProxies),
+                        ),
                       ),
-                    ),
-                    if (_proxiesMounted)
-                      ExcludeFocus(
-                        excluding: _index != 1,
-                        child: TickerMode(
-                          enabled: _index == 1,
-                          child: widget.proxiesBuilder(
-                            context,
-                            _index == 1,
-                            () => _select(0),
-                            _request,
+                      if (_proxiesMounted)
+                        ExcludeFocus(
+                          excluding: _index != 1,
+                          child: TickerMode(
+                            enabled: _index == 1,
+                            child: widget.proxiesBuilder(
+                              context,
+                              _index == 1,
+                              () => _select(0),
+                              _request,
+                            ),
                           ),
-                        ),
-                      )
-                    else
-                      const SizedBox.shrink(),
-                    if (_settingsMounted)
-                      ExcludeFocus(
-                        excluding: _index != 2,
-                        child: TickerMode(
-                          enabled: _index == 2,
-                          child: widget.settingsBuilder!(context),
-                        ),
-                      )
-                    else
-                      const SizedBox.shrink(),
-                  ],
+                        )
+                      else
+                        const SizedBox.shrink(),
+                      if (_settingsMounted)
+                        ExcludeFocus(
+                          excluding: _index != 2,
+                          child: TickerMode(
+                            enabled: _index == 2,
+                            child: widget.settingsBuilder!(context),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
+                    ],
+                  ),
                 ),
                 if (!docked && !keyboardVisible)
                   Positioned(

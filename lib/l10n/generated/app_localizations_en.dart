@@ -43,6 +43,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNavigationTitle => 'Home navigation';
 
   @override
+  String get navigationGalleryTitle => 'Navigation';
+
+  @override
+  String get navigationGalleryDocked => 'Bottom navigation';
+
+  @override
+  String get navigationGalleryFloating => 'Floating navigation';
+
+  @override
+  String get navigationExperimentalBadge => 'Experimental';
+
+  @override
   String get homeNavigationPanel => 'Sliding panel';
 
   @override
