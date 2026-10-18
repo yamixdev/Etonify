@@ -1087,7 +1087,20 @@ class MeowBoxService(
     }
 
     private fun awaitNativeServiceClose(server: CommandServer, source: String): Boolean {
-        val task = nativeCloseTask ?: NativeServiceCloseTask {
+        val task = nativeCloseTask ?: NativeServiceCloseTask(onTimeout = {
+            if (commandServer === server) {
+                runCatching {
+                    val dump = Libbox.goroutineDump()
+                    val limit = 128 * 1024
+                    val bounded = if (dump.length <= limit) dump else
+                        dump.take(limit * 3 / 4) + "\n... dump truncated ...\n" + dump.takeLast(limit / 4)
+                    MeowDiagnostics.log(TAG, "native close stalled source=$source " +
+                        "goroutineDumpChars=${dump.length}\n$bounded")
+                }.onFailure { error ->
+                    MeowDiagnostics.log(TAG, "native close goroutine dump failed source=$source", error)
+                }
+            }
+        }) {
             val started = SystemClock.elapsedRealtime()
             try {
                 server.closeService()

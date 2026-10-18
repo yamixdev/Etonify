@@ -10,6 +10,40 @@ import org.junit.Test
 
 class NativeServiceCloseTaskTest {
     @Test
+    fun `stalled close reports diagnostics once without blocking waiters or cancelling cleanup`() {
+        val closeRelease = CountDownLatch(1)
+        val reportEntered = CountDownLatch(1)
+        val reportRelease = CountDownLatch(1)
+        val reports = AtomicInteger()
+        val task = NativeServiceCloseTask(onTimeout = {
+            reports.incrementAndGet()
+            reportEntered.countDown()
+            check(reportRelease.await(5, TimeUnit.SECONDS))
+        }) { check(closeRelease.await(5, TimeUnit.SECONDS)) }
+        task.start {}
+        try {
+            assertFalse(task.awaitClosed(5))
+            assertTrue(reportEntered.await(1, TimeUnit.SECONDS))
+            repeat(3) { assertFalse(task.awaitClosed(5)) }
+            assertEquals(1, reports.get())
+            closeRelease.countDown()
+            assertTrue(task.awaitClosed(1_000))
+        } finally {
+            closeRelease.countDown()
+            reportRelease.countDown()
+        }
+    }
+
+    @Test
+    fun `completed close does not collect a stalled dump`() {
+        val reports = AtomicInteger()
+        val task = NativeServiceCloseTask(onTimeout = { reports.incrementAndGet() }) {}
+        task.start {}
+        assertTrue(task.awaitClosed(1_000))
+        assertEquals(0, reports.get())
+    }
+
+    @Test
     fun `timeout and repeated stop keep waiting for the original native close`() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)

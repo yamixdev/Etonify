@@ -151,12 +151,18 @@ class HomeSubscriptionCard extends StatelessWidget {
                               ),
                             ),
                             const Gap(12),
-                            Text(
-                              remainingText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                            Flexible(
+                              child: Tooltip(
+                                message: remainingText,
+                                child: Text(
+                                  remainingText,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
                               ),
                             ),
                           ],

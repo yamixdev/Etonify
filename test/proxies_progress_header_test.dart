@@ -376,8 +376,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('45 ms'), findsOneWidget);
-    final latency = tester.widget<Text>(find.text('45 ms'));
+    final rowLatency = find.descendant(
+      of: find.byKey(const ValueKey('proxy-select-node-0')),
+      matching: find.text('45 ms'),
+    );
+    expect(rowLatency, findsOneWidget);
+    final latency = tester.widget<Text>(rowLatency);
     final theme = Theme.of(tester.element(find.byType(ProxiesPage)));
     expect(latency.style?.color, theme.colorScheme.onSurfaceVariant);
     expect(find.textContaining('Работает'), findsNothing);
@@ -544,7 +548,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final latency = find.text('4.7 s');
+    final latency = find.descendant(
+      of: find.byKey(const ValueKey('proxy-select-node-0')),
+      matching: find.text('4.7 s'),
+    );
     expect(latency, findsOneWidget);
     expect(tester.widget<Text>(latency).style?.color, Colors.deepOrangeAccent);
     expect(

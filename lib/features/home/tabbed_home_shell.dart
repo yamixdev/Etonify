@@ -42,6 +42,17 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
   var _serial = 0;
   ({int serial, String? groupTag})? _request;
 
+  @override
+  void didUpdateWidget(covariant TabbedHomeShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_index == 2 &&
+        (widget.bottomNavigationStyle == BottomNavigationStyle.docked ||
+            widget.settingsBuilder == null)) {
+      _index = 0;
+    }
+    if (widget.settingsBuilder == null) _settingsMounted = false;
+  }
+
   void _select(int index) {
     if (index == _index) return;
     FocusScope.of(context).unfocus();
@@ -68,11 +79,7 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
     final docked = widget.bottomNavigationStyle == BottomNavigationStyle.docked;
     const barHeight = 60.0;
     final bottom = media.viewPadding.bottom + 8;
-    final reserve = keyboardVisible
-        ? 0.0
-        : docked
-        ? barHeight + media.viewPadding.bottom
-        : bottom + barHeight + 12;
+    final reserve = keyboardVisible || docked ? 0.0 : bottom + barHeight + 12;
     final effects =
         widget.effectsEnabled &&
         !media.disableAnimations &&
@@ -99,7 +106,7 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
           selectedIcon: const Icon(Icons.dns_rounded, size: 22),
           label: l10n.proxiesTitle,
         ),
-        if (widget.settingsBuilder != null)
+        if (!docked && widget.settingsBuilder != null)
           NavigationDestination(
             key: const ValueKey('settings-tab'),
             tooltip: '',
@@ -137,6 +144,7 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
             ),
             child: MediaQuery.removePadding(
               context: context,
+              removeTop: true,
               removeBottom: true,
               removeLeft: true,
               removeRight: true,
@@ -153,6 +161,7 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
+        bottomNavigationBar: docked && !keyboardVisible ? surface : null,
         body: FloatingNavigationInsets(
           bottom: reserve,
           child: Builder(
@@ -196,32 +205,28 @@ class _TabbedHomeShellState extends State<TabbedHomeShell> {
                       const SizedBox.shrink(),
                   ],
                 ),
-                if (!keyboardVisible)
+                if (!docked && !keyboardVisible)
                   Positioned(
-                    left: docked ? 0 : media.viewPadding.left + 16,
-                    right: docked ? 0 : media.viewPadding.right + 16,
-                    bottom: docked ? 0 : bottom,
-                    child: docked
-                        ? surface
-                        : Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 288),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(
-                                  barHeight / 2,
-                                ),
-                                child: effects
-                                    ? BackdropFilter(
-                                        filter: ui.ImageFilter.blur(
-                                          sigmaX: 14,
-                                          sigmaY: 14,
-                                        ),
-                                        child: surface,
-                                      )
-                                    : surface,
-                              ),
-                            ),
-                          ),
+                    left: media.viewPadding.left + 16,
+                    right: media.viewPadding.right + 16,
+                    bottom: bottom,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 288),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(barHeight / 2),
+                          child: effects
+                              ? BackdropFilter(
+                                  filter: ui.ImageFilter.blur(
+                                    sigmaX: 14,
+                                    sigmaY: 14,
+                                  ),
+                                  child: surface,
+                                )
+                              : surface,
+                        ),
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -263,7 +268,8 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
   void didUpdateWidget(covariant _ScrubbableNavigationBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedIndex != widget.selectedIndex ||
-        oldWidget.requestSerial != widget.requestSerial) {
+        oldWidget.requestSerial != widget.requestSerial ||
+        oldWidget.destinations.length != widget.destinations.length) {
       _previewIndex = null;
       _scrubbing = false;
     }

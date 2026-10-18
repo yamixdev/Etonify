@@ -1562,17 +1562,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          l10n.selectedProxyLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                        Text(
                           _localizedProxyTitle(l10n, current),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1586,6 +1575,21 @@ class _ProxiesPageState extends State<ProxiesPage> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: state?.selecting == true ? 104 : 72,
+                    child: _ProxyLatencyAction(
+                      key: ValueKey(
+                        'proxy-current-latency-action-${proxy.tag}',
+                      ),
+                      proxy: current,
+                      state: state,
+                      animate: false,
+                      onPressed: widget.onProxyUrlTest == null
+                          ? null
+                          : () => unawaited(widget.onProxyUrlTest!(proxy.tag)),
                     ),
                   ),
                 ],

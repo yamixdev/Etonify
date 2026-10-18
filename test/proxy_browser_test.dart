@@ -75,6 +75,7 @@ ProxiesPage _page({
   bool loading = false,
   bool active = true,
   bool catalogReady = true,
+  bool connected = true,
   String selectedTag = '',
   AppProxySummary? activeProxy,
   ProxySort initialSort = ProxySort.source,
@@ -98,7 +99,7 @@ ProxiesPage _page({
   selectedTag: selectedTag,
   activeProxy: activeProxy,
   initialSort: initialSort,
-  connected: true,
+  connected: connected,
   progressiveBlurEnabled: false,
   browserMode: true,
   browserRequest: request,
@@ -114,6 +115,55 @@ ProxiesPage _page({
 );
 
 void main() {
+  for (final connected in [true, false]) {
+    testWidgets(
+      'current choice ping is actionable and live connected=$connected',
+      (tester) async {
+        final states = ProxyRuntimeVisualStore();
+        addTearDown(states.dispose);
+        final pings = <String>[];
+        final selections = <String>[];
+        await tester.pumpWidget(
+          _app(
+            _page(
+              proxies: [_proxy('Selected')],
+              groups: {},
+              selectedTag: 'Selected',
+              connected: connected,
+              states: states,
+              select: selections.add,
+              ping: (tag) async {
+                pings.add(tag);
+              },
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final card = find.byKey(const ValueKey('proxy-current-choice'));
+        expect(
+          find.descendant(of: card, matching: find.text('Selected proxy')),
+          findsNothing,
+        );
+        final ping = find.descendant(of: card, matching: find.text('42 ms'));
+        expect(ping, findsOneWidget);
+        await tester.tap(ping);
+        expect(pings, ['Selected']);
+        expect(selections, isEmpty);
+        states.replaceAll({
+          'Selected': const ProxyRuntimeVisualState(
+            latency: 137,
+            latencyFresh: true,
+          ),
+        });
+        await tester.pump();
+        expect(
+          find.descendant(of: card, matching: find.text('137 ms')),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
   testWidgets('current choice uses accent outline without a circular check', (
     tester,
   ) async {

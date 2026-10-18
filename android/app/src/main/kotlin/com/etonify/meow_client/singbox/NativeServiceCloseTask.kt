@@ -11,8 +11,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * original result instead of queuing more JNI calls or replacing a failed
  * close with a subsequent no-op's successful result.
  */
-internal class NativeServiceCloseTask(close: () -> Unit) {
+internal class NativeServiceCloseTask(
+    private val onTimeout: (() -> Unit)? = null,
+    close: () -> Unit,
+) {
     private val started = AtomicBoolean(false)
+    private val timeoutReported = AtomicBoolean(false)
     private val result = FutureTask { runCatching(close) }
 
     fun start(onComplete: (Result<Unit>) -> Unit) {
@@ -29,6 +33,12 @@ internal class NativeServiceCloseTask(close: () -> Unit) {
     fun awaitClosed(timeoutMs: Long): Boolean = try {
         result.get(timeoutMs, TimeUnit.MILLISECONDS).isSuccess
     } catch (_: TimeoutException) {
+        if (onTimeout != null && !result.isDone && timeoutReported.compareAndSet(false, true)) {
+            Thread({ runCatching(onTimeout) }, "MeowNativeCloseDiagnostics").apply {
+                isDaemon = true
+                start()
+            }
+        }
         false
     } catch (_: InterruptedException) {
         Thread.currentThread().interrupt()

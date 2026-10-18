@@ -36,82 +36,14 @@ class ProxyTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final proxy = runtimeState?.presentation ?? this.proxy;
     final theme = Theme.of(context);
-    final l10n = AppLocalizations.of(context);
-    final state = runtimeState;
-    final latencyFresh = state?.latencyFresh ?? proxy.latencyFresh;
-    final latency = state == null ? proxy.latency : state.latency;
-    final latencyChecking = state?.latencyChecking ?? proxy.latencyChecking;
-    final latencyUnavailable =
-        state?.latencyUnavailable ?? proxy.latencyUnavailable;
-    final latencyError = state == null
-        ? proxy.latencyError
-        : state.latencyError;
-    final hasLatencyError = latencyError?.trim().isNotEmpty == true;
-    final highlighted = state?.highlighted ?? this.highlighted;
-    final selecting = state?.selecting ?? false;
-    final selectionUnconfirmed = state?.selectionUnconfirmed ?? false;
-    final hasNoLatencyResult =
-        !selecting &&
-        !latencyChecking &&
-        !latencyUnavailable &&
-        latency == null;
-    final latencyText = selecting
-        ? l10n.proxySwitching
-        : selectionUnconfirmed
-        ? l10n.proxySelectionUnconfirmed
-        : latencyChecking
-        ? '... ms'
-        : latency == null
-        ? l10n.proxyLatencyNoResult
-        : latency >= 1000
-        ? '${(latency / 1000).toStringAsFixed(1)} s'
-        : '$latency ms';
-    final delayColor = selecting
-        ? theme.colorScheme.primary
-        : selectionUnconfirmed
-        ? theme.colorScheme.error
-        : latencyChecking
-        ? theme.colorScheme.primary
-        : latencyUnavailable
-        ? theme.colorScheme.error
-        : !latencyFresh || latency == null
-        ? theme.colorScheme.onSurfaceVariant
-        : latency < 800
-        ? (theme.brightness == Brightness.dark
-              ? Colors.lightGreen
-              : Colors.green)
-        : (theme.brightness == Brightness.dark
-              ? Colors.orange
-              : Colors.deepOrangeAccent);
-    final latencyContent = _ProxyLatencyLabel(
-      text: latencyText,
-      color: delayColor,
-      checking: latencyChecking && !selecting && !selectionUnconfirmed,
-      unavailable:
-          latencyUnavailable &&
-          !latencyChecking &&
-          !selecting &&
-          !selectionUnconfirmed,
-      unavailableLabel: l10n.proxyUnavailable,
-      emphasized:
-          selecting ||
-          selectionUnconfirmed ||
-          latencyFresh ||
-          latencyUnavailable ||
-          hasLatencyError,
-      animate: animate,
-      tooltip: hasLatencyError
-          ? _latencyErrorTooltip(latencyError)
-          : hasNoLatencyResult
-          ? l10n.proxyLatencyNoResultDescription
-          : null,
-    );
-
-    final latencyLabel = ProxyLatencyButton(
+    final highlighted = runtimeState?.highlighted ?? this.highlighted;
+    final selecting = runtimeState?.selecting ?? false;
+    final latencyLabel = _ProxyLatencyAction(
       key: ValueKey('proxy-latency-action-${proxy.tag}'),
-      label: '${l10n.urlTestTitle}: ${_localizedProxyTitle(l10n, proxy)}',
-      onPressed: selecting ? null : onTestLatency,
-      child: latencyContent,
+      proxy: proxy,
+      state: runtimeState,
+      onPressed: onTestLatency,
+      animate: animate,
     );
     final horizontalInset = !forceBaseInset && proxy.isGroupChild ? 24.0 : 6.0;
     final emphasized = selected || highlighted;
@@ -241,6 +173,79 @@ class _ProxyTileActions extends InheritedWidget {
   bool updateShouldNotify(_ProxyTileActions oldWidget) =>
       animate != oldWidget.animate ||
       (onOpenGroup == null) != (oldWidget.onOpenGroup == null);
+}
+
+class _ProxyLatencyAction extends StatelessWidget {
+  const _ProxyLatencyAction({
+    super.key,
+    required this.proxy,
+    this.state,
+    this.onPressed,
+    this.animate = true,
+  });
+
+  final AppProxySummary proxy;
+  final ProxyRuntimeVisualState? state;
+  final VoidCallback? onPressed;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final latency = state == null ? proxy.latency : state!.latency;
+    final fresh = state?.latencyFresh ?? proxy.latencyFresh;
+    final checking = state?.latencyChecking ?? proxy.latencyChecking;
+    final unavailable = state?.latencyUnavailable ?? proxy.latencyUnavailable;
+    final error = state == null ? proxy.latencyError : state!.latencyError;
+    final selecting = state?.selecting ?? false;
+    final unconfirmed = state?.selectionUnconfirmed ?? false;
+    final hasError = error?.trim().isNotEmpty == true;
+    final noResult = !selecting && !checking && !unavailable && latency == null;
+    final text = selecting
+        ? l10n.proxySwitching
+        : unconfirmed
+        ? l10n.proxySelectionUnconfirmed
+        : checking
+        ? '... ms'
+        : latency == null
+        ? l10n.proxyLatencyNoResult
+        : latency >= 1000
+        ? '${(latency / 1000).toStringAsFixed(1)} s'
+        : '$latency ms';
+    final color = selecting || (checking && !unconfirmed)
+        ? theme.colorScheme.primary
+        : unconfirmed || unavailable
+        ? theme.colorScheme.error
+        : !fresh || latency == null
+        ? theme.colorScheme.onSurfaceVariant
+        : latency < 800
+        ? (theme.brightness == Brightness.dark
+              ? Colors.lightGreen
+              : Colors.green)
+        : (theme.brightness == Brightness.dark
+              ? Colors.orange
+              : Colors.deepOrangeAccent);
+    return ProxyLatencyButton(
+      label: '${l10n.urlTestTitle}: ${_localizedProxyTitle(l10n, proxy)}',
+      onPressed: selecting ? null : onPressed,
+      child: _ProxyLatencyLabel(
+        text: text,
+        color: color,
+        checking: checking && !selecting && !unconfirmed,
+        unavailable: unavailable && !checking && !selecting && !unconfirmed,
+        unavailableLabel: l10n.proxyUnavailable,
+        emphasized:
+            selecting || unconfirmed || fresh || unavailable || hasError,
+        animate: animate,
+        tooltip: hasError
+            ? _latencyErrorTooltip(error)
+            : noResult
+            ? l10n.proxyLatencyNoResultDescription
+            : null,
+      ),
+    );
+  }
 }
 
 // Passed as ValueListenableBuilder.child so ping-only updates do not rebuild

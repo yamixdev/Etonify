@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/home_page.dart';
 import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
@@ -130,6 +131,8 @@ class HomePresentationBuilder {
   Widget build({
     ProxyPanelMetrics? panelMetrics,
     bool tabbed = false,
+    BottomNavigationStyle bottomNavigationStyle =
+        BottomNavigationStyle.floating,
     double navigationBottomInset = 12,
   }) {
     return HomePage(
@@ -139,7 +142,8 @@ class HomePresentationBuilder {
           ? navigationBottomInset
           : (panelMetrics?.bottomInset ?? 0) + proxyPanelMinHeight + 20,
       showActiveProxyFooter: tabbed,
-      showSettingsAction: !tabbed,
+      showSettingsAction:
+          !tabbed || bottomNavigationStyle == BottomNavigationStyle.docked,
     );
   }
 }

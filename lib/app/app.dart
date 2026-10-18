@@ -9751,6 +9751,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     ).build(
       panelMetrics: panelMetrics,
       tabbed: openProxies != null,
+      bottomNavigationStyle: _settings.bottomNavigationStyle,
       navigationBottomInset: FloatingNavigationInsets.of(context),
     );
   }

@@ -57,9 +57,15 @@ void main() {
           of: find.byType(HomePage),
           matching: find.byIcon(Icons.settings_rounded),
         ),
-        findsNothing,
+        findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey('settings-tab')));
+      expect(find.byKey(const ValueKey('settings-tab')), findsNothing);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(HomePage),
+          matching: find.byIcon(Icons.settings_rounded),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('General'));
       await tester.pumpAndSettle();
@@ -76,6 +82,8 @@ void main() {
       await tester.tap(navigation);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sliding panel').last);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -1152,14 +1160,14 @@ void main() {
         ),
       );
 
-      expect(find.text('42 ms'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('42 ms')), findsOneWidget);
 
       runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
         'proxy-1': ProxyRuntimeVisualState(latency: 7, latencyFresh: true),
       });
       await tester.pump();
 
-      expect(find.text('7 ms'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('7 ms')), findsOneWidget);
 
       runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
         'proxy-1': ProxyRuntimeVisualState(
@@ -1170,16 +1178,16 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('7 ms'), findsNothing);
-      expect(find.text('—'), findsNothing);
-      expect(find.text('.'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('7 ms')), findsNothing);
+      expect(_inProxyRow('proxy-1', find.text('—')), findsNothing);
+      expect(_inProxyRow('proxy-1', find.text('.')), findsOneWidget);
 
       runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
         'proxy-1': ProxyRuntimeVisualState(latency: 9, latencyFresh: true),
       });
       await tester.pump();
 
-      expect(find.text('9 ms'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('9 ms')), findsOneWidget);
     },
   );
 
@@ -1224,12 +1232,18 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('EOF'), findsNothing);
-      expect(find.text('No result'), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+      expect(_inProxyRow('proxy-1', find.text('EOF')), findsNothing);
+      expect(_inProxyRow('proxy-1', find.text('No result')), findsOneWidget);
       expect(
-        find.byWidgetPredicate(
-          (widget) => widget is Tooltip && widget.message == 'unexpected EOF',
+        _inProxyRow('proxy-1', find.byIcon(Icons.warning_amber_rounded)),
+        findsNothing,
+      );
+      expect(
+        _inProxyRow(
+          'proxy-1',
+          find.byWidgetPredicate(
+            (widget) => widget is Tooltip && widget.message == 'unexpected EOF',
+          ),
         ),
         findsOneWidget,
       );
@@ -1275,8 +1289,11 @@ void main() {
     });
     await tester.pump();
 
-    expect(find.text('DNS'), findsNothing);
-    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(_inProxyRow('proxy-1', find.text('DNS')), findsNothing);
+    expect(
+      _inProxyRow('proxy-1', find.byIcon(Icons.warning_amber_rounded)),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -1502,14 +1519,17 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('Switching'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('Switching')), findsOneWidget);
 
       runtimeStates.replaceAll(const <String, ProxyRuntimeVisualState>{
         'proxy-1': ProxyRuntimeVisualState(selectionUnconfirmed: true),
       });
       await tester.pump();
-      expect(find.text('Switching'), findsNothing);
-      expect(find.text('Not confirmed'), findsOneWidget);
+      expect(_inProxyRow('proxy-1', find.text('Switching')), findsNothing);
+      expect(
+        _inProxyRow('proxy-1', find.text('Not confirmed')),
+        findsOneWidget,
+      );
 
       for (final state in const [
         ProxyRuntimeVisualState(
@@ -1523,7 +1543,10 @@ void main() {
       ]) {
         runtimeStates.replaceAll({'proxy-1': state});
         await tester.pump();
-        expect(find.text('Not confirmed'), findsOneWidget);
+        expect(
+          _inProxyRow('proxy-1', find.text('Not confirmed')),
+          findsOneWidget,
+        );
       }
     },
   );
@@ -2418,6 +2441,11 @@ void main() {
     expect(ru.subscriptionProxyTypeLabel, 'Прокси');
   });
 }
+
+Finder _inProxyRow(String tag, Finder matching) => find.descendant(
+  of: find.byKey(ValueKey('proxy-select-$tag')),
+  matching: matching,
+);
 
 AppProxySummary _proxy(String tag, String name, {int? latency}) {
   return AppProxySummary(

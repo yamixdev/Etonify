@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
@@ -47,7 +48,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      _scrubApp(style: BottomNavigationStyle.docked, safeBottom: 24),
+      _scrubApp(
+        style: BottomNavigationStyle.docked,
+        safeTop: 32,
+        safeBottom: 24,
+      ),
     );
     await tester.pumpAndSettle();
     final bar = tester.getRect(find.byType(NavigationBar));
@@ -75,9 +80,12 @@ void main() {
     );
     expect(
       FloatingNavigationInsets.of(tester.element(find.text('Home body'))),
-      84,
+      0,
     );
-    for (final key in ['home-tab', 'proxies-tab', 'settings-tab']) {
+    expect(find.byKey(const ValueKey('settings-tab')), findsNothing);
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.bottomNavigationBar, isNotNull);
+    for (final key in ['home-tab', 'proxies-tab']) {
       final size = tester.getSize(find.byKey(ValueKey(key)));
       expect(size.width, greaterThanOrEqualTo(48));
       expect(size.height, greaterThanOrEqualTo(48));
@@ -103,12 +111,12 @@ void main() {
       await tester.pump();
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        2,
+        1,
       );
       expect(find.text('Home body'), findsOneWidget);
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(find.text('Settings body'), findsOneWidget);
+      expect(find.text('Proxies body'), findsOneWidget);
     });
   }
 
@@ -219,12 +227,13 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(_scrubApp());
+      await tester.pumpWidget(_scrubApp(safeTop: 32, safeBottom: 24));
       await tester.pumpAndSettle();
       final bar = tester.getRect(find.byType(NavigationBar));
       expect(bar.height, inInclusiveRange(56, 60));
       expect(bar.width, lessThanOrEqualTo(300));
       expect(bar.center.dx, closeTo(196.5, .1));
+      expect(bar.bottom, 818);
       for (final key in ['home-tab', 'proxies-tab', 'settings-tab']) {
         final size = tester.getSize(find.byKey(ValueKey(key)));
         expect(size.width, greaterThanOrEqualTo(48));
@@ -327,68 +336,125 @@ void main() {
     expect(find.text('Settings body'), findsOneWidget);
   });
 
+  testWidgets('switching from settings to docked returns home safely', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_scrubApp());
+    await tester.tap(find.byKey(const ValueKey('settings-tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings body'), findsOneWidget);
+    await tester.pumpWidget(_scrubApp(style: BottomNavigationStyle.docked));
+    await tester.pumpAndSettle();
+    expect(find.text('Home body'), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-tab')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(_scrubApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-tab')));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings body'), findsOneWidget);
+  });
+
   for (final style in BottomNavigationStyle.values) {
+    testWidgets('keyboard can select proxy destination ${style.name}', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_scrubApp(style: style));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('Proxies body'), findsOneWidget);
+    });
+
     testWidgets(
-      'last settings entry scrolls above ${style.name} navigation and remains clickable',
+      'accessible navigation keeps tap selection without scrubbing ${style.name}',
       (tester) async {
-        tester.view.physicalSize = const Size(360, 640);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        var aboutOpened = false;
-        void noop() {}
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            home: MediaQuery(
-              data: const MediaQueryData(
-                viewPadding: EdgeInsets.only(bottom: 24),
-              ),
-              child: TabbedHomeShell(
-                bottomNavigationStyle: style,
-                homeBuilder: (_, open) => const SizedBox(),
-                proxiesBuilder: (_, active, back, request) => const SizedBox(),
-                settingsBuilder: (_) => SettingsPage(
-                  onOpenGeneral: noop,
-                  onOpenDns: noop,
-                  onOpenSubscriptions: noop,
-                  onOpenInbound: noop,
-                  onOpenRouting: noop,
-                  onOpenSecurity: noop,
-                  onImportBackup: noop,
-                  onExportSettings: noop,
-                  onExportEncryptedProfile: noop,
-                  onExportPlainProfile: noop,
-                  onResetSettings: noop,
-                  onOpenExperimental: noop,
-                  onOpenLogs: noop,
-                  onOpenAbout: () => aboutOpened = true,
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.tap(find.byKey(const ValueKey('settings-tab')));
+        await tester.pumpWidget(_scrubApp(style: style, accessible: true));
         await tester.pumpAndSettle();
-        await tester.drag(
-          find.byKey(const ValueKey('settings-destinations')),
-          const Offset(0, -1500),
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('home-tab'))),
         );
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveTo(
+          tester.getCenter(find.byKey(const ValueKey('proxies-tab'))),
+        );
+        await gesture.up();
         await tester.pumpAndSettle();
-        final about = find.text('About');
-        expect(
-          tester.getRect(about).bottom,
-          lessThan(tester.getRect(find.byType(NavigationBar)).top),
-        );
-        await tester.tap(about);
-        expect(aboutOpened, isTrue);
-        expect(tester.takeException(), isNull);
+        expect(find.text('Home body'), findsOneWidget);
+        expect(find.byType(BackdropFilter), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('proxies-tab')));
+        await tester.pumpAndSettle();
+        expect(find.text('Proxies body'), findsOneWidget);
       },
     );
 
+    if (style == BottomNavigationStyle.floating) {
+      testWidgets(
+        'last settings entry scrolls above ${style.name} navigation and remains clickable',
+        (tester) async {
+          tester.view.physicalSize = const Size(360, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          var aboutOpened = false;
+          void noop() {}
+          await tester.pumpWidget(
+            MaterialApp(
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: MediaQuery(
+                data: const MediaQueryData(
+                  padding: EdgeInsets.only(top: 32, bottom: 24),
+                  viewPadding: EdgeInsets.only(top: 32, bottom: 24),
+                ),
+                child: TabbedHomeShell(
+                  bottomNavigationStyle: style,
+                  homeBuilder: (_, open) => const SizedBox(),
+                  proxiesBuilder: (_, active, back, request) =>
+                      const SizedBox(),
+                  settingsBuilder: (_) => SettingsPage(
+                    onOpenGeneral: noop,
+                    onOpenDns: noop,
+                    onOpenSubscriptions: noop,
+                    onOpenInbound: noop,
+                    onOpenRouting: noop,
+                    onOpenSecurity: noop,
+                    onImportBackup: noop,
+                    onExportSettings: noop,
+                    onExportEncryptedProfile: noop,
+                    onExportPlainProfile: noop,
+                    onResetSettings: noop,
+                    onOpenExperimental: noop,
+                    onOpenLogs: noop,
+                    onOpenAbout: () => aboutOpened = true,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byKey(const ValueKey('settings-tab')));
+          await tester.pumpAndSettle();
+          await tester.drag(
+            find.byKey(const ValueKey('settings-destinations')),
+            const Offset(0, -1500),
+          );
+          await tester.pumpAndSettle();
+          final about = find.text('About');
+          expect(
+            tester.getRect(about).bottom,
+            lessThan(tester.getRect(find.byType(NavigationBar)).top),
+          );
+          await tester.tap(about);
+          expect(aboutOpened, isTrue);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
     testWidgets(
-      'three destinations fit narrow Russian layout with large text ${style.name}',
+      'destinations fit narrow Russian layout with large text ${style.name}',
       (tester) async {
         tester.view.physicalSize = const Size(320, 640);
         tester.view.devicePixelRatio = 1;
@@ -412,55 +478,66 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        for (final tab in ['home-tab', 'proxies-tab', 'settings-tab']) {
+        for (final tab in [
+          'home-tab',
+          'proxies-tab',
+          if (style == BottomNavigationStyle.floating) 'settings-tab',
+        ]) {
           final target = find.byKey(ValueKey(tab));
           expect(tester.getSize(target).height, greaterThanOrEqualTo(48));
           await tester.tap(target);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         }
-        expect(find.text('Параметры'), findsOneWidget);
+        expect(
+          find.text(
+            style == BottomNavigationStyle.floating ? 'Параметры' : 'Список',
+          ),
+          findsOneWidget,
+        );
       },
     );
 
-    testWidgets(
-      'settings is a retained third tab and Back returns home ${style.name}',
-      (tester) async {
-        var settingsBuilds = 0;
-        await tester.pumpWidget(
-          MaterialApp(
-            supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            home: TabbedHomeShell(
-              bottomNavigationStyle: style,
-              homeBuilder: (_, open) => const Text('Home content'),
-              proxiesBuilder: (_, active, back, request) =>
-                  const Text('Proxy content'),
-              settingsBuilder: (_) {
-                settingsBuilds++;
-                return const TextField(key: ValueKey('settings-field'));
-              },
+    if (style == BottomNavigationStyle.floating) {
+      testWidgets(
+        'settings is a retained third tab and Back returns home ${style.name}',
+        (tester) async {
+          var settingsBuilds = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              home: TabbedHomeShell(
+                bottomNavigationStyle: style,
+                homeBuilder: (_, open) => const Text('Home content'),
+                proxiesBuilder: (_, active, back, request) =>
+                    const Text('Proxy content'),
+                settingsBuilder: (_) {
+                  settingsBuilds++;
+                  return const TextField(key: ValueKey('settings-field'));
+                },
+              ),
             ),
-          ),
-        );
-        expect(settingsBuilds, 0);
-        await tester.tap(find.byKey(const ValueKey('settings-tab')));
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('settings-field')),
-          'saved',
-        );
-        await tester.tap(find.byKey(const ValueKey('home-tab')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('settings-tab')));
-        await tester.pumpAndSettle();
-        expect(find.text('saved'), findsOneWidget);
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(find.text('Home content'), findsOneWidget);
-        expect(find.byKey(const ValueKey('settings-field')), findsNothing);
-      },
-    );
+          );
+          expect(settingsBuilds, 0);
+          await tester.tap(find.byKey(const ValueKey('settings-tab')));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('settings-field')),
+            'saved',
+          );
+          await tester.tap(find.byKey(const ValueKey('home-tab')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('settings-tab')));
+          await tester.pumpAndSettle();
+          expect(find.text('saved'), findsOneWidget);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.text('Home content'), findsOneWidget);
+          expect(find.byKey(const ValueKey('settings-field')), findsNothing);
+        },
+      );
+    }
 
     testWidgets(
       'navigation respects safe edges and hides for keyboard ${style.name}',
@@ -473,7 +550,11 @@ void main() {
               home: MediaQuery(
                 data: MediaQueryData(
                   size: const Size(800, 600),
-                  viewPadding: const EdgeInsets.only(bottom: 24),
+                  padding: EdgeInsets.only(
+                    top: 32,
+                    bottom: keyboard > 0 ? 0 : 24,
+                  ),
+                  viewPadding: const EdgeInsets.only(top: 32, bottom: 24),
                   viewInsets: EdgeInsets.only(bottom: keyboard),
                   disableAnimations: reduced,
                 ),
@@ -503,7 +584,7 @@ void main() {
         expect(bar.bottom, lessThanOrEqualTo(576));
         expect(
           tester.getRect(find.byKey(const ValueKey('full-content'))).bottom,
-          600,
+          style == BottomNavigationStyle.floating ? 600 : 516,
         );
         expect(
           find.byType(BackdropFilter),
@@ -610,9 +691,11 @@ Widget _scrubApp({
   bool rtl = false,
   BottomNavigationStyle style = BottomNavigationStyle.floating,
   double safeBottom = 0,
+  double safeTop = 0,
   double safeLeft = 0,
   double safeRight = 0,
   double keyboard = 0,
+  bool accessible = false,
 }) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -622,7 +705,15 @@ Widget _scrubApp({
   ),
   home: MediaQuery(
     data: MediaQueryData(
+      accessibleNavigation: accessible,
+      padding: EdgeInsets.fromLTRB(
+        safeLeft,
+        safeTop,
+        safeRight,
+        keyboard > 0 ? 0 : safeBottom,
+      ),
       viewPadding: EdgeInsets.only(
+        top: safeTop,
         bottom: safeBottom,
         left: safeLeft,
         right: safeRight,

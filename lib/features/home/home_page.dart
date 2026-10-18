@@ -372,47 +372,56 @@ class _HomeBrandTitle extends StatelessWidget {
           child: Text(brandName, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         const Gap(8),
-        InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: onOpenChangelog,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh.withValues(
-                alpha: .72,
-              ),
+        Flexible(
+          child: Tooltip(
+            message: versionLabel,
+            child: InkWell(
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: .45),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (prereleaseVersion) ...[
-                  Tooltip(
-                    message: AppLocalizations.of(
-                      context,
-                    ).updatesPrereleaseVersionTooltip,
-                    child: Icon(
-                      Icons.science_rounded,
-                      size: 14,
-                      color: theme.colorScheme.tertiary,
+              onTap: onOpenChangelog,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHigh.withValues(
+                    alpha: .72,
+                  ),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: .45,
                     ),
                   ),
-                  const Gap(4),
-                ],
-                Text(
-                  versionLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (prereleaseVersion) ...[
+                      Tooltip(
+                        message: AppLocalizations.of(
+                          context,
+                        ).updatesPrereleaseVersionTooltip,
+                        child: Icon(
+                          Icons.science_rounded,
+                          size: 14,
+                          color: theme.colorScheme.tertiary,
+                        ),
+                      ),
+                      const Gap(4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        versionLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
