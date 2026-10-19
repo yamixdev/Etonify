@@ -42,6 +42,7 @@ class MeowBoxService(
         const val EXTRA_STOP_REASON = "stop_reason"
         const val EXTRA_TILE_START = "tile_start"
         const val EXTRA_SCHEDULED_RESTART = "scheduled_restart"
+        const val EXTRA_EXPECTED_EXTERNAL_STOP_REVISION = "expected_external_stop_revision"
         private const val NOTIFICATION_ID = 42
         private const val COMMAND_CLIENT_DISCONNECT_TIMEOUT_MS = 1_000L
         private const val NATIVE_SERVICE_CLOSE_TIMEOUT_MS = 6_000L
@@ -308,6 +309,14 @@ class MeowBoxService(
     fun onStartCommand(intent: Intent?, startId: Int): Int {
         val action = intent?.action
         MeowDiagnostics.log(TAG, "onStartCommand action=$action startId=$startId")
+        if (action in listOf(ACTION_START, ACTION_RESTART_CORE, ACTION_RELOAD) &&
+            intent?.hasExtra(EXTRA_EXPECTED_EXTERNAL_STOP_REVISION) == true &&
+            intent.getLongExtra(EXTRA_EXPECTED_EXTERNAL_STOP_REVISION, -1L) != SingboxController.externalStopRevision
+        ) {
+            MeowDiagnostics.log(TAG, "ignoring $action superseded by external stop")
+            if (!ownsActiveRuntime()) service.stopSelfResult(startId)
+            return Service.START_NOT_STICKY
+        }
         if (action == null) {
             val mode = currentMode()
             if (shouldRestoreStickyStart(mode)) {
@@ -687,7 +696,7 @@ class MeowBoxService(
             if (!ownsActiveRuntime()) service.stopSelf()
             return
         }
-        MeowApplication.writeRuntimeIntent(mode, source)
+        if (!SingboxController.writeIntentForStartToken(token, mode, source)) return
         val alreadyRunning =
             SingboxController.running && SingboxController.serviceMode == mode && commandServer != null
         if (alreadyRunning) {
@@ -757,7 +766,7 @@ class MeowBoxService(
         Log.i(TAG, "startOrReloadInternal begin service=${service.javaClass.simpleName}")
         cancelPendingTerminalForceStop("startOrReloadInternal")
         val mode = currentMode()
-        MeowApplication.writeRuntimeIntent(mode, "start_or_reload")
+        if (!SingboxController.writeIntentForStartToken(token, mode, "start_or_reload")) return
         SingboxController.log(
             "info",
             "native_start_marker phase=begin service=${service.javaClass.simpleName} " +

@@ -162,7 +162,7 @@ class HomePage extends StatelessWidget {
           ),
         ),
         SliverFillRemaining(
-          hasScrollBody: false,
+          hasScrollBody: true,
           child: Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottomInset),
             child: Column(

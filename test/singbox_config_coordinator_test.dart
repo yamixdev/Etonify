@@ -725,7 +725,11 @@ SingboxConfigBuildResult _build(String config, {String? configPath}) {
 
 class _FailingStartRuntime extends _BlockingRuntime {
   @override
-  Future<void> start({required String config, required bool useVpn}) async {
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
     throw StateError('ordinary start failed');
   }
 }
@@ -735,12 +739,16 @@ class _FailingPreparedRuntime extends _BlockingRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
     throw StateError('prepared apply failed');
   }
 
   @override
-  Future<void> startPrepared({required bool useVpn}) async {
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
     throw StateError('prepared restart failed');
   }
 }
@@ -754,6 +762,7 @@ class _SupersedingPreparedRuntime extends _BlockingRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
     await onApply?.call();
     _confirmCoreRestart(useVpn: useVpn);
@@ -783,6 +792,7 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
     required String config,
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
     await _trackConfigApply(config);
     if (restartCore) {
@@ -810,6 +820,7 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
     if (restartCore) {
       _confirmCoreRestart(useVpn: useVpn);
@@ -840,7 +851,11 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
   Future<bool> prepareVpn({required bool requiresVpn}) async => true;
 
   @override
-  Future<void> start({required String config, required bool useVpn}) {
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) {
     startCalls++;
     running = true;
     mode = useVpn ? 'vpn' : 'proxy';
@@ -854,7 +869,10 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
   }
 
   @override
-  Future<void> startPrepared({required bool useVpn}) async {
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
     startCalls++;
     running = true;
     mode = useVpn ? 'vpn' : 'proxy';

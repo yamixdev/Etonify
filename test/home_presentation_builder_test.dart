@@ -77,8 +77,17 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
-            final bar = tester.getRect(find.byType(NavigationBar));
-            expect(bar.height, 60);
+            final bar = tester.getRect(
+              style == BottomNavigationStyle.floating
+                  ? find.byKey(const ValueKey('floating-bottom-navigation'))
+                  : find.byType(NavigationBar),
+            );
+            expect(
+              bar.height,
+              style == BottomNavigationStyle.floating
+                  ? greaterThanOrEqualTo(56)
+                  : equals(60),
+            );
             expect(
               bar.bottom,
               style == BottomNavigationStyle.floating ? 818 : 826,

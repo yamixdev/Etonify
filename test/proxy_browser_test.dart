@@ -340,7 +340,11 @@ void main() {
       final last = find.byKey(const ValueKey('proxy-select-Server 79'));
       expect(
         tester.getRect(last).bottom,
-        lessThanOrEqualTo(tester.getRect(find.byType(NavigationBar)).top),
+        lessThanOrEqualTo(
+          tester
+              .getRect(find.byKey(const ValueKey('floating-bottom-navigation')))
+              .top,
+        ),
       );
       await tester.tap(last);
       expect(selected, ['Server 79']);

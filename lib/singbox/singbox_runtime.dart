@@ -204,20 +204,27 @@ class SingboxRuntime {
     return value['granted'] == true;
   }
 
-  Future<void> start({required String config, required bool useVpn}) {
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) {
     if (_isWindows) return _windowsVoid('start', {'config': config});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
-    return _hostApi.start(config, useVpn);
+    return _hostApi.start(config, useVpn, expectedExternalStopRevision);
   }
 
-  Future<void> startPrepared({required bool useVpn}) {
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) {
     if (_isWindows) return _windowsVoid('startPrepared', {});
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
-    return _hostApi.startPrepared(useVpn);
+    return _hostApi.startPrepared(useVpn, expectedExternalStopRevision);
   }
 
   Future<void> startProbe(String config) {
@@ -236,6 +243,7 @@ class SingboxRuntime {
     required String config,
     required bool useVpn,
     bool restartCore = false,
+    int? expectedExternalStopRevision,
   }) {
     if (_isWindows) {
       return _windowsVoid('applyConfig', {
@@ -246,12 +254,18 @@ class SingboxRuntime {
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
-    return _hostApi.applyConfig(config, useVpn, restartCore);
+    return _hostApi.applyConfig(
+      config,
+      useVpn,
+      restartCore,
+      expectedExternalStopRevision,
+    );
   }
 
   Future<void> applyPreparedConfig({
     required bool useVpn,
     bool restartCore = false,
+    int? expectedExternalStopRevision,
   }) {
     if (_isWindows) {
       return _windowsVoid('applyPreparedConfig', {'restartCore': restartCore});
@@ -259,7 +273,11 @@ class SingboxRuntime {
     if (!Platform.isAndroid) {
       return Future<void>.value();
     }
-    return _hostApi.applyPreparedConfig(useVpn, restartCore);
+    return _hostApi.applyPreparedConfig(
+      useVpn,
+      restartCore,
+      expectedExternalStopRevision,
+    );
   }
 
   Future<String?> getConfigPath() async {

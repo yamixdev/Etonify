@@ -26,6 +26,68 @@ import java.nio.file.StandardWatchEventKinds
 @Config(application = MeowApplication::class, sdk = [28], manifest = Config.NONE)
 class VpnScheduledRestartTest {
     @Test
+    fun `external stop snapshots retain their coherent state and intent epochs`() {
+        SingboxController.setRunning(false)
+        val before = SingboxController.runtimeStateSnapshot()
+        val revision = before["externalStopRevision"] as Long
+        val stateRevision = before["runtimeStateRevision"] as Long
+
+        SingboxController.recordExternalStop("test_snapshot_stop")
+        val stopped = SingboxController.runtimeStateSnapshot()
+
+        assertEquals(revision, before["externalStopRevision"])
+        assertEquals(stateRevision, before["runtimeStateRevision"])
+        assertEquals(revision + 1L, stopped["externalStopRevision"])
+        assertEquals(stateRevision + 1L, stopped["runtimeStateRevision"])
+        assertEquals(false, stopped["running"])
+        assertEquals("", stopped["mode"])
+        assertEquals(false, stopped["runtimeIntentFresh"])
+    }
+
+    @Test
+    fun `external stop invalidates pending start token and only accepts the newer revision`() {
+        withBlockedBox { service, box, _, _ ->
+            MeowApplication.writeRuntimeIntent("vpn", "test_start")
+            val oldRevision = SingboxController.externalStopRevision
+            val oldToken = SingboxController.nextStartToken("test_pending_start")
+
+            SingboxController.recordExternalStop("notification_stop")
+
+            assertEquals(oldRevision + 1L, SingboxController.externalStopRevision)
+            assertEquals(null, MeowApplication.readRuntimeIntent())
+            assertEquals(false, SingboxController.writeIntentForStartToken(oldToken, "vpn", "late_start"))
+            assertEquals(null, MeowApplication.readRuntimeIntent())
+            assertEquals(Service.START_NOT_STICKY, box.onStartCommand(
+                Intent(service, MeowVpnService::class.java).setAction(MeowBoxService.ACTION_START)
+                    .putExtra("expected_external_stop_revision", oldRevision),
+                1,
+            ))
+            assertEquals(Service.START_STICKY, box.onStartCommand(
+                Intent(service, MeowVpnService::class.java).setAction(MeowBoxService.ACTION_START)
+                    .putExtra("expected_external_stop_revision", oldRevision + 1L),
+                2,
+            ))
+        }
+    }
+
+    @Test
+    fun `late Dart start carrying an obsolete stop revision is rejected before queuing`() {
+        withBlockedBox { service, box, _, _ ->
+            MeowApplication.clearRuntimeIntent()
+            for (action in listOf(MeowBoxService.ACTION_START, MeowBoxService.ACTION_RESTART_CORE, MeowBoxService.ACTION_RELOAD)) {
+                val result = box.onStartCommand(
+                    Intent(service, MeowVpnService::class.java)
+                        .setAction(action)
+                        .putExtra("expected_external_stop_revision", -1L),
+                    1,
+                )
+                assertEquals(Service.START_NOT_STICKY, result)
+            }
+            assertEquals(null, MeowApplication.readRuntimeIntent())
+        }
+    }
+
+    @Test
     fun `explicit stop cancels the one shot foreground restart alarm`() {
         val context = MeowApplication.application
         val pending = PendingIntent.getForegroundService(

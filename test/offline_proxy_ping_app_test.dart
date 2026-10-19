@@ -113,7 +113,11 @@ class _ProbeRuntime extends Fake implements SingboxRuntime {
   Future<void> stopProbe() async => running = false;
 
   @override
-  Future<void> start({required String config, required bool useVpn}) async {
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
     vpnStarts++;
   }
 

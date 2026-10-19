@@ -7,6 +7,57 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test(
+    'safe restart preserves its stop revision across delayed promotion',
+    () async {
+      final runtime = _FakeRuntime();
+      final controller = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(controller.dispose);
+      final promoted = Completer<void>();
+      final applying = controller.applyRuntimeBuild(
+        build: _build(),
+        useVpn: true,
+        policy: RuntimeApplyPolicy.safeCoreRestart,
+        expectedExternalStopRevision: 8,
+        promotePreparedConfig: (_) => promoted.future,
+        cacheStartedBuild: (_) {},
+        logCall: (_, _) {},
+        trimMemory: (_) {},
+        onWatchdogTimeout: (_) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.applyPreparedConfigCalls, 0);
+      promoted.complete();
+      expect((await applying).success, isTrue);
+      expect(runtime.lastExpectedExternalStopRevision, 8);
+    },
+  );
+
+  test(
+    'prepared start preserves the operation stop revision across promotion',
+    () async {
+      final runtime = _FakeRuntime(running: false);
+      final controller = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(controller.dispose);
+      final promoted = Completer<void>();
+      final starting = controller.startRuntimeWithBuild(
+        build: _build(),
+        useVpn: true,
+        expectedExternalStopRevision: 7,
+        promotePreparedConfig: (_) => promoted.future,
+        cacheStartedBuild: (_) {},
+        logCall: (_, _) {},
+        trimMemory: (_) {},
+        onWatchdogTimeout: (_) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.startPreparedCalls, 0);
+      promoted.complete();
+      expect((await starting).success, isTrue);
+      expect(runtime.lastExpectedExternalStopRevision, 7);
+    },
+  );
+
   test('safe core restart applies prepared config without full stop', () async {
     final runtime = _FakeRuntime();
     final controller = RuntimeLifecycleController(
@@ -676,6 +727,7 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   int stopCalls = 0;
   int prepareVpnCalls = 0;
   int startPreparedCalls = 0;
+  int? lastExpectedExternalStopRevision;
   int statusCalls = 0;
   Future<Map<String, dynamic>> Function()? statusResponse;
   bool? lastRestartCore;
@@ -695,7 +747,9 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
     required String config,
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
+    lastExpectedExternalStopRevision = expectedExternalStopRevision;
     applyConfigCalls++;
     lastRestartCore = restartCore;
     running = true;
@@ -709,7 +763,9 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) async {
+    lastExpectedExternalStopRevision = expectedExternalStopRevision;
     applyPreparedConfigCalls++;
     lastRestartCore = restartCore;
     if (hangApply) {
@@ -749,7 +805,12 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   }
 
   @override
-  Future<void> start({required String config, required bool useVpn}) async {
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
+    lastExpectedExternalStopRevision = expectedExternalStopRevision;
     if (!startCompletes) {
       await Future<void>.delayed(const Duration(minutes: 1));
     }
@@ -760,7 +821,11 @@ class _FakeRuntime implements RuntimeLifecycleRuntime {
   }
 
   @override
-  Future<void> startPrepared({required bool useVpn}) async {
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) async {
+    lastExpectedExternalStopRevision = expectedExternalStopRevision;
     startPreparedCalls++;
     if (!startCompletes) {
       await Future<void>.delayed(const Duration(minutes: 1));

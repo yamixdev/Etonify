@@ -1148,14 +1148,14 @@ class SingboxHostApi {
     return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
   }
 
-  Future<void> start(String config, bool useVpn) async {
+  Future<void> start(String config, bool useVpn, int? expectedExternalStopRevision) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.start$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn, expectedExternalStopRevision]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
@@ -1166,14 +1166,14 @@ class SingboxHostApi {
     ;
   }
 
-  Future<void> startPrepared(bool useVpn) async {
+  Future<void> startPrepared(bool useVpn, int? expectedExternalStopRevision) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.startPrepared$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn, expectedExternalStopRevision]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
@@ -1220,14 +1220,14 @@ class SingboxHostApi {
     ;
   }
 
-  Future<void> applyConfig(String config, bool useVpn, bool restartCore) async {
+  Future<void> applyConfig(String config, bool useVpn, bool restartCore, int? expectedExternalStopRevision) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.applyConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn, restartCore]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn, restartCore, expectedExternalStopRevision]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
@@ -1238,14 +1238,14 @@ class SingboxHostApi {
     ;
   }
 
-  Future<void> applyPreparedConfig(bool useVpn, bool restartCore) async {
+  Future<void> applyPreparedConfig(bool useVpn, bool restartCore, int? expectedExternalStopRevision) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.applyPreparedConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn, restartCore]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn, restartCore, expectedExternalStopRevision]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

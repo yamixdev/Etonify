@@ -100,6 +100,7 @@ class SingboxConfigCoordinatorSnapshot {
   const SingboxConfigCoordinatorSnapshot({
     required this.connected,
     required this.runtimeTransitionInProgress,
+    this.externalStopRevision,
     required this.activeSubscription,
     this.coreSettings = const CoreSettings(),
     required this.selectedProxyTag,
@@ -159,6 +160,7 @@ class SingboxConfigCoordinatorSnapshot {
 
   final bool connected;
   final bool runtimeTransitionInProgress;
+  final int? externalStopRevision;
   final Subscription? activeSubscription;
   final CoreSettings coreSettings;
   final String selectedProxyTag;
@@ -369,6 +371,7 @@ class SingboxConfigCoordinator {
     bool refreshCachedConfig = false,
   }) async {
     var snapshot = _readSnapshot();
+    final expectedExternalStopRevision = snapshot.externalStopRevision;
     if (!_allowRuntimeApply()) {
       return const SingboxConfigApplyResult(
         status: SingboxConfigApplyStatus.superseded,
@@ -482,6 +485,7 @@ class SingboxConfigCoordinator {
       restartRuntime: restartRuntime,
       forceFullServiceRestart: forceFullServiceRestart,
       generation: generation,
+      expectedExternalStopRevision: expectedExternalStopRevision,
     );
   }
 
@@ -491,7 +495,10 @@ class SingboxConfigCoordinator {
     required bool restartRuntime,
     bool forceFullServiceRestart = false,
     int? generation,
+    int? expectedExternalStopRevision,
   }) {
+    final stopRevision =
+        expectedExternalStopRevision ?? _readSnapshot().externalStopRevision;
     final applyGeneration = generation ?? ++_runtimeConfigApplyGeneration;
     final operation = _runtimeConfigApplyQueue.then(
       (_) => _applyRuntimeConfigSerially(
@@ -500,6 +507,7 @@ class SingboxConfigCoordinator {
         restartRuntime: restartRuntime,
         forceFullServiceRestart: forceFullServiceRestart,
         generation: applyGeneration,
+        expectedExternalStopRevision: stopRevision,
       ),
     );
     _runtimeConfigApplyQueue = operation.then<void>(
@@ -515,6 +523,7 @@ class SingboxConfigCoordinator {
     required bool restartRuntime,
     required bool forceFullServiceRestart,
     required int generation,
+    int? expectedExternalStopRevision,
   }) async {
     var preparedBuildPromoted = false;
     _PreparedConfigTransaction? preparedConfigTransaction;
@@ -569,6 +578,7 @@ class SingboxConfigCoordinator {
         build: build,
         useVpn: useVpn,
         policy: policy,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         promotePreparedConfig: (candidate) async {
           preparedConfigTransaction = await _beginPreparedConfigTransaction(
             candidate,
@@ -677,6 +687,7 @@ class SingboxConfigCoordinator {
   Future<RuntimeLifecycleResult> startRuntimeWithBuild(
     SingboxConfigBuildResult build, {
     required bool useVpn,
+    int? expectedExternalStopRevision,
   }) async {
     if (!_allowRuntimeApply()) {
       discardPreparedConfigCandidate(build);
@@ -690,6 +701,7 @@ class SingboxConfigCoordinator {
       final result = await _runtimeLifecycle.startRuntimeWithBuild(
         build: build,
         useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         promotePreparedConfig: promotePreparedConfigBuild,
         cacheStartedBuild: _cacheStartedBuild,
         logCall: _logCall,

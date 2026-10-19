@@ -162,7 +162,7 @@ class MeowVpnService : VpnService() {
     override fun onRevoke() {
         Log.w(TAG, "onRevoke")
         MeowDiagnostics.log(TAG, "onRevoke")
-        MeowApplication.clearRuntimeIntent()
+        SingboxController.recordExternalStop("vpn_permission_revoked")
         cancelScheduledRestart("vpn_permission_revoked")
         try {
             if (::boxService.isInitialized) {

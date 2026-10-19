@@ -68,6 +68,36 @@ object SingboxController {
     private val groupsEventScheduled = AtomicBoolean(false)
     private val runtimeGeneration = AtomicLong(0)
     private val runtimeStartGeneration = AtomicLong(0)
+    private val externalStopGeneration = AtomicLong(0)
+    private val stateRevision = AtomicLong(0)
+    val externalStopRevision: Long get() = externalStopGeneration.get()
+    val runtimeStateRevision: Long get() = stateRevision.get()
+
+    @Synchronized
+    fun runtimeStateSnapshot(): Map<String, Any?> = mapOf(
+        "running" to running,
+        "mode" to serviceMode,
+        "runtimeGeneration" to activeRuntimeGeneration,
+        "externalStopRevision" to externalStopRevision,
+        "runtimeStateRevision" to runtimeStateRevision,
+        "runtimeIntentFresh" to MeowApplication.isRuntimeIntentFresh(),
+    )
+
+    @Synchronized
+    fun recordExternalStop(reason: String) {
+        externalStopGeneration.incrementAndGet()
+        stateRevision.incrementAndGet()
+        cancelStartTokens(reason)
+        MeowApplication.clearRuntimeIntent()
+        emitCurrentState()
+    }
+
+    @Synchronized
+    fun writeIntentForStartToken(token: Long, mode: String, reason: String): Boolean {
+        if (!isStartTokenCurrent(token)) return false
+        MeowApplication.writeRuntimeIntent(mode, reason)
+        return true
+    }
     private val networkGeneration = AtomicLong(0)
     val currentNetworkGeneration: Long get() = networkGeneration.get()
     private val urlTestAttribution = NativeUrlTestAttribution()
@@ -508,8 +538,12 @@ object SingboxController {
         error: String? = null,
         eventRuntimeGeneration: Long? = null,
     ) {
-        running = value
-        serviceMode = if (value) mode else ""
+        val snapshot = synchronized(this) {
+            stateRevision.incrementAndGet()
+            running = value
+            serviceMode = if (value) mode else ""
+            runtimeStateSnapshot()
+        }
         MeowDiagnostics.log(TAG, "setRunning value=$value mode=$serviceMode error=$error")
         if (!value) {
             uplink = 0
@@ -522,7 +556,7 @@ object SingboxController {
             connectionsOut = 0
             trafficAvailable = false
         }
-        emitCurrentState(error, eventRuntimeGeneration)
+        emitCurrentState(error, eventRuntimeGeneration, snapshot)
         emitCurrentStatus()
         if (value) {
             // Keep the native stream alive with the foreground VPN service.
@@ -1277,15 +1311,17 @@ object SingboxController {
         eventSink?.success(payload)
     }
 
-    private fun emitCurrentState(error: String? = null, eventRuntimeGeneration: Long? = null) {
+    private fun emitCurrentState(
+        error: String? = null,
+        eventRuntimeGeneration: Long? = null,
+        snapshot: Map<String, Any?> = runtimeStateSnapshot(),
+    ) {
         emit(
-            mapOf(
+            snapshot + mapOf(
                 "type" to runtimeEventState,
-                "running" to running,
-                "mode" to serviceMode,
-                "runtimeGeneration" to (eventRuntimeGeneration ?: activeRuntimeGeneration),
+                "runtimeGeneration" to (eventRuntimeGeneration ?: snapshot["runtimeGeneration"]),
                 "recordedServiceAlive" to MeowApplication.isRecordedServiceAlive(),
-                "activeRuntimeOwner" to MeowBoxService.hasActiveRuntimeOwner(serviceMode.takeIf { it.isNotBlank() }),
+                "activeRuntimeOwner" to MeowBoxService.hasActiveRuntimeOwner((snapshot["mode"] as? String)?.takeIf { it.isNotBlank() }),
                 "error" to error,
             ),
         )

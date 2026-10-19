@@ -51,13 +51,12 @@ void main() {
       find.descendant(of: docked, matching: find.byType(NavigationDestination)),
       findsNWidgets(2),
     );
-    expect(
-      find.descendant(
-        of: floating,
-        matching: find.byType(NavigationDestination),
-      ),
-      findsNWidgets(3),
-    );
+    for (final tab in ['home-tab', 'proxies-tab', 'settings-tab']) {
+      expect(
+        find.descendant(of: floating, matching: find.byKey(ValueKey(tab))),
+        findsOneWidget,
+      );
+    }
     expect(
       find.descendant(
         of: docked,

@@ -274,10 +274,10 @@ abstract class SingboxHostApi {
   Map<String?, Object?> vpnPermissionStatus();
 
   @asyncCallback
-  void start(String config, bool useVpn);
+  void start(String config, bool useVpn, int? expectedExternalStopRevision);
 
   @asyncCallback
-  void startPrepared(bool useVpn);
+  void startPrepared(bool useVpn, int? expectedExternalStopRevision);
 
   @asyncCallback
   void startProbe(String config);
@@ -286,10 +286,19 @@ abstract class SingboxHostApi {
   void stopProbe();
 
   @asyncCallback
-  void applyConfig(String config, bool useVpn, bool restartCore);
+  void applyConfig(
+    String config,
+    bool useVpn,
+    bool restartCore,
+    int? expectedExternalStopRevision,
+  );
 
   @asyncCallback
-  void applyPreparedConfig(bool useVpn, bool restartCore);
+  void applyPreparedConfig(
+    bool useVpn,
+    bool restartCore,
+    int? expectedExternalStopRevision,
+  );
 
   @asyncCallback
   String getConfigPath();

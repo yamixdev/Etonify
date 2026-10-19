@@ -1180,7 +1180,17 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    private fun dispatchStartAfterConfigWrite(useVpn: Boolean, result: MethodChannel.Result) {
+    private fun dispatchStartAfterConfigWrite(
+        useVpn: Boolean,
+        result: MethodChannel.Result,
+        expectedExternalStopRevision: Long? = null,
+    ) {
+        if (expectedExternalStopRevision != null &&
+            expectedExternalStopRevision != SingboxController.externalStopRevision
+        ) {
+            result.error("runtime_start_cancelled", "Start superseded by external stop", null)
+            return
+        }
         Log.i(TAG, "start requested useVpn=$useVpn running=${SingboxController.running} mode=${SingboxController.serviceMode}")
         SingboxController.log(
             "info",
@@ -1197,7 +1207,7 @@ class MainActivity : FlutterFragmentActivity() {
             MeowProxyService::class.java
         }
         if (SingboxController.running && SingboxController.serviceMode == targetMode) {
-            val serviceIntent = Intent(this, targetService).setAction(MeowBoxService.ACTION_START)
+            val serviceIntent = runtimeStartIntent(targetService, expectedExternalStopRevision)
             Log.i(TAG, "start forwarding idempotent ACTION_START mode=$targetMode")
             MeowDiagnostics.log(TAG, "start forwarding idempotent ACTION_START mode=$targetMode")
             startForegroundService(serviceIntent)
@@ -1222,6 +1232,9 @@ class MainActivity : FlutterFragmentActivity() {
                     .putExtra(MeowBoxService.EXTRA_STOP_REASON, "mode_switch_to_$targetMode"),
             )
             SingboxController.awaitStopped { stopped ->
+                if (expectedExternalStopRevision != null &&
+                    expectedExternalStopRevision != SingboxController.externalStopRevision
+                ) return@awaitStopped
                 if (!stopped) {
                     val cleaned = cleanupStoppedRuntimeState(
                         reason = "mode_switch_to_$targetMode",
@@ -1243,7 +1256,7 @@ class MainActivity : FlutterFragmentActivity() {
                         return@awaitStopped
                     }
                 }
-                val serviceIntent = Intent(this, targetService).setAction(MeowBoxService.ACTION_START)
+                val serviceIntent = runtimeStartIntent(targetService, expectedExternalStopRevision)
                 Log.i(TAG, "starting target service after mode switch target=${targetService.simpleName} stopped=$stopped")
                 MeowDiagnostics.log(
                     TAG,
@@ -1252,7 +1265,7 @@ class MainActivity : FlutterFragmentActivity() {
                 startForegroundService(serviceIntent)
             }
         } else {
-            val serviceIntent = Intent(this, targetService).setAction(MeowBoxService.ACTION_START)
+            val serviceIntent = runtimeStartIntent(targetService, expectedExternalStopRevision)
             Log.i(TAG, "starting target service target=${targetService.simpleName}")
             MeowDiagnostics.log(TAG, "starting target service target=${targetService.simpleName}")
             startForegroundService(serviceIntent)
@@ -1260,11 +1273,21 @@ class MainActivity : FlutterFragmentActivity() {
         result.success(true)
     }
 
+    private fun runtimeStartIntent(target: Class<out android.app.Service>, revision: Long?): Intent =
+        Intent(this, target).setAction(MeowBoxService.ACTION_START).apply {
+            if (revision != null) putExtra(MeowBoxService.EXTRA_EXPECTED_EXTERNAL_STOP_REVISION, revision)
+        }
+
     private fun dispatchApplyConfigAfterConfigWrite(
         useVpn: Boolean,
         restartCore: Boolean,
         result: MethodChannel.Result,
+        expectedExternalStopRevision: Long,
     ) {
+        if (expectedExternalStopRevision != SingboxController.externalStopRevision) {
+            result.error("runtime_start_cancelled", "Apply superseded by external stop", null)
+            return
+        }
         val dnsCacheClearPending = PersistentDnsCache.isClearPending(
             MeowApplication.singboxWorkingDirectory,
         )
@@ -1287,19 +1310,14 @@ class MainActivity : FlutterFragmentActivity() {
         )
         if (SingboxController.running && SingboxController.serviceMode == targetMode) {
             if (effectiveRestartCore) {
-                startService(Intent(this, serviceClass).setAction(MeowBoxService.ACTION_RESTART_CORE))
+                startService(runtimeStartIntent(serviceClass, expectedExternalStopRevision).setAction(MeowBoxService.ACTION_RESTART_CORE))
                 result.success(true)
             } else {
-                SingboxController.reloadService { reloadResult ->
-                    reloadResult.onSuccess {
-                        result.success(true)
-                    }.onFailure {
-                        result.error("reload_failed", it.message, null)
-                    }
-                }
+                startService(runtimeStartIntent(serviceClass, expectedExternalStopRevision).setAction(MeowBoxService.ACTION_RELOAD))
+                result.success(true)
             }
         } else {
-            val serviceIntent = Intent(this, serviceClass).setAction(MeowBoxService.ACTION_START)
+            val serviceIntent = runtimeStartIntent(serviceClass, expectedExternalStopRevision)
             startForegroundService(serviceIntent)
             result.success(true)
         }
@@ -1420,18 +1438,16 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun runtimeStatusMap(): Map<String?, Any?> {
+        val runtimeState = SingboxController.runtimeStateSnapshot()
         val recordedState = MeowApplication.readServiceState()
         val runtimeIntent = MeowApplication.readRuntimeIntent()
         val recordedServiceAlive = MeowApplication.isRecordedServiceAlive()
         val activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner(
-            SingboxController.serviceMode.takeIf { it.isNotBlank() },
+            (runtimeState["mode"] as? String)?.takeIf { it.isNotBlank() },
         )
         val nativeRecoveryPending =
-            !SingboxController.running && (recordedServiceAlive || activeRuntimeOwner)
+            runtimeState["running"] != true && (recordedServiceAlive || activeRuntimeOwner)
         return mapOf(
-            "running" to SingboxController.running,
-            "mode" to SingboxController.serviceMode,
-            "runtimeGeneration" to SingboxController.activeRuntimeGeneration,
             "uplink" to SingboxController.uplink,
             "downlink" to SingboxController.downlink,
             "uplinkTotal" to SingboxController.uplinkTotal,
@@ -1450,13 +1466,12 @@ class MainActivity : FlutterFragmentActivity() {
             // Status is intentionally read-only. Recovery belongs to explicit
             // stop/timeout paths so polling cannot interrupt a normal restart.
             "staleRuntimeStateCleaned" to false,
-            "runtimeIntentFresh" to MeowApplication.isRuntimeIntentFresh(),
             "runtimeIntentMode" to runtimeIntent?.mode,
             "runtimeIntentReason" to runtimeIntent?.reason,
             "runtimeIntentPid" to runtimeIntent?.pid,
             "runtimeIntentUpdatedAtMillis" to runtimeIntent?.updatedAtMillis,
             "runtimeIntentState" to MeowApplication.describeRuntimeIntent(),
-        )
+        ) + runtimeState
     }
 
     private fun logsWithNativeDiagnostics(content: String): String {
@@ -1618,21 +1633,23 @@ class MainActivity : FlutterFragmentActivity() {
                     callback(Result.success(mapOf("granted" to (VpnService.prepare(this@MainActivity) == null))))
                 }
 
-                override fun start(config: String, useVpn: Boolean, callback: (Result<Unit>) -> Unit) {
+                override fun start(config: String, useVpn: Boolean, expectedExternalStopRevision: Long?, callback: (Result<Unit>) -> Unit) {
                     if (config.isBlank()) {
                         callback(errorResult("empty_config", "Config is empty"))
                         return
                     }
                     val result = unitResult(callback)
+                    val stopRevision = expectedExternalStopRevision ?: SingboxController.externalStopRevision
                     writeConfigAndDispatch(config, result) {
-                        dispatchStartAfterConfigWrite(useVpn, result)
+                        dispatchStartAfterConfigWrite(useVpn, result, stopRevision)
                     }
                 }
 
-                override fun startPrepared(useVpn: Boolean, callback: (Result<Unit>) -> Unit) {
+                override fun startPrepared(useVpn: Boolean, expectedExternalStopRevision: Long?, callback: (Result<Unit>) -> Unit) {
                     val result = unitResult(callback)
+                    val stopRevision = expectedExternalStopRevision ?: SingboxController.externalStopRevision
                     withPreparedConfig(result) {
-                        dispatchStartAfterConfigWrite(useVpn, result)
+                        dispatchStartAfterConfigWrite(useVpn, result, stopRevision)
                     }
                 }
 
@@ -1692,6 +1709,7 @@ class MainActivity : FlutterFragmentActivity() {
                     config: String,
                     useVpn: Boolean,
                     restartCore: Boolean,
+                    expectedExternalStopRevision: Long?,
                     callback: (Result<Unit>) -> Unit,
                 ) {
                     if (config.isBlank()) {
@@ -1699,19 +1717,22 @@ class MainActivity : FlutterFragmentActivity() {
                         return
                     }
                     val result = unitResult(callback)
+                    val stopRevision = expectedExternalStopRevision ?: SingboxController.externalStopRevision
                     writeConfigAndDispatch(config, result) {
-                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result)
+                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result, stopRevision)
                     }
                 }
 
                 override fun applyPreparedConfig(
                     useVpn: Boolean,
                     restartCore: Boolean,
+                    expectedExternalStopRevision: Long?,
                     callback: (Result<Unit>) -> Unit,
                 ) {
                     val result = unitResult(callback)
+                    val stopRevision = expectedExternalStopRevision ?: SingboxController.externalStopRevision
                     withPreparedConfig(result) {
-                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result)
+                        dispatchApplyConfigAfterConfigWrite(useVpn, restartCore, result, stopRevision)
                     }
                 }
 

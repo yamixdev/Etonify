@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -102,50 +103,64 @@ class _TabbedHomeShellState extends State<TabbedHomeShell>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(builder: _buildShell);
+
+  Widget _buildShell(BuildContext context, BoxConstraints constraints) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final media = MediaQuery.of(context);
     final keyboardVisible = media.viewInsets.bottom > 0;
     final docked = widget.bottomNavigationStyle == BottomNavigationStyle.docked;
-    const barHeight = 60.0;
     final bottom = media.viewPadding.bottom + 8;
-    final reserve = keyboardVisible || docked ? 0.0 : bottom + barHeight + 12;
     final effects =
         widget.effectsEnabled &&
         !media.disableAnimations &&
         !media.highContrast &&
         !media.accessibleNavigation;
+    final destinations = [
+      NavigationDestination(
+        key: const ValueKey('home-tab'),
+        tooltip: '',
+        icon: const Icon(Icons.home_outlined, size: 22),
+        selectedIcon: const Icon(Icons.home_rounded, size: 22),
+        label: l10n.homeTabTitle,
+      ),
+      NavigationDestination(
+        key: const ValueKey('proxies-tab'),
+        tooltip: '',
+        icon: const Icon(Icons.dns_outlined, size: 22),
+        selectedIcon: const Icon(Icons.dns_rounded, size: 22),
+        label: l10n.proxiesTitle,
+      ),
+      if (!docked && widget.settingsBuilder != null)
+        NavigationDestination(
+          key: const ValueKey('settings-tab'),
+          tooltip: '',
+          icon: const Icon(Icons.settings_outlined, size: 22),
+          selectedIcon: const Icon(Icons.settings_rounded, size: 22),
+          label: l10n.settingsTitle,
+        ),
+    ];
+    final floatingLayout = docked
+        ? null
+        : _FloatingNavigationLayout.measure(
+            context,
+            math.max(
+              0,
+              constraints.maxWidth - media.viewPadding.horizontal - 32,
+            ),
+            destinations,
+          );
+    final barHeight = floatingLayout?.height ?? 60;
+    final reserve = keyboardVisible || docked ? 0.0 : bottom + barHeight + 12;
     final navigation = _ScrubbableNavigationBar(
       requestSerial: _serial,
       height: barHeight,
       rounded: !docked,
       selectedIndex: _index,
       onDestinationSelected: _select,
-      destinations: [
-        NavigationDestination(
-          key: const ValueKey('home-tab'),
-          tooltip: '',
-          icon: const Icon(Icons.home_outlined, size: 22),
-          selectedIcon: const Icon(Icons.home_rounded, size: 22),
-          label: l10n.homeTabTitle,
-        ),
-        NavigationDestination(
-          key: const ValueKey('proxies-tab'),
-          tooltip: '',
-          icon: const Icon(Icons.dns_outlined, size: 22),
-          selectedIcon: const Icon(Icons.dns_rounded, size: 22),
-          label: l10n.proxiesTitle,
-        ),
-        if (!docked && widget.settingsBuilder != null)
-          NavigationDestination(
-            key: const ValueKey('settings-tab'),
-            tooltip: '',
-            icon: const Icon(Icons.settings_outlined, size: 22),
-            selectedIcon: const Icon(Icons.settings_rounded, size: 22),
-            label: l10n.settingsTitle,
-          ),
-      ],
+      destinations: destinations,
+      floatingLayout: floatingLayout,
     );
     final surface = Material(
       color: docked
@@ -246,7 +261,9 @@ class _TabbedHomeShellState extends State<TabbedHomeShell>
                     bottom: bottom,
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 288),
+                        constraints: BoxConstraints(
+                          maxWidth: floatingLayout!.width,
+                        ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(barHeight / 2),
                           child: effects
@@ -279,6 +296,7 @@ class _ScrubbableNavigationBar extends StatefulWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     required this.destinations,
+    this.floatingLayout,
   });
 
   final double height;
@@ -287,6 +305,7 @@ class _ScrubbableNavigationBar extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final List<NavigationDestination> destinations;
+  final _FloatingNavigationLayout? floatingLayout;
 
   @override
   State<_ScrubbableNavigationBar> createState() =>
@@ -295,6 +314,7 @@ class _ScrubbableNavigationBar extends StatefulWidget {
 
 class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
   final _boundsKey = GlobalKey();
+  final _destinationKeys = <int, GlobalKey>{};
   int? _previewIndex;
   var _scrubbing = false;
 
@@ -329,6 +349,21 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
           bounds,
           Radius.circular(box.size.height / 2),
         ).contains(local)) {
+      return null;
+    }
+    if (widget.floatingLayout != null) {
+      for (var index = 0; index < widget.destinations.length; index++) {
+        final target =
+            _destinationKeys[index]?.currentContext?.findRenderObject()
+                as RenderBox?;
+        if (target != null &&
+            target.hasSize &&
+            (Offset.zero & target.size).contains(
+              target.globalToLocal(globalPosition),
+            )) {
+          return index;
+        }
+      }
       return null;
     }
     final visualIndex = (local.dx / box.size.width * widget.destinations.length)
@@ -379,29 +414,251 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
             ? null
             : (details) => _commit(details.globalPosition),
         onLongPressCancel: _cancel,
-        child: NavigationBar(
-          height: widget.height,
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          animationDuration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 120),
-          labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-          labelTextStyle: WidgetStateProperty.resolveWith(
-            (states) => theme.textTheme.labelSmall?.copyWith(
-              fontSize: 11.5,
-              fontWeight: states.contains(WidgetState.selected)
-                  ? FontWeight.w700
-                  : FontWeight.w600,
-              color: states.contains(WidgetState.selected)
-                  ? theme.colorScheme.onSurface
-                  : theme.colorScheme.onSurfaceVariant,
+        child: widget.floatingLayout != null
+            ? _buildFloating(context)
+            : NavigationBar(
+                height: widget.height,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                animationDuration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 120),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                labelTextStyle: WidgetStateProperty.resolveWith(
+                  (states) => theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 11.5,
+                    fontWeight: states.contains(WidgetState.selected)
+                        ? FontWeight.w700
+                        : FontWeight.w600,
+                    color: states.contains(WidgetState.selected)
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                selectedIndex: _previewIndex ?? widget.selectedIndex,
+                onDestinationSelected: widget.onDestinationSelected,
+                destinations: widget.destinations,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildFloating(BuildContext context) {
+    final layout = widget.floatingLayout!;
+    final media = MediaQuery.of(context);
+    final theme = Theme.of(context);
+    final selected = _previewIndex ?? widget.selectedIndex;
+    final duration = media.disableAnimations || media.accessibleNavigation
+        ? Duration.zero
+        : const Duration(milliseconds: 150);
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return SizedBox(
+      key: const ValueKey('floating-bottom-navigation'),
+      width: layout.width,
+      height: layout.height,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: selected.toDouble(), end: selected.toDouble()),
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        builder: (context, position, _) {
+          final indicatorStart = 4 + position * layout.inactiveWidth;
+          return Stack(
+            children: [
+              Positioned(
+                left: rtl
+                    ? layout.width - indicatorStart - layout.activeWidth + 4
+                    : indicatorStart + 4,
+                top: 4,
+                bottom: 4,
+                width: layout.activeWidth - 8,
+                child: DecoratedBox(
+                  key: const ValueKey('floating-navigation-indicator'),
+                  decoration: ShapeDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    shape: const StadiumBorder(),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
+                    for (
+                      var index = 0;
+                      index < widget.destinations.length;
+                      index++
+                    )
+                      SizedBox(
+                        key: _destinationKeys.putIfAbsent(index, GlobalKey.new),
+                        width:
+                            layout.inactiveWidth +
+                            (layout.activeWidth - layout.inactiveWidth) *
+                                (1 - (position - index).abs()).clamp(0.0, 1.0),
+                        height: layout.height,
+                        child: _FloatingNavigationDestination(
+                          destination: widget.destinations[index],
+                          selected: index == selected,
+                          labelWidth: layout.activeWidth - 54,
+                          labelStyle: layout.labelStyle,
+                          onTap: () => widget.onDestinationSelected(index),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FloatingNavigationLayout {
+  const _FloatingNavigationLayout({
+    required this.width,
+    required this.height,
+    required this.activeWidth,
+    required this.inactiveWidth,
+    required this.labelStyle,
+  });
+
+  final double width;
+  final double height;
+  final double activeWidth;
+  final double inactiveWidth;
+  final TextStyle labelStyle;
+
+  factory _FloatingNavigationLayout.measure(
+    BuildContext context,
+    double availableWidth,
+    List<NavigationDestination> destinations,
+  ) {
+    final style = Theme.of(context).textTheme.labelLarge!.copyWith(
+      fontSize: 13,
+      height: 1.2,
+      fontWeight: FontWeight.w600,
+    );
+    double textWidth = 0;
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    for (final destination in destinations) {
+      painter.text = TextSpan(text: destination.label, style: style);
+      painter.layout();
+      textWidth = math.max(textWidth, painter.width);
+    }
+    final inactiveTotal = 48.0 * (destinations.length - 1);
+    final width = math.min(
+      availableWidth,
+      math.max(288.0, textWidth + 54 + inactiveTotal + 8),
+    );
+    final activeWidth = math.min(
+      width - 8 - inactiveTotal,
+      math.max((width - 8) / (destinations.length + 1.2) * 2.2, textWidth + 54),
+    );
+    double textHeight = 0;
+    for (final destination in destinations) {
+      painter.text = TextSpan(text: destination.label, style: style);
+      painter.layout(maxWidth: math.max(1, activeWidth - 54));
+      textHeight = math.max(textHeight, painter.height);
+    }
+    painter.dispose();
+    return _FloatingNavigationLayout(
+      width: width,
+      height: math.max(56, textHeight + 24),
+      activeWidth: activeWidth,
+      inactiveWidth: (width - 8 - activeWidth) / (destinations.length - 1),
+      labelStyle: style,
+    );
+  }
+}
+
+class _FloatingNavigationDestination extends StatefulWidget {
+  const _FloatingNavigationDestination({
+    required this.destination,
+    required this.selected,
+    required this.labelWidth,
+    required this.labelStyle,
+    required this.onTap,
+  });
+
+  final NavigationDestination destination;
+  final bool selected;
+  final double labelWidth;
+  final TextStyle labelStyle;
+  final VoidCallback onTap;
+
+  @override
+  State<_FloatingNavigationDestination> createState() =>
+      _FloatingNavigationDestinationState();
+}
+
+class _FloatingNavigationDestinationState
+    extends State<_FloatingNavigationDestination> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final destination = widget.destination;
+    final selected = widget.selected;
+    final onTap = widget.onTap;
+    final colors = Theme.of(context).colorScheme;
+    final foreground = selected
+        ? colors.onPrimaryContainer
+        : colors.onSurfaceVariant;
+    return Semantics(
+      key: destination.key,
+      label: destination.label,
+      button: true,
+      selected: selected,
+      focused: _focused,
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const StadiumBorder(),
+          focusColor: colors.primary.withValues(alpha: .2),
+          onFocusChange: (value) => setState(() => _focused = value),
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              shape: StadiumBorder(
+                side: BorderSide(
+                  width: 2,
+                  color: _focused ? colors.onSurface : Colors.transparent,
+                ),
+              ),
+            ),
+            child: ClipRect(
+              child: OverflowBox(
+                minWidth: 0,
+                maxWidth: double.infinity,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconTheme(
+                      data: IconThemeData(color: foreground, size: 22),
+                      child: selected
+                          ? destination.selectedIcon ?? destination.icon
+                          : destination.icon,
+                    ),
+                    if (selected) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: widget.labelWidth,
+                        child: Text(
+                          destination.label,
+                          style: widget.labelStyle.copyWith(color: foreground),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
-          selectedIndex: _previewIndex ?? widget.selectedIndex,
-          onDestinationSelected: widget.onDestinationSelected,
-          destinations: widget.destinations,
         ),
       ),
     );

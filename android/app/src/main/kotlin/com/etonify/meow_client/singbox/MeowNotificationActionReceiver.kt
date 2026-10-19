@@ -43,7 +43,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
             NotificationActionDecision.STOP_ACTIVE_RUNTIME -> {
-                MeowApplication.clearRuntimeIntent()
+                SingboxController.recordExternalStop("notification_stop")
                 MeowVpnService.cancelScheduledRestart(applicationContext, "notification_stop")
                 MeowBoxService.requestStopAll("notification_stop")
                 SingboxController.awaitStopped(8_000L) { stopped ->
@@ -59,6 +59,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
                 }
             }
             NotificationActionDecision.CLEAR_STALE_NOTIFICATION -> {
+                SingboxController.recordExternalStop("notification_stale_stop")
                 clearStaleNotification(applicationContext, "notification_stale_action")
                 pendingResult.finish()
             }
@@ -73,6 +74,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
     }
 
     private fun clearStaleNotification(context: Context, reason: String) {
+        if (MeowApplication.isRuntimeIntentFresh()) return
         MeowVpnService.cancelScheduledRestart(context, reason)
         context.stopService(Intent(context, MeowVpnService::class.java))
         context.stopService(Intent(context, MeowProxyService::class.java))

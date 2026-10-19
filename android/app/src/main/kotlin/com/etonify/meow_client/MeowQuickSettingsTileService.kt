@@ -92,6 +92,7 @@ class MeowQuickSettingsTileService : TileService() {
     )
 
     private fun stopRuntime(mode: String) {
+        SingboxController.recordExternalStop("quick_tile_stop")
         MeowBoxService.requestStopAll("quick_tile_stop")
         val serviceClass = serviceClass(mode)
         startService(

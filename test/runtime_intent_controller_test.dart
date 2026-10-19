@@ -2,6 +2,50 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/runtime_intent_controller.dart';
 
 void main() {
+  test(
+    'external stop cancels user intent, queued restart and deferred retry',
+    () {
+      final controller = RuntimeIntentController()
+        ..markRuntimeDesired()
+        ..queueStartAfterStop()
+        ..deferRetryUntilResume();
+      final generation = controller.beginManualStart();
+
+      expect(controller.observeExternalStop(1), isTrue);
+
+      expect(controller.desiredByUser, isFalse);
+      expect(controller.isManualStartCurrent(generation), isFalse);
+      expect(controller.consumeRetryOnResume(connected: false), isFalse);
+      expect(controller.completeSuccessfulStop(), isFalse);
+    },
+  );
+
+  test('already observed external stop cannot cancel a newer manual start', () {
+    final controller = RuntimeIntentController();
+    controller.observeExternalStop(4);
+    final generation = controller.beginManualStart();
+    controller.markRuntimeDesired();
+
+    expect(controller.observeExternalStop(4), isFalse);
+    expect(controller.observeExternalStop(3), isFalse);
+    expect(controller.isManualStartCurrent(generation), isTrue);
+    expect(controller.externalStopRevision, 4);
+  });
+
+  test(
+    'new manual start releases external stop queued restart suppression',
+    () {
+      final controller = RuntimeIntentController();
+      controller.observeExternalStop(1);
+      controller.beginManualStart();
+      controller.markRuntimeDesired();
+      controller.beginExplicitStop();
+      controller.queueStartAfterStop();
+
+      expect(controller.completeSuccessfulStop(), isTrue);
+    },
+  );
+
   test('manual start generations reject stale asynchronous work', () {
     final controller = RuntimeIntentController();
 

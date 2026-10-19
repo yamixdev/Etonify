@@ -32,10 +32,7 @@ void main() {
       await tester.pumpAndSettle();
       final surface = tester.widget<Material>(
         find
-            .ancestor(
-              of: find.byType(NavigationBar),
-              matching: find.byType(Material),
-            )
+            .ancestor(of: _navigation(style), matching: find.byType(Material))
             .first,
       );
       final rendered = Color.alphaBlend(
@@ -52,7 +49,7 @@ void main() {
         expect(surface.color, theme.scaffoldBackgroundColor);
         final decorations = tester.widgetList<DecoratedBox>(
           find.ancestor(
-            of: find.byType(NavigationBar),
+            of: _navigation(style),
             matching: find.byType(DecoratedBox),
           ),
         );
@@ -310,8 +307,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(_scrubApp(safeTop: 32, safeBottom: 24));
       await tester.pumpAndSettle();
-      final bar = tester.getRect(find.byType(NavigationBar));
-      expect(bar.height, inInclusiveRange(56, 60));
+      final bar = tester.getRect(_navigation(BottomNavigationStyle.floating));
+      expect(bar.height, inInclusiveRange(52, 56));
       expect(bar.width, lessThanOrEqualTo(300));
       expect(bar.center.dx, closeTo(196.5, .1));
       expect(bar.bottom, 818);
@@ -320,6 +317,121 @@ void main() {
         expect(size.width, greaterThanOrEqualTo(48));
         expect(size.height, greaterThanOrEqualTo(48));
       }
+      final home = tester.getRect(find.byKey(const ValueKey('home-tab')));
+      final proxies = tester.getRect(find.byKey(const ValueKey('proxies-tab')));
+      expect(home.width, greaterThan(proxies.width));
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('Proxies'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
+      final icon = tester.getCenter(find.byIcon(Icons.home_rounded));
+      final label = tester.getCenter(find.text('Home'));
+      expect(icon.dy, closeTo(label.dy, 1));
+    },
+  );
+
+  for (final rtl in [false, true]) {
+    testWidgets('scrub follows expanded target bounds rtl=$rtl', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_scrubApp(rtl: rtl));
+      await tester.pumpAndSettle();
+      final home = tester.getRect(find.byKey(const ValueKey('home-tab')));
+      final gesture = await tester.startGesture(home.center);
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveTo(
+        Offset(rtl ? home.left + 6 : home.right - 6, home.center.dy),
+      );
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Home body'), findsOneWidget);
+    });
+  }
+
+  for (final rtl in [false, true]) {
+    testWidgets('scrub resolves moving item bounds rtl=$rtl', (tester) async {
+      await tester.pumpWidget(_scrubApp(rtl: rtl));
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('home-tab'))),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveTo(
+        tester.getCenter(find.byKey(const ValueKey('proxies-tab'))),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 35));
+      final home = tester.getRect(find.byKey(const ValueKey('home-tab')));
+      await gesture.moveTo(
+        Offset(rtl ? home.left + 2 : home.right - 2, home.center.dy),
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const ValueKey('home-tab')))
+            .properties
+            .selected,
+        isTrue,
+      );
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(find.text('Home body'), findsOneWidget);
+    });
+  }
+
+  testWidgets('focused floating destination has a visible perimeter', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_scrubApp());
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final homeSemantics = tester.widget<Semantics>(
+      find.byKey(const ValueKey('home-tab')),
+    );
+    expect(homeSemantics.properties.focused, isTrue);
+    final decorations = tester.widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byKey(const ValueKey('home-tab')),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    expect(
+      decorations.where((widget) {
+        final decoration = widget.decoration;
+        return decoration is ShapeDecoration &&
+            decoration.shape is OutlinedBorder &&
+            (decoration.shape as OutlinedBorder).side.width >= 2 &&
+            (decoration.shape as OutlinedBorder).side.color.a > 0;
+      }),
+      isNotEmpty,
+    );
+  });
+
+  testWidgets(
+    'floating indicator follows selection without moving in reduced motion',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(_scrubApp(reduced: true));
+      await tester.pumpAndSettle();
+      for (final tab in ['home-tab', 'proxies-tab', 'settings-tab']) {
+        final target = find.byKey(ValueKey(tab));
+        expect(
+          tester.getSemantics(target).getSemanticsData().label,
+          isNotEmpty,
+        );
+        await tester.tap(target);
+        await tester.pump();
+        expect(tester.widget<Semantics>(target).properties.selected, isTrue);
+        final indicator = tester.getRect(
+          find.byKey(const ValueKey('floating-navigation-indicator')),
+        );
+        final bounds = tester.getRect(target);
+        expect(indicator.center.dx, closeTo(bounds.center.dx, .1));
+        expect(indicator.width, closeTo(bounds.width - 8, .1));
+      }
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
     },
   );
 
@@ -344,9 +456,14 @@ void main() {
         await tester.pump();
         expect(
           tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          destination,
+              .widget<Semantics>(
+                find.byKey(
+                  ValueKey(destination == 1 ? 'proxies-tab' : 'settings-tab'),
+                ),
+              )
+              .properties
+              .selected,
+          isTrue,
         );
         expect(find.text('Home body'), findsOneWidget);
         expect(requested, 0);
@@ -378,23 +495,27 @@ void main() {
         await tester.pump();
         expect(
           tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          1,
+              .widget<Semantics>(find.byKey(const ValueKey('proxies-tab')))
+              .properties
+              .selected,
+          isTrue,
         );
         if (cancelPointer) {
           await gesture.cancel();
         } else {
-          final bar = tester.getRect(find.byType(NavigationBar));
+          final bar = tester.getRect(
+            _navigation(BottomNavigationStyle.floating),
+          );
           await gesture.moveTo(Offset(bar.center.dx, bar.top - 30));
           await gesture.up();
         }
         await tester.pumpAndSettle();
         expect(
           tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          0,
+              .widget<Semantics>(find.byKey(const ValueKey('home-tab')))
+              .properties
+              .selected,
+          isTrue,
         );
         expect(find.text('Home body'), findsOneWidget);
         expect(requested, 0);
@@ -525,7 +646,7 @@ void main() {
           final about = find.text('About');
           expect(
             tester.getRect(about).bottom,
-            lessThan(tester.getRect(find.byType(NavigationBar)).top),
+            lessThan(tester.getRect(_navigation(style)).top),
           );
           await tester.tap(about);
           expect(aboutOpened, isTrue);
@@ -653,7 +774,7 @@ void main() {
         }
 
         await pump();
-        final bar = tester.getRect(find.byType(NavigationBar));
+        final bar = tester.getRect(_navigation(style));
         expect(
           bar.left,
           style == BottomNavigationStyle.floating ? greaterThan(0) : 0,
@@ -676,7 +797,7 @@ void main() {
         await pump(reduced: true);
         expect(find.byType(BackdropFilter), findsNothing);
         await pump(keyboard: 280);
-        expect(find.byType(NavigationBar), findsNothing);
+        expect(_navigation(style), findsNothing);
       },
     );
 
@@ -767,6 +888,11 @@ void main() {
   }
 }
 
+Finder _navigation(BottomNavigationStyle style) =>
+    style == BottomNavigationStyle.floating
+    ? find.byKey(const ValueKey('floating-bottom-navigation'))
+    : find.byType(NavigationBar);
+
 Widget _scrubApp({
   VoidCallback? onRequested,
   bool rtl = false,
@@ -777,6 +903,7 @@ Widget _scrubApp({
   double safeRight = 0,
   double keyboard = 0,
   bool accessible = false,
+  bool reduced = false,
 }) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -787,6 +914,7 @@ Widget _scrubApp({
   home: MediaQuery(
     data: MediaQueryData(
       accessibleNavigation: accessible,
+      disableAnimations: reduced,
       padding: EdgeInsets.fromLTRB(
         safeLeft,
         safeTop,

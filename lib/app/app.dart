@@ -224,6 +224,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   final RuntimeConnectionController _runtimeConnection =
       RuntimeConnectionController();
   final RuntimeIntentController _runtimeIntent = RuntimeIntentController();
+  int _lastNativeRuntimeStateRevision = -1;
+  int _manualStartStateRevision = -1;
   final RuntimeOperationCoordinator _runtimeOperations =
       RuntimeOperationCoordinator();
   final RuntimeRecoveryController _runtimeRecovery =
@@ -3757,30 +3759,36 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _resumeForegroundSyncTimer?.cancel();
     _startSubscriptionAutoRefresh();
-    _resumeForegroundSyncTimer = Timer(const Duration(milliseconds: 350), () {
-      _resumeForegroundSyncTimer = null;
-      if (!mounted || !_foregroundLifecycleActive) {
-        return;
-      }
-      // Android installation starts a new process, and bootstrap already
-      // refreshes version metadata plus stale update artifacts there. Repeating
-      // package and file I/O on every foreground transition competes with the
-      // first interactive frame after returning from recents.
-      unawaited(_reconcileRuntimeAfterResume());
-      if (_connected) {
-        _scheduleActiveOutboundIpRefresh(
-          delay: const Duration(milliseconds: 700),
-        );
-        if (_locationLookupLimit > 0) {
-          _proxyLocationCoordinator.scheduleBestOutboundLocationRefresh(
-            delay: const Duration(seconds: 1),
-          );
+    _resumeForegroundSyncTimer = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        _resumeForegroundSyncTimer = null;
+        if (!mounted || !_foregroundLifecycleActive) {
+          return;
         }
-      }
-      if (_runtimeIntent.consumeRetryOnResume(connected: _connected)) {
-        _scheduleInvalidOutboundRetry('resume lifecycle retry');
-      }
-    });
+        // Android installation starts a new process, and bootstrap already
+        // refreshes version metadata plus stale update artifacts there. Repeating
+        // package and file I/O on every foreground transition competes with the
+        // first interactive frame after returning from recents.
+        final reconciled = await _reconcileRuntimeAfterResume();
+        if (!mounted || !_foregroundLifecycleActive || !reconciled) {
+          return;
+        }
+        if (_connected) {
+          _scheduleActiveOutboundIpRefresh(
+            delay: const Duration(milliseconds: 700),
+          );
+          if (_locationLookupLimit > 0) {
+            _proxyLocationCoordinator.scheduleBestOutboundLocationRefresh(
+              delay: const Duration(seconds: 1),
+            );
+          }
+        }
+        if (_runtimeIntent.consumeRetryOnResume(connected: _connected)) {
+          _scheduleInvalidOutboundRetry('resume lifecycle retry');
+        }
+      },
+    );
   }
 
   Future<void> _syncRuntimeUiForeground(bool foreground) async {
@@ -3794,12 +3802,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  Future<void> _reconcileRuntimeAfterResume() async {
+  Future<bool> _reconcileRuntimeAfterResume() async {
     AppLogStore.info('runtime', 'resume reconcile start');
     await _syncRuntimeFlags();
-    await _syncRuntimeState();
+    if (!await _syncRuntimeState()) return false;
     if (!_connected || !_foregroundLifecycleActive) {
-      return;
+      return true;
     }
     final networkReady = await _networkInterfaceUsable(
       reason: 'resume_reconcile',
@@ -3810,7 +3818,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         'runtime',
         'resume reconcile postponed: no usable network interface',
       );
-      return;
+      return false;
     }
     if (_deferredAutomaticUrlTest.take(
       fullSessionRunning: _fullUrlTestSessionRunning,
@@ -3825,6 +3833,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _schedulePeriodicGroupUrlTest();
     }
     AppLogStore.debug('runtime', 'resume reconcile completed');
+    return true;
   }
 
   void _setMemoryLimitEnabled(bool value, {bool warningDismissed = false}) {
@@ -4164,6 +4173,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
+    final runtimeStateKnown = await _syncRuntimeState();
+    if (!mounted || (!runtimeStateKnown && !_connected && !_starting)) return;
     if (_runtimeActiveOrRequested) {
       await _stopRuntime(reason: 'toggle_connection');
       return;
@@ -4289,8 +4300,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     // A foreground VPN can outlive Flutter. Reconcile with the native owner
     // before showing "Building config" or rebuilding an already running
     // runtime after the Activity has been recreated.
-    await _syncRuntimeState();
-    if (!mounted || _runtimeActiveOrRequested) {
+    final runtimeStateKnown = await _syncRuntimeState();
+    if (!mounted || !runtimeStateKnown || _runtimeActiveOrRequested) {
       if (_connected) {
         AppLogStore.info(
           'runtime',
@@ -4300,6 +4311,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return;
     }
     final startGeneration = _runtimeIntent.beginManualStart();
+    final expectedExternalStopRevision = _runtimeIntent.externalStopRevision;
+    _manualStartStateRevision = _lastNativeRuntimeStateRevision;
     AppLogStore.info(
       'sing-box',
       'manual start requested source=$source\n'
@@ -4430,6 +4443,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         build,
         useVpn: _vpnInboundEnabled,
         manualStartGeneration: startGeneration,
+        expectedExternalStopRevision: expectedExternalStopRevision,
       );
       if (logicalSession != null &&
           logicalSession.phase == OfflineUrlTestPhase.pausingForVpn) {
@@ -7455,10 +7469,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     required bool useVpn,
     int? manualStartGeneration,
     int? automaticRecoveryGeneration,
+    int? expectedExternalStopRevision,
   }) async {
+    if ((manualStartGeneration != null &&
+            !_manualRuntimeStartCurrent(manualStartGeneration)) ||
+        (automaticRecoveryGeneration != null &&
+            !_automaticRuntimeRecoveryCurrent(automaticRecoveryGeneration))) {
+      _configCoordinator.discardPreparedConfigCandidate(build);
+      return;
+    }
     final result = await _configCoordinator.startRuntimeWithBuild(
       build,
       useVpn: useVpn,
+      expectedExternalStopRevision: expectedExternalStopRevision,
     );
     if (!mounted) {
       return;
@@ -7793,6 +7816,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return SingboxConfigCoordinatorSnapshot(
       connected: _connected,
       runtimeTransitionInProgress: _runtimeTransitionInProgress,
+      externalStopRevision: _runtimeIntent.externalStopRevision,
       activeSubscription: _activeSubscription,
       selectedProxyTag: _selectedProxyTag,
       excludedOutboundTags: _excludedRuntimeOutboundTags,
@@ -7896,7 +7920,42 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
+  bool _acceptNativeRuntimeSnapshot(Map<String, dynamic> snapshot) {
+    final stopRevision = (snapshot['externalStopRevision'] as num?)?.toInt();
+    final stateRevision = (snapshot['runtimeStateRevision'] as num?)?.toInt();
+    if (stopRevision != null &&
+        stopRevision < _runtimeIntent.externalStopRevision) {
+      return false;
+    }
+    if (stateRevision != null &&
+        stateRevision < _lastNativeRuntimeStateRevision) {
+      return false;
+    }
+    final newExternalStop =
+        stopRevision != null &&
+        _runtimeIntent.observeExternalStop(stopRevision);
+    if (newExternalStop) {
+      _cancelAutomaticRuntimeRecovery('external_stop');
+      _cancelManualRuntimeStart('external_stop');
+      _runtimeLifecycle.cancelStartWatchdog();
+      _clearRuntimeProxySelectionGuard();
+      _groupUrlTestScheduler.cancel();
+      _networkRecovery.cancelDecision();
+      if (mounted) {
+        setState(() => _setConnectionPhase(AppConnectionPhase.idle));
+      }
+    } else if (stateRevision != null &&
+        stateRevision <= _manualStartStateRevision &&
+        _runtimeDesiredByUser &&
+        _starting) {
+      return false;
+    }
+    if (stateRevision != null) _lastNativeRuntimeStateRevision = stateRevision;
+    return true;
+  }
+
   void _handleRuntimeStateEvent(RuntimeStateEvent event) {
+    if (!_acceptNativeRuntimeSnapshot(event.raw)) return;
     final running = event.running;
     final mode = event.raw['mode']?.toString() ?? '';
     final nativeRuntimeGeneration =
@@ -7944,7 +8003,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     var shouldCancelLatency = false;
     setState(() {
       if (running) {
-        _runtimeIntent.restoreDesiredFromObservedRuntime();
+        if (event.raw['runtimeIntentFresh'] != false) {
+          _runtimeIntent.restoreDesiredFromObservedRuntime();
+        }
         _proxyLocationCoordinator.invalidateSignature();
       }
       _setConnectionPhase(
@@ -8364,10 +8425,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  Future<void> _syncRuntimeState() async {
+  Future<bool> _syncRuntimeState() async {
+    final manualGeneration = _runtimeIntent.manualStartGeneration;
     try {
       final status = await _singboxRuntime.status();
-      if (!mounted || !_foregroundLifecycleActive) return;
+      if (!mounted || !_foregroundLifecycleActive) return false;
+      if (manualGeneration != _runtimeIntent.manualStartGeneration) {
+        return false;
+      }
+      if (!_acceptNativeRuntimeSnapshot(status)) return false;
+      if (status['running'] is! bool) return false;
       final running = status['running'] == true;
       _updateNativeRuntimeState(
         running: running,
@@ -8389,7 +8456,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
             }),
           );
         }
-        return;
+        return true;
       }
       if (!running &&
           !_connected &&
@@ -8397,7 +8464,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _offlineProbeRuntimeGeneration > 0 &&
           (status['runtimeGeneration'] as num?)?.toInt() ==
               _offlineProbeRuntimeGeneration) {
-        return;
+        return true;
       }
       final recordedServiceAlive = status['recordedServiceAlive'] == true;
       final runtimeIntentFresh = status['runtimeIntentFresh'] == true;
@@ -8428,7 +8495,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final syncedTraffic = _appTrafficMonitor.reduceRuntimeStatus(status);
       setState(() {
         if (running) {
-          _runtimeIntent.restoreDesiredFromObservedRuntime();
+          if (status['runtimeIntentFresh'] != false) {
+            _runtimeIntent.restoreDesiredFromObservedRuntime();
+          }
         }
         _setConnectionPhase(
           decision.phase,
@@ -8452,8 +8521,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
           'runtime sync running but interface is not usable yet',
         );
       }
+      return true;
     } catch (_) {
       // Ignore transient sync failures: live EventChannel events still drive state.
+      return false;
     }
   }
 
@@ -8659,6 +8730,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
       return;
     }
+    final expectedExternalStopRevision = _runtimeIntent.externalStopRevision;
     AppLogStore.info('sing-box', reason);
     try {
       try {
@@ -8671,7 +8743,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
         return;
       }
-      if (await _tryFastRetryViaMutation(reason, retryGeneration)) {
+      if (await _tryFastRetryViaMutation(
+        reason,
+        retryGeneration,
+        expectedExternalStopRevision,
+      )) {
         return;
       }
       if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
@@ -8712,6 +8788,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         build,
         useVpn: _vpnInboundEnabled,
         automaticRecoveryGeneration: retryGeneration,
+        expectedExternalStopRevision: expectedExternalStopRevision,
       );
     } catch (error, stackTrace) {
       if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
@@ -8745,6 +8822,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<bool> _tryFastRetryViaMutation(
     String reason,
     int retryGeneration,
+    int expectedExternalStopRevision,
   ) async {
     if (!_automaticRuntimeRecoveryCurrent(retryGeneration)) {
       return true;
@@ -8821,6 +8899,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       build,
       useVpn: _vpnInboundEnabled,
       automaticRecoveryGeneration: retryGeneration,
+      expectedExternalStopRevision: expectedExternalStopRevision,
     );
     return true;
   }

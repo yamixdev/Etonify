@@ -35,19 +35,28 @@ class RuntimeLifecycleResult {
 }
 
 abstract interface class RuntimeLifecycleRuntime {
-  Future<void> start({required String config, required bool useVpn});
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  });
 
-  Future<void> startPrepared({required bool useVpn});
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  });
 
   Future<void> applyConfig({
     required String config,
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   });
 
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   });
 
   Future<void> stop({required String reason});
@@ -75,11 +84,13 @@ class SingboxRuntimeLifecycleRuntime implements RuntimeLifecycleRuntime {
     required String config,
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) {
     return _runtime.applyConfig(
       config: config,
       useVpn: useVpn,
       restartCore: restartCore,
+      expectedExternalStopRevision: expectedExternalStopRevision,
     );
   }
 
@@ -87,10 +98,12 @@ class SingboxRuntimeLifecycleRuntime implements RuntimeLifecycleRuntime {
   Future<void> applyPreparedConfig({
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
   }) {
     return _runtime.applyPreparedConfig(
       useVpn: useVpn,
       restartCore: restartCore,
+      expectedExternalStopRevision: expectedExternalStopRevision,
     );
   }
 
@@ -105,13 +118,27 @@ class SingboxRuntimeLifecycleRuntime implements RuntimeLifecycleRuntime {
   }
 
   @override
-  Future<void> start({required String config, required bool useVpn}) {
-    return _runtime.start(config: config, useVpn: useVpn);
+  Future<void> start({
+    required String config,
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) {
+    return _runtime.start(
+      config: config,
+      useVpn: useVpn,
+      expectedExternalStopRevision: expectedExternalStopRevision,
+    );
   }
 
   @override
-  Future<void> startPrepared({required bool useVpn}) {
-    return _runtime.startPrepared(useVpn: useVpn);
+  Future<void> startPrepared({
+    required bool useVpn,
+    int? expectedExternalStopRevision,
+  }) {
+    return _runtime.startPrepared(
+      useVpn: useVpn,
+      expectedExternalStopRevision: expectedExternalStopRevision,
+    );
   }
 
   @override
@@ -165,6 +192,7 @@ class RuntimeLifecycleController {
   Future<RuntimeLifecycleResult> startRuntimeWithBuild({
     required SingboxConfigBuildResult build,
     required bool useVpn,
+    int? expectedExternalStopRevision,
     required RuntimeBuildHook promotePreparedConfig,
     required RuntimeVoidHook cacheStartedBuild,
     required RuntimeLogHook logCall,
@@ -185,7 +213,10 @@ class RuntimeLifecycleController {
         useVpn: useVpn,
         onTimeout: onWatchdogTimeout,
       );
-      startFuture = _runtime.startPrepared(useVpn: useVpn);
+      startFuture = _runtime.startPrepared(
+        useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
+      );
       return _waitForStartFuture(
         startFuture,
         watchdogGeneration: watchdogGeneration,
@@ -202,7 +233,11 @@ class RuntimeLifecycleController {
         useVpn: useVpn,
         onTimeout: onWatchdogTimeout,
       );
-      startFuture = _runtime.start(config: build.configJson, useVpn: useVpn);
+      startFuture = _runtime.start(
+        config: build.configJson,
+        useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
+      );
       return _waitForStartFuture(
         startFuture,
         watchdogGeneration: watchdogGeneration,
@@ -398,6 +433,7 @@ class RuntimeLifecycleController {
   Future<RuntimeLifecycleResult> applyRuntimeBuild({
     required SingboxConfigBuildResult build,
     required bool useVpn,
+    int? expectedExternalStopRevision,
     required RuntimeApplyPolicy policy,
     required RuntimeBuildHook promotePreparedConfig,
     required RuntimeVoidHook cacheStartedBuild,
@@ -432,6 +468,7 @@ class RuntimeLifecycleController {
       return fullServiceRestart(
         build: build,
         useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         reason: 'config_changed',
         promotePreparedConfig: promotePreparedConfigOnce,
         cacheStartedBuild: cacheStartedBuild,
@@ -453,6 +490,7 @@ class RuntimeLifecycleController {
       final recovered = await fullServiceRestart(
         build: build,
         useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         reason: 'safe_core_restart_precondition_failed',
         promotePreparedConfig: promotePreparedConfigOnce,
         cacheStartedBuild: cacheStartedBuild,
@@ -474,6 +512,7 @@ class RuntimeLifecycleController {
         build: build,
         useVpn: useVpn,
         restartCore: true,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         promotePreparedConfig: promotePreparedConfigOnce,
         cacheStartedBuild: cacheStartedBuild,
         logCall: logCall,
@@ -494,6 +533,7 @@ class RuntimeLifecycleController {
       final recovered = await fullServiceRestart(
         build: build,
         useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         reason: 'runtime_interface_recovery',
         promotePreparedConfig: promotePreparedConfigOnce,
         cacheStartedBuild: cacheStartedBuild,
@@ -526,6 +566,7 @@ class RuntimeLifecycleController {
           final recovered = await fullServiceRestart(
             build: build,
             useVpn: useVpn,
+            expectedExternalStopRevision: expectedExternalStopRevision,
             reason: 'safe_core_restart_exception',
             promotePreparedConfig: promotePreparedConfigOnce,
             cacheStartedBuild: cacheStartedBuild,
@@ -552,6 +593,7 @@ class RuntimeLifecycleController {
   Future<RuntimeLifecycleResult> fullServiceRestart({
     required SingboxConfigBuildResult build,
     required bool useVpn,
+    int? expectedExternalStopRevision,
     required String reason,
     required RuntimeBuildHook promotePreparedConfig,
     required RuntimeVoidHook cacheStartedBuild,
@@ -584,6 +626,7 @@ class RuntimeLifecycleController {
       return await startRuntimeWithBuild(
         build: build,
         useVpn: useVpn,
+        expectedExternalStopRevision: expectedExternalStopRevision,
         promotePreparedConfig: promotePreparedConfig,
         cacheStartedBuild: cacheStartedBuild,
         logCall: logCall,
@@ -729,6 +772,7 @@ class RuntimeLifecycleController {
     required SingboxConfigBuildResult build,
     required bool useVpn,
     required bool restartCore,
+    int? expectedExternalStopRevision,
     required RuntimeBuildHook promotePreparedConfig,
     required RuntimeVoidHook cacheStartedBuild,
     required RuntimeLogHook logCall,
@@ -748,7 +792,11 @@ class RuntimeLifecycleController {
             'configOutbounds=${build.configOutboundCount}',
       );
       return _runtime
-          .applyPreparedConfig(useVpn: useVpn, restartCore: restartCore)
+          .applyPreparedConfig(
+            useVpn: useVpn,
+            restartCore: restartCore,
+            expectedExternalStopRevision: expectedExternalStopRevision,
+          )
           .timeout(startTimeout);
     }
     logCall(
@@ -762,6 +810,7 @@ class RuntimeLifecycleController {
           config: build.configJson,
           useVpn: useVpn,
           restartCore: restartCore,
+          expectedExternalStopRevision: expectedExternalStopRevision,
         )
         .timeout(startTimeout);
   }
