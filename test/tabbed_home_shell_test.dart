@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -6,9 +7,169 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/features/settings/settings_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/generated/app_localizations_en.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
 void main() {
+  for (final rtl in [false, true]) {
+    testWidgets('horizontal drag tracks the finger without a hold rtl=$rtl', (
+      tester,
+    ) async {
+      var requested = 0;
+      await tester.pumpWidget(
+        _scrubApp(rtl: rtl, onRequested: () => requested++),
+      );
+      await tester.pumpAndSettle();
+      final indicator = find.byKey(
+        const ValueKey('floating-navigation-indicator'),
+      );
+      final home = tester.getCenter(find.byKey(const ValueKey('home-tab')));
+      final gesture = await tester.startGesture(home);
+      final direction = rtl ? -1.0 : 1.0;
+      await gesture.moveBy(Offset(direction * 24, 0));
+      await tester.pump();
+      final first = tester.getRect(indicator);
+      await gesture.moveBy(Offset(direction * 12, 0));
+      await tester.pump();
+      final next = tester.getRect(indicator);
+      expect(next.center.dx - first.center.dx, closeTo(direction * 12, .1));
+      expect(find.text('Home body'), findsOneWidget);
+      expect(requested, 0);
+      await gesture.moveBy(Offset(direction * 25, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text('Proxies body'), findsOneWidget);
+      expect(requested, 1);
+    });
+  }
+
+  testWidgets('touch removes the keyboard focus perimeter', (tester) async {
+    await tester.pumpWidget(_scrubApp());
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('home-tab')));
+    await tester.pumpAndSettle();
+    final decorations = tester.widgetList<DecoratedBox>(
+      find.descendant(
+        of: find.byKey(const ValueKey('home-tab')),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    expect(
+      decorations.where((widget) {
+        final decoration = widget.decoration;
+        return decoration is ShapeDecoration &&
+            decoration.shape is OutlinedBorder &&
+            (decoration.shape as OutlinedBorder).side.width >= 2 &&
+            (decoration.shape as OutlinedBorder).side.color.a > 0;
+      }),
+      isEmpty,
+    );
+  });
+
+  for (final rtl in [false, true]) {
+    testWidgets('drag clamps at both ends and commits once rtl=$rtl', (
+      tester,
+    ) async {
+      var requested = 0;
+      await tester.pumpWidget(
+        _scrubApp(rtl: rtl, onRequested: () => requested++),
+      );
+      await tester.pumpAndSettle();
+      final direction = rtl ? -1.0 : 1.0;
+      final bar = tester.getRect(_navigation(BottomNavigationStyle.floating));
+      final indicator = find.byKey(
+        const ValueKey('floating-navigation-indicator'),
+      );
+      for (final (key, sign, body) in [
+        ('home-tab', 1, 'Settings body'),
+        ('settings-tab', -1, 'Home body'),
+      ]) {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey(key))),
+        );
+        await gesture.moveBy(Offset(direction * sign * 500, 0));
+        await tester.pump();
+        final pill = tester.getRect(indicator);
+        expect(pill.left, greaterThanOrEqualTo(bar.left + 4));
+        expect(pill.right, lessThanOrEqualTo(bar.right - 4));
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(find.text(body), findsOneWidget);
+      }
+      expect(requested, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('vertical motion on the floating bar does not change tabs', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_scrubApp());
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const ValueKey('proxies-tab')),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Home body'), findsOneWidget);
+  });
+
+  testWidgets('a drag interrupts a moving indicator without snapping ahead', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_scrubApp());
+    await tester.pumpAndSettle();
+    final indicator = find.byKey(
+      const ValueKey('floating-navigation-indicator'),
+    );
+    final initialCenter = tester.getRect(indicator).center.dx;
+    await tester.tap(find.byKey(const ValueKey('settings-tab')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 35));
+    final before = tester.getRect(indicator);
+    final gesture = await tester.startGesture(before.center);
+    await gesture.moveBy(const Offset(-24, 0));
+    await tester.pump();
+    expect(
+      tester.getRect(indicator).center.dx,
+      closeTo(
+        (before.center.dx - 24).clamp(initialCenter, double.infinity),
+        .1,
+      ),
+    );
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    expect(find.text('Settings body'), findsOneWidget);
+  });
+
+  testWidgets('drag reaches all tabs with strongly unequal label widths', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _scrubApp(labels: const _LongNavigationLabelsDelegate()),
+    );
+    await tester.pumpAndSettle();
+    for (final (key, offset, body) in [
+      ('home-tab', 1000.0, 'Settings body'),
+      ('settings-tab', -1000.0, 'Home body'),
+      ('home-tab', 170.0, 'Proxies body'),
+      ('proxies-tab', 1000.0, 'Settings body'),
+    ]) {
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(ValueKey(key))),
+      );
+      await gesture.moveBy(Offset(offset, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.text(body), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   for (final style in BottomNavigationStyle.values) {
     testWidgets('navigation blends with page background ${style.name}', (
       tester,
@@ -223,7 +384,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(NavigationBar), findsNothing);
   });
-  testWidgets('a same-tab group request cancels an older held selection', (
+  testWidgets('a same-tab group request cancels an older drag selection', (
     tester,
   ) async {
     late ValueChanged<String?> open;
@@ -250,7 +411,6 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('proxies-tab'))),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveTo(
       tester.getCenter(find.byKey(const ValueKey('settings-tab'))),
     );
@@ -264,7 +424,7 @@ void main() {
   });
 
   testWidgets(
-    'an external navigation request cancels an older held selection',
+    'an external navigation request cancels an older drag selection',
     (tester) async {
       late ValueChanged<String?> open;
       await tester.pumpWidget(
@@ -286,7 +446,6 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(const ValueKey('home-tab'))),
       );
-      await tester.pump(const Duration(milliseconds: 600));
       await gesture.moveTo(
         tester.getCenter(find.byKey(const ValueKey('settings-tab'))),
       );
@@ -376,17 +535,14 @@ void main() {
   }
 
   for (final rtl in [false, true]) {
-    testWidgets('scrub follows expanded target bounds rtl=$rtl', (
+    testWidgets('a short horizontal drag returns to the current tab rtl=$rtl', (
       tester,
     ) async {
       await tester.pumpWidget(_scrubApp(rtl: rtl));
       await tester.pumpAndSettle();
       final home = tester.getRect(find.byKey(const ValueKey('home-tab')));
       final gesture = await tester.startGesture(home.center);
-      await tester.pump(const Duration(milliseconds: 600));
-      await gesture.moveTo(
-        Offset(rtl ? home.left + 6 : home.right - 6, home.center.dy),
-      );
+      await gesture.moveBy(Offset(rtl ? -24 : 24, 0));
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
@@ -395,22 +551,17 @@ void main() {
   }
 
   for (final rtl in [false, true]) {
-    testWidgets('scrub resolves moving item bounds rtl=$rtl', (tester) async {
+    testWidgets('reversing a drag restores the original tab rtl=$rtl', (
+      tester,
+    ) async {
       await tester.pumpWidget(_scrubApp(rtl: rtl));
       await tester.pumpAndSettle();
       final gesture = await tester.startGesture(
         tester.getCenter(find.byKey(const ValueKey('home-tab'))),
       );
-      await tester.pump(const Duration(milliseconds: 600));
-      await gesture.moveTo(
-        tester.getCenter(find.byKey(const ValueKey('proxies-tab'))),
-      );
+      await gesture.moveBy(Offset(rtl ? -60 : 60, 0));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 35));
-      final home = tester.getRect(find.byKey(const ValueKey('home-tab')));
-      await gesture.moveTo(
-        Offset(rtl ? home.left + 2 : home.right - 2, home.center.dy),
-      );
+      await gesture.moveBy(Offset(rtl ? 60 : -60, 0));
       await tester.pump();
       expect(
         tester
@@ -419,7 +570,7 @@ void main() {
             .selected,
         isTrue,
       );
-      await gesture.cancel();
+      await gesture.up();
       await tester.pumpAndSettle();
       expect(find.text('Home body'), findsOneWidget);
     });
@@ -482,46 +633,38 @@ void main() {
   );
 
   for (final destination in [1, 2]) {
-    testWidgets(
-      'hold and scrub previews then commits destination $destination once',
-      (tester) async {
-        var requested = 0;
-        await tester.pumpWidget(_scrubApp(onRequested: () => requested++));
-        await tester.pumpAndSettle();
-        final gesture = await tester.startGesture(
-          tester.getCenter(find.byKey(const ValueKey('home-tab'))),
-        );
-        await tester.pump(const Duration(milliseconds: 600));
-        await gesture.moveTo(
-          tester.getCenter(
-            find.byKey(
-              ValueKey(destination == 1 ? 'proxies-tab' : 'settings-tab'),
-            ),
-          ),
-        );
-        await tester.pump();
-        expect(
-          tester
-              .widget<Semantics>(
-                find.byKey(
-                  ValueKey(destination == 1 ? 'proxies-tab' : 'settings-tab'),
-                ),
-              )
-              .properties
-              .selected,
-          isTrue,
-        );
-        expect(find.text('Home body'), findsOneWidget);
-        expect(requested, 0);
-        await gesture.up();
-        await tester.pumpAndSettle();
-        expect(
-          find.text(destination == 1 ? 'Proxies body' : 'Settings body'),
-          findsOneWidget,
-        );
-        expect(requested, destination == 1 ? 1 : 0);
-      },
-    );
+    testWidgets('drag previews then commits destination $destination once', (
+      tester,
+    ) async {
+      var requested = 0;
+      await tester.pumpWidget(_scrubApp(onRequested: () => requested++));
+      await tester.pumpAndSettle();
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('home-tab'))),
+      );
+      await gesture.moveBy(Offset(destination == 1 ? 60 : 120, 0));
+      await tester.pump();
+      expect(
+        tester
+            .widget<Semantics>(
+              find.byKey(
+                ValueKey(destination == 1 ? 'proxies-tab' : 'settings-tab'),
+              ),
+            )
+            .properties
+            .selected,
+        isTrue,
+      );
+      expect(find.text('Home body'), findsOneWidget);
+      expect(requested, 0);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        find.text(destination == 1 ? 'Proxies body' : 'Settings body'),
+        findsOneWidget,
+      );
+      expect(requested, destination == 1 ? 1 : 0);
+    });
   }
 
   for (final cancelPointer in [false, true]) {
@@ -534,10 +677,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byKey(const ValueKey('home-tab'))),
         );
-        await tester.pump(const Duration(milliseconds: 600));
-        await gesture.moveTo(
-          tester.getCenter(find.byKey(const ValueKey('proxies-tab'))),
-        );
+        await gesture.moveBy(const Offset(60, 0));
         await tester.pump();
         expect(
           tester
@@ -569,13 +709,12 @@ void main() {
     );
   }
 
-  testWidgets('scrubbing follows visual destinations in RTL', (tester) async {
+  testWidgets('dragging follows visual destinations in RTL', (tester) async {
     await tester.pumpWidget(_scrubApp(rtl: true));
     await tester.pumpAndSettle();
     final gesture = await tester.startGesture(
       tester.getCenter(find.byKey(const ValueKey('home-tab'))),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveTo(
       tester.getCenter(find.byKey(const ValueKey('settings-tab'))),
     );
@@ -940,6 +1079,7 @@ Finder _navigation(BottomNavigationStyle style) =>
     : find.byType(NavigationBar);
 
 Widget _scrubApp({
+  LocalizationsDelegate<AppLocalizations>? labels,
   VoidCallback? onRequested,
   bool rtl = false,
   BottomNavigationStyle style = BottomNavigationStyle.floating,
@@ -952,7 +1092,7 @@ Widget _scrubApp({
   bool reduced = false,
 }) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: [?labels, ...AppLocalizations.localizationsDelegates],
   builder: (context, child) => Directionality(
     textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
     child: child!,
@@ -984,3 +1124,29 @@ Widget _scrubApp({
     ),
   ),
 );
+
+class _LongNavigationLabels extends AppLocalizationsEn {
+  @override
+  String get homeTabTitle => 'A';
+
+  @override
+  String get proxiesTitle => 'B';
+
+  @override
+  String get settingsTitle => 'Settings preferences';
+}
+
+class _LongNavigationLabelsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _LongNavigationLabelsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => locale.languageCode == 'en';
+
+  @override
+  Future<AppLocalizations> load(Locale locale) =>
+      SynchronousFuture(_LongNavigationLabels());
+
+  @override
+  bool shouldReload(_LongNavigationLabelsDelegate old) => false;
+}

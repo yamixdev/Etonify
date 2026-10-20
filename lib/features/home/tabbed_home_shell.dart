@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
@@ -314,28 +315,34 @@ class _ScrubbableNavigationBar extends StatefulWidget {
 
 class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
   final _boundsKey = GlobalKey();
-  final _destinationKeys = <int, GlobalKey>{};
   int? _previewIndex;
   var _scrubbing = false;
+  Rect? _dragBounds;
+  Rect? _renderedBounds;
+  Offset? _dragPointer;
 
   @override
   void didUpdateWidget(covariant _ScrubbableNavigationBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedIndex != widget.selectedIndex ||
         oldWidget.requestSerial != widget.requestSerial ||
-        oldWidget.destinations.length != widget.destinations.length) {
+        oldWidget.destinations.length != widget.destinations.length ||
+        oldWidget.floatingLayout?.width != widget.floatingLayout?.width ||
+        oldWidget.floatingLayout?.height != widget.floatingLayout?.height) {
       _previewIndex = null;
       _scrubbing = false;
+      _dragBounds = null;
+      _dragPointer = null;
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.accessibleNavigationOf(context)) {
-      _previewIndex = null;
-      _scrubbing = false;
-    }
+    _previewIndex = null;
+    _scrubbing = false;
+    _dragBounds = null;
+    _dragPointer = null;
   }
 
   int? _destinationAt(Offset globalPosition) {
@@ -349,21 +356,6 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
           bounds,
           Radius.circular(box.size.height / 2),
         ).contains(local)) {
-      return null;
-    }
-    if (widget.floatingLayout != null) {
-      for (var index = 0; index < widget.destinations.length; index++) {
-        final target =
-            _destinationKeys[index]?.currentContext?.findRenderObject()
-                as RenderBox?;
-        if (target != null &&
-            target.hasSize &&
-            (Offset.zero & target.size).contains(
-              target.globalToLocal(globalPosition),
-            )) {
-          return index;
-        }
-      }
       return null;
     }
     final visualIndex = (local.dx / box.size.width * widget.destinations.length)
@@ -382,7 +374,84 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
 
   void _cancel() {
     _scrubbing = false;
-    if (_previewIndex != null) setState(() => _previewIndex = null);
+    if (_previewIndex != null || _dragBounds != null) {
+      setState(() {
+        _previewIndex = null;
+        _dragBounds = null;
+        _dragPointer = null;
+      });
+    }
+  }
+
+  Rect _floatingBounds(int index) {
+    final layout = widget.floatingLayout!;
+    final width = layout.activeWidths[index];
+    final inactiveWidth =
+        (layout.width - 8 - width) / (widget.destinations.length - 1);
+    return Rect.fromLTWH(index * inactiveWidth, 0, width, layout.height);
+  }
+
+  int _nearestFloatingIndex(Rect bounds) {
+    var nearest = 0;
+    var distance = double.infinity;
+    for (var index = 0; index < widget.destinations.length; index++) {
+      final candidate = (_floatingBounds(index).center.dx - bounds.center.dx)
+          .abs();
+      if (candidate < distance) {
+        nearest = index;
+        distance = candidate;
+      }
+    }
+    return nearest;
+  }
+
+  void _startDrag(DragStartDetails details) {
+    setState(() {
+      _dragBounds = _renderedBounds ?? _floatingBounds(widget.selectedIndex);
+      _dragPointer = details.globalPosition;
+    });
+  }
+
+  void _updateDrag(DragUpdateDetails details) {
+    final bounds = _dragBounds;
+    if (bounds == null) return;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final last = widget.destinations.length - 1;
+    final center =
+        (bounds.center.dx + (rtl ? -details.delta.dx : details.delta.dx)).clamp(
+          _floatingBounds(0).center.dx,
+          _floatingBounds(last).center.dx,
+        );
+    var next = _floatingBounds(last);
+    for (var index = 0; index < last; index++) {
+      final start = _floatingBounds(index);
+      final end = _floatingBounds(index + 1);
+      if (center <= end.center.dx) {
+        next = Rect.lerp(
+          start,
+          end,
+          (center - start.center.dx) / (end.center.dx - start.center.dx),
+        )!;
+        break;
+      }
+    }
+    setState(() {
+      _dragBounds = next;
+      _dragPointer = details.globalPosition;
+    });
+  }
+
+  void _endDrag() {
+    final bounds = _dragBounds;
+    final pointer = _dragPointer;
+    final box = _boundsKey.currentContext?.findRenderObject() as RenderBox?;
+    if (bounds == null || pointer == null || box == null || !box.hasSize) {
+      return;
+    }
+    final y = box.globalToLocal(pointer).dy;
+    final index = _nearestFloatingIndex(bounds);
+    _cancel();
+    if (y >= 0 && y < box.size.height) widget.onDestinationSelected(index);
   }
 
   void _commit(Offset position) {
@@ -396,24 +465,30 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accessible = MediaQuery.accessibleNavigationOf(context);
+    final floating = widget.floatingLayout != null;
     return Listener(
       onPointerCancel: (_) => _cancel(),
       child: GestureDetector(
         key: _boundsKey,
         excludeFromSemantics: true,
-        onLongPressStart: accessible
+        dragStartBehavior: DragStartBehavior.down,
+        onHorizontalDragStart: floating && !accessible ? _startDrag : null,
+        onHorizontalDragUpdate: floating && !accessible ? _updateDrag : null,
+        onHorizontalDragEnd: floating && !accessible ? (_) => _endDrag() : null,
+        onHorizontalDragCancel: floating && !accessible ? _cancel : null,
+        onLongPressStart: accessible || floating
             ? null
             : (details) {
                 _scrubbing = true;
                 _preview(details.globalPosition);
               },
-        onLongPressMoveUpdate: accessible
+        onLongPressMoveUpdate: accessible || floating
             ? null
             : (details) => _preview(details.globalPosition),
-        onLongPressEnd: accessible
+        onLongPressEnd: accessible || floating
             ? null
             : (details) => _commit(details.globalPosition),
-        onLongPressCancel: _cancel,
+        onLongPressCancel: floating ? null : _cancel,
         child: widget.floatingLayout != null
             ? _buildFloating(context)
             : NavigationBar(
@@ -448,20 +523,18 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
     final layout = widget.floatingLayout!;
     final media = MediaQuery.of(context);
     final theme = Theme.of(context);
-    final selected = _previewIndex ?? widget.selectedIndex;
-    final duration = media.disableAnimations || media.accessibleNavigation
+    final dragBounds = _dragBounds;
+    final duration =
+        dragBounds != null ||
+            media.disableAnimations ||
+            media.accessibleNavigation
         ? Duration.zero
         : const Duration(milliseconds: 150);
     final rtl = Directionality.of(context) == TextDirection.rtl;
-    final selectedWidth = layout.activeWidths[selected];
-    final selectedInactiveWidth =
-        (layout.width - 8 - selectedWidth) / (widget.destinations.length - 1);
-    final targetBounds = Rect.fromLTWH(
-      selected * selectedInactiveWidth,
-      0,
-      selectedWidth,
-      layout.height,
-    );
+    final targetBounds = dragBounds ?? _floatingBounds(widget.selectedIndex);
+    final selected = dragBounds == null
+        ? widget.selectedIndex
+        : _nearestFloatingIndex(dragBounds);
     return SizedBox(
       key: const ValueKey('floating-bottom-navigation'),
       width: layout.width,
@@ -472,6 +545,7 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
         curve: Curves.easeOutCubic,
         builder: (context, animatedBounds, _) {
           final bounds = animatedBounds!;
+          _renderedBounds = bounds;
           final inactiveWidth =
               (layout.width - 8 - bounds.width) /
               (widget.destinations.length - 1);
@@ -501,7 +575,6 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
                       index++
                     )
                       SizedBox(
-                        key: _destinationKeys.putIfAbsent(index, GlobalKey.new),
                         width:
                             inactiveWidth +
                             (bounds.width - inactiveWidth) *
@@ -611,11 +684,28 @@ class _FloatingNavigationDestinationState
   bool _focused = false;
 
   @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addHighlightModeListener(_highlightModeChanged);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlightModeChanged);
+    super.dispose();
+  }
+
+  void _highlightModeChanged(FocusHighlightMode mode) => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
     final destination = widget.destination;
     final selected = widget.selected;
     final onTap = widget.onTap;
     final colors = Theme.of(context).colorScheme;
+    final showFocus =
+        _focused &&
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     final foreground = selected
         ? colors.onPrimaryContainer
         : colors.onSurfaceVariant;
@@ -637,7 +727,7 @@ class _FloatingNavigationDestinationState
               shape: StadiumBorder(
                 side: BorderSide(
                   width: 2,
-                  color: _focused ? colors.onSurface : Colors.transparent,
+                  color: showFocus ? colors.onSurface : Colors.transparent,
                 ),
               ),
             ),
