@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -328,6 +329,51 @@ void main() {
       expect(icon.dy, closeTo(label.dy, 1));
     },
   );
+
+  for (final rtl in [false, true]) {
+    testWidgets('floating pill hugs and centers each visible label rtl=$rtl', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_scrubApp(rtl: rtl));
+      await tester.pumpAndSettle();
+      final bar = tester.getRect(_navigation(BottomNavigationStyle.floating));
+      final widths = <double>[];
+      for (final (key, label, icon) in [
+        ('home-tab', 'Home', Icons.home_rounded),
+        ('proxies-tab', 'Proxies', Icons.dns_rounded),
+        ('settings-tab', 'Settings', Icons.settings_rounded),
+      ]) {
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+        final pill = tester.getRect(
+          find.byKey(const ValueKey('floating-navigation-indicator')),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.text(label),
+        );
+        final boxes = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: label.length),
+        );
+        final text = boxes
+            .map((box) => box.toRect())
+            .reduce((a, b) => a.expandToInclude(b));
+        final textRect = text.shift(paragraph.localToGlobal(Offset.zero));
+        final content = textRect.expandToInclude(
+          tester.getRect(find.byIcon(icon)),
+        );
+        expect(content.left - pill.left, closeTo(12, .5));
+        expect(pill.right - content.right, closeTo(12, .5));
+        expect(content.center.dx, closeTo(pill.center.dx, .5));
+        expect(
+          tester.getRect(_navigation(BottomNavigationStyle.floating)),
+          bar,
+        );
+        widths.add(pill.width);
+      }
+      expect(widths.last, greaterThan(widths.first + 20));
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final rtl in [false, true]) {
     testWidgets('scrub follows expanded target bounds rtl=$rtl', (

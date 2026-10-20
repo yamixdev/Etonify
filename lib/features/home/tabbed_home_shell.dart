@@ -453,25 +453,36 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
         ? Duration.zero
         : const Duration(milliseconds: 150);
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final selectedWidth = layout.activeWidths[selected];
+    final selectedInactiveWidth =
+        (layout.width - 8 - selectedWidth) / (widget.destinations.length - 1);
+    final targetBounds = Rect.fromLTWH(
+      selected * selectedInactiveWidth,
+      0,
+      selectedWidth,
+      layout.height,
+    );
     return SizedBox(
       key: const ValueKey('floating-bottom-navigation'),
       width: layout.width,
       height: layout.height,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: selected.toDouble(), end: selected.toDouble()),
+      child: TweenAnimationBuilder<Rect?>(
+        tween: RectTween(begin: targetBounds, end: targetBounds),
         duration: duration,
         curve: Curves.easeOutCubic,
-        builder: (context, position, _) {
-          final indicatorStart = 4 + position * layout.inactiveWidth;
+        builder: (context, animatedBounds, _) {
+          final bounds = animatedBounds!;
+          final inactiveWidth =
+              (layout.width - 8 - bounds.width) /
+              (widget.destinations.length - 1);
+          final position = bounds.left / inactiveWidth;
           return Stack(
             children: [
               Positioned(
-                left: rtl
-                    ? layout.width - indicatorStart - layout.activeWidth + 4
-                    : indicatorStart + 4,
+                left: rtl ? layout.width - bounds.right : bounds.left + 8,
                 top: 4,
                 bottom: 4,
-                width: layout.activeWidth - 8,
+                width: bounds.width - 8,
                 child: DecoratedBox(
                   key: const ValueKey('floating-navigation-indicator'),
                   decoration: ShapeDecoration(
@@ -492,14 +503,14 @@ class _ScrubbableNavigationBarState extends State<_ScrubbableNavigationBar> {
                       SizedBox(
                         key: _destinationKeys.putIfAbsent(index, GlobalKey.new),
                         width:
-                            layout.inactiveWidth +
-                            (layout.activeWidth - layout.inactiveWidth) *
+                            inactiveWidth +
+                            (bounds.width - inactiveWidth) *
                                 (1 - (position - index).abs()).clamp(0.0, 1.0),
                         height: layout.height,
                         child: _FloatingNavigationDestination(
                           destination: widget.destinations[index],
                           selected: index == selected,
-                          labelWidth: layout.activeWidth - 54,
+                          labelWidth: layout.activeWidths[index] - 62,
                           labelStyle: layout.labelStyle,
                           onTap: () => widget.onDestinationSelected(index),
                         ),
@@ -519,15 +530,13 @@ class _FloatingNavigationLayout {
   const _FloatingNavigationLayout({
     required this.width,
     required this.height,
-    required this.activeWidth,
-    required this.inactiveWidth,
+    required this.activeWidths,
     required this.labelStyle,
   });
 
   final double width;
   final double height;
-  final double activeWidth;
-  final double inactiveWidth;
+  final List<double> activeWidths;
   final TextStyle labelStyle;
 
   factory _FloatingNavigationLayout.measure(
@@ -541,6 +550,7 @@ class _FloatingNavigationLayout {
       fontWeight: FontWeight.w600,
     );
     double textWidth = 0;
+    final textWidths = <double>[];
     final painter = TextPainter(
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
@@ -548,29 +558,29 @@ class _FloatingNavigationLayout {
     for (final destination in destinations) {
       painter.text = TextSpan(text: destination.label, style: style);
       painter.layout();
+      textWidths.add(painter.width);
       textWidth = math.max(textWidth, painter.width);
     }
     final inactiveTotal = 48.0 * (destinations.length - 1);
     final width = math.min(
       availableWidth,
-      math.max(288.0, textWidth + 54 + inactiveTotal + 8),
+      math.max(288.0, textWidth + 62 + inactiveTotal + 8),
     );
-    final activeWidth = math.min(
-      width - 8 - inactiveTotal,
-      math.max((width - 8) / (destinations.length + 1.2) * 2.2, textWidth + 54),
-    );
+    final activeWidths = <double>[
+      for (final textWidth in textWidths)
+        math.min(width - 8 - inactiveTotal, math.max(62.0, textWidth + 62)),
+    ];
     double textHeight = 0;
-    for (final destination in destinations) {
-      painter.text = TextSpan(text: destination.label, style: style);
-      painter.layout(maxWidth: math.max(1, activeWidth - 54));
+    for (var index = 0; index < destinations.length; index++) {
+      painter.text = TextSpan(text: destinations[index].label, style: style);
+      painter.layout(maxWidth: math.max(1, activeWidths[index] - 62));
       textHeight = math.max(textHeight, painter.height);
     }
     painter.dispose();
     return _FloatingNavigationLayout(
       width: width,
       height: math.max(56, textHeight + 24),
-      activeWidth: activeWidth,
-      inactiveWidth: (width - 8 - activeWidth) / (destinations.length - 1),
+      activeWidths: activeWidths,
       labelStyle: style,
     );
   }
@@ -650,6 +660,7 @@ class _FloatingNavigationDestinationState
                         width: widget.labelWidth,
                         child: Text(
                           destination.label,
+                          textAlign: TextAlign.center,
                           style: widget.labelStyle.copyWith(color: foreground),
                         ),
                       ),
