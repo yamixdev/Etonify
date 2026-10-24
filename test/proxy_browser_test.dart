@@ -10,6 +10,7 @@ import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/theme/app_theme.dart';
 
 class _CountingRuntimeStore extends ProxyRuntimeVisualStore {
@@ -714,7 +715,7 @@ void main() {
             () => Future<void>.delayed(const Duration(milliseconds: 10)),
           );
           await tester.pump(const Duration(milliseconds: 1));
-          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) return;
+          if (find.byType(AppLoadingIndicator).evaluate().isEmpty) return;
         }
         fail('Background presentation did not finish');
       }
@@ -760,7 +761,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(AppLoadingIndicator), findsOneWidget);
       await tester.pumpWidget(_app(_page()));
       await tester.pumpAndSettle();
       expect(

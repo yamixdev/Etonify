@@ -8,6 +8,7 @@ import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -269,10 +270,8 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
                         ),
                         if (_busy) ...[
                           const Gap(10),
-                          LinearProgressIndicator(
+                          AppLinearProgressIndicator(
                             value: _progress?.fraction,
-                            minHeight: 4,
-                            borderRadius: BorderRadius.circular(999),
                           ),
                           if (_etaText(l10n) case final eta?) ...[
                             const Gap(6),
@@ -326,10 +325,7 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
                         : l10n.routingRuleFilesUpdateAction,
                   ),
                   trailing: _busy
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const AppLoadingIndicator.compact()
                       : Icon(
                           Icons.chevron_right_rounded,
                           color: cs.onSurfaceVariant,

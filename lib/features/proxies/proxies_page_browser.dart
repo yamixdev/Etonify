@@ -138,7 +138,7 @@ extension _ProxyBrowser on _ProxiesPageState {
     final list =
         (widget.loading || !widget.catalogReady || _presentationLoading) &&
             entries.isEmpty
-        ? const Center(child: CircularProgressIndicator())
+        ? const Center(child: AppLoadingIndicator())
         : entries.isEmpty
         ? Center(child: Text(l10n.subscriptionNoServersFound))
         : ListView.builder(

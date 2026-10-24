@@ -20,6 +20,7 @@ import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 part 'settings_split_routing_page.dart';
@@ -419,13 +420,7 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
                                         !adBlockStatus.available,
                                   ),
                             icon: _adBlockBusy
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                                ? const AppLoadingIndicator.compact(size: 16)
                                 : Icon(
                                     adBlockStatus.available
                                         ? Icons.refresh_rounded
@@ -1043,7 +1038,7 @@ class _AdBlockStatusPanel extends StatelessWidget {
           ],
           if (busy) ...[
             const Gap(12),
-            LinearProgressIndicator(minHeight: 4, value: progress?.fraction),
+            AppLinearProgressIndicator(value: progress?.fraction),
           ],
         ],
       ),

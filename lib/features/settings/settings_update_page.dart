@@ -13,6 +13,7 @@ import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/changelog_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 class SettingsUpdatePage extends StatefulWidget {
@@ -1060,10 +1061,7 @@ class _CachedInstallerButton extends StatelessWidget {
         foregroundColor: Theme.of(context).colorScheme.error,
       ),
       icon: clearing
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            )
+          ? const AppLoadingIndicator.compact()
           : const Icon(Icons.delete_sweep_rounded),
       label: Text(
         l10n.updatesDeleteCachedApkAction,
@@ -1096,12 +1094,18 @@ class _UpdateHero extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: checking
-                ? const SizedBox.square(
-                    dimension: 24,
-                    child: CircularProgressIndicator(strokeWidth: 3),
-                  )
-                : Icon(Icons.system_update_rounded, color: cs.primary),
+            child: AppAnimatedSwitcher(
+              child: checking
+                  ? const AppLoadingIndicator(
+                      key: ValueKey('update-checking'),
+                      size: 24,
+                    )
+                  : Icon(
+                      Icons.system_update_rounded,
+                      key: const ValueKey('update-idle'),
+                      color: cs.primary,
+                    ),
+            ),
           ),
           const Gap(12),
           Expanded(
@@ -1239,7 +1243,7 @@ class _DownloadProgressCard extends StatelessWidget {
               ),
             ),
             const Gap(12),
-            LinearProgressIndicator(value: value, minHeight: 4),
+            AppLinearProgressIndicator(value: value, semanticsLabel: title),
             const Gap(10),
             if (stage == AppUpdateDownloadStage.retryingWithoutVpn)
               Text(l10n.remoteDownloadRetryWithoutVpnHint),

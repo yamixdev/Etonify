@@ -32,6 +32,7 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 import 'package:url_launcher/url_launcher.dart';

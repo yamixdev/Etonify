@@ -723,14 +723,7 @@ class _AddSubscriptionLoadingCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    color: cs.primary,
-                  ),
-                ),
+                AppLoadingIndicator(size: 28, color: cs.primary),
                 const Gap(12),
                 Expanded(
                   child: Text(
@@ -743,7 +736,7 @@ class _AddSubscriptionLoadingCard extends StatelessWidget {
               ],
             ),
             const Gap(16),
-            const LinearProgressIndicator(),
+            const AppLinearProgressIndicator(),
           ],
         ),
       ),

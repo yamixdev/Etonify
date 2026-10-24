@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/release_notes_card.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
@@ -169,6 +170,6 @@ class _ChangelogLoadingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const SizedBox(
     height: 104,
-    child: Center(child: CircularProgressIndicator(strokeWidth: 3)),
+    child: Center(child: AppLoadingIndicator(contained: true)),
   );
 }

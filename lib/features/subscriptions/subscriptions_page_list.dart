@@ -284,7 +284,7 @@ class _SubscriptionCard extends StatelessWidget {
               left: 0,
               right: 0,
               top: 0,
-              child: LinearProgressIndicator(
+              child: AppLinearProgressIndicator(
                 minHeight: 2,
                 backgroundColor: Colors.transparent,
               ),

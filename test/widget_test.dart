@@ -20,6 +20,7 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
   testWidgets(
@@ -48,7 +49,7 @@ void main() {
       expect(find.byType(ProxyPanelShell), findsNothing);
       await tester.tap(find.byKey(const ValueKey('proxies-tab')));
       await tester.pumpAndSettle();
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(AppLoadingIndicator), findsNothing);
       expect(find.text('No servers found'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -2004,7 +2005,7 @@ void main() {
       ),
     );
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(AppLoadingIndicator), findsOneWidget);
     expect(find.text('42 ms', findRichText: true), findsNothing);
     final latencyText = find.text('Checking…', findRichText: true);
     expect(latencyText, findsOneWidget);

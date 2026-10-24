@@ -108,6 +108,7 @@ import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/theme/app_theme.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
@@ -9959,7 +9960,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       onboardingCompleted: _onboardingCompleted && _legalAccepted,
       loading: const Scaffold(
         key: ValueKey('loading'),
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: AppLoadingIndicator(size: 48, contained: true)),
       ),
       welcome: _onboardingCompleted
           ? LegalConsentPage(

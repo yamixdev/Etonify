@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 
@@ -58,14 +59,7 @@ class ActiveProxyDelayIndicator extends StatelessWidget {
     final icon = networkUnavailable
         ? Icon(Icons.wifi_off_rounded, color: color)
         : showCheckingIndicator
-        ? SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: theme.colorScheme.primary,
-            ),
-          )
+        ? AppLoadingIndicator.compact(color: theme.colorScheme.primary)
         : latencyUnavailable
         ? Icon(FluentIcons.wifi_warning_24_regular, color: color)
         : !latencyFresh || latencyUnknown
@@ -104,10 +98,7 @@ class ActiveProxyDelayIndicator extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeOutCubic,
+                    AppAnimatedSwitcher(
                       child: KeyedSubtree(
                         key: ValueKey(
                           networkUnavailable

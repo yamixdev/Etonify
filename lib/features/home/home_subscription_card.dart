@@ -6,6 +6,7 @@ import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/theme/app_theme.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 class HomeSubscriptionCard extends StatelessWidget {
   const HomeSubscriptionCard({
@@ -212,19 +213,11 @@ class _ProfileRefreshAction extends StatelessWidget {
             ),
             onTap: enabled ? onTap : null,
             child: Center(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
+              child: AppAnimatedSwitcher(
                 child: refreshing
-                    ? SizedBox(
+                    ? AppLoadingIndicator.compact(
                         key: const ValueKey('profile-refresh-progress'),
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: theme.colorScheme.primary,
-                        ),
+                        color: theme.colorScheme.primary,
                       )
                     : Icon(
                         Icons.update_rounded,

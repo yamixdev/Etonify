@@ -6,6 +6,7 @@ import 'support/windows_storage_fixture.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/features/settings/routing_rule_files_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
   setUpAll(() async {
@@ -41,7 +42,21 @@ void main() {
       ),
     );
     await tester.pumpWidget(build(status));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(AppLoadingIndicator), findsOneWidget);
+    activity.progress.value = const RussiaRouteUpdateProgress(
+      stage: RussiaRouteUpdateStage.downloadingPackage,
+      completedBytes: 25,
+      totalBytes: 100,
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<AppLinearProgressIndicator>(
+            find.byType(AppLinearProgressIndicator),
+          )
+          .value,
+      .25,
+    );
 
     await tester.pumpWidget(
       build(
@@ -57,7 +72,8 @@ void main() {
     activity.progress.value = null;
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(AppLoadingIndicator), findsNothing);
+    expect(find.byType(AppLinearProgressIndicator), findsNothing);
     expect(find.text('29.09.2026 06:00'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });

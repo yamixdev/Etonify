@@ -19,6 +19,7 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/widgets/app_bottom_sheet_surface.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
@@ -1509,13 +1510,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required AppLocalizations l10n,
   }) {
     if (widget.loading || _presentationLoading) {
-      return const Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(strokeWidth: 3),
-        ),
-      );
+      return const Center(child: AppLoadingIndicator(size: 28));
     }
     return Center(
       child: Text(

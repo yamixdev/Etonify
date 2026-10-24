@@ -760,7 +760,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
           flexibleSpace: _busy
               ? const Align(
                   alignment: Alignment.bottomCenter,
-                  child: LinearProgressIndicator(
+                  child: AppLinearProgressIndicator(
                     minHeight: 2,
                     backgroundColor: Colors.transparent,
                   ),
@@ -978,7 +978,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                       if (_payloadLoading)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: LinearProgressIndicator(minHeight: 2),
+                          child: AppLinearProgressIndicator(minHeight: 2),
                         ),
                       if (_payloadFailed) ...[
                         Text(l10n.subscriptionServersLoadFailed),

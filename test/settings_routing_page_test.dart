@@ -15,6 +15,7 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
 import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
   testWidgets(
@@ -87,11 +88,20 @@ void main() {
     await tester.scrollUntilVisible(find.text('Скачать и включить'), 150);
     await tester.tap(find.text('Скачать и включить'));
     await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.byType(AppLinearProgressIndicator), findsOneWidget);
+    expect(
+      tester
+          .widget<AppLinearProgressIndicator>(
+            find.byType(AppLinearProgressIndicator),
+          )
+          .value,
+      isNull,
+    );
     expect(enabledValues, isEmpty);
     download.complete(readyFilter);
     await tester.pumpAndSettle();
     expect(enabledValues, [true]);
+    expect(find.byType(AppLinearProgressIndicator), findsNothing);
     expect(find.text('Включить локальную блокировку'), findsOneWidget);
     expect(find.text('Обновить'), findsOneWidget);
     expect(find.text('Удалить'), findsOneWidget);
