@@ -626,7 +626,13 @@ object MeowDefaultNetworkMonitor {
             return false
         }
         val notifyKey = "$effectiveNetwork:$interfaceName:$index"
-        val gateDecision = interfaceUpdateGate.evaluate(notifyKey, force)
+        val gateDecision = synchronized(lock) {
+            if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
+            // An attempted delivery is not a committed interface. A newer
+            // Android callback may have superseded it while libbox was busy.
+            if (appliedInterfaceKey != notifyKey) interfaceUpdateGate.failed(notifyKey)
+            interfaceUpdateGate.evaluate(notifyKey, force)
+        }
         if (!gateDecision.shouldDispatch) {
             return synchronized(lock) { listener === currentListener && appliedInterfaceKey == notifyKey }
         }

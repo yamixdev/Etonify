@@ -82,6 +82,55 @@ class DefaultInterfaceReassertTest {
     }
 
     @Test
+    fun `callback during handover delivery cannot suppress recovery of scan readiness`() {
+        installVpnOwner()
+        val supersede = AtomicBoolean(false)
+        val updates = AtomicInteger()
+        val generation = ReflectionHelpers.getField<AtomicLong>(MeowDefaultNetworkMonitor, "notifyDebounceGeneration")
+        installInterface {
+            updates.incrementAndGet()
+            if (supersede.compareAndSet(true, false)) generation.incrementAndGet()
+        }
+        assertTrue(MeowDefaultNetworkMonitor.currentInterfaceState().available)
+        val beforeGeneration = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        val shadow = shadowOf(MeowApplication.connectivity)
+        shadow.clearAllNetworks()
+        val nextNetwork = ShadowNetwork.newInstance(202)
+        shadow.addNetwork(nextNetwork, ShadowNetworkInfo.newInstance(
+            NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_MOBILE, 0, true, true,
+        ))
+        val capabilities = NetworkCapabilities()
+        shadowOf(capabilities).apply {
+            addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        }
+        shadow.setNetworkCapabilities(nextNetwork, capabilities)
+        val physical = NetworkInterface.getNetworkInterfaces().toList().first { it.index >= 0 }
+        shadow.setLinkProperties(nextNetwork, LinkProperties().apply { interfaceName = physical.name })
+        assertFalse(MeowDefaultNetworkMonitor.currentInterfaceState().available)
+        val beforeUpdates = updates.get()
+        supersede.set(true)
+        assertFalse(deliverOrdinaryInterfaceUpdate(generation.get()))
+        assertTrue("a superseding callback must retry an uncommitted handover", deliverOrdinaryInterfaceUpdate(generation.get()))
+        assertTrue("URLTest can start again only after native delivery is committed", MeowDefaultNetworkMonitor.currentInterfaceState().available)
+        assertTrue(MeowDefaultNetworkMonitor.currentInterfaceState().generation > beforeGeneration)
+        assertEquals(beforeUpdates + 2, updates.get())
+        repeat(10) { assertTrue(deliverOrdinaryInterfaceUpdate(generation.get())) }
+        assertEquals("committed duplicates must not keep resetting connections", beforeUpdates + 2, updates.get())
+    }
+
+    private fun deliverOrdinaryInterfaceUpdate(generation: Long): Boolean =
+        ReflectionHelpers.callInstanceMethod(
+            MeowDefaultNetworkMonitor,
+            "notifyListenerInternal",
+            ReflectionHelpers.ClassParameter.from(Long::class.javaPrimitiveType, generation),
+            ReflectionHelpers.ClassParameter.from(Network::class.java, null),
+            ReflectionHelpers.ClassParameter.from(Boolean::class.javaPrimitiveType, false),
+        )
+
+    @Test
     fun `failed forced binding clears previously ready interface`() {
         installVpnOwner()
         installInterface {}
