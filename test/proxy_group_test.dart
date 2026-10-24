@@ -4221,6 +4221,51 @@ void main() {
     },
   );
 
+  test('system DNS never silently drops a proxy detour', () {
+    const subscription = Subscription(
+      id: 'system-dns',
+      name: 'System DNS',
+      url: 'https://example.com/sub',
+      outbounds: [
+        Outbound(
+          tag: 'node',
+          name: 'Node',
+          config: {
+            'type': 'socks',
+            'tag': 'node',
+            'server': '127.0.0.1',
+            'server_port': 1080,
+          },
+        ),
+      ],
+    );
+    expect(
+      () => _defaultBuilder(
+        subscription,
+        dnsDirectResolver: 'device://network',
+        dnsDirectThroughProxy: true,
+      ).build(),
+      throwsFormatException,
+    );
+    expect(
+      () => _defaultBuilder(
+        subscription,
+        dnsProxyResolver: 'device://network',
+      ).build(),
+      throwsFormatException,
+    );
+    final config = _defaultBuilder(
+      subscription,
+      dnsDirectResolver: 'device://network',
+    ).build();
+    expect(
+      ((config['dns'] as Map<String, dynamic>)['servers'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .firstWhere((server) => server['tag'] == 'dns-direct'),
+      {'type': 'local', 'tag': 'dns-direct'},
+    );
+  });
+
   test('Russia routes use configured direct RU DNS resolver', () {
     const subscription = Subscription(
       id: 'ru-dns-sub',

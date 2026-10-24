@@ -12,6 +12,81 @@ import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
+  test(
+    'prepared-only configs retain current and previous disk rule references',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'route-pin-config-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final target = File('${directory.path}/config.json');
+      final candidate = File('${directory.path}/candidate.json');
+      await target.writeAsString(
+        '{"route":{"rule_set":[{"type":"local","path":"/old/ai-services.srs"}]}}',
+      );
+      await candidate.writeAsString(
+        '{"route":{"rule_set":[{"type":"local","path":"/new/ai-services.srs"},{"type":"remote","url":"https://example.com/rules"}]}}',
+      );
+      final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+      addTearDown(lifecycle.dispose);
+      final retained = <List<String>>[];
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+        cleanupRouteData: (paths) async => retained.add(paths.toList()),
+      );
+      expect(
+        (await coordinator.startRuntimeWithBuild(
+          _build('', configPath: candidate.path),
+          useVpn: true,
+        )).success,
+        isTrue,
+      );
+      expect(
+        retained.single,
+        unorderedEquals(['/old/ai-services.srs', '/new/ai-services.srs']),
+      );
+    },
+  );
+
+  test(
+    'rule generations are cleaned only after confirmed apply with previous runtime pins',
+    () async {
+      const olderConfig =
+          '{"route":{"rule_set":[{"type":"local","path":"/older/ai-services.srs"}]}}';
+      final runtime = _BlockingRuntime()..blockingConfig = olderConfig;
+      final lifecycle = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(lifecycle.dispose);
+      final retained = <List<String>>[];
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        cleanupRouteData: (paths) async => retained.add(paths.toList()),
+      );
+      final starting = coordinator.startRuntimeWithBuild(
+        _build(olderConfig),
+        useVpn: true,
+      );
+      await runtime.firstApplyStarted.future;
+      expect(retained, isEmpty);
+      runtime.releaseFirstApply.complete();
+      expect((await starting).success, isTrue);
+      expect(retained, isEmpty);
+      expect(
+        (await coordinator.startRuntimeWithBuild(
+          _build(
+            '{"route":{"rule_set":[{"type":"local","path":"/newer/ai-services.srs"}]}}',
+          ),
+          useVpn: true,
+        )).success,
+        isTrue,
+      );
+      expect(
+        retained.last,
+        containsAll(['/older/ai-services.srs', '/newer/ai-services.srs']),
+      );
+    },
+  );
+
   test('confirmed ordinary startup records the applied config', () async {
     final runtime = _BlockingRuntime();
     final lifecycle = RuntimeLifecycleController(runtime: runtime);
@@ -615,6 +690,7 @@ SingboxConfigCoordinator _coordinator({
   Duration fullServiceRestartDebounce = const Duration(milliseconds: 450),
   SingboxConfigPathReader? readConfigPath,
   bool Function()? allowRuntimeApply,
+  Future<void> Function(Iterable<String>)? cleanupRouteData,
   SingboxRuntimeStatusReader? readRuntimeStatus,
   SingboxConfigCoordinatorSnapshot Function()? snapshot,
 }) {
@@ -642,6 +718,7 @@ SingboxConfigCoordinator _coordinator({
         },
     readConfigPath: readConfigPath ?? () async => null,
     allowRuntimeApply: allowRuntimeApply,
+    cleanupRouteData: cleanupRouteData,
     fullServiceRestartDebounce: fullServiceRestartDebounce,
   );
 }
@@ -770,6 +847,7 @@ class _SupersedingPreparedRuntime extends _BlockingRuntime {
 }
 
 class _BlockingRuntime implements RuntimeLifecycleRuntime {
+  String blockingConfig = 'first';
   final Completer<void> firstApplyStarted = Completer<void>();
   final Completer<void> releaseFirstApply = Completer<void>();
   final Completer<void> firstStart = Completer<void>();
@@ -807,7 +885,7 @@ class _BlockingRuntime implements RuntimeLifecycleRuntime {
       maxConcurrentApplies = _concurrentApplies;
     }
     try {
-      if (config == 'first') {
+      if (config == blockingConfig) {
         firstApplyStarted.complete();
         await releaseFirstApply.future;
       }

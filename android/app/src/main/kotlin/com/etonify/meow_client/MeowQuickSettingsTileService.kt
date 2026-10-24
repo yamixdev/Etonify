@@ -92,7 +92,7 @@ class MeowQuickSettingsTileService : TileService() {
     )
 
     private fun stopRuntime(mode: String) {
-        SingboxController.recordExternalStop("quick_tile_stop")
+        val stopToken = SingboxController.recordExternalStop("quick_tile_stop")
         MeowBoxService.requestStopAll("quick_tile_stop")
         val serviceClass = serviceClass(mode)
         startService(
@@ -101,7 +101,7 @@ class MeowQuickSettingsTileService : TileService() {
                 .putExtra(MeowBoxService.EXTRA_STOP_REASON, "quick_tile"),
         )
         Handler(Looper.getMainLooper()).postDelayed({
-            if (!SingboxController.running) {
+            SingboxController.runIfStoppedForStartToken(stopToken) {
                 stopService(Intent(this, MeowVpnService::class.java))
                 stopService(Intent(this, MeowProxyService::class.java))
                 stopService(Intent(this, MeowProbeService::class.java))
@@ -135,6 +135,7 @@ class MeowQuickSettingsTileService : TileService() {
     }
 
     private fun startRuntimeService(mode: String) {
+        SingboxController.nextStartToken("quick_tile_start_request")
         val intent = Intent(this, serviceClass(mode)).setAction(MeowBoxService.ACTION_START)
             .putExtra(MeowBoxService.EXTRA_TILE_START, true)
         startForegroundService(intent)

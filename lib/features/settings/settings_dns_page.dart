@@ -86,6 +86,8 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
   late final FocusNode _directFocusNode;
   late final FocusNode _proxyFocusNode;
   late final AppSettingsCommands _commands;
+  String? _directError;
+  String? _proxyError;
 
   static const _directPresets = <_DnsPreset>[
     _DnsPreset(
@@ -224,6 +226,16 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
 
   void _commitDirectResolver() {
     final value = _directController.text.trim();
+    if (normalizeDnsResolverInput(value) == 'device://network' &&
+        ref.read(appSettingsProvider).controller.dnsDirectThroughProxy) {
+      setState(
+        () => _directError = AppLocalizations.of(
+          context,
+        ).dnsSystemProxyUnavailable,
+      );
+      return;
+    }
+    if (_directError != null) setState(() => _directError = null);
     final current = ref.read(appSettingsProvider).controller.dnsDirectResolver;
     if (value.isEmpty) {
       _directController.text = dnsResolverFieldText(current);
@@ -236,6 +248,15 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
 
   void _commitProxyResolver() {
     final value = _proxyController.text.trim();
+    if (normalizeDnsResolverInput(value) == 'device://network') {
+      setState(
+        () => _proxyError = AppLocalizations.of(
+          context,
+        ).dnsSystemProxyUnavailable,
+      );
+      return;
+    }
+    if (_proxyError != null) setState(() => _proxyError = null);
     final current = ref.read(appSettingsProvider).controller.dnsProxyResolver;
     if (value.isEmpty) {
       _proxyController.text = dnsResolverFieldText(current);
@@ -258,6 +279,8 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
     final currentProxyResolver = settings.dnsProxyResolver;
     final currentSecureOnly = settings.dnsSecureOnly;
     final currentDirectThroughProxy = settings.dnsDirectThroughProxy;
+    final directIsSystem =
+        normalizeDnsResolverInput(currentDirectResolver) == 'device://network';
 
     ref.listen(
       appSettingsProvider.select((s) => s.controller.dnsDirectResolver),
@@ -279,10 +302,12 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
     final directPresets = _availablePresets(
       _directPresets,
       secureOnly: currentSecureOnly,
+      allowSystem: !currentDirectThroughProxy,
     );
     final proxyPresets = _availablePresets(
       _proxyPresets,
       secureOnly: currentSecureOnly,
+      allowSystem: false,
     );
 
     return ProgressiveBlurScaffold(
@@ -340,6 +365,7 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                         inputFormatters: [noNewlineInputFormatter],
                         decoration: InputDecoration(
                           labelText: l10n.dnsResolverTitle,
+                          errorText: _directError,
                           helperText: l10n.dnsDirectResolverSubtitle,
                           hintText: '1.1.1.1',
                         ),
@@ -382,6 +408,9 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                       ),
                     ),
                     if (proxyIsCustom) const Gap(12),
+                    if (normalizeDnsResolverInput(currentProxyResolver) ==
+                        'device://network')
+                      Text(l10n.dnsSystemProxyUnavailable),
                     if (proxyIsCustom)
                       TextField(
                         controller: _proxyController,
@@ -392,6 +421,7 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                         inputFormatters: [noNewlineInputFormatter],
                         decoration: InputDecoration(
                           labelText: l10n.dnsResolverTitle,
+                          errorText: _proxyError,
                           helperText: l10n.dnsProxyResolverSubtitle,
                           hintText: 'https://dns.cloudflare.com/dns-query',
                         ),
@@ -432,9 +462,15 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
                       color: cs.primary,
                     ),
                     title: Text(l10n.dnsDirectThroughProxyTitle),
-                    subtitle: Text(l10n.dnsDirectThroughProxySubtitle),
+                    subtitle: Text(
+                      directIsSystem
+                          ? l10n.dnsSystemProxyUnavailable
+                          : l10n.dnsDirectThroughProxySubtitle,
+                    ),
                     value: currentDirectThroughProxy,
-                    onChanged: _commands.setDnsDirectThroughProxy,
+                    onChanged: directIsSystem && !currentDirectThroughProxy
+                        ? null
+                        : _commands.setDnsDirectThroughProxy,
                   ),
                 ],
               ),
@@ -448,14 +484,15 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
   List<_DnsPreset> _availablePresets(
     List<_DnsPreset> presets, {
     required bool secureOnly,
+    required bool allowSystem,
   }) {
-    if (!secureOnly) {
-      return presets;
-    }
     return presets
         .where(
           (preset) =>
-              preset.id == 'custom' || isEncryptedDnsResolver(preset.value),
+              (allowSystem || preset.id != 'device') &&
+              (!secureOnly ||
+                  preset.id == 'custom' ||
+                  isEncryptedDnsResolver(preset.value)),
         )
         .toList(growable: false);
   }

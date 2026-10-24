@@ -84,12 +84,22 @@ object SingboxController {
     )
 
     @Synchronized
-    fun recordExternalStop(reason: String) {
+    fun recordExternalStop(reason: String): Long {
         externalStopGeneration.incrementAndGet()
         stateRevision.incrementAndGet()
-        cancelStartTokens(reason)
+        val stopToken = cancelStartTokens(reason)
         MeowApplication.clearRuntimeIntent()
         emitCurrentState()
+        return stopToken
+    }
+
+    @Synchronized
+    fun runIfStoppedForStartToken(token: Long, cleanup: () -> Unit): Boolean {
+        if (!isStartTokenCurrent(token) || running || MeowApplication.readRuntimeIntent() != null) {
+            return false
+        }
+        cleanup()
+        return true
     }
 
     @Synchronized
@@ -601,12 +611,14 @@ object SingboxController {
         return generation
     }
 
+    @Synchronized
     fun nextStartToken(reason: String): Long {
         val token = runtimeStartGeneration.incrementAndGet()
         MeowDiagnostics.log(TAG, "nextStartToken token=$token reason=$reason")
         return token
     }
 
+    @Synchronized
     fun cancelStartTokens(reason: String): Long {
         val token = runtimeStartGeneration.incrementAndGet()
         MeowDiagnostics.log(TAG, "cancelStartTokens token=$token reason=$reason")

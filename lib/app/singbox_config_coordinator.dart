@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 
@@ -8,11 +9,35 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
+
+Future<Set<String>?> _ruleSetPathsInBackground(String content) =>
+    Isolate.run(() => _ruleSetPaths(content));
+
+Set<String>? _ruleSetPaths(String content) {
+  try {
+    final config = jsonDecode(content);
+    if (config is! Map) return null;
+    final route = config['route'];
+    if (route == null) return <String>{};
+    if (route is! Map) return null;
+    final rules = route['rule_set'];
+    if (rules == null) return <String>{};
+    if (rules is! List) return null;
+    return {
+      for (final rule in rules)
+        if (rule is Map && rule['type'] == 'local' && rule['path'] is String)
+          rule['path'] as String,
+    };
+  } on FormatException {
+    return null;
+  }
+}
 
 enum SingboxConfigCoordinatorPhase {
   reconfiguring,
@@ -259,6 +284,7 @@ class SingboxConfigCoordinator {
     SingboxConfigPathReader? readConfigPath,
     SingboxConfigCapabilitiesRefresher? refreshCapabilities,
     bool Function()? allowRuntimeApply,
+    Future<void> Function(Iterable<String>)? cleanupRouteData,
     this.fullServiceRestartDebounce = const Duration(milliseconds: 450),
   }) : _readSnapshot = readSnapshot,
        _isMounted = isMounted,
@@ -277,7 +303,11 @@ class SingboxConfigCoordinator {
        _readConfigPath =
            readConfigPath ?? SingboxRuntime.instance.getConfigPath,
        _refreshCapabilities = refreshCapabilities,
-       _allowRuntimeApply = allowRuntimeApply ?? (() => true);
+       _allowRuntimeApply = allowRuntimeApply ?? (() => true),
+       _cleanupRouteData =
+           cleanupRouteData ??
+           ((paths) => RussiaRouteDataService.instance
+               .cleanupSupersededDomainLists(protectedRuleSetPaths: paths));
 
   final Duration fullServiceRestartDebounce;
 
@@ -298,6 +328,11 @@ class SingboxConfigCoordinator {
   final SingboxConfigPathReader _readConfigPath;
   final SingboxConfigCapabilitiesRefresher? _refreshCapabilities;
   final bool Function() _allowRuntimeApply;
+  final Future<void> Function(Iterable<String>) _cleanupRouteData;
+  Set<String>? _confirmedRuleSetPaths;
+  int _confirmedRuntimeGeneration = 0;
+  final Map<int, Set<String>> _pendingRoutePaths = {};
+  final Expando<int> _routeBuildGenerations = Expando<int>();
 
   int _runtimeConfigApplyGeneration = 0;
   int _singboxConfigBuildGeneration = 0;
@@ -470,6 +505,7 @@ class SingboxConfigCoordinator {
     }
     recordBuiltConfigLog(reason, build);
     if (!applyToRuntime) {
+      discardPreparedConfigCandidate(build);
       return _recordApplyResult(
         SingboxConfigApplyResult(
           status: SingboxConfigApplyStatus.validated,
@@ -528,6 +564,8 @@ class SingboxConfigCoordinator {
     var preparedBuildPromoted = false;
     _PreparedConfigTransaction? preparedConfigTransaction;
     var runtimeApplySucceeded = false;
+    final currentPaths = await _ruleSetPathsForBuild(build);
+    final previousPaths = await _previousRuntimeRuleSetPaths();
     try {
       if (!_allowRuntimeApply() ||
           !_isMounted() ||
@@ -599,6 +637,12 @@ class SingboxConfigCoordinator {
         runtimeApplySucceeded = true;
         await preparedConfigTransaction?.commit();
         preparedConfigTransaction = null;
+        await _cleanupAfterConfirmedApply(
+          build,
+          currentPaths,
+          previousPaths,
+          generation,
+        );
       }
       if (!_isMounted() || !_isCurrentApply(generation)) {
         return _recordApplyResult(
@@ -665,6 +709,7 @@ class SingboxConfigCoordinator {
         ),
       );
     } finally {
+      _releaseRouteBuild(build);
       // Applying a prepared build consumes its staged file. If the operation
       // became stale or failed before promotion, remove the orphan candidate.
       if (!preparedBuildPromoted) {
@@ -697,6 +742,8 @@ class SingboxConfigCoordinator {
       );
     }
     final generation = ++_runtimeConfigApplyGeneration;
+    final currentPaths = await _ruleSetPathsForBuild(build);
+    final previousPaths = await _previousRuntimeRuleSetPaths();
     try {
       final result = await _runtimeLifecycle.startRuntimeWithBuild(
         build: build,
@@ -708,6 +755,16 @@ class SingboxConfigCoordinator {
         trimMemory: _trimRuntimeStartMemory,
         onWatchdogTimeout: _onRuntimeLifecycleTimeout,
       );
+      if (result.success) {
+        await _cleanupAfterConfirmedApply(
+          build,
+          currentPaths,
+          previousPaths,
+          generation,
+        );
+      } else {
+        _releaseRouteBuild(build);
+      }
       // The lifecycle only reports success after native status/event confirmation.
       // A late startup must not overwrite a newer configuration's diagnostics.
       if (_isMounted() && _isCurrentApply(generation) && _allowRuntimeApply()) {
@@ -724,6 +781,7 @@ class SingboxConfigCoordinator {
       }
       return result;
     } catch (error) {
+      _releaseRouteBuild(build);
       // Preparation happens before the lifecycle's native-start error handler.
       // Preserve exception propagation while keeping the last attempt truthful.
       if (_isMounted() && _isCurrentApply(generation) && _allowRuntimeApply()) {
@@ -817,6 +875,9 @@ class SingboxConfigCoordinator {
     final stagedConfigPath = configPath == null
         ? null
         : '$configPath.pending.$generation';
+    while (RussiaRouteDataService.instance.generationCleanupInFlight != null) {
+      await RussiaRouteDataService.instance.generationCleanupInFlight;
+    }
     final input = _currentSingboxConfigBuildInput(
       outputConfigPath: stagedConfigPath,
       // A validation-only build has no file to read back. Always return JSON
@@ -825,6 +886,11 @@ class SingboxConfigCoordinator {
       returnConfig: returnConfig || stagedConfigPath == null,
       capabilitiesOverride: capabilities,
     );
+    _pendingRoutePaths[generation] = {
+      ?input.russiaCuratedDirectServicesPath,
+      ?input.russiaAiServicesPath,
+      ?input.russiaSocialServicesPath,
+    };
     late final SingboxConfigBuildResult result;
     try {
       final inputReadyMs = preparationWatch.elapsedMilliseconds;
@@ -848,14 +914,17 @@ class SingboxConfigCoordinator {
             'totalMs=${preparationWatch.elapsedMilliseconds}',
       );
     } catch (_) {
+      _pendingRoutePaths.remove(generation);
       _deletePreparedConfigCandidate(stagedConfigPath);
       rethrow;
     }
     if (!_isMounted()) {
+      _pendingRoutePaths.remove(generation);
       _deletePreparedConfigCandidate(stagedConfigPath);
       return null;
     }
     if (dropStale && generation != _singboxConfigBuildGeneration) {
+      _pendingRoutePaths.remove(generation);
       _deletePreparedConfigCandidate(stagedConfigPath);
       return null;
     }
@@ -864,13 +933,16 @@ class SingboxConfigCoordinator {
           !_isMounted() ||
           (dropStale && generation != _singboxConfigBuildGeneration)) {
         _deletePreparedConfigCandidate(stagedConfigPath);
+        _pendingRoutePaths.remove(generation);
         return null;
       }
     } catch (_) {
+      _pendingRoutePaths.remove(generation);
       _deletePreparedConfigCandidate(stagedConfigPath);
       rethrow;
     }
     if (dropStale) _preparedBuildGenerations[result] = generation;
+    _routeBuildGenerations[result] = generation;
     return result;
   }
 
@@ -975,10 +1047,69 @@ class SingboxConfigCoordinator {
   }
 
   void discardPreparedConfigCandidate(SingboxConfigBuildResult build) {
+    _releaseRouteBuild(build);
     if (!build.hasPreparedConfig) {
       return;
     }
     _deletePreparedConfigCandidate(build.configPath);
+  }
+
+  void _releaseRouteBuild(SingboxConfigBuildResult build) {
+    _pendingRoutePaths.remove(_routeBuildGenerations[build]);
+  }
+
+  Future<Set<String>?> _ruleSetPathsForBuild(
+    SingboxConfigBuildResult build,
+  ) async {
+    final generation = _routeBuildGenerations[build];
+    final known = _pendingRoutePaths[generation];
+    if (known != null) return known;
+    try {
+      return await _ruleSetPathsInBackground(
+        await _configContentForValidation(build),
+      );
+    } on FileSystemException {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  Future<Set<String>?> _previousRuntimeRuleSetPaths() async {
+    if (_confirmedRuleSetPaths != null) return _confirmedRuleSetPaths;
+    try {
+      final path = await ensureSingboxConfigPath();
+      if (path == null) return null;
+      final file = File(path);
+      return await file.exists()
+          ? await _ruleSetPathsInBackground(await file.readAsString())
+          : <String>{};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _cleanupAfterConfirmedApply(
+    SingboxConfigBuildResult build,
+    Set<String>? current,
+    Set<String>? previous,
+    int generation,
+  ) async {
+    _releaseRouteBuild(build);
+    if (generation <= _confirmedRuntimeGeneration) return;
+    final rollback = _confirmedRuleSetPaths ?? previous;
+    _confirmedRuntimeGeneration = generation;
+    _confirmedRuleSetPaths = current;
+    if (current == null || rollback == null) return;
+    try {
+      await _cleanupRouteData({
+        ...current,
+        ...rollback,
+        for (final paths in _pendingRoutePaths.values) ...paths,
+      });
+    } catch (error) {
+      AppLogStore.info('routing', 'Skipped superseded rule cleanup: $error');
+    }
   }
 
   Future<void> logCurrentSingboxConfig(String reason) async {
@@ -989,7 +1120,11 @@ class SingboxConfigCoordinator {
     if (build == null) {
       return;
     }
-    recordBuiltConfigLog(reason, build);
+    try {
+      recordBuiltConfigLog(reason, build);
+    } finally {
+      discardPreparedConfigCandidate(build);
+    }
   }
 
   void recordBuiltConfigLog(String reason, SingboxConfigBuildResult build) {

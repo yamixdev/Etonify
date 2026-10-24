@@ -862,6 +862,41 @@ class SubscriptionStore {
     });
   }
 
+  static Future<void> applyMovedSubscriptionDecision(
+    String id, {
+    required String expectedUrl,
+    required String expectedMovedUrl,
+    required bool? accepted,
+  }) async {
+    if (accepted == null ||
+        expectedMovedUrl.isEmpty ||
+        expectedMovedUrl == expectedUrl) {
+      return;
+    }
+    await _withSubscriptionWriteLock(id, () async {
+      final current = getMetadata(id);
+      final info = current?.info;
+      if (current == null ||
+          current.url != expectedUrl ||
+          info == null ||
+          info.newUrl != expectedMovedUrl ||
+          info.ignoreSubscriptionMoved) {
+        return;
+      }
+      final infoMap = info.toMap();
+      if (accepted) {
+        infoMap.remove('new_url');
+      }
+      infoMap['ignore_subscription_moved'] = !accepted;
+      await _saveMetadataUnlocked(
+        current.copyWith(
+          url: accepted ? expectedMovedUrl : current.url,
+          info: SubscriptionInfo.fromMap(infoMap),
+        ),
+      );
+    });
+  }
+
   /// Persists a proxy selection without letting an older in-memory snapshot
   /// overwrite metadata written by a concurrent subscription refresh.
   static Future<void> saveSelectedProxyMetadata(Subscription sub) async {

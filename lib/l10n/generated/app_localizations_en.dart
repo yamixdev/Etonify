@@ -1960,6 +1960,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Protect DNS for direct routes while website traffic stays direct.';
 
   @override
+  String get dnsSystemProxyUnavailable =>
+      'System DNS cannot be sent through a proxy. Choose another resolver to enable this option.';
+
+  @override
   String get urlTestUrlTitle => 'Test URL';
 
   @override

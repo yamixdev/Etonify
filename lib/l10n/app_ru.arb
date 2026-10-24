@@ -755,6 +755,7 @@
   "dnsSecureOnlySubtitle": "Разрешить только DoH и DoT. DNS устройства, UDP и TCP не используются.",
   "dnsDirectThroughProxyTitle": "Прямой DNS через прокси",
   "dnsDirectThroughProxySubtitle": "DNS прямых маршрутов идёт через прокси, а сайты подключаются напрямую.",
+  "dnsSystemProxyUnavailable": "Системный DNS нельзя направить через прокси. Выберите другой DNS-сервер, чтобы включить эту опцию.",
   "urlTestUrlTitle": "Адрес проверки",
   "urlTestUrlSubtitle": "Если подписка задаёт свой адрес, используется он",
   "urlTestIntervalTitle": "Интервал проверки, сек.",

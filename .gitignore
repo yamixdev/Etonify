@@ -66,6 +66,8 @@ diagnostics/
 *.trace
 
 # Local caches and temporary files
+__pycache__/
+*.py[cod]
 .agents/
 skills-lock.json
 *.tmp

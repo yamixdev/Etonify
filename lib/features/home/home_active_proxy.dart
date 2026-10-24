@@ -102,6 +102,7 @@ class ActiveProxyDelayIndicator extends StatelessWidget {
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 180),
@@ -123,51 +124,53 @@ class ActiveProxyDelayIndicator extends StatelessWidget {
                       ),
                     ),
                     const Gap(8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 76),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 180),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeOutCubic,
-                        layoutBuilder: (currentChild, previousChildren) {
-                          return Stack(
-                            alignment: Alignment.centerLeft,
-                            children: [...previousChildren, ?currentChild],
-                          );
-                        },
-                        transitionBuilder: (child, animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: ScaleTransition(
-                              scale: Tween<double>(
-                                begin: .96,
-                                end: 1,
-                              ).animate(animation),
-                              child: child,
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 76),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeOutCubic,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [...previousChildren, ?currentChild],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: .96,
+                                  end: 1,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Text.rich(
+                            key: ValueKey('$valueText$unitText'),
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: valueText,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: color,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: unitText,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: color,
+                                  ),
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                        child: Text.rich(
-                          key: ValueKey('$valueText$unitText'),
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: valueText,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: color,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              TextSpan(
-                                text: unitText,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: color,
-                                ),
-                              ),
-                            ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),

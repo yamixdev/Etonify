@@ -259,7 +259,12 @@ class HomePage extends StatelessWidget {
               onTap: onToggleConnection,
             ),
             const Gap(8),
-            _buildActiveProxyDelayIndicator(proxy),
+            SizedBox(
+              width: 220,
+              child: RepaintBoundary(
+                child: _buildActiveProxyDelayIndicator(proxy),
+              ),
+            ),
           ],
         ),
       ),

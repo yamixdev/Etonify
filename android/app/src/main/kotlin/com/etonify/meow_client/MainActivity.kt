@@ -1275,6 +1275,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun runtimeStartIntent(target: Class<out android.app.Service>, revision: Long?): Intent =
         Intent(this, target).setAction(MeowBoxService.ACTION_START).apply {
+            SingboxController.nextStartToken("activity_start_request")
             if (revision != null) putExtra(MeowBoxService.EXTRA_EXPECTED_EXTERNAL_STOP_REVISION, revision)
         }
 
@@ -1676,8 +1677,7 @@ class MainActivity : FlutterFragmentActivity() {
                     writeConfigAndDispatch(config, result) {
                         runCatching {
                             startForegroundService(
-                                Intent(this@MainActivity, MeowProbeService::class.java)
-                                    .setAction(MeowBoxService.ACTION_START),
+                                runtimeStartIntent(MeowProbeService::class.java, null),
                             )
                         }.onSuccess {
                             result.success(true)

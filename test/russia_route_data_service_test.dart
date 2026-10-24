@@ -10,6 +10,62 @@ import 'package:meow_client/data/routing/russia_route_data_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'generation cleanup preserves runtime pins and rollback, not newest two alone',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final old = await _updateFixture({'category-ai-!cn': 'old.fixture'});
+        final obsolete = await _updateFixture({
+          'category-ai-!cn': 'obsolete.fixture',
+        }, force: true);
+        final previous = await _updateFixture({
+          'category-ai-!cn': 'previous.fixture',
+        }, force: true);
+        final current = await _updateFixture({
+          'category-ai-!cn': 'current.fixture',
+        }, force: true);
+        final base = _manifestFile(current).parent;
+        final unrelated = Directory(
+          '${base.path}/domain-list-compiled-user-data',
+        );
+        await unrelated.create();
+        await File('${unrelated.path}/keep').writeAsString('unrelated');
+        final runtimePaths = [old.aiServicesPath!, old.socialServicesPath!];
+        await RussiaRouteDataService.instance.cleanupSupersededDomainLists(
+          protectedRuleSetPaths: runtimePaths,
+        );
+        expect(File(old.aiServicesPath!).existsSync(), isTrue);
+        expect(File(previous.aiServicesPath!).existsSync(), isTrue);
+        expect(File(current.aiServicesPath!).existsSync(), isTrue);
+        expect(
+          Directory(File(obsolete.aiServicesPath!).parent.path).existsSync(),
+          isFalse,
+        );
+        expect(File('${unrelated.path}/keep').readAsStringSync(), 'unrelated');
+      });
+    },
+  );
+
+  test('cleanup fails closed for unreadable metadata', () async {
+    await _withIsolatedRouteStorage(() async {
+      final current = await _updateFixture({
+        'category-ai-!cn': 'current.fixture',
+      });
+      final manifest = _manifestFile(current);
+      final obsolete = Directory(
+        '${manifest.parent.path}/domain-list-compiled-v1-100',
+      );
+      await obsolete.create();
+      await File('${obsolete.path}/keep').writeAsString('intact');
+      await manifest.writeAsString('{broken');
+      await RussiaRouteDataService.instance.cleanupSupersededDomainLists(
+        protectedRuleSetPaths: <String>[],
+      );
+      expect(File('${obsolete.path}/keep').readAsStringSync(), 'intact');
+      expect(File(current.aiServicesPath!).existsSync(), isTrue);
+    });
+  });
+
   test('Russia route status only needs daily update after 24 hours', () {
     final now = DateTime.now().millisecondsSinceEpoch;
     final fresh = RussiaRouteDataStatus(
@@ -29,6 +85,46 @@ void main() {
 
     expect(fresh.needsDailyUpdate, isFalse);
     expect(stale.needsDailyUpdate, isTrue);
+  });
+
+  test('cleanup never follows linked generation directories', () async {
+    await _withIsolatedRouteStorage(() async {
+      final current = await _updateFixture({
+        'category-ai-!cn': 'current.fixture',
+      });
+      final base = _manifestFile(current).parent;
+      final outside = Directory('${base.parent.path}/outside');
+      await outside.create();
+      final marker = File('${outside.path}/keep');
+      await marker.writeAsString('external');
+      final link = Link('${base.path}/domain-list-compiled-v1-100');
+      try {
+        await link.create(outside.path);
+      } on FileSystemException catch (error) {
+        markTestSkipped(
+          'Directory links unavailable: ${error.osError?.errorCode}',
+        );
+        return;
+      }
+      await RussiaRouteDataService.instance.cleanupSupersededDomainLists(
+        protectedRuleSetPaths: <String>[],
+      );
+      expect(await marker.readAsString(), 'external');
+      expect(await link.exists(), isTrue);
+    });
+  });
+
+  test('corrupt previous metadata does not prevent bundled recovery', () async {
+    await _withIsolatedRouteStorage(() async {
+      final current = await _updateFixture({
+        'category-ai-!cn': 'current.fixture',
+      });
+      await _manifestFile(current).writeAsString('{broken');
+      final recovered = await RussiaRouteDataService.instance
+          .ensureBundledInstalled();
+      expect(recovered.available, isTrue);
+      expect(File(recovered.geositeRuBlockedPath!).existsSync(), isTrue);
+    });
   });
 
   group('domain-list rebuild policy', () {
@@ -417,9 +513,18 @@ File _manifestFile(RussiaRouteDataStatus status) => File(
 );
 
 Future<RussiaRouteDataStatus> _updateFixture(
-  Map<String, String> categories,
-) async {
-  await RussiaRouteDataService.instance.ensureBundledInstalled();
+  Map<String, String> categories, {
+  bool force = false,
+}) async {
+  final installed = await RussiaRouteDataService.instance
+      .ensureBundledInstalled();
+  if (force) {
+    final manifest = _manifestFile(installed);
+    final metadata =
+        jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+    metadata['lastUpdateCheckAtMillis'] = 0;
+    await manifest.writeAsString(jsonEncode(metadata));
+  }
   return HttpOverrides.runZoned(
     () => RussiaRouteDataService.instance.ensureUpdated(),
     createHttpClient: (_) => _RouteFixtureHttpClient(categories),

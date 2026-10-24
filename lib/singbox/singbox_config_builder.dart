@@ -1179,6 +1179,9 @@ class SingboxConfigBuilder {
   }) {
     final trimmed = normalizeDnsResolverInput(value);
     if (trimmed == 'device://network') {
+      if (detour != null && detour != 'direct') {
+        throw FormatException('System DNS cannot use proxy detour for $tag');
+      }
       return {'type': 'local', 'tag': tag};
     }
     if (trimmed.isEmpty) {

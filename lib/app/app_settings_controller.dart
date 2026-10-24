@@ -697,6 +697,9 @@ class AppSettingsController {
   }
 
   AppSettingsChange setDnsDirectPreset(String value) {
+    if (value == 'device' && dnsDirectThroughProxy) {
+      return const AppSettingsChange.none();
+    }
     if (dnsDirectPreset == value) {
       return const AppSettingsChange.none();
     }
@@ -714,6 +717,9 @@ class AppSettingsController {
 
   AppSettingsChange setDnsDirectResolver(String value) {
     final requested = normalizeDnsResolverInput(value);
+    if (requested == 'device://network' && dnsDirectThroughProxy) {
+      return const AppSettingsChange.none();
+    }
     final normalized = dnsSecureOnly && !isEncryptedDnsResolver(requested)
         ? defaultSecureDnsDirectResolver
         : requested;
@@ -728,6 +734,7 @@ class AppSettingsController {
   }
 
   AppSettingsChange setDnsProxyPreset(String value) {
+    if (value == 'device') return const AppSettingsChange.none();
     if (dnsProxyPreset == value) {
       return const AppSettingsChange.none();
     }
@@ -745,6 +752,7 @@ class AppSettingsController {
 
   AppSettingsChange setDnsProxyResolver(String value) {
     final requested = normalizeDnsResolverInput(value);
+    if (requested == 'device://network') return const AppSettingsChange.none();
     final normalized = dnsSecureOnly && !isEncryptedDnsResolver(requested)
         ? defaultSecureDnsProxyResolver
         : requested;
@@ -782,6 +790,10 @@ class AppSettingsController {
   }
 
   AppSettingsChange setDnsDirectThroughProxy(bool value) {
+    if (value &&
+        normalizeDnsResolverInput(dnsDirectResolver) == 'device://network') {
+      return const AppSettingsChange.none();
+    }
     if (dnsDirectThroughProxy == value) {
       return const AppSettingsChange.none();
     }

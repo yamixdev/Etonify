@@ -1957,6 +1957,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'DNS прямых маршрутов идёт через прокси, а сайты подключаются напрямую.';
 
   @override
+  String get dnsSystemProxyUnavailable =>
+      'Системный DNS нельзя направить через прокси. Выберите другой DNS-сервер, чтобы включить эту опцию.';
+
+  @override
   String get urlTestUrlTitle => 'Адрес проверки';
 
   @override

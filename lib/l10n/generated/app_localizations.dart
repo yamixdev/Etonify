@@ -3557,6 +3557,12 @@ abstract class AppLocalizations {
   /// **'Protect DNS for direct routes while website traffic stays direct.'**
   String get dnsDirectThroughProxySubtitle;
 
+  /// No description provided for @dnsSystemProxyUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'System DNS cannot be sent through a proxy. Choose another resolver to enable this option.'**
+  String get dnsSystemProxyUnavailable;
+
   /// No description provided for @urlTestUrlTitle.
   ///
   /// In en, this message translates to:

@@ -52,6 +52,69 @@ Finder _directResolverField() {
 }
 
 void main() {
+  testWidgets('restored system proxy DNS shows a repair explanation', (
+    tester,
+  ) async {
+    final controller = AppSettingsController()
+      ..dnsProxyPreset = 'device'
+      ..dnsProxyResolver = 'device://network';
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(controller),
+        appSettingsCommandsProvider.overrideWithValue(AppSettingsCommands()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _dnsSettingsApp(
+        harnessKey: GlobalKey<_DnsSettingsHarnessState>(),
+        container: container,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('System DNS cannot be sent through a proxy'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byIcon(Icons.shield_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Cloudflare DoT'), findsOneWidget);
+    expect(find.text('Device network'), findsNothing);
+  });
+
+  testWidgets('system DNS disables proxy detour with an explanation', (
+    tester,
+  ) async {
+    final controller = AppSettingsController()
+      ..dnsDirectPreset = 'device'
+      ..dnsDirectResolver = 'device://network';
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(controller),
+        appSettingsCommandsProvider.overrideWithValue(AppSettingsCommands()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      _dnsSettingsApp(
+        harnessKey: GlobalKey<_DnsSettingsHarnessState>(),
+        container: container,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final switches = tester.widgetList<SwitchListTile>(
+      find.byType(SwitchListTile),
+    );
+    expect(switches.last.onChanged, isNull);
+    expect(
+      find.textContaining('System DNS cannot be sent through a proxy'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byIcon(Icons.shield_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Device network'), findsNothing);
+  });
+
   testWidgets('DNS selectors use shared settings title styling', (
     tester,
   ) async {

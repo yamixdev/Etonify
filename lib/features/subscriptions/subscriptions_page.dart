@@ -343,6 +343,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     try {
       return await operation;
     } on TimeoutException {
+      if (!mounted) rethrow;
       throw _LocalizedSubscriptionPageError(
         AppLocalizations.of(context).subscriptionOperationTimeout,
       );
@@ -359,18 +360,20 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     return subscriptionErrorMessage(error, AppLocalizations.of(context));
   }
 
-  Future<Subscription> _maybeHandleMovedSubscription(Subscription sub) async {
+  Future<void> _maybeHandleMovedSubscription(Subscription snapshot) async {
+    if (!mounted) return;
+    final sub = SubscriptionStore.getMetadata(snapshot.id);
+    if (sub == null) return;
     final info = sub.info;
     final movedUrl = info?.newUrl;
-    final l10n = AppLocalizations.of(context);
-    if (!mounted ||
-        info == null ||
+    if (info == null ||
         info.ignoreSubscriptionMoved ||
         movedUrl == null ||
         movedUrl.isEmpty ||
         movedUrl == sub.url) {
-      return sub;
+      return;
     }
+    final l10n = AppLocalizations.of(context);
 
     final decision = await showDialog<bool>(
       context: context,
@@ -390,20 +393,12 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       ),
     );
 
-    if (decision == true) {
-      final updated = sub.copyWith(
-        url: movedUrl,
-        info: info.copyWith(newUrl: null, ignoreSubscriptionMoved: false),
-      );
-      await SubscriptionStore.save(updated);
-      return updated;
-    }
-
-    final ignored = sub.copyWith(
-      info: info.copyWith(ignoreSubscriptionMoved: true),
+    await SubscriptionStore.applyMovedSubscriptionDecision(
+      sub.id,
+      expectedUrl: sub.url,
+      expectedMovedUrl: movedUrl,
+      accepted: decision,
     );
-    await SubscriptionStore.save(ignored);
-    return ignored;
   }
 
   void _addSubscription() {
@@ -554,6 +549,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         'subscription',
         'Subscription import failed: ${e.runtimeType}: $e',
       );
+      if (!mounted) rethrow;
       throw _LocalizedSubscriptionPageError(_userFacingSubscriptionError(e));
     }
   }
@@ -698,8 +694,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         }
       }
       await _maybeHandleMovedSubscription(updated);
-      _reload();
       if (mounted) {
+        _reload();
         AppNotice.show(
           context,
           AppLocalizations.of(
@@ -709,7 +705,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         );
       }
     } catch (e) {
-      setState(() => _error = _userFacingSubscriptionError(e));
+      if (mounted) {
+        setState(() => _error = _userFacingSubscriptionError(e));
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -741,31 +739,33 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         ],
       ),
     );
-    if (confirmed != true) {
+    if (confirmed != true || !mounted) {
       return;
     }
     await _enableHwidAndRefreshSubscription(subscription.id);
   }
 
   Future<void> _enableHwidAndRefreshSubscription(String id) async {
-    final current = await SubscriptionStore.getInBackground(id);
-    if (current == null) {
-      return;
-    }
-    final info = current.info ?? const SubscriptionInfo();
+    if (!mounted) return;
+    final allowInsecureTls = widget.allowUntrustedSubscriptionCertificates;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await SubscriptionStore.save(
-        current.copyWith(info: info.copyWith(requireHwid: true)),
+      await SubscriptionStore.updateMetadata(
+        id,
+        (current) => current.copyWith(
+          info: (current.info ?? const SubscriptionInfo()).copyWith(
+            requireHwid: true,
+          ),
+        ),
       );
       final updated = await _runSubscriptionOperationWithWarning(
         SubscriptionStore.refresh(
           id,
           operationTimeout: _kSubscriptionOperationTimeout,
-          allowInsecureTls: widget.allowUntrustedSubscriptionCertificates,
+          allowInsecureTls: allowInsecureTls,
           onRouteAttempt: _handleSubscriptionRouteAttempt,
         ),
       );
@@ -778,7 +778,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         tone: AppNoticeTone.success,
       );
       await _maybeHandleMovedSubscription(updated);
-      _reload();
+      if (mounted) _reload();
     } catch (e) {
       if (!mounted) {
         return;

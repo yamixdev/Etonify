@@ -87,6 +87,46 @@ HomePage _home({
 );
 
 void main() {
+  for (final textScale in [1.0, 2.0]) {
+    testWidgets(
+      'home ping does not resize the connection control ($textScale)',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final states = ProxyRuntimeVisualStore();
+        addTearDown(states.dispose);
+        await tester.pumpWidget(
+          _app(_home(states: states), textScale: textScale),
+        );
+        await tester.pumpAndSettle();
+        final control = find.byKey(const ValueKey('connection-button-logo'));
+        final resting = tester.getRect(control);
+        for (final (checking, latency) in [
+          (true, 123),
+          (false, 123),
+          (true, 9999),
+          (false, 9999),
+        ]) {
+          states.replaceAll({
+            'auto': ProxyRuntimeVisualState(
+              latency: latency,
+              latencyFresh: true,
+              latencyChecking: checking,
+            ),
+          });
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 90));
+          expect(tester.getRect(control), resting);
+          await tester.pump(const Duration(milliseconds: 250));
+          expect(tester.getRect(control), resting);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
   testWidgets('mini-card and its short content stay compact and centered', (
     tester,
   ) async {

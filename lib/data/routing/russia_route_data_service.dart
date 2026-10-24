@@ -11,6 +11,14 @@ import 'package:meow_client/core/platform/android_files_dir.dart';
 
 final RegExp _domainListWhitespaceRegExp = RegExp(r'\s');
 final RegExp _validDomainRegExp = RegExp(r'^[a-z0-9.\-_]+$');
+final RegExp _compiledGenerationPattern = RegExp(
+  r'^domain-list-compiled-v\d+-\d+$',
+);
+
+bool _sameStoragePath(String first, String second) => Platform.isWindows
+    ? first.replaceAll('\\', '/').toLowerCase() ==
+          second.replaceAll('\\', '/').toLowerCase()
+    : first == second;
 
 @visibleForTesting
 bool shouldRebuildRussiaRouteDomainLists({
@@ -351,6 +359,17 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
 
   Future<RussiaRouteDataStatus>? _updateInFlight;
   Future<RussiaRouteDataStatus>? _domainListMigrationInFlight;
+  Future<void>? _cleanupInFlight;
+  int _metadataWrites = 0;
+
+  Future<void>? get generationCleanupInFlight => _cleanupInFlight;
+
+  Future<void> waitForGenerationCleanup() async {
+    while (_cleanupInFlight != null) {
+      await _cleanupInFlight;
+    }
+  }
+
   @override
   final ValueNotifier<RussiaRouteUpdateProgress?> progress = ValueNotifier(
     null,
@@ -388,6 +407,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<RussiaRouteDataStatus> loadStatus() async {
+    await waitForGenerationCleanup();
     final current = await _loadStatus();
     final pending = _domainListMigrationInFlight;
     if (pending != null) return pending;
@@ -571,6 +591,97 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     );
   }
 
+  Future<void> cleanupSupersededDomainLists({
+    required Iterable<String> protectedRuleSetPaths,
+  }) {
+    final pending = _cleanupInFlight;
+    if (pending != null) return pending;
+    if (_updateInFlight != null ||
+        _domainListMigrationInFlight != null ||
+        _metadataWrites > 0) {
+      return Future.value();
+    }
+    final future = _cleanupSupersededDomainLists(protectedRuleSetPaths.toSet());
+    _cleanupInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_cleanupInFlight, future)) _cleanupInFlight = null;
+    });
+  }
+
+  Future<void> _cleanupSupersededDomainLists(
+    Set<String> protectedRuleSetPaths,
+  ) async {
+    try {
+      final paths = await _storagePaths();
+      final base = Directory(paths.baseDirectoryPath).absolute;
+      if (await FileSystemEntity.type(base.path, followLinks: false) !=
+          FileSystemEntityType.directory) {
+        return;
+      }
+      final canonicalBase = await base.resolveSymbolicLinks();
+      if (!_sameStoragePath(canonicalBase, base.path)) return;
+      final metadataFile = File(paths.metadataPath);
+      if (await FileSystemEntity.type(metadataFile.path, followLinks: false) !=
+          FileSystemEntityType.file) {
+        return;
+      }
+      final metadata = jsonDecode(await metadataFile.readAsString());
+      if (metadata is! Map) return;
+      final active = metadata['domainListCommunityCompiledDirectory'];
+      final previous = metadata['domainListCommunityPreviousCompiledDirectory'];
+      if (active is! String ||
+          !_compiledGenerationPattern.hasMatch(active) ||
+          (previous != null &&
+              (previous is! String ||
+                  !_compiledGenerationPattern.hasMatch(previous)))) {
+        return;
+      }
+      final protected = <String>{active, if (previous is String) previous};
+      for (final path in protectedRuleSetPaths) {
+        final parent = Directory(
+          await File(path).absolute.parent.resolveSymbolicLinks(),
+        );
+        if (_sameStoragePath(parent.parent.path, base.path)) {
+          protected.add(
+            parent.uri.pathSegments.where((s) => s.isNotEmpty).last,
+          );
+        }
+      }
+      await for (final directory in base.list(followLinks: false)) {
+        if (directory is! Directory) continue;
+        final name = directory.uri.pathSegments.where((s) => s.isNotEmpty).last;
+        if (!_compiledGenerationPattern.hasMatch(name) ||
+            protected.contains(name)) {
+          continue;
+        }
+        if (!_sameStoragePath(directory.absolute.parent.path, base.path) ||
+            await FileSystemEntity.type(directory.path, followLinks: false) !=
+                FileSystemEntityType.directory ||
+            !_sameStoragePath(
+              await directory.resolveSymbolicLinks(),
+              directory.absolute.path,
+            )) {
+          continue;
+        }
+        var containsLink = false;
+        await for (final entry in directory.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          if (entry is Link) {
+            containsLink = true;
+            break;
+          }
+        }
+        if (!containsLink) await directory.delete(recursive: true);
+      }
+    } on FileSystemException {
+      return;
+    } on FormatException {
+      return;
+    }
+  }
+
   Future<List<RussiaRouteDataFile>> listInstalledFiles() async {
     final paths = await _storagePaths();
     final status = await loadStatus();
@@ -647,6 +758,9 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<RussiaRouteDataStatus> ensureBundledInstalled() async {
+    while (_cleanupInFlight != null) {
+      await _cleanupInFlight;
+    }
     final inFlight = _updateInFlight;
     if (inFlight != null) {
       return inFlight;
@@ -699,6 +813,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<RussiaRouteDataStatus> deleteInstalled() async {
+    await waitForGenerationCleanup();
     final paths = await _storagePaths();
     final base = Directory(paths.baseDirectoryPath);
     if (base.existsSync()) {
@@ -752,6 +867,9 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<RussiaRouteDataStatus> ensureUpdated({bool force = false}) async {
+    while (_cleanupInFlight != null) {
+      await _cleanupInFlight;
+    }
     final inFlight = _updateInFlight;
     if (inFlight != null) {
       return inFlight;
@@ -944,40 +1062,71 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     domainListCommunityMetadata,
     int domainListCommunityCompilerVersion = 0,
     String? domainListCommunityCompiledDirectory,
-  }) {
-    return _writeAtomically(
-      paths.metadataPath,
-      utf8.encode(
-        jsonEncode({
-          'sourceName': sourceName,
-          'versionTag': packageInfo.versionTag,
-          'sourceKind': packageInfo.sourceKind,
-          if (packageInfo.releaseTag != null)
-            'releaseTag': packageInfo.releaseTag,
-          if (packageInfo.packageSha256 != null)
-            'packageSha256': packageInfo.packageSha256,
-          if (packageInfo.assetSizeBytes != null)
-            'assetSizeBytes': packageInfo.assetSizeBytes,
-          if (packageInfo.verifiedAtMillis != null)
-            'verifiedAtMillis': packageInfo.verifiedAtMillis,
-          'verifiedFiles': packageInfo.verifiedFiles,
-          'installedAtMillis': installedAtMillis,
-          'lastUpdateCheckAtMillis': lastUpdateCheckAtMillis,
-          'domainListCommunityUpdatedAtMillis':
-              domainListCommunityUpdatedAtMillis,
-          'domainListCommunityCategoryCount': domainListCommunityCategoryCount,
-          'domainListCommunityDomainCount': domainListCommunityDomainCount,
-          'domainListCommunityCompilerVersion':
-              domainListCommunityCompilerVersion,
-          'domainListCommunityCompiledDirectory':
-              ?domainListCommunityCompiledDirectory,
-          'domainListCommunityMetadata': {
-            for (final entry in domainListCommunityMetadata.entries)
-              entry.key: entry.value.toJson(),
-          },
-        }),
-      ),
-    );
+  }) async {
+    String? previousCompiledDirectory;
+    _metadataWrites++;
+    try {
+      await waitForGenerationCleanup();
+      final metadataFile = File(paths.metadataPath);
+      try {
+        final previousMetadata = jsonDecode(await metadataFile.readAsString());
+        if (previousMetadata is Map) {
+          final oldActive =
+              previousMetadata['domainListCommunityCompiledDirectory'];
+          final oldPrevious =
+              previousMetadata['domainListCommunityPreviousCompiledDirectory'];
+          final previous = oldActive == domainListCommunityCompiledDirectory
+              ? oldPrevious
+              : oldActive;
+          if (previous is String &&
+              _compiledGenerationPattern.hasMatch(previous)) {
+            previousCompiledDirectory = previous;
+          }
+        }
+      } on FileSystemException {
+        previousCompiledDirectory = null;
+      } on FormatException {
+        previousCompiledDirectory = null;
+      }
+      await _writeAtomically(
+        paths.metadataPath,
+        utf8.encode(
+          jsonEncode({
+            'sourceName': sourceName,
+            'versionTag': packageInfo.versionTag,
+            'sourceKind': packageInfo.sourceKind,
+            if (packageInfo.releaseTag != null)
+              'releaseTag': packageInfo.releaseTag,
+            if (packageInfo.packageSha256 != null)
+              'packageSha256': packageInfo.packageSha256,
+            if (packageInfo.assetSizeBytes != null)
+              'assetSizeBytes': packageInfo.assetSizeBytes,
+            if (packageInfo.verifiedAtMillis != null)
+              'verifiedAtMillis': packageInfo.verifiedAtMillis,
+            'verifiedFiles': packageInfo.verifiedFiles,
+            'installedAtMillis': installedAtMillis,
+            'lastUpdateCheckAtMillis': lastUpdateCheckAtMillis,
+            'domainListCommunityUpdatedAtMillis':
+                domainListCommunityUpdatedAtMillis,
+            'domainListCommunityCategoryCount':
+                domainListCommunityCategoryCount,
+            'domainListCommunityDomainCount': domainListCommunityDomainCount,
+            'domainListCommunityCompilerVersion':
+                domainListCommunityCompilerVersion,
+            'domainListCommunityCompiledDirectory':
+                ?domainListCommunityCompiledDirectory,
+            'domainListCommunityPreviousCompiledDirectory':
+                ?previousCompiledDirectory,
+            'domainListCommunityMetadata': {
+              for (final entry in domainListCommunityMetadata.entries)
+                entry.key: entry.value.toJson(),
+            },
+          }),
+        ),
+      );
+    } finally {
+      _metadataWrites--;
+    }
   }
 
   Future<_InstalledRoutePackageInfo> _installBundledRoutePackage(
