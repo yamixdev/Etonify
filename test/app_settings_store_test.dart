@@ -693,13 +693,64 @@ void main() {
       'proxy_sort': 'working',
     });
 
-    expect(working.proxySort, 'working');
-    expect(store.stateToMap(working)['proxy_sort'], 'working');
-    expect(store.stateToSafeExportMap(working)['proxy_sort'], 'working');
+    expect(working.proxySort, 'latency');
+    expect(working.proxyHideUnavailable, isTrue);
+    expect(store.stateToMap(working)['proxy_sort'], 'latency');
+    expect(store.stateToSafeExportMap(working)['proxy_hide_unavailable'], '1');
+    final independent = store.mapState(const <String, dynamic>{
+      'proxy_sort': 'name',
+      'proxy_hide_unavailable': '1',
+    });
+    final restored = store.mapState(store.stateToMap(independent));
+    expect(restored.proxySort, 'name');
+    expect(restored.proxyHideUnavailable, isTrue);
     expect(
       store.mapState(const <String, dynamic>{'proxy_sort': 'broken'}).proxySort,
       'source',
     );
+  });
+
+  for (final currentFilter in [false, true]) {
+    for (final (legacySort, expectedSort, expectedFilter) in [
+      ('working', 'latency', true),
+      ('latency', 'latency', false),
+      ('source', 'source', false),
+      ('name', 'name', false),
+      ('country', 'country', false),
+    ]) {
+      test(
+        'legacy import $legacySort restores filtering over current=$currentFilter',
+        () {
+          final store = _TestSettingsStore();
+          final current = store.mapState({
+            'proxy_sort': 'name',
+            'proxy_hide_unavailable': currentFilter ? '1' : '0',
+          });
+          final imported = store.mergeSafeImportMap(current, {
+            'proxy_sort': legacySort,
+          });
+          expect(imported.proxySort, expectedSort);
+          expect(imported.proxyHideUnavailable, expectedFilter);
+        },
+      );
+    }
+  }
+
+  test('partial imports preserve filter and explicit new filter wins', () {
+    final store = _TestSettingsStore();
+    final current = store.mapState({
+      'proxy_sort': 'name',
+      'proxy_hide_unavailable': '1',
+    });
+    final partial = store.mergeSafeImportMap(current, {'locale_code': 'ru'});
+    expect(partial.proxySort, 'name');
+    expect(partial.proxyHideUnavailable, isTrue);
+    final explicit = store.mergeSafeImportMap(current, {
+      'proxy_sort': 'working',
+      'proxy_hide_unavailable': '0',
+    });
+    expect(explicit.proxySort, 'latency');
+    expect(explicit.proxyHideUnavailable, isFalse);
   });
 
   test('persists and exports DNS protection parameters', () {

@@ -1214,6 +1214,18 @@ abstract class AppLocalizations {
   /// **'Working only'**
   String get sortByWorking;
 
+  /// No description provided for @proxyHideUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide unavailable'**
+  String get proxyHideUnavailable;
+
+  /// No description provided for @proxyListApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get proxyListApply;
+
   /// No description provided for @sortByName.
   ///
   /// In en, this message translates to:
@@ -2948,7 +2960,7 @@ abstract class AppLocalizations {
   /// No description provided for @trafficDashboardPublicIp.
   ///
   /// In en, this message translates to:
-  /// **'Your IP'**
+  /// **'External IP'**
   String get trafficDashboardPublicIp;
 
   /// No description provided for @trafficDashboardPublicIpHint.
@@ -2960,7 +2972,7 @@ abstract class AppLocalizations {
   /// No description provided for @trafficDashboardPublicIpRefresh.
   ///
   /// In en, this message translates to:
-  /// **'Refresh your IP'**
+  /// **'Refresh external IP'**
   String get trafficDashboardPublicIpRefresh;
 
   /// No description provided for @trafficDashboardPublicIpError.
@@ -6549,19 +6561,19 @@ abstract class AppLocalizations {
   /// No description provided for @batteryOptimizationTitle.
   ///
   /// In en, this message translates to:
-  /// **'Battery optimization'**
+  /// **'Background activity'**
   String get batteryOptimizationTitle;
 
   /// No description provided for @batteryOptimizationExempt.
   ///
   /// In en, this message translates to:
-  /// **'Unrestricted background access'**
+  /// **'Unrestricted by battery optimization'**
   String get batteryOptimizationExempt;
 
   /// No description provided for @batteryOptimizationRestricted.
   ///
   /// In en, this message translates to:
-  /// **'Restricted background access'**
+  /// **'Restricted by battery optimization'**
   String get batteryOptimizationRestricted;
 
   /// No description provided for @batteryOptimizationUnavailable.

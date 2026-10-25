@@ -149,12 +149,58 @@ void main() {
     final flag = tester.getRect(find.byType(CountryFlagBadge).last);
     final title = tester.getRect(find.text('Sweden server'));
     final subtitle = tester.getRect(find.text('203.0.113.7').last);
-    final content = flag.expandToInclude(title).expandToInclude(subtitle);
     expect(card.width, lessThanOrEqualTo(300));
     expect(card.center.dx, closeTo(196.5, 1));
-    expect(content.center.dx, closeTo(card.center.dx, 1));
-    expect(title.center.dx, closeTo(subtitle.center.dx, 1));
+    expect(flag.right, lessThan(title.left));
+    expect(title.left, closeTo(subtitle.left, 1));
     expect(card.height, greaterThanOrEqualTo(48));
+  });
+
+  testWidgets('group arrow does not displace IP or enlarge the text gap', (
+    tester,
+  ) async {
+    var details = 0;
+    var groups = 0;
+    var lists = 0;
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: Center(
+            child: HomeCurrentProxyCard(
+              proxy: _proxy.copyWith(isGroup: true, childCount: 5),
+              connectionInfo: const ServerConnectionInfo(
+                connected: true,
+                outboundTag: 'auto',
+                exitIp: '203.0.113.7',
+              ),
+              onTap: () => lists++,
+              onOpenInfo: () => details++,
+              onOpenGroup: () => groups++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final title = tester.getRect(find.text('Sweden server'));
+    final ip = tester.getRect(find.text('203.0.113.7'));
+    final arrow = find.byKey(const ValueKey('proxy-open-group-auto'));
+    expect(ip.left, closeTo(title.left, 1));
+    expect(ip.top - title.bottom, lessThanOrEqualTo(12));
+    expect(tester.getRect(arrow).left, greaterThanOrEqualTo(title.right));
+    expect(tester.getSize(arrow).height, greaterThanOrEqualTo(48));
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('home-current-proxy-card')))
+          .height,
+      lessThanOrEqualTo(96),
+    );
+    await tester.tap(find.text('203.0.113.7'));
+    expect((details, groups, lists), (1, 0, 0));
+    await tester.tap(arrow);
+    expect((details, groups, lists), (1, 1, 0));
+    await tester.tap(find.text('Sweden server'));
+    expect((details, groups, lists), (1, 1, 1));
   });
 
   testWidgets(
@@ -335,11 +381,11 @@ void main() {
       expect(tester.takeException(), isNull);
       final title = find.text(proxy.displayName);
       final card = find.byKey(const ValueKey('home-current-proxy-card'));
-      expect(tester.getSize(title).width, greaterThan(200));
+      expect(tester.getSize(title).width, greaterThan(group ? 120 : 180));
       expect(tester.getSize(card).height, greaterThanOrEqualTo(48));
       expect(
         tester.getRect(title).right,
-        closeTo(tester.getRect(card).right - 16, 1),
+        closeTo(tester.getRect(card).right - 16 - (group ? 48 : 0), 1),
       );
       await tester.tap(title);
       expect(opens, 1);

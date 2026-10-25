@@ -625,6 +625,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get sortByWorking => 'Только рабочие';
 
   @override
+  String get proxyHideUnavailable => 'Скрывать недоступные';
+
+  @override
+  String get proxyListApply => 'Готово';
+
+  @override
   String get sortByName => 'По имени';
 
   @override
@@ -1603,14 +1609,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficDashboardServerIp => 'IP сервера';
 
   @override
-  String get trafficDashboardPublicIp => 'Ваш IP';
+  String get trafficDashboardPublicIp => 'Внешний IP';
 
   @override
   String get trafficDashboardPublicIpHint =>
       'Внешний адрес текущего подключения';
 
   @override
-  String get trafficDashboardPublicIpRefresh => 'Обновить ваш IP';
+  String get trafficDashboardPublicIpRefresh => 'Обновить внешний IP';
 
   @override
   String get trafficDashboardPublicIpError =>
@@ -3696,13 +3702,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get routingAdBlockSummary => 'Локальный фильтр доменов';
 
   @override
-  String get batteryOptimizationTitle => 'Оптимизация батареи';
+  String get batteryOptimizationTitle => 'Работа в фоне';
 
   @override
-  String get batteryOptimizationExempt => 'Работа в фоне без ограничений';
+  String get batteryOptimizationExempt => 'Без ограничений батареи';
 
   @override
-  String get batteryOptimizationRestricted => 'Работа в фоне ограничена';
+  String get batteryOptimizationRestricted => 'Ограничено батареей';
 
   @override
   String get batteryOptimizationUnavailable => 'Недоступно на этом устройстве';

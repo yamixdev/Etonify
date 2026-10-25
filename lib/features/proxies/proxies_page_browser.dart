@@ -204,6 +204,8 @@ extension _ProxyBrowser on _ProxiesPageState {
                 l10n: l10n,
                 current: _sort,
                 onSelected: _setSort,
+                hideUnavailable: _hideUnavailable,
+                onHideUnavailableChanged: _setHideUnavailable,
               ),
               icon: const Icon(FluentIcons.arrow_sort_24_regular),
             ),

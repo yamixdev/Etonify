@@ -112,6 +112,45 @@ Widget _page({
 }
 
 void main() {
+  testWidgets('filtered group still opens and hidden members can be restored', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: ProxiesPage(
+            proxies: [
+              _proxy('Root', children: ['Failed']),
+              _proxy(
+                'Failed',
+              ).copyWith(parentGroupTag: 'Root', latencyUnavailable: true),
+            ],
+            selectedTag: '',
+            connected: false,
+            hideUnavailable: true,
+            progressiveBlurEnabled: false,
+            hapticEnabled: false,
+            onSelected: (_) {},
+            onUrlTest: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proxy-open-group-Root')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('proxy-group-current-name')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('proxy-select-Failed')), findsNothing);
+    await tester.tap(find.byTooltip('Sort').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hide unavailable'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('proxy-select-Failed')), findsOneWidget);
+  });
   for (final browserMode in [false, true]) {
     for (final connected in [false, true]) {
       testWidgets(

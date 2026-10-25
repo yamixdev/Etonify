@@ -7,6 +7,21 @@ import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 
 void main() {
+  test('unavailable filter preserves name ordering and untested rows', () {
+    final result = buildProxyListPresentation(
+      ProxyListPresentationInput(
+        proxies: [
+          _proxy('z', 'Zulu', latency: 30),
+          _proxy('bad', 'Bad', unavailable: true),
+          _proxy('a', 'Alpha'),
+        ],
+        sort: ProxySort.name,
+        hideUnavailable: true,
+        selectedTag: '',
+      ),
+    );
+    expect(result.items.map((p) => p.tag), ['a', 'z']);
+  });
   test('selection leaves source and sorted presentation rows in place', () {
     final proxies = [
       _proxy('b', 'Beta', latency: 20, fresh: true),

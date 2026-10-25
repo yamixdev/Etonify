@@ -80,6 +80,7 @@ ProxiesPage _page({
   String selectedTag = '',
   AppProxySummary? activeProxy,
   ProxySort initialSort = ProxySort.source,
+  bool hideUnavailable = false,
 }) => ProxiesPage(
   profileId: profileId,
   proxies:
@@ -100,6 +101,7 @@ ProxiesPage _page({
   selectedTag: selectedTag,
   activeProxy: activeProxy,
   initialSort: initialSort,
+  hideUnavailable: hideUnavailable,
   connected: connected,
   progressiveBlurEnabled: false,
   browserMode: true,
@@ -116,6 +118,116 @@ ProxiesPage _page({
 );
 
 void main() {
+  testWidgets(
+    'sort options remain reachable at narrow width and doubled Russian text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        _app(_page(), locale: const Locale('ru'), scaler: TextScaler.linear(2)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Сортировка'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Скрывать недоступные'));
+      await tester.tap(find.text('Скрывать недоступные'));
+      await tester.ensureVisible(find.text('Готово'));
+      await tester.tap(find.text('Готово'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SwitchListTile), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'large source list filters live status in the background worker',
+    (tester) async {
+      final states = ProxyRuntimeVisualStore();
+      addTearDown(states.dispose);
+      states.replaceAll({
+        'First': const ProxyRuntimeVisualState(latencyUnavailable: true),
+      });
+      await tester.pumpWidget(
+        _app(
+          _page(
+            proxies: [
+              _proxy('First'),
+              for (var i = 0; i < 500; i++) _proxy('Server $i'),
+            ],
+            states: states,
+            hideUnavailable: true,
+          ),
+        ),
+      );
+      Future<void> waitFor(String name) async {
+        for (var i = 0; i < 150 && find.text(name).evaluate().isEmpty; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(find.text(name), findsOneWidget);
+      }
+
+      await waitFor('Server 0');
+      expect(find.text('First'), findsNothing);
+      states.replaceAll({
+        'First': const ProxyRuntimeVisualState(latency: 40, latencyFresh: true),
+      });
+      await tester.pump(const Duration(milliseconds: 650));
+      await waitFor('First');
+      expect(
+        tester.getTopLeft(find.text('First')).dy,
+        lessThan(tester.getTopLeft(find.text('Server 0')).dy),
+      );
+    },
+  );
+  testWidgets('sort sheet separates filtering from order and applies both', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        _page(
+          proxies: [
+            _proxy('Zulu'),
+            _proxy('Bad').copyWith(latencyUnavailable: true, latency: null),
+            _proxy('Alpha').copyWith(latency: null, latencyFresh: false),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Sort'));
+    await tester.pumpAndSettle();
+    expect(find.text('Working only'), findsNothing);
+    expect(find.byType(SwitchListTile), findsOneWidget);
+    await tester.tap(find.text('Hide unavailable'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('By name'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bad'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('Alpha')).dy,
+      lessThan(tester.getTopLeft(find.text('Zulu')).dy),
+    );
+    await tester.tap(find.byTooltip('Sort'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isTrue,
+    );
+    await tester.tap(find.text('Hide unavailable'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bad'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Alpha')).dy,
+      lessThan(tester.getTopLeft(find.text('Bad')).dy),
+    );
+  });
   for (final connected in [true, false]) {
     testWidgets(
       'current choice ping is actionable and live connected=$connected',

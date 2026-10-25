@@ -7,7 +7,12 @@ import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/theme/app_theme.dart';
 
 @Preview(name: 'Home · exit IP', size: Size(360, 180))
-Widget homeServerIpPreview() => MaterialApp(
+Widget homeServerIpPreview() => _serverPreview();
+
+@Preview(name: 'Home · group exit IP', size: Size(360, 180))
+Widget homeServerGroupIpPreview() => _serverPreview(group: true);
+
+Widget _serverPreview({bool group = false}) => MaterialApp(
   debugShowCheckedModeBanner: false,
   locale: const Locale('ru'),
   supportedLocales: AppLocalizations.supportedLocales,
@@ -16,9 +21,11 @@ Widget homeServerIpPreview() => MaterialApp(
   home: Scaffold(
     body: Center(
       child: HomeCurrentProxyCard(
-        proxy: const AppProxySummary(
+        proxy: AppProxySummary(
           tag: 'example',
-          displayName: 'Швеция',
+          displayName: group ? '⚡ ⭐ LTE Авто — Швеция' : 'Швеция',
+          isGroup: group,
+          childCount: group ? 5 : 0,
           countryCode: 'SE',
           type: 'vless',
           server: 'node.example',
@@ -40,6 +47,7 @@ Widget homeServerIpPreview() => MaterialApp(
         ),
         onTap: _noop,
         onOpenInfo: _noop,
+        onOpenGroup: group ? _noop : null,
       ),
     ),
   ),

@@ -15,7 +15,8 @@ class _BatteryOptimizationTileState extends State<BatteryOptimizationTile>
     with WidgetsBindingObserver {
   BatteryOptimizationStatus? _status;
   bool _opening = false;
-  int _queryGeneration = 0;
+  bool _querying = false;
+  bool _refreshQueued = false;
 
   @override
   void initState() {
@@ -30,10 +31,20 @@ class _BatteryOptimizationTileState extends State<BatteryOptimizationTile>
   }
 
   Future<void> _refresh() async {
-    final generation = ++_queryGeneration;
-    final status = await BatteryOptimization.getStatus();
-    if (mounted && generation == _queryGeneration) {
-      setState(() => _status = status);
+    if (_querying) {
+      _refreshQueued = true;
+      return;
+    }
+    _querying = true;
+    try {
+      do {
+        _refreshQueued = false;
+        final status = await BatteryOptimization.getStatus();
+        if (!mounted) return;
+        if (_status != status) setState(() => _status = status);
+      } while (_refreshQueued);
+    } finally {
+      _querying = false;
     }
   }
 
@@ -52,13 +63,11 @@ class _BatteryOptimizationTileState extends State<BatteryOptimizationTile>
         ),
       );
     }
-    await _refresh();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _queryGeneration++;
     super.dispose();
   }
 
@@ -80,7 +89,10 @@ class _BatteryOptimizationTileState extends State<BatteryOptimizationTile>
         color: Theme.of(context).colorScheme.primary,
       ),
       title: Text(l10n.batteryOptimizationTitle),
-      subtitle: Text('$statusText\n${l10n.batteryOptimizationDescription}'),
+      subtitle: Tooltip(
+        message: l10n.batteryOptimizationDescription,
+        child: Text(statusText),
+      ),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: _opening ? null : _open,
     );

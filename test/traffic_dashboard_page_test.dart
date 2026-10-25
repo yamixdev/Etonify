@@ -151,7 +151,10 @@ void main() {
       addTearDown(notifier.dispose);
       await tester.pumpWidget(app(notifier));
       final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
-      final title = find.descendant(of: card, matching: find.text('Ваш IP'));
+      final title = find.descendant(
+        of: card,
+        matching: find.text('Внешний IP'),
+      );
       expect(
         tester.getTopLeft(title).dy - tester.getTopLeft(card).dy,
         lessThan(22),
@@ -178,7 +181,7 @@ void main() {
     final notifier = ValueNotifier(snapshot());
     addTearDown(notifier.dispose);
     await tester.pumpWidget(app(notifier));
-    expect(find.text('Ваш IP'), findsOneWidget);
+    expect(find.text('Внешний IP'), findsOneWidget);
     expect(find.text('IP сервера'), findsOneWidget);
   });
 
@@ -195,7 +198,10 @@ void main() {
       await tester.pumpWidget(app(notifier, publicIpController: controller));
       await tester.pump();
       final card = find.byKey(const ValueKey('traffic-dashboard-public-ip'));
-      final title = find.descendant(of: card, matching: find.text('Ваш IP'));
+      final title = find.descendant(
+        of: card,
+        matching: find.text('Внешний IP'),
+      );
       final value = find.descendant(
         of: card,
         matching: find.text('203.0.113.8'),

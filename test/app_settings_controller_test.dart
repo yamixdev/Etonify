@@ -396,7 +396,15 @@ void main() {
 
     expect(change.changed, isTrue);
     expect(change.restartRuntime, isFalse);
-    expect(controller.proxySort, 'working');
+    expect(controller.proxySort, 'latency');
+    expect(controller.proxyHideUnavailable, isTrue);
+    controller.setProxySort('name');
+    expect(controller.proxyHideUnavailable, isTrue);
+    final filter = controller.setProxyHideUnavailable(false);
+    expect(filter.changed, isTrue);
+    expect(filter.restartRuntime, isFalse);
+    expect(controller.proxySort, 'name');
+    expect(controller.proxyHideUnavailable, isFalse);
   });
 
   test('secure DNS policy upgrades and keeps every resolver encrypted', () {

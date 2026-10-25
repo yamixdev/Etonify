@@ -628,6 +628,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortByWorking => 'Working only';
 
   @override
+  String get proxyHideUnavailable => 'Hide unavailable';
+
+  @override
+  String get proxyListApply => 'Done';
+
+  @override
   String get sortByName => 'By name';
 
   @override
@@ -1607,14 +1613,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficDashboardServerIp => 'Server IP';
 
   @override
-  String get trafficDashboardPublicIp => 'Your IP';
+  String get trafficDashboardPublicIp => 'External IP';
 
   @override
   String get trafficDashboardPublicIpHint =>
       'Public address of your current connection';
 
   @override
-  String get trafficDashboardPublicIpRefresh => 'Refresh your IP';
+  String get trafficDashboardPublicIpRefresh => 'Refresh external IP';
 
   @override
   String get trafficDashboardPublicIpError =>
@@ -3692,13 +3698,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingAdBlockSummary => 'Local domain filter';
 
   @override
-  String get batteryOptimizationTitle => 'Battery optimization';
+  String get batteryOptimizationTitle => 'Background activity';
 
   @override
-  String get batteryOptimizationExempt => 'Unrestricted background access';
+  String get batteryOptimizationExempt =>
+      'Unrestricted by battery optimization';
 
   @override
-  String get batteryOptimizationRestricted => 'Restricted background access';
+  String get batteryOptimizationRestricted =>
+      'Restricted by battery optimization';
 
   @override
   String get batteryOptimizationUnavailable => 'Unavailable on this device';

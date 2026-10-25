@@ -152,7 +152,11 @@ class _NavigationCard extends StatelessWidget {
                   Expanded(child: child),
                   Padding(
                     padding: const EdgeInsets.all(10),
-                    child: Column(
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         Text(
                           label,
@@ -162,26 +166,15 @@ class _NavigationCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (badge != null) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: cs.secondaryContainer,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              badge!,
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSecondaryContainer,
-                              ),
+                        if (badge != null)
+                          Tooltip(
+                            message: badge!,
+                            child: Icon(
+                              Icons.science_outlined,
+                              size: 18,
+                              color: cs.onSurfaceVariant,
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ),

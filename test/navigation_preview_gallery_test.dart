@@ -134,7 +134,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: id);
       }
-      expect(find.text('Экспериментально'), findsOneWidget);
+      expect(find.text('Экспериментально'), findsNothing);
+      expect(find.byIcon(Icons.science_outlined), findsOneWidget);
+      expect(find.byTooltip('Экспериментально'), findsOneWidget);
     });
   }
 }

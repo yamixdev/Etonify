@@ -33,6 +33,7 @@ class ProxyListPresentationInput {
     required this.proxies,
     required this.sort,
     required this.selectedTag,
+    this.hideUnavailable = false,
     this.activeProxy,
     this.canAddChain = false,
     this.searchQuery = '',
@@ -42,6 +43,7 @@ class ProxyListPresentationInput {
   });
   final List<AppProxySummary> proxies;
   final ProxySort sort;
+  final bool hideUnavailable;
   final String selectedTag;
   final AppProxySummary? activeProxy;
   final bool canAddChain;
@@ -93,6 +95,7 @@ ProxyListPresentation buildProxyListPresentation(
                 shouldShowProxyForSort(
                   proxy,
                   input.sort,
+                  hideUnavailable: input.hideUnavailable,
                   runtimeState: input.runtimeStates[proxy.tag],
                 )),
       )
@@ -295,9 +298,10 @@ int compareProxySummaries(
 bool shouldShowProxyForSort(
   AppProxySummary proxy,
   ProxySort sort, {
+  bool hideUnavailable = false,
   ProxyRuntimeVisualState? runtimeState,
 }) {
-  if (sort != ProxySort.working) {
+  if (!hideUnavailable && sort != ProxySort.working) {
     return true;
   }
   return !(runtimeState?.latencyUnavailable ?? proxy.latencyUnavailable);

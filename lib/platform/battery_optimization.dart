@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 enum BatteryOptimizationStatus { exempt, restricted, unavailable }
@@ -7,11 +9,15 @@ class BatteryOptimization {
 
   static Future<BatteryOptimizationStatus> getStatus() async {
     try {
-      return switch (await _channel.invokeMethod<String>('getStatus')) {
+      return switch (await _channel
+          .invokeMethod<String>('getStatus')
+          .timeout(const Duration(seconds: 2))) {
         'exempt' => BatteryOptimizationStatus.exempt,
         'restricted' => BatteryOptimizationStatus.restricted,
         _ => BatteryOptimizationStatus.unavailable,
       };
+    } on TimeoutException {
+      return BatteryOptimizationStatus.unavailable;
     } on PlatformException {
       return BatteryOptimizationStatus.unavailable;
     } on MissingPluginException {

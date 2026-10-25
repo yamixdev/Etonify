@@ -5669,6 +5669,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setProxySort(value.name));
   }
 
+  void _setProxyHideUnavailable(bool value) {
+    _applySettingsChange(() => _settings.setProxyHideUnavailable(value));
+  }
+
   void _setAccentColor(String hex) {
     _applySettingsChange(() => _settings.setAccentColor(hex));
   }
@@ -9928,6 +9932,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         downlinkTotalBytes: _appTrafficMonitor.downlinkTotalBytes,
         trafficListenable: _appTrafficMonitor.trafficUiSnapshotNotifier,
         initialSort: _proxySort,
+        hideUnavailable: _settings.proxyHideUnavailable,
         progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
         runtimeStates: _proxyRuntimeVisualStates,
         proxyListLoading:
@@ -9939,6 +9944,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       ),
       callbacks: ProxiesPresentationCallbacks(
         changeSort: _setProxySort,
+        changeHideUnavailable: _setProxyHideUnavailable,
         selectProxy: _selectProxy,
         runUrlTest: _runUrlTest,
         runProxyUrlTest: _runProxyUrlTest,

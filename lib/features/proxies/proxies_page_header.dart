@@ -111,6 +111,8 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.activeProxyHideIp,
     required this.l10n,
     required this.sort,
+    required this.hideUnavailable,
+    required this.onHideUnavailableChanged,
     required this.connected,
     required this.serverCount,
     required this.urlTestInFlight,
@@ -134,6 +136,8 @@ class _ProxySheetHeader extends StatelessWidget {
   final bool activeProxyHideIp;
   final AppLocalizations l10n;
   final ProxySort sort;
+  final bool hideUnavailable;
+  final ValueChanged<bool> onHideUnavailableChanged;
   final bool connected;
   final int serverCount;
   final bool urlTestInFlight;
@@ -400,6 +404,8 @@ class _ProxySheetHeader extends StatelessWidget {
                             l10n: l10n,
                             current: sort,
                             onSelected: onSortSelected,
+                            hideUnavailable: hideUnavailable,
+                            onHideUnavailableChanged: onHideUnavailableChanged,
                           ),
                           icon: const Icon(FluentIcons.arrow_sort_24_regular),
                         ),

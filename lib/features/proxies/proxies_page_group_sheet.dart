@@ -13,6 +13,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
     this.outboundForTag,
     required this.initialSort,
     this.onSortChanged,
+    this.hideUnavailable = false,
+    this.onHideUnavailableChanged,
     this.onProxyUrlTest,
     this.onVisibleProxyNeedsLocation,
   });
@@ -28,6 +30,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
   final Outbound? Function(String tag)? outboundForTag;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
+  final bool hideUnavailable;
+  final ValueChanged<bool>? onHideUnavailableChanged;
   final Future<void> Function(String tag)? onProxyUrlTest;
   final void Function(String tag, ValueGetter<bool> isVisible)?
   onVisibleProxyNeedsLocation;
@@ -46,6 +50,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
       outboundForTag: outboundForTag,
       initialSort: initialSort,
       onSortChanged: onSortChanged,
+      hideUnavailable: hideUnavailable,
+      onHideUnavailableChanged: onHideUnavailableChanged,
       onProxyUrlTest: onProxyUrlTest,
       onVisibleProxyNeedsLocation: onVisibleProxyNeedsLocation,
     );
@@ -65,6 +71,8 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
     this.outboundForTag,
     required this.initialSort,
     this.onSortChanged,
+    this.hideUnavailable = false,
+    this.onHideUnavailableChanged,
     this.onProxyUrlTest,
     this.onVisibleProxyNeedsLocation,
   });
@@ -80,6 +88,8 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   final Outbound? Function(String tag)? outboundForTag;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
+  final bool hideUnavailable;
+  final ValueChanged<bool>? onHideUnavailableChanged;
   final Future<void> Function(String tag)? onProxyUrlTest;
   final void Function(String tag, ValueGetter<bool> isVisible)?
   onVisibleProxyNeedsLocation;
@@ -91,6 +101,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
 
 class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   late ProxySort _sort;
+  late bool _hideUnavailable;
   late String _selectedTag;
   Timer? _runtimeResortTimer;
   bool _listScrollActive = false;
@@ -133,6 +144,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   void initState() {
     super.initState();
     _sort = widget.initialSort;
+    _hideUnavailable = widget.hideUnavailable || _sort == ProxySort.working;
     _selectedTag = widget.selectedTag;
     _navigation = [widget.group];
     widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
@@ -141,6 +153,10 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
   @override
   void didUpdateWidget(covariant _GroupOutboundsSheetBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.hideUnavailable != widget.hideUnavailable) {
+      _hideUnavailable = widget.hideUnavailable;
+      _sortedChildrenCache = null;
+    }
     if (oldWidget.runtimeStates != widget.runtimeStates) {
       oldWidget.runtimeStates?.revision.removeListener(_onRuntimeStatesChanged);
       widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
@@ -226,7 +242,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       });
     }
     if (!mounted ||
-        (_sort != ProxySort.latency &&
+        (!_hideUnavailable &&
+            _sort != ProxySort.latency &&
             _sort != ProxySort.working &&
             _sort != ProxySort.country)) {
       return;
@@ -243,7 +260,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     _runtimeResortTimer = Timer(_runtimeResortInterval(_children.length), () {
       _runtimeResortTimer = null;
       if (!mounted ||
-          (_sort != ProxySort.latency &&
+          (!_hideUnavailable &&
+              _sort != ProxySort.latency &&
               _sort != ProxySort.working &&
               _sort != ProxySort.country)) {
         return;
@@ -289,6 +307,16 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
     widget.onSortChanged?.call(value);
   }
 
+  void _setHideUnavailable(bool value) {
+    if (!mounted || _hideUnavailable == value) return;
+    setState(() {
+      _hideUnavailable = value;
+      _sortedChildrenCache = null;
+      _sortedChildrenSort = null;
+    });
+    widget.onHideUnavailableChanged?.call(value);
+  }
+
   List<AppProxySummary> _sortedChildren() {
     final cached = _sortedChildrenCache;
     if (cached != null && _sortedChildrenSort == _sort) {
@@ -299,6 +327,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
           (proxy) => shouldShowProxyForSort(
             proxy,
             _sort,
+            hideUnavailable: _hideUnavailable,
             runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
           ),
         )
@@ -526,6 +555,8 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                     title: groupBaseTitle,
                     l10n: l10n,
                     sort: _sort,
+                    hideUnavailable: _hideUnavailable,
+                    onHideUnavailableChanged: _setHideUnavailable,
                     onSortSelected: _setSort,
                     onClose: _back,
                   ),
@@ -590,6 +621,8 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
     required this.title,
     required this.l10n,
     required this.sort,
+    required this.hideUnavailable,
+    required this.onHideUnavailableChanged,
     required this.onSortSelected,
     required this.onClose,
   });
@@ -597,6 +630,8 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
   final String title;
   final AppLocalizations l10n;
   final ProxySort sort;
+  final bool hideUnavailable;
+  final ValueChanged<bool> onHideUnavailableChanged;
   final ValueChanged<ProxySort> onSortSelected;
   final VoidCallback onClose;
 
@@ -668,6 +703,8 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
                   l10n: l10n,
                   current: sort,
                   onSelected: onSortSelected,
+                  hideUnavailable: hideUnavailable,
+                  onHideUnavailableChanged: onHideUnavailableChanged,
                 ),
                 icon: const Icon(FluentIcons.arrow_sort_24_regular),
               ),

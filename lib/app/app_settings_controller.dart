@@ -141,6 +141,7 @@ class AppSettingsController {
   BottomNavigationStyle bottomNavigationStyle = BottomNavigationStyle.floating;
   bool sendHwidToProviders = true;
   String proxySort = 'source';
+  bool proxyHideUnavailable = false;
   bool progressiveBlurEnabled = false;
   bool vpnInboundEnabled = true;
   int vpnMtu = 1500;
@@ -223,6 +224,7 @@ class AppSettingsController {
       activeProfileId: activeProfileId,
       selectedProxyTag: selectedProxyTag,
       proxySort: proxySort,
+      proxyHideUnavailable: proxyHideUnavailable,
       localeCode: localeCode,
       themePreference: themePreference,
       accentColorHex: accentColorHex,
@@ -322,7 +324,11 @@ class AppSettingsController {
     proxySort =
         const {'source', 'latency', 'name', 'country'}.contains(state.proxySort)
         ? state.proxySort
+        : state.proxySort == 'working'
+        ? 'latency'
         : 'source';
+    proxyHideUnavailable =
+        state.proxyHideUnavailable || state.proxySort == 'working';
     progressiveBlurEnabled = progressiveBlurEnabledOverride;
     memoryLimitEnabled = state.memoryLimitEnabled;
     memoryLimitWarningDismissed = state.memoryLimitWarningDismissed;
@@ -486,6 +492,7 @@ class AppSettingsController {
   }
 
   AppSettingsChange setProxySort(String value) {
+    final legacyWorking = value == 'working';
     final normalized =
         const {
           'source',
@@ -494,12 +501,19 @@ class AppSettingsController {
           'name',
           'country',
         }.contains(value)
-        ? value
+        ? (legacyWorking ? 'latency' : value)
         : 'source';
-    if (proxySort == normalized) {
+    if (proxySort == normalized && (!legacyWorking || proxyHideUnavailable)) {
       return const AppSettingsChange.none();
     }
     proxySort = normalized;
+    if (legacyWorking) proxyHideUnavailable = true;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setProxyHideUnavailable(bool value) {
+    if (proxyHideUnavailable == value) return const AppSettingsChange.none();
+    proxyHideUnavailable = value;
     return const AppSettingsChange(changed: true);
   }
 

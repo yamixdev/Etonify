@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +54,16 @@ void main() {
     tester,
   ) async {
     await mount(tester);
-    expect(find.text('Battery optimization'), findsOneWidget);
+    expect(find.text('Background activity'), findsOneWidget);
+    final subtitle = tester
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(ListTile),
+            matching: find.byType(Text),
+          ),
+        )
+        .last;
+    expect(subtitle.data, isNot(contains('\n')));
     expect(find.textContaining('Restricted'), findsOneWidget);
     await tester.tap(find.byType(ListTile));
     await tester.pumpAndSettle();
@@ -71,7 +82,7 @@ void main() {
   ) async {
     fail = true;
     await mount(tester, locale: const Locale('ru'));
-    expect(find.text('Оптимизация батареи'), findsOneWidget);
+    expect(find.text('Работа в фоне'), findsOneWidget);
     expect(find.textContaining('Недоступно'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -85,6 +96,45 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Could not open'), findsOneWidget);
       expect(find.textContaining('Unrestricted'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'resume checks are coalesced and opening does not query before return',
+    (tester) async {
+      var queries = 0;
+      Completer<String>? pending;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'getStatus') {
+              queries++;
+              return pending == null ? 'restricted' : pending.future;
+            }
+            return true;
+          });
+      await mount(tester);
+      expect(queries, 1);
+      await tester.tap(find.byType(ListTile));
+      await tester.pumpAndSettle();
+      expect(queries, 1);
+      pending = Completer<String>();
+      for (var i = 0; i < 3; i++) {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+      }
+      expect(queries, 2);
+      final result = pending;
+      pending = null;
+      result.complete('exempt');
+      await tester.pumpAndSettle();
+      expect(queries, 3);
+      expect(find.textContaining('Restricted'), findsOneWidget);
+      await tester.pump(const Duration(minutes: 2));
+      expect(queries, 3);
+      expect(tester.takeException(), isNull);
     },
   );
 }

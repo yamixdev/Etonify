@@ -70,7 +70,7 @@ class HomeCurrentProxyCard extends StatelessWidget {
         : l10n.notAvailableShort;
     final subtitle = Text(
       ipText,
-      textAlign: TextAlign.center,
+      textAlign: TextAlign.start,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.bodySmall?.copyWith(
@@ -89,8 +89,9 @@ class HomeCurrentProxyCard extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: theme.colorScheme.onSurfaceVariant,
                 minimumSize: const Size(48, 32),
+                alignment: AlignmentDirectional.centerStart,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                padding: EdgeInsets.zero,
               ),
               child: subtitle,
             ),
@@ -119,38 +120,28 @@ class HomeCurrentProxyCard extends StatelessWidget {
                 Flexible(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        textAlign: TextAlign.center,
+                        textAlign: TextAlign.start,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (openGroup == null)
-                        ipAction
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(child: ipAction),
-                            IconButton(
-                              key: ValueKey('proxy-open-group-${proxy.tag}'),
-                              tooltip: l10n.proxyOpenGroup(title),
-                              onPressed: openGroup,
-                              icon: const Icon(
-                                Icons.chevron_right_rounded,
-                                size: 18,
-                              ),
-                            ),
-                          ],
-                        ),
+                      ipAction,
                     ],
                   ),
                 ),
+                if (openGroup != null)
+                  IconButton(
+                    key: ValueKey('proxy-open-group-${proxy.tag}'),
+                    tooltip: l10n.proxyOpenGroup(title),
+                    onPressed: openGroup,
+                    icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                  ),
               ],
             ),
           ),

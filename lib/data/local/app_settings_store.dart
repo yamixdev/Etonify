@@ -162,6 +162,7 @@ class AppSettingsState {
     required this.activeProfileId,
     required this.selectedProxyTag,
     this.proxySort = 'source',
+    this.proxyHideUnavailable = false,
     required this.localeCode,
     required this.themePreference,
     required this.accentColorHex,
@@ -244,6 +245,7 @@ class AppSettingsState {
   final String activeProfileId;
   final String selectedProxyTag;
   final String proxySort;
+  final bool proxyHideUnavailable;
   final String localeCode;
   final AppThemePreference themePreference;
   final String accentColorHex; // e.g. "2D5BFF" or "default"
@@ -326,6 +328,7 @@ class AppSettingsState {
     String? activeProfileId,
     String? selectedProxyTag,
     String? proxySort,
+    bool? proxyHideUnavailable,
     String? localeCode,
     AppThemePreference? themePreference,
     String? accentColorHex,
@@ -412,6 +415,7 @@ class AppSettingsState {
       activeProfileId: activeProfileId ?? this.activeProfileId,
       selectedProxyTag: selectedProxyTag ?? this.selectedProxyTag,
       proxySort: proxySort ?? this.proxySort,
+      proxyHideUnavailable: proxyHideUnavailable ?? this.proxyHideUnavailable,
       localeCode: localeCode ?? this.localeCode,
       themePreference: themePreference ?? this.themePreference,
       accentColorHex: accentColorHex ?? this.accentColorHex,
@@ -559,6 +563,7 @@ abstract class AppSettingsStore {
   static const _activeProfileIdKey = 'active_profile_id';
   static const _selectedProxyTagKey = 'selected_proxy_tag';
   static const _proxySortKey = 'proxy_sort';
+  static const _proxyHideUnavailableKey = 'proxy_hide_unavailable';
   static const _localeCodeKey = 'locale_code';
   static const _themePreferenceKey = 'theme_preference';
   static const _accentColorHexKey = 'accent_color_hex';
@@ -666,6 +671,7 @@ abstract class AppSettingsStore {
     _homeNavigationModeKey,
     _bottomNavigationStyleKey,
     _proxySortKey,
+    _proxyHideUnavailableKey,
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
     _updateInstallModeKey,
@@ -732,6 +738,11 @@ abstract class AppSettingsStore {
       for (final entry in imported.entries)
         if (safeExportKeys.contains(entry.key)) entry.key: entry.value,
     };
+    if (sanitized.containsKey(_proxySortKey) &&
+        !sanitized.containsKey(_proxyHideUnavailableKey)) {
+      sanitized[_proxyHideUnavailableKey] =
+          sanitized[_proxySortKey]?.toString() == 'working' ? '1' : '0';
+    }
     final merged = {...currentMap, ...sanitized};
     final mode = merged[_splitRoutingModeKey]?.toString();
     final bank = mode == 'proxy_selected'
@@ -856,12 +867,15 @@ abstract class AppSettingsStore {
       selectedProxyTag: map[_selectedProxyTagKey]?.toString() ?? '',
       proxySort: switch (map[_proxySortKey]?.toString()) {
         'latency' => 'latency',
-        'working' => 'working',
+        'working' => 'latency',
         'name' => 'name',
         'country' => 'country',
         _ => 'source',
       },
       localeCode: map[_localeCodeKey]?.toString() ?? 'system',
+      proxyHideUnavailable: map[_proxyHideUnavailableKey] == null
+          ? map[_proxySortKey]?.toString() == 'working'
+          : map[_proxyHideUnavailableKey]?.toString() == '1',
       themePreference: switch (map[_themePreferenceKey]) {
         'system' => AppThemePreference.system,
         'dark' => AppThemePreference.dark,
@@ -1117,6 +1131,7 @@ abstract class AppSettingsStore {
       _activeProfileIdKey: state.activeProfileId,
       _selectedProxyTagKey: state.selectedProxyTag,
       _proxySortKey: state.proxySort,
+      _proxyHideUnavailableKey: state.proxyHideUnavailable ? '1' : '0',
       _localeCodeKey: state.localeCode,
       _themePreferenceKey: state.themePreference.name,
       _accentColorHexKey: state.accentColorHex,

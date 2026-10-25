@@ -28,6 +28,7 @@ class ProxiesPresentationData {
     required this.downlinkTotalBytes,
     required this.trafficListenable,
     required this.initialSort,
+    this.hideUnavailable = false,
     required this.progressiveBlurEnabled,
     required this.runtimeStates,
     this.proxyListLoading = false,
@@ -52,6 +53,7 @@ class ProxiesPresentationData {
   final int downlinkTotalBytes;
   final ValueListenable<TrafficUiSnapshot> trafficListenable;
   final ProxySort initialSort;
+  final bool hideUnavailable;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore runtimeStates;
   final bool proxyListLoading;
@@ -69,6 +71,7 @@ class ProxiesPresentationData {
 class ProxiesPresentationCallbacks {
   const ProxiesPresentationCallbacks({
     required this.changeSort,
+    this.changeHideUnavailable,
     required this.selectProxy,
     required this.runUrlTest,
     this.runProxyUrlTest,
@@ -86,6 +89,7 @@ class ProxiesPresentationCallbacks {
   });
 
   final ValueChanged<ProxySort> changeSort;
+  final ValueChanged<bool>? changeHideUnavailable;
   final ValueChanged<String> selectProxy;
   final Future<void> Function() runUrlTest;
   final Future<void> Function(String tag)? runProxyUrlTest;
@@ -141,6 +145,8 @@ class ProxiesPresentationBuilder {
       trafficBytes: data.trafficBytes,
       trafficListenable: data.trafficListenable,
       initialSort: data.initialSort,
+      hideUnavailable: data.hideUnavailable,
+      onHideUnavailableChanged: callbacks.changeHideUnavailable,
       onSortChanged: callbacks.changeSort,
       progressiveBlurEnabled: data.progressiveBlurEnabled,
       onSelected: callbacks.selectProxy,

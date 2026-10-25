@@ -149,48 +149,86 @@ Future<void> _showProxySortPicker(
   required AppLocalizations l10n,
   required ProxySort current,
   required ValueChanged<ProxySort> onSelected,
+  required bool hideUnavailable,
+  required ValueChanged<bool> onHideUnavailableChanged,
 }) async {
-  final result = await showModalBottomSheet<ProxySort>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      final theme = Theme.of(context);
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Text(l10n.sort, style: theme.textTheme.titleLarge),
-              ),
-              RadioGroup<ProxySort>(
-                groupValue: current,
-                onChanged: (value) => Navigator.of(context).pop(value),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final sort in ProxySort.values)
-                      RadioListTile<ProxySort>(
-                        value: sort,
-                        secondary: Icon(_proxySortIcon(sort)),
-                        title: Text(_proxySortLabel(l10n, sort)),
-                        contentPadding: EdgeInsets.zero,
+  var pendingSort = current == ProxySort.working ? ProxySort.latency : current;
+  var pendingFilter = hideUnavailable || current == ProxySort.working;
+  final result =
+      await showModalBottomSheet<({ProxySort sort, bool hideUnavailable})>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (context) {
+          final theme = Theme.of(context);
+          return SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: StatefulBuilder(
+                  builder: (context, update) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                        child: Text(
+                          l10n.sort,
+                          style: theme.textTheme.titleLarge,
+                        ),
                       ),
-                  ],
+                      RadioGroup<ProxySort>(
+                        groupValue: pendingSort,
+                        onChanged: (value) {
+                          if (value != null) update(() => pendingSort = value);
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final sort in ProxySort.values.where(
+                              (value) => value != ProxySort.working,
+                            ))
+                              RadioListTile<ProxySort>(
+                                value: sort,
+                                secondary: Icon(_proxySortIcon(sort)),
+                                title: Text(_proxySortLabel(l10n, sort)),
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Divider(),
+                      SwitchListTile(
+                        key: const ValueKey('proxy-hide-unavailable'),
+                        title: Text(l10n.proxyHideUnavailable),
+                        value: pendingFilter,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (value) =>
+                            update(() => pendingFilter = value),
+                      ),
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop((
+                            sort: pendingSort,
+                            hideUnavailable: pendingFilter,
+                          )),
+                          child: Text(l10n.proxyListApply),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       );
-    },
-  );
-  if (result != null && result != current) {
-    onSelected(result);
+  if (result == null || !context.mounted) return;
+  if (result.sort != current) onSelected(result.sort);
+  if (result.hideUnavailable != hideUnavailable) {
+    onHideUnavailableChanged(result.hideUnavailable);
   }
 }
 
@@ -413,6 +451,8 @@ class ProxiesPage extends StatefulWidget {
     this.trafficListenable,
     this.initialSort = ProxySort.source,
     this.onSortChanged,
+    this.hideUnavailable = false,
+    this.onHideUnavailableChanged,
     required this.progressiveBlurEnabled,
     required this.onSelected,
     required this.onUrlTest,
@@ -464,6 +504,8 @@ class ProxiesPage extends StatefulWidget {
   final ValueListenable<TrafficUiSnapshot>? trafficListenable;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
+  final bool hideUnavailable;
+  final ValueChanged<bool>? onHideUnavailableChanged;
   final bool progressiveBlurEnabled;
   final ValueChanged<String> onSelected;
   final Future<void> Function() onUrlTest;
@@ -527,6 +569,7 @@ class _GroupPanelSnapshot {
 
 class _ProxiesPageState extends State<ProxiesPage> {
   late ProxySort _sort;
+  late bool _hideUnavailable;
   List<AppProxySummary> _visibleItems = const [];
   Timer? _runtimeResortTimer;
   bool _listScrollActive = false;
@@ -593,6 +636,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
   void initState() {
     super.initState();
     _sort = widget.initialSort;
+    _hideUnavailable = widget.hideUnavailable || _sort == ProxySort.working;
     widget.runtimeStates?.revision.addListener(_onRuntimeStatesChanged);
     _bindSheetMetricsListenable(widget.sheetMetricsListenable);
     if (widget.browserMode) _applyBrowserRequest();
@@ -669,6 +713,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _sort = widget.initialSort;
       _runtimeResortPending = false;
       _proxyDataRefreshPending = false;
+      _rebuildVisibleItems();
+    }
+    if (oldWidget.hideUnavailable != widget.hideUnavailable) {
+      _hideUnavailable = widget.hideUnavailable;
       _rebuildVisibleItems();
     }
     if (!_effectiveSheetAtMaxExtent &&
@@ -800,6 +848,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (!mounted ||
         (widget.embedded && !_embeddedListActivated) ||
         (!_proxyDataRefreshPending &&
+            !_hideUnavailable &&
             _sort != ProxySort.latency &&
             _sort != ProxySort.working &&
             _sort != ProxySort.country)) {
@@ -820,6 +869,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       if (!mounted ||
           (widget.embedded && !_embeddedListActivated) ||
           (!_proxyDataRefreshPending &&
+              !_hideUnavailable &&
               _sort != ProxySort.latency &&
               _sort != ProxySort.working &&
               _sort != ProxySort.country)) {
@@ -848,6 +898,15 @@ class _ProxiesPageState extends State<ProxiesPage> {
       _rebuildVisibleItems();
     });
     widget.onSortChanged?.call(value);
+  }
+
+  void _setHideUnavailable(bool value) {
+    if (!mounted || _hideUnavailable == value) return;
+    setState(() {
+      _hideUnavailable = value;
+      _rebuildVisibleItems();
+    });
+    widget.onHideUnavailableChanged?.call(value);
   }
 
   bool _rebuildVisibleItems() {
@@ -888,6 +947,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
         ProxyListPresentationInput(
           proxies: proxies,
           sort: _sort,
+          hideUnavailable: _hideUnavailable,
           selectedTag: _presentationSelectedTag,
           activeProxy: widget.activeProxy,
           canAddChain: _canAddChain,
@@ -916,6 +976,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
         final preparationTimer = Stopwatch()..start();
         final proxies = _presentationProxies;
         final sort = _sort;
+        final hideUnavailable = _hideUnavailable;
         final selectedTag = _presentationSelectedTag;
         final activeProxy = widget.activeProxy;
         final canAddChain = _canAddChain;
@@ -933,7 +994,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
           for (var i = start; i < min(start + 128, proxies.length); i++) {
             final proxy = proxies[i];
             if (chainPredicate?.call(proxy.tag) ?? false) chains.add(proxy.tag);
-            if (sort != ProxySort.source) {
+            if (sort != ProxySort.source || hideUnavailable) {
               final state = runtimeStates?.valueFor(proxy.tag);
               if (state != null) states[proxy.tag] = state;
             }
@@ -944,6 +1005,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
           ProxyListPresentationInput(
             proxies: proxies,
             sort: sort,
+            hideUnavailable: hideUnavailable,
             selectedTag: selectedTag,
             activeProxy: activeProxy,
             canAddChain: canAddChain,
@@ -1040,15 +1102,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     final cachedChildren = widget.groupChildrenByTag[group.tag];
     if (cachedChildren != null) {
-      final children = cachedChildren
-          .where(
-            (proxy) => shouldShowProxyForSort(
-              proxy,
-              _sort,
-              runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
-            ),
-          )
-          .toList(growable: false);
+      final children = cachedChildren.toList(growable: false);
       _sortItems(children, keepLowestFirst: false);
       return children;
     }
@@ -1059,13 +1113,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
     final children = group.childTags
         .map((tag) => childByTag[tag])
         .whereType<AppProxySummary>()
-        .where(
-          (proxy) => shouldShowProxyForSort(
-            proxy,
-            _sort,
-            runtimeState: widget.runtimeStates?.valueFor(proxy.tag),
-          ),
-        )
         .toList(growable: false);
     _sortItems(children, keepLowestFirst: false);
     return children;
@@ -1118,6 +1165,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
                       : null,
                   outboundForTag: widget.outboundForTag,
                   initialSort: _sort,
+                  hideUnavailable: _hideUnavailable,
+                  onHideUnavailableChanged: _setHideUnavailable,
                   onSortChanged: (value) {
                     if (_sort != value && mounted) {
                       setState(() {
@@ -1236,6 +1285,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
               l10n: l10n,
               current: _sort,
               onSelected: _setSort,
+              hideUnavailable: _hideUnavailable,
+              onHideUnavailableChanged: _setHideUnavailable,
             ),
             icon: const Icon(FluentIcons.arrow_sort_24_regular),
           ),
@@ -1353,6 +1404,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     activeProxyHideIp: widget.activeProxyHideIp,
                     l10n: l10n,
                     sort: _sort,
+                    hideUnavailable: _hideUnavailable,
+                    onHideUnavailableChanged: _setHideUnavailable,
                     connected: widget.connected,
                     serverCount: widget.serverCount,
                     urlTestInFlight: widget.urlTestInFlight,
