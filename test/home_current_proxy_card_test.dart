@@ -7,6 +7,7 @@ import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
@@ -65,6 +66,11 @@ HomePage _home({
       sourceLabel: '',
     ),
     activeProxy: proxy,
+    serverConnectionInfo: ServerConnectionInfo(
+      connected: true,
+      outboundTag: proxy.tag,
+      exitIp: '203.0.113.7',
+    ),
     runtimeStates: states,
     hideServerIp: false,
     hapticEnabled: false,
@@ -82,6 +88,7 @@ HomePage _home({
     openChangelog: () {},
     openProxies: open ?? () {},
     openProxyGroup: group,
+    openServerInfo: () {},
   ),
   bottomInset: 0,
 );
@@ -141,7 +148,7 @@ void main() {
     );
     final flag = tester.getRect(find.byType(CountryFlagBadge).last);
     final title = tester.getRect(find.text('Sweden server'));
-    final subtitle = tester.getRect(find.text('VLESS').last);
+    final subtitle = tester.getRect(find.text('203.0.113.7').last);
     final content = flag.expandToInclude(title).expandToInclude(subtitle);
     expect(card.width, lessThanOrEqualTo(300));
     expect(card.center.dx, closeTo(196.5, 1));
@@ -287,7 +294,8 @@ void main() {
     });
     await tester.pumpAndSettle();
     expect(find.text('New current server'), findsOneWidget);
-    expect(find.text('Trojan'), findsOneWidget);
+    expect(find.text('Trojan'), findsNothing);
+    expect(find.text('203.0.113.7'), findsOneWidget);
     expect(find.text('Sweden server'), findsNothing);
     expect(
       find.byKey(const ValueKey('proxy-latency-action-auto')),
@@ -338,28 +346,29 @@ void main() {
     });
   }
 
-  testWidgets('lowest card preserves selected name and empty group metadata', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _app(
-        Scaffold(
-          body: HomeCurrentProxyCard(
-            proxy: _proxy.copyWith(
-              tag: 'lowest',
-              displayName: 'lowest · Sweden server',
-              protocolLabel: '',
-              isGroup: true,
-              childCount: 5,
+  testWidgets(
+    'lowest card preserves selected name without inventing an exit IP',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: HomeCurrentProxyCard(
+              proxy: _proxy.copyWith(
+                tag: 'lowest',
+                displayName: 'lowest · Sweden server',
+                protocolLabel: '',
+                isGroup: true,
+                childCount: 5,
+              ),
+              onTap: () {},
             ),
-            onTap: () {},
           ),
         ),
-      ),
-    );
-    expect(find.text('Lowest · Sweden server'), findsOneWidget);
-    expect(find.text('Automatic selection · 5 proxies'), findsOneWidget);
-  });
+      );
+      expect(find.text('Lowest · Sweden server'), findsOneWidget);
+      expect(find.text('Disconnected'), findsOneWidget);
+    },
+  );
 
   testWidgets('AMOLED connected moon retains green and toggle action', (
     tester,

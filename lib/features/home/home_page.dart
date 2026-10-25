@@ -303,6 +303,10 @@ class HomePage extends StatelessWidget {
     if (actions.openProxies != null) {
       Widget buildCard(ProxyRuntimeVisualState? state) => HomeCurrentProxyCard(
         proxy: state?.presentation ?? proxy,
+        connectionInfo: this.state.serverConnectionInfo,
+        connectionListenable: this.state.serverConnectionListenable,
+        hideIp: hideServerIp,
+        onOpenInfo: actions.openServerInfo ?? onOpenTrafficDashboard,
         onTap: actions.openProxies!,
         onOpenGroup: proxy.isGroup && actions.openProxyGroup != null
             ? () => actions.openProxyGroup!(proxy.tag)

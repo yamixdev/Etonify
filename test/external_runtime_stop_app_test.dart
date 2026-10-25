@@ -14,6 +14,7 @@ import 'package:meow_client/app/providers/vpn_lifecycle_commands_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/features/home/home_page.dart';
+import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
@@ -45,6 +46,20 @@ class _Runtime extends Fake implements SingboxRuntime {
   var runtimeGeneration = 1;
   var prepareCalls = 0;
   Completer<bool>? prepareGate;
+  Map<String, dynamic> externalIpInfo = {};
+  NetworkInterfaceSnapshot network = const NetworkInterfaceSnapshot(
+    available: true,
+    interfaceName: 'wlan0',
+    interfaceIndex: 1,
+    generation: 1,
+    reason: 'test',
+    updatedAtMillis: 1,
+  );
+
+  @override
+  Future<Map<String, dynamic>> lookupOutboundExternalInfo({
+    required String outboundTag,
+  }) async => externalIpInfo;
 
   Map<String, dynamic> snapshot() => {
     'running': running,
@@ -89,15 +104,7 @@ class _Runtime extends Fake implements SingboxRuntime {
   }
 
   @override
-  Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async =>
-      const NetworkInterfaceSnapshot(
-        available: true,
-        interfaceName: 'wlan0',
-        interfaceIndex: 1,
-        generation: 1,
-        reason: 'test',
-        updatedAtMillis: 1,
-      );
+  Future<NetworkInterfaceSnapshot> getNetworkInterfaceState() async => network;
   @override
   Future<void> start({
     required String config,
@@ -195,6 +202,142 @@ void main() {
           .setMockMethodCallHandler(MethodChannel(name), null);
     }
   });
+
+  for (final queryOnly in [false, true]) {
+    testWidgets(
+      queryOnly
+          ? 'open server details clear the exit IP on query-only network handover'
+          : 'open server details clear the confirmed exit IP immediately on network loss',
+      (tester) async {
+        runtime.externalIpInfo = {'ip': '203.0.113.7', 'countryCode': 'SE'};
+        final state = AppSettingsController()
+            .toState(
+              onboardingCompleted: true,
+              acceptedLegalVersion: '0.2.1',
+              acceptedLegalAtMillis: 1,
+              activeProfileId: _subscription.id,
+              selectedProxyTag: 'test',
+            )
+            .copyWith(
+              localeCode: 'en',
+              autoConnectOnLaunch: false,
+              autoCheckServers: false,
+              autoCheckNoticeAcknowledged: true,
+              hwidDefaultNoticeShown: true,
+            );
+        final container = ProviderContainer(
+          overrides: [singboxRuntimeProvider.overrideWithValue(runtime)],
+        );
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(seconds: 16));
+          container.dispose();
+        });
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MeowClient(store: MemoryAppSettingsStore(state)),
+          ),
+        );
+        await tester.pumpAndSettle();
+        container
+            .read(subscriptionCatalogProvider.notifier)
+            .replace(
+              subscriptions: [_subscription],
+              activeProfileId: _subscription.id,
+              selectedProxyTag: 'test',
+            );
+        await tester.pumpAndSettle();
+        runtime.stateRevision++;
+        runtime.controller.add({'type': 'state', ...runtime.snapshot()});
+        await tester.pump();
+        runtime.controller.add({
+          'type': 'network',
+          'reason': 'default_interface',
+          'networkGeneration': 1,
+          'interfaceName': 'wlan0',
+          'interfaceIndex': 1,
+        });
+        await tester.pump();
+        runtime.controller.add({
+          'type': 'groups',
+          'runtimeGeneration': 1,
+          'networkGeneration': 1,
+          'groups': [
+            {
+              'tag': 'select',
+              'selected': 'test',
+              'items': [
+                {'tag': 'test', 'type': 'socks'},
+              ],
+            },
+          ],
+        });
+        await tester.pump();
+        tester
+            .widget<HomePage>(find.byType(HomePage))
+            .actions
+            .refreshActiveProxyIp!();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<HomePage>(find.byType(HomePage))
+              .state
+              .serverConnectionInfo
+              .exitIp,
+          '203.0.113.7',
+          reason: AppLogStore.entries.value
+              .map((e) => '${e.title}: ${e.message}')
+              .join('\n'),
+        );
+        tester
+            .widget<HomePage>(find.byType(HomePage))
+            .actions
+            .openServerInfo!();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        final page = tester.widget<TrafficDashboardPage>(
+          find.byType(TrafficDashboardPage),
+        );
+        final source = page.serverConnectionListenable!;
+        final oldKey = source.value.key;
+        expect(source.value.exitIp, '203.0.113.7');
+        runtime.network = NetworkInterfaceSnapshot(
+          available: queryOnly,
+          interfaceName: queryOnly ? 'rmnet_data0' : '',
+          interfaceIndex: queryOnly ? 2 : 0,
+          generation: 2,
+          reason: 'no_default_interface',
+          updatedAtMillis: 2,
+        );
+        if (queryOnly) {
+          tester
+              .widget<HomePage>(find.byType(HomePage))
+              .actions
+              .refreshActiveProxyIp!();
+        } else {
+          runtime.controller.add({
+            'type': 'network',
+            'reason': 'no_default_interface',
+            'networkGeneration': 2,
+            'interfaceName': '',
+            'interfaceIndex': 0,
+          });
+        }
+        await tester.pump();
+        await tester.pump();
+        if (queryOnly) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pumpAndSettle();
+        }
+        expect(source.value.exitIp, isEmpty);
+        expect(source.value.key, isNot(oldKey));
+        expect(source.value.connected, isTrue);
+      },
+    );
+  }
 
   for (final replayStoppedState in [false, true]) {
     testWidgets(

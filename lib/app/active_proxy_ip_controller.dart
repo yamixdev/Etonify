@@ -112,6 +112,9 @@ class ActiveProxyIpController {
   int _token = 0;
   bool _disposed = false;
   ActiveProxyIpSnapshot snapshot = const ActiveProxyIpSnapshot.idle();
+  String _snapshotTargetKey = '';
+  String get snapshotTargetKey => _snapshotTargetKey;
+  String _scheduledTargetKey = '';
 
   void dispose() {
     _disposed = true;
@@ -144,6 +147,7 @@ class ActiveProxyIpController {
     _attempts.clear();
     _failureCounts.clear();
     _suppressedUntil.clear();
+    _scheduledTargetKey = '';
     _setSnapshot(const ActiveProxyIpSnapshot.idle(), onSnapshot);
   }
 
@@ -178,6 +182,7 @@ class ActiveProxyIpController {
     if (target == null) {
       return;
     }
+    _scheduledTargetKey = target.key;
 
     _retryTimer?.cancel();
     _retryTimer = null;
@@ -651,6 +656,7 @@ class ActiveProxyIpController {
       return;
     }
     snapshot = next;
+    _snapshotTargetKey = _scheduledTargetKey;
     onSnapshot(next);
   }
 

@@ -1518,6 +1518,56 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficDashboardTitle => 'Traffic dashboard';
 
   @override
+  String get serverNetworkTitle => 'Server and network';
+
+  @override
+  String get serverNetworkExitIp => 'VPN exit IP';
+
+  @override
+  String get serverNetworkEndpoint => 'Server address';
+
+  @override
+  String get serverNetworkPort => 'Port';
+
+  @override
+  String get serverNetworkProtocol => 'Protocol';
+
+  @override
+  String get serverNetworkTransport => 'Transport';
+
+  @override
+  String get serverNetworkSecurity => 'Security';
+
+  @override
+  String get serverNetworkOrganization => 'ISP / network organization';
+
+  @override
+  String get serverNetworkCountry => 'IP location';
+
+  @override
+  String get serverNetworkCity => 'City';
+
+  @override
+  String get serverNetworkTimezone => 'Time zone';
+
+  @override
+  String get serverNetworkPrefix => 'Network prefix';
+
+  @override
+  String get serverNetworkRefresh => 'Refresh network information';
+
+  @override
+  String get serverNetworkError =>
+      'Network details are unavailable. The VPN connection is not affected.';
+
+  @override
+  String get serverNetworkSource =>
+      'IP data: ip.guide. The exit IP is sent to this service when you open these details. Location is approximate.';
+
+  @override
+  String get serverNetworkPending => 'Waiting for a confirmed VPN exit IP';
+
+  @override
   String get trafficDashboardSubtitle =>
       'Live speed, session totals, and connection info';
 

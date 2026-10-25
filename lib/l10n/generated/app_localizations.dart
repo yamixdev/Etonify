@@ -2777,6 +2777,102 @@ abstract class AppLocalizations {
   /// **'Traffic dashboard'**
   String get trafficDashboardTitle;
 
+  /// No description provided for @serverNetworkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server and network'**
+  String get serverNetworkTitle;
+
+  /// No description provided for @serverNetworkExitIp.
+  ///
+  /// In en, this message translates to:
+  /// **'VPN exit IP'**
+  String get serverNetworkExitIp;
+
+  /// No description provided for @serverNetworkEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address'**
+  String get serverNetworkEndpoint;
+
+  /// No description provided for @serverNetworkPort.
+  ///
+  /// In en, this message translates to:
+  /// **'Port'**
+  String get serverNetworkPort;
+
+  /// No description provided for @serverNetworkProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol'**
+  String get serverNetworkProtocol;
+
+  /// No description provided for @serverNetworkTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport'**
+  String get serverNetworkTransport;
+
+  /// No description provided for @serverNetworkSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get serverNetworkSecurity;
+
+  /// No description provided for @serverNetworkOrganization.
+  ///
+  /// In en, this message translates to:
+  /// **'ISP / network organization'**
+  String get serverNetworkOrganization;
+
+  /// No description provided for @serverNetworkCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'IP location'**
+  String get serverNetworkCountry;
+
+  /// No description provided for @serverNetworkCity.
+  ///
+  /// In en, this message translates to:
+  /// **'City'**
+  String get serverNetworkCity;
+
+  /// No description provided for @serverNetworkTimezone.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone'**
+  String get serverNetworkTimezone;
+
+  /// No description provided for @serverNetworkPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Network prefix'**
+  String get serverNetworkPrefix;
+
+  /// No description provided for @serverNetworkRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh network information'**
+  String get serverNetworkRefresh;
+
+  /// No description provided for @serverNetworkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Network details are unavailable. The VPN connection is not affected.'**
+  String get serverNetworkError;
+
+  /// No description provided for @serverNetworkSource.
+  ///
+  /// In en, this message translates to:
+  /// **'IP data: ip.guide. The exit IP is sent to this service when you open these details. Location is approximate.'**
+  String get serverNetworkSource;
+
+  /// No description provided for @serverNetworkPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for a confirmed VPN exit IP'**
+  String get serverNetworkPending;
+
   /// No description provided for @trafficDashboardSubtitle.
   ///
   /// In en, this message translates to:

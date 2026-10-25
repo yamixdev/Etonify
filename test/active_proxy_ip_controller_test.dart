@@ -5,6 +5,46 @@ import 'package:meow_client/app/active_proxy_ip_controller.dart';
 
 void main() {
   test(
+    'published IP identity remains bound to its network until a new snapshot',
+    () {
+      final controller = ActiveProxyIpController();
+      addTearDown(controller.dispose);
+      var target = const ActiveProxyIpTarget(
+        subscriptionId: 'sub',
+        outboundTag: 'node',
+        endpointHost: '198.51.100.7',
+        endpointIp: '198.51.100.7',
+        networkGeneration: 1,
+      );
+      void schedule() => controller.schedule(
+        externalLookupReady: false,
+        isConnected: () => true,
+        isForegroundActive: () => true,
+        currentTarget: () => target,
+        networkUsable: (_) async => true,
+        resolveExternalIp: (_) async => null,
+        persistResult: (_, _) async {},
+        onSnapshot: (_) {},
+      );
+      schedule();
+      final before = controller.snapshotTargetKey;
+      target = const ActiveProxyIpTarget(
+        subscriptionId: 'sub',
+        outboundTag: 'node',
+        endpointHost: '198.51.100.7',
+        endpointIp: '198.51.100.7',
+        networkGeneration: 2,
+      );
+      expect(before, isNot(target.key));
+      expect(controller.snapshotTargetKey, before);
+      schedule();
+      expect(controller.snapshotTargetKey, target.key);
+      controller.reset(onSnapshot: (_) {});
+      expect(controller.snapshotTargetKey, isEmpty);
+    },
+  );
+
+  test(
     'active lookup target changes when configuration changes under same tag',
     () {
       final before = _target(outboundIdentityKey: 'old-config');

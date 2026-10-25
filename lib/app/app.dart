@@ -72,6 +72,7 @@ import 'package:meow_client/features/home/home_presentation_builder.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
+import 'package:meow_client/features/home/server_ip_metadata.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/proxies/proxies_presentation_builder.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
@@ -98,6 +99,7 @@ import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/platform/quick_settings_tile_installer.dart';
 import 'package:meow_client/platform/windows/windows_storage_error.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -197,6 +199,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
       {};
   late final AppTrafficMonitor _appTrafficMonitor;
   final _publicIpController = PublicIpController();
+  final _serverIpMetadataController = ServerIpMetadataController();
+  final _serverConnectionInfo = ValueNotifier(const ServerConnectionInfo());
+  bool _trafficDashboardSheetOpen = false;
   late final DeepLinkImportCoordinator _deepLinkImportCoordinator;
   AdBlockRuleSetStatus _adBlockStatus =
       const AdBlockRuleSetStatus.unavailable();
@@ -956,6 +961,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         usable: state.usable,
       );
       if (mounted) {
+        _serverConnectionInfo.value = _currentServerConnectionInfo();
         ref
             .read(vpnRuntimeStateProvider.notifier)
             .updateNetwork(generation: state.generation, usable: state.usable);
@@ -2484,6 +2490,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _proxyRuntime.dispose();
     _appTrafficMonitor.dispose();
     _publicIpController.dispose();
+    _serverIpMetadataController.dispose();
+    _serverConnectionInfo.dispose();
     super.dispose();
   }
 
@@ -2812,11 +2820,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  Future<void> _showTrafficDashboard() async {
+  Future<void> _showTrafficDashboard({bool serverNetworkFirst = false}) async {
     final context = _navigatorKey.currentContext;
-    if (context == null) {
+    if (context == null || _trafficDashboardSheetOpen) {
       return;
     }
+    _trafficDashboardSheetOpen = true;
+    _serverConnectionInfo.value = _currentServerConnectionInfo();
     _appTrafficMonitor.openDashboard();
     try {
       await showModalBottomSheet<void>(
@@ -2835,10 +2845,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
                 _appTrafficMonitor.trafficDashboardSnapshotNotifier,
             scrollController: scrollController,
             publicIpController: _publicIpController,
+            serverConnectionListenable: _serverConnectionInfo,
+            serverIpMetadataController: _serverIpMetadataController,
+            onRefreshServerIp: _refreshActiveProxyIp,
+            initialSection: serverNetworkFirst
+                ? TrafficDashboardSection.serverNetwork
+                : TrafficDashboardSection.traffic,
           ),
         ),
       );
     } finally {
+      _trafficDashboardSheetOpen = false;
       _appTrafficMonitor.closeDashboard();
     }
   }
@@ -3636,8 +3653,44 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   bool get _effectiveProgressiveBlurEnabled => false;
 
-  void _publishTrafficDashboardSnapshot({bool force = false}) =>
-      _appTrafficMonitor.publish(force: force);
+  void _publishTrafficDashboardSnapshot({bool force = false}) {
+    _serverConnectionInfo.value = _currentServerConnectionInfo();
+    _appTrafficMonitor.publish(force: force);
+  }
+
+  ServerConnectionInfo _currentServerConnectionInfo() {
+    final outbound = _currentResolvedActiveOutbound();
+    final target = _connected && !_connectionBusy
+        ? _currentActiveProxyIpTarget()
+        : null;
+    final confirmed =
+        target != null &&
+        _activeProxyIpController.snapshotTargetKey == target.key &&
+        _activeProxyIp.outboundTag == target.outboundTag &&
+        _activeProxyIp.source == ActiveProxyIpSource.external &&
+        _activeProxyIp.hasKnownIp;
+    return ServerConnectionInfo(
+      key:
+          '${_activeSubscription?.id}\n$_selectedProxyTag\n${target?.key ?? ''}',
+      connected: _connected,
+      outboundTag: outbound?.tag ?? '',
+      selectedProxyTag: _selectedProxyTag,
+      presentedChildTag: _displayProxyCache?.selectedChildTag ?? '',
+      presentedEndpoint: _displayProxyCache?.endpointLabel ?? '',
+      name: outbound?.name.trim().isNotEmpty == true
+          ? outbound!.name
+          : outbound?.tag ?? '',
+      countryCode: confirmed ? _activeProxyIp.countryCode ?? '' : '',
+      exitIp: confirmed ? _activeProxyIp.ip?.trim() ?? '' : '',
+      ipChecking:
+          target != null && _activeProxyIp.state == ActiveProxyIpState.checking,
+      endpointHost: outbound?.server ?? '',
+      endpointPort: outbound?.port ?? 0,
+      protocol: outbound?.type.toUpperCase() ?? '',
+      transport: outbound == null ? '' : _transportLabel(outbound.config) ?? '',
+      security: outbound == null ? '' : _securityLabel(outbound.config) ?? '',
+    );
+  }
 
   void _resetTrafficDashboardData() => _appTrafficMonitor.reset();
 
@@ -3697,11 +3750,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         phase == AppConnectionPhase.stopping) {
       _pendingRuntimeGroups.clear();
     }
+    _serverConnectionInfo.value = _currentServerConnectionInfo();
   }
 
   void _applyActiveProxyIpSnapshot(ActiveProxyIpSnapshot snapshot) {
     _activeProxyIp = snapshot;
     _applyRuntimeStateToDerivedCaches();
+    _serverConnectionInfo.value = _currentServerConnectionInfo();
   }
 
   void _publishActiveProxyIpSnapshot(ActiveProxyIpSnapshot snapshot) {
@@ -3721,6 +3776,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (rebuild) {
           _applyRuntimeStateToDerivedCaches();
         }
+        _serverConnectionInfo.value = _currentServerConnectionInfo();
       },
     );
   }
@@ -8109,6 +8165,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       generation: networkGeneration,
       usable: usable,
     );
+    _serverConnectionInfo.value = _currentServerConnectionInfo();
     if (mounted) {
       ref
           .read(vpnRuntimeStateProvider.notifier)
@@ -9795,6 +9852,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         connectionStatusLabel: _connectionButtonStatusLabel(context),
         activeProfile: _activeProfile,
         activeProxy: _displayProxy,
+        serverConnectionInfo: _currentServerConnectionInfo(),
+        serverConnectionListenable: _serverConnectionInfo,
         runtimeStates: _proxyRuntimeVisualStates,
         hideServerIp: _hideServerIp,
         hapticEnabled: _hapticEnabled,
@@ -9824,6 +9883,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         openSettings: _showSettingsPage,
         openChangelog: () => unawaited(_showChangelogPage()),
         openTrafficDashboard: () => unawaited(_showTrafficDashboard()),
+        openServerInfo: () =>
+            unawaited(_showTrafficDashboard(serverNetworkFirst: true)),
         refreshActiveSubscription: canRefreshActiveSubscription
             ? _refreshActiveSubscription
             : null,

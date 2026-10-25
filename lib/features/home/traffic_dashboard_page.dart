@@ -7,23 +7,36 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
+import 'package:meow_client/features/home/server_ip_metadata.dart';
+import 'package:meow_client/features/home/server_network_card.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 /// The sheet itself is static. Each section listens only to its displayed data,
 /// so traffic samples never rebuild the heading or connection information.
+enum TrafficDashboardSection { traffic, serverNetwork }
+
 class TrafficDashboardPage extends StatefulWidget {
   const TrafficDashboardPage({
     super.key,
     required this.snapshotListenable,
     this.scrollController,
     this.publicIpController,
+    this.serverConnectionListenable,
+    this.serverIpMetadataController,
+    this.onRefreshServerIp,
+    this.initialSection = TrafficDashboardSection.traffic,
   });
 
   final ValueListenable<TrafficDashboardSnapshot> snapshotListenable;
   final ScrollController? scrollController;
   final PublicIpController? publicIpController;
+  final ValueListenable<ServerConnectionInfo>? serverConnectionListenable;
+  final ServerIpMetadataController? serverIpMetadataController;
+  final VoidCallback? onRefreshServerIp;
+  final TrafficDashboardSection initialSection;
 
   @override
   State<TrafficDashboardPage> createState() => _TrafficDashboardPageState();
@@ -94,6 +107,11 @@ class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
                 ),
               ),
               const Gap(16),
+              if (widget.initialSection ==
+                  TrafficDashboardSection.serverNetwork) ...[
+                _serverNetworkSection(),
+                const Gap(12),
+              ],
               _SnapshotSection(
                 listenable: widget.snapshotListenable,
                 select: (s) => (
@@ -133,6 +151,11 @@ class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
                 ),
               ),
               const Gap(12),
+              if (widget.initialSection == TrafficDashboardSection.traffic &&
+                  widget.serverConnectionListenable != null) ...[
+                _serverNetworkSection(),
+                const Gap(12),
+              ],
               _SnapshotSection(
                 listenable: widget.snapshotListenable,
                 select: (s) => s.hideServerIp,
@@ -161,6 +184,7 @@ class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
                   country: data.country,
                   ip: data.ip,
                   hideIp: data.hideIp,
+                  showIp: widget.serverConnectionListenable == null,
                 ),
               ),
             ],
@@ -169,6 +193,23 @@ class _TrafficDashboardPageState extends State<TrafficDashboardPage> {
       ),
     );
   }
+
+  Widget _serverNetworkSection() =>
+      ValueListenableBuilder<ServerConnectionInfo>(
+        valueListenable:
+            widget.serverConnectionListenable ??
+            const AlwaysStoppedAnimation(ServerConnectionInfo()),
+        builder: (context, connection, _) => _SnapshotSection(
+          listenable: widget.snapshotListenable,
+          select: (snapshot) => snapshot.hideServerIp,
+          builder: (context, hidden) => ServerNetworkCard(
+            connection: connection,
+            hideIp: hidden,
+            controller: widget.serverIpMetadataController,
+            onRefreshExitIp: widget.onRefreshServerIp,
+          ),
+        ),
+      );
 }
 
 class _SnapshotSection<T> extends StatefulWidget {
@@ -619,6 +660,7 @@ class _ConnectionCard extends StatelessWidget {
     required this.country,
     required this.ip,
     required this.hideIp,
+    this.showIp = true,
   });
   final bool connected;
   final bool connecting;
@@ -627,6 +669,7 @@ class _ConnectionCard extends StatelessWidget {
   final String? country;
   final String ip;
   final bool hideIp;
+  final bool showIp;
 
   @override
   Widget build(BuildContext context) {
@@ -666,11 +709,13 @@ class _ConnectionCard extends StatelessWidget {
               ? null
               : CountryFlagBadge(countryCode: country ?? '', size: 22),
         ),
-        const Gap(12),
-        _InfoRow(
-          label: l10n.trafficDashboardServerIp,
-          value: _displayIp(ip, hideIp, l10n),
-        ),
+        if (showIp) ...[
+          const Gap(12),
+          _InfoRow(
+            label: l10n.trafficDashboardServerIp,
+            value: _displayIp(ip, hideIp, l10n),
+          ),
+        ],
       ],
     );
   }

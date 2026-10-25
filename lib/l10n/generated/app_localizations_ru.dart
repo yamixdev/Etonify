@@ -1514,6 +1514,56 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trafficDashboardTitle => 'Мониторинг трафика';
 
   @override
+  String get serverNetworkTitle => 'Сервер и сеть';
+
+  @override
+  String get serverNetworkExitIp => 'Выходной IP VPN';
+
+  @override
+  String get serverNetworkEndpoint => 'Адрес сервера';
+
+  @override
+  String get serverNetworkPort => 'Порт';
+
+  @override
+  String get serverNetworkProtocol => 'Протокол';
+
+  @override
+  String get serverNetworkTransport => 'Транспорт';
+
+  @override
+  String get serverNetworkSecurity => 'Защита';
+
+  @override
+  String get serverNetworkOrganization => 'ISP / организация сети';
+
+  @override
+  String get serverNetworkCountry => 'Расположение IP';
+
+  @override
+  String get serverNetworkCity => 'Город';
+
+  @override
+  String get serverNetworkTimezone => 'Часовой пояс';
+
+  @override
+  String get serverNetworkPrefix => 'Подсеть';
+
+  @override
+  String get serverNetworkRefresh => 'Обновить сведения о сети';
+
+  @override
+  String get serverNetworkError =>
+      'Сведения о сети недоступны. На работу VPN это не влияет.';
+
+  @override
+  String get serverNetworkSource =>
+      'Данные об IP: ip.guide. При открытии подробностей выходной IP передаётся этому сервису. Геолокация приблизительная.';
+
+  @override
+  String get serverNetworkPending => 'Ожидаем подтверждённый выходной IP VPN';
+
+  @override
   String get trafficDashboardSubtitle =>
       'Скорость, трафик за сессию и данные подключения';
 

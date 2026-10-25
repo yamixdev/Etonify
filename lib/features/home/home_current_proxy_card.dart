@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 class HomeCurrentProxyCard extends StatelessWidget {
@@ -10,11 +12,19 @@ class HomeCurrentProxyCard extends StatelessWidget {
     required this.proxy,
     required this.onTap,
     this.onOpenGroup,
+    this.onOpenInfo,
+    this.connectionInfo = const ServerConnectionInfo(),
+    this.hideIp = false,
+    this.connectionListenable,
   });
 
   final AppProxySummary proxy;
   final VoidCallback onTap;
   final VoidCallback? onOpenGroup;
+  final VoidCallback? onOpenInfo;
+  final ServerConnectionInfo connectionInfo;
+  final bool hideIp;
+  final ValueListenable<ServerConnectionInfo>? connectionListenable;
 
   String _title(AppLocalizations l10n) {
     if (!isLowestProxyTag(proxy.tag)) return proxy.displayName;
@@ -28,38 +38,38 @@ class HomeCurrentProxyCard extends StatelessWidget {
         : '${l10n.proxyLowestName} · $selected';
   }
 
-  String _subtitle(AppLocalizations l10n) {
-    if (proxy.isGroup && !isLowestProxyTag(proxy.tag) && proxy.childCount > 0) {
-      return '${l10n.proxyAutomaticSelectionLabel} · '
-          '${l10n.subscriptionServersCount(proxy.childCount)}';
-    }
-    final protocol = proxy.protocolLabel.trim();
-    if (protocol == 'URLTest' || protocol == 'URLTest · auto') {
-      return l10n.proxyAutomaticSelectionLabel;
-    }
-    if (protocol.startsWith('URLTest · ')) {
-      return '${l10n.proxyAutomaticSelectionLabel} · '
-          '${protocol.substring('URLTest · '.length).trim()}';
-    }
-    if (protocol == 'Chain') return l10n.proxyChainLabel;
-    if (protocol.startsWith('Chain · ')) {
-      return '${l10n.proxyChainLabel} · '
-          '${protocol.substring('Chain · '.length)}';
-    }
-    if (proxy.isGroup && proxy.childCount > 0 && protocol.isEmpty) {
-      return '${l10n.proxyAutomaticSelectionLabel} · '
-          '${l10n.subscriptionServersCount(proxy.childCount)}';
-    }
-    return protocol;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final source = connectionListenable;
+    return source == null
+        ? _buildCard(context, connectionInfo)
+        : ValueListenableBuilder<ServerConnectionInfo>(
+            valueListenable: source,
+            builder: (context, info, _) => _buildCard(context, info),
+          );
+  }
+
+  Widget _buildCard(BuildContext context, ServerConnectionInfo connectionInfo) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     final title = _title(l10n);
+    final matches = connectionInfo.selectedProxyTag.isNotEmpty
+        ? connectionInfo.selectedProxyTag == proxy.tag &&
+              connectionInfo.presentedChildTag ==
+                  (proxy.selectedChildTag ?? '') &&
+              connectionInfo.presentedEndpoint == proxy.endpointLabel
+        : connectionInfo.outboundTag == proxy.tag ||
+              connectionInfo.outboundTag == proxy.selectedChildTag;
+    final ip = connectionInfo.connected && matches ? connectionInfo.exitIp : '';
+    final ipText = !connectionInfo.connected
+        ? l10n.trafficDashboardStateDisconnected
+        : ip.isNotEmpty
+        ? networkAddressText(ip, hidden: hideIp)
+        : connectionInfo.ipChecking
+        ? l10n.loading
+        : l10n.notAvailableShort;
     final subtitle = Text(
-      _subtitle(l10n),
+      ipText,
       textAlign: TextAlign.center,
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
@@ -69,6 +79,22 @@ class HomeCurrentProxyCard extends StatelessWidget {
     );
     final openGroup = proxy.isGroup ? onOpenGroup : null;
 
+    final ipAction = onOpenInfo == null
+        ? subtitle
+        : Tooltip(
+            message: l10n.serverNetworkTitle,
+            child: TextButton(
+              key: const ValueKey('home-server-ip-action'),
+              onPressed: onOpenInfo,
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onSurfaceVariant,
+                minimumSize: const Size(48, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+              ),
+              child: subtitle,
+            ),
+          );
     final card = Material(
       key: const ValueKey('home-current-proxy-card'),
       color: theme.colorScheme.surfaceContainerLow,
@@ -104,39 +130,24 @@ class HomeCurrentProxyCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (openGroup != null)
-                        Tooltip(
-                          message: l10n.proxyOpenGroup(title),
-                          child: TextButton(
-                            key: ValueKey('proxy-open-group-${proxy.tag}'),
-                            onPressed: openGroup,
-                            style: TextButton.styleFrom(
-                              alignment: Alignment.center,
-                              foregroundColor:
-                                  theme.colorScheme.onSurfaceVariant,
-                              minimumSize: const Size(48, 48),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
+                      if (openGroup == null)
+                        ipAction
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(child: ipAction),
+                            IconButton(
+                              key: ValueKey('proxy-open-group-${proxy.tag}'),
+                              tooltip: l10n.proxyOpenGroup(title),
+                              onPressed: openGroup,
+                              icon: const Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
                               ),
-                              visualDensity: VisualDensity.standard,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(child: subtitle),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.chevron_right_rounded,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else ...[
-                        const SizedBox(height: 3),
-                        subtitle,
-                      ],
+                          ],
+                        ),
                     ],
                   ),
                 ),

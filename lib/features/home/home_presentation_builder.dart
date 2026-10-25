@@ -6,6 +6,7 @@ import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 
 @immutable
 class HomePresentationData {
@@ -29,6 +30,8 @@ class HomePresentationData {
     required this.brandName,
     required this.versionLabel,
     this.prereleaseVersion = false,
+    this.serverConnectionInfo = const ServerConnectionInfo(),
+    this.serverConnectionListenable,
   });
 
   final bool connected;
@@ -50,11 +53,15 @@ class HomePresentationData {
   final String brandName;
   final String versionLabel;
   final bool prereleaseVersion;
+  final ServerConnectionInfo serverConnectionInfo;
+  final ValueListenable<ServerConnectionInfo>? serverConnectionListenable;
 
   HomeViewState toViewState() {
     final showTraffic = connected && trafficAvailable;
     return HomeViewState(
       connected: connected,
+      serverConnectionInfo: serverConnectionInfo,
+      serverConnectionListenable: serverConnectionListenable,
       connecting: connecting,
       resolvingProxy: resolvingProxy,
       connectionStatusLabel: connectionStatusLabel,
@@ -91,6 +98,7 @@ class HomePresentationCallbacks {
     this.refreshActiveSubscription,
     this.openProxies,
     this.openProxyGroup,
+    this.openServerInfo,
   });
 
   final VoidCallback toggleConnection;
@@ -104,6 +112,7 @@ class HomePresentationCallbacks {
   final Future<void> Function()? refreshActiveSubscription;
   final VoidCallback? openProxies;
   final ValueChanged<String>? openProxyGroup;
+  final VoidCallback? openServerInfo;
 
   HomeViewActions toViewActions() {
     return HomeViewActions(
@@ -118,6 +127,7 @@ class HomePresentationCallbacks {
       refreshActiveSubscription: refreshActiveSubscription,
       openProxies: openProxies,
       openProxyGroup: openProxyGroup,
+      openServerInfo: openServerInfo,
     );
   }
 }

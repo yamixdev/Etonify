@@ -27,6 +27,7 @@ void main() {
             addTearDown(runtimeStates.dispose);
             var settingsOpened = false;
             var changelogOpened = false;
+            var networkOpened = false;
             void noop() {}
             await tester.pumpWidget(
               MaterialApp(
@@ -60,6 +61,7 @@ void main() {
                             openSettings: () => settingsOpened = true,
                             openChangelog: () => changelogOpened = true,
                             openTrafficDashboard: noop,
+                            openServerInfo: () => networkOpened = true,
                             openProxies: () => open(null),
                           ),
                         ).build(
@@ -117,7 +119,12 @@ void main() {
               await tester.tap(find.byKey(const ValueKey('home-tab')));
               await tester.pumpAndSettle();
             }
-            await tester.tap(card);
+            await tester.tap(
+              find.byKey(const ValueKey('home-server-ip-action')),
+            );
+            expect(networkOpened, isTrue);
+            expect(find.text('Proxy browser'), findsNothing);
+            await tester.tap(find.text('Test server'));
             await tester.pumpAndSettle();
             expect(find.text('Proxy browser'), findsOneWidget);
           },

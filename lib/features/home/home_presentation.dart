@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
+import 'package:meow_client/models/server_connection_info.dart';
 
 @immutable
 class HomeViewState {
@@ -22,6 +23,8 @@ class HomeViewState {
     this.trafficListenable,
     this.activeProfileRefreshing = false,
     this.showActiveProfileRefreshAction = false,
+    this.serverConnectionInfo = const ServerConnectionInfo(),
+    this.serverConnectionListenable,
   });
 
   final bool connected;
@@ -38,6 +41,8 @@ class HomeViewState {
   final ValueListenable<TrafficUiSnapshot>? trafficListenable;
   final bool activeProfileRefreshing;
   final bool showActiveProfileRefreshAction;
+  final ServerConnectionInfo serverConnectionInfo;
+  final ValueListenable<ServerConnectionInfo>? serverConnectionListenable;
   final String brandName;
   final String versionLabel;
   final bool prereleaseVersion;
@@ -57,6 +62,7 @@ class HomeViewActions {
     this.refreshActiveSubscription,
     this.openProxies,
     this.openProxyGroup,
+    this.openServerInfo,
   });
 
   final VoidCallback toggleConnection;
@@ -70,4 +76,5 @@ class HomeViewActions {
   final Future<void> Function()? refreshActiveSubscription;
   final VoidCallback? openProxies;
   final ValueChanged<String>? openProxyGroup;
+  final VoidCallback? openServerInfo;
 }
