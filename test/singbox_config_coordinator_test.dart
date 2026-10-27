@@ -13,6 +13,46 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
   test(
+    'generated builds protect AdBlock artifacts for current and rollback runtime',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'adblock-config-pins-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final block = File('${directory.path}/new-block.srs');
+      final allow = File('${directory.path}/new-allow.srs');
+      await block.writeAsBytes([0x53, 0x52, 0x53, 2, 1, 1]);
+      await allow.writeAsBytes([0x53, 0x52, 0x53, 2, 1, 1]);
+      final target = File('${directory.path}/config.json');
+      await target.writeAsString(
+        '{"route":{"rule_set":[{"type":"local","path":"/runtime/old-adblock.srs"}]}}',
+      );
+      final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+      addTearDown(lifecycle.dispose);
+      final retained = <Set<String>>[];
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+        snapshot: () =>
+            _snapshot(adBlockPath: block.path, adBlockAllowPath: allow.path),
+        cleanupRouteData: (paths) async => retained.add(paths.toSet()),
+      );
+      addTearDown(coordinator.dispose);
+      final build = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      expect(
+        (await coordinator.startRuntimeWithBuild(build, useVpn: true)).success,
+        isTrue,
+      );
+      expect(
+        retained.single,
+        containsAll([block.path, allow.path, '/runtime/old-adblock.srs']),
+      );
+    },
+  );
+
+  test(
     'prepared-only configs retain current and previous disk rule references',
     () async {
       final directory = await Directory.systemTemp.createTemp(
@@ -727,6 +767,8 @@ SingboxConfigCoordinatorSnapshot _snapshot({
   bool connected = true,
   int mtu = 9000,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
+  String? adBlockPath,
+  String? adBlockAllowPath,
 }) {
   return SingboxConfigCoordinatorSnapshot(
     connected: connected,
@@ -752,9 +794,9 @@ SingboxConfigCoordinatorSnapshot _snapshot({
     urlTestConcurrency: 4,
     urlTestUnavailableCheckIntervalSeconds: 60,
     blockLeaks: true,
-    adBlockEnabled: false,
-    adBlockBlockRuleSetPath: null,
-    adBlockAllowRuleSetPath: null,
+    adBlockEnabled: adBlockPath != null,
+    adBlockBlockRuleSetPath: adBlockPath,
+    adBlockAllowRuleSetPath: adBlockAllowPath,
     useRussiaRouteData: false,
     routeDataAvailable: false,
     routeDataSourceKind: 'test',

@@ -308,7 +308,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   static const _domainListCommunityRawBaseUrl =
       'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data';
   static const _maxDomainListCategoryBytes = 2 * 1024 * 1024;
-  static const _domainListCommunityCompilerVersion = 1;
+  static const _domainListCommunityCompilerVersion = 2;
 
   static const _assetGeositeRuBlocked =
       'assets/route_data/russia/geosite-ru-blocked.srs';
@@ -344,7 +344,9 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     'rutube',
   ];
   static const _aiServicesCategories = <String>['category-ai-!cn'];
+  static const _additionalSocialCategory = 'category-social-media-!cn';
   static const _socialServicesCategories = <String>[
+    _additionalSocialCategory,
     'discord',
     'github',
     'google',
@@ -1779,6 +1781,10 @@ Map<String, String> _readCachedDomainListCommunityCategories(String directory) {
     final category = pending.removeLast();
     if (files.containsKey(category)) continue;
     final file = File('$directory/${Uri.encodeComponent(category)}.txt');
+    if (category == RussiaRouteDataService._additionalSocialCategory &&
+        !file.existsSync()) {
+      continue;
+    }
     final content = file.readAsStringSync();
     files[category] = content;
     for (final rawLine in const LineSplitter().convert(content)) {
@@ -1824,7 +1830,13 @@ _CompiledRuleSetArtifact _compileSocialServicesArtifact(
 ) {
   return _compileDomainListCommunityArtifact(
     categoryFiles,
-    RussiaRouteDataService._socialServicesCategories,
+    RussiaRouteDataService._socialServicesCategories
+        .where(
+          (category) =>
+              category != RussiaRouteDataService._additionalSocialCategory ||
+              categoryFiles.containsKey(category),
+        )
+        .toList(),
   );
 }
 
@@ -1834,6 +1846,7 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
 ) {
   final exactDomains = <String>{};
   final suffixDomains = <String>{};
+  final keywords = <String>{};
   final visiting = <String>{};
   List<(_NormalizedRuleDomain, Set<String>)> loadCategory(String category) {
     if (!visiting.add(category)) {
@@ -1871,7 +1884,6 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
       }
       if (attributes.contains('ads') ||
           value.startsWith('regexp:') ||
-          value.startsWith('keyword:') ||
           value.startsWith('geosite:') ||
           value.startsWith('ext:')) {
         continue;
@@ -1894,18 +1906,22 @@ _CompiledRuleSetArtifact _compileDomainListCommunityArtifact(
           exactDomains.add(normalized.value);
         case _RuleDomainType.suffix:
           suffixDomains.add(normalized.value);
+        case _RuleDomainType.keyword:
+          keywords.add(normalized.value);
       }
     }
   }
 
   final exactList = exactDomains.toList()..sort();
   final suffixList = suffixDomains.toList()..sort();
+  final keywordList = keywords.toList()..sort();
   return _CompiledRuleSetArtifact(
     ruleSetBytes: _buildSrsRuleSet(
       domains: exactList,
       domainSuffixes: suffixList,
+      domainKeywords: keywordList,
     ),
-    domainCount: exactList.length + suffixList.length,
+    domainCount: exactList.length + suffixList.length + keywordList.length,
   );
 }
 
@@ -1919,6 +1935,12 @@ _NormalizedRuleDomain? _normalizeServiceDomainLine(String line) {
   var value = line.trim();
   if (value.isEmpty) {
     return null;
+  }
+  if (value.startsWith('keyword:')) {
+    final keyword = value.substring('keyword:'.length).trim().toLowerCase();
+    return keyword.isEmpty || !_validDomainRegExp.hasMatch(keyword)
+        ? null
+        : _NormalizedRuleDomain(_RuleDomainType.keyword, keyword);
   }
   if (value.startsWith('full:')) {
     value = value.substring('full:'.length).trim();
@@ -1965,17 +1987,25 @@ String? _normalizeDomainValue(String value) {
 Uint8List _buildSrsRuleSet({
   required List<String> domains,
   required List<String> domainSuffixes,
+  required List<String> domainKeywords,
 }) {
   final body = _ByteAccumulator();
   _writeUvarint(
     body,
-    (domains.isNotEmpty || domainSuffixes.isNotEmpty) ? 1 : 0,
+    (domains.isNotEmpty ||
+            domainSuffixes.isNotEmpty ||
+            domainKeywords.isNotEmpty)
+        ? 1
+        : 0,
   );
-  if (domains.isNotEmpty || domainSuffixes.isNotEmpty) {
+  if (domains.isNotEmpty ||
+      domainSuffixes.isNotEmpty ||
+      domainKeywords.isNotEmpty) {
     _writeDefaultDomainRule(
       body,
       domains: domains,
       domainSuffixes: domainSuffixes,
+      domainKeywords: domainKeywords,
     );
   }
   final compressedBody = Uint8List.fromList(
@@ -1992,13 +2022,25 @@ void _writeDefaultDomainRule(
   _ByteAccumulator writer, {
   required List<String> domains,
   required List<String> domainSuffixes,
+  required List<String> domainKeywords,
 }) {
   writer.writeByte(0);
-  writer.writeByte(_ruleItemDomain);
-  _buildDomainMatcher(
-    domains: domains,
-    domainSuffixes: domainSuffixes,
-  ).writeTo(writer);
+  if (domains.isNotEmpty || domainSuffixes.isNotEmpty) {
+    writer.writeByte(_ruleItemDomain);
+    _buildDomainMatcher(
+      domains: domains,
+      domainSuffixes: domainSuffixes,
+    ).writeTo(writer);
+  }
+  if (domainKeywords.isNotEmpty) {
+    writer.writeByte(_ruleItemDomainKeyword);
+    _writeUvarint(writer, domainKeywords.length);
+    for (final keyword in domainKeywords) {
+      final bytes = utf8.encode(keyword);
+      _writeUvarint(writer, bytes.length);
+      writer.writeBytes(bytes);
+    }
+  }
   writer.writeByte(_ruleItemFinal);
   writer.writeByte(0);
 }
@@ -2170,10 +2212,11 @@ class _NormalizedRuleDomain {
   final String value;
 }
 
-enum _RuleDomainType { exact, suffix }
+enum _RuleDomainType { exact, suffix, keyword }
 
 const List<int> _srsMagicBytes = <int>[0x53, 0x52, 0x53];
 const int _srsVersion2 = 2;
 const int _ruleItemDomain = 2;
+const int _ruleItemDomainKeyword = 3;
 const int _ruleItemFinal = 0xFF;
 const String _rootLabelMarker = '\n';

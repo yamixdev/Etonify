@@ -931,24 +931,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'Что Etonify хранит локально и какие данные не собирает.';
 
   @override
-  String get legalGateTitle => 'Перед использованием Etonify';
+  String get legalGateTitle => 'Отказ от ответственности';
 
   @override
-  String legalGateSubtitle(String version) {
-    return 'Начиная с версии $version, нужно прочитать и принять соглашение и политику конфиденциальности.';
-  }
+  String get legalGateBody =>
+      'Etonify не предоставляет VPN-серверы. Вы добавляете профили сами и отвечаете за их использование и сохранность ключей.\n\nПриложение работает «как есть». Доступность сторонних серверов и сетей не гарантируется. Соблюдайте законы своей страны и правила сервисов.\n\nПрофили, настройки и логи хранятся на устройстве. При сетевых запросах сторонние сервисы могут видеть ваш IP-адрес.';
 
   @override
-  String get legalAcceptAction => 'Принять и продолжить';
+  String get legalAcceptAction => 'Принять';
 
   @override
-  String get legalAcceptHint => 'Откройте оба документа, чтобы продолжить.';
-
-  @override
-  String get legalDocumentReadAction => 'Прочитано';
-
-  @override
-  String get legalContactAction => 'Задать вопрос';
+  String get legalAcceptHint =>
+      'Нажимая «Принять», вы принимаете пользовательское соглашение и подтверждаете ознакомление с политикой конфиденциальности.';
 
   @override
   String get legalImportBlockedMessage =>

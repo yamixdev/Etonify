@@ -3366,7 +3366,7 @@ void main() {
       dnsRules,
       contains(
         allOf([
-          containsPair('domain_suffix', ['ru', 'su', 'рф']),
+          containsPair('domain_suffix', ['ru', 'su', 'рф', 'xn--p1ai']),
           containsPair('server', 'dns-ru-direct'),
         ]),
       ),
@@ -3864,7 +3864,9 @@ void main() {
       russiaGeoipRuBlockedPath: '/definitely/missing/geoip.srs',
       russiaGeoipRuWhitelistPath: '/definitely/missing/whitelist.srs',
       russiaGeoipRuPath: '/definitely/missing/ru.srs',
-      russiaCuratedDirectServicesPath: '/definitely/missing/direct.srs',
+      russiaCuratedDirectServicesPath: _russiaRuleSetPath(
+        'geosite-ru-available-only-inside.srs',
+      ),
       bypassLocalNetwork: true,
       splitRoutingMode: SplitRoutingMode.disabled,
       splitRoutingPackages: const <String>[],
@@ -3880,6 +3882,8 @@ void main() {
     final route = (config['route'] as Map).cast<String, dynamic>();
     final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
     expect(route.containsKey('rule_set'), isFalse);
+    expect(route['final'], 'select');
+    expect((config['dns'] as Map)['final'], 'dns-remote');
     expect(
       routeRules.any((rule) => rule['rule_set'] == 'ru-direct-services'),
       isFalse,
@@ -3889,6 +3893,69 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'punycode РФ names use RU direct DNS and route after blocked exceptions',
+    () {
+      const subscription = Subscription(
+        id: 'idn-route',
+        name: 'IDN',
+        url: '',
+        outbounds: [
+          Outbound(
+            tag: 'node',
+            name: 'Node',
+            config: {
+              'type': 'vless',
+              'server': 'node.example',
+              'server_port': 443,
+              'uuid': 'node-uuid',
+            },
+          ),
+        ],
+      );
+      final config = _defaultBuilder(
+        subscription,
+        useRussiaRouteData: true,
+      ).build();
+      final route = (config['route'] as Map).cast<String, dynamic>();
+      final routeRules = (route['rules'] as List).cast<Map<dynamic, dynamic>>();
+      final blockedIndex = routeRules.indexWhere(
+        (rule) =>
+            (rule['rule_set'] as Object?) is List &&
+            (rule['rule_set'] as List).contains('ru-geosite-ru-blocked'),
+      );
+      final curatedIndex = routeRules.indexWhere(
+        (rule) => rule['rule_set'] == 'ru-direct-services',
+      );
+      expect(blockedIndex, greaterThanOrEqualTo(0));
+      expect(curatedIndex, greaterThan(blockedIndex));
+      expect(
+        _domainDecision(config, 'dns', 'example.xn--p1ai', {}),
+        'dns-ru-direct',
+      );
+      expect(
+        _domainDecision(config, 'route', 'example.xn--p1ai', {}),
+        'direct',
+      );
+      expect(
+        _domainDecision(config, 'route', 'example.xn--p1ai', {
+          'ru-geosite-ru-blocked',
+        }),
+        'select',
+      );
+      expect(
+        _domainDecision(config, 'dns', 'example.xn--p1ai', {
+          'ru-geosite-ru-blocked',
+        }),
+        'dns-remote',
+      );
+      expect(
+        _domainDecision(config, 'route', 'example.xn--p1ai.evil.com', {}),
+        'select',
+      );
+    },
+  );
 
   group('DNS follows the active traffic selector', () {
     const subscription = Subscription(

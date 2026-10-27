@@ -306,17 +306,10 @@
   "legalPrivacyTitle": "Privacy Policy",
   "legalTermsSummary": "Rules for responsible use and project disclaimers.",
   "legalPrivacySummary": "What Etonify stores locally and what it does not collect.",
-  "legalGateTitle": "Before using Etonify",
-  "legalGateSubtitle": "Starting with version {version}, please read and accept the Terms and Privacy Policy to continue.",
-  "@legalGateSubtitle": {
-    "placeholders": {
-      "version": { "type": "String" }
-    }
-  },
-  "legalAcceptAction": "Accept and continue",
-  "legalAcceptHint": "Open both documents to enable continue.",
-  "legalDocumentReadAction": "I have read it",
-  "legalContactAction": "Ask a question",
+  "legalGateTitle": "Disclaimer",
+  "legalGateBody": "Etonify does not provide VPN servers. You add your own profiles and are responsible for their use and the security of your access keys.\n\nThe app is provided as is. Third-party servers and networks may be unavailable. Follow applicable laws and the rules of the services you use.\n\nProfiles, settings, and logs are stored on your device. Third-party services may see your IP address when the app sends network requests.",
+  "legalAcceptAction": "Accept",
+  "legalAcceptHint": "By selecting Accept, you agree to the Terms of Use and acknowledge that you have read the Privacy Policy.",
   "legalImportBlockedMessage": "Accept Terms and Privacy Policy before importing subscriptions.",
   "legalTermsBody": "# Etonify Terms of Use\n\n## What the app does\n\nEtonify is an Android VPN client. **It does not sell or provide VPN servers:** users add subscriptions, profiles, and servers from third-party providers.\n\n## User responsibility\n\nUse Etonify according to applicable law and service rules. Do not use it for attacks, fraud, malware, harassment, or other illegal activity.\n\n- You are responsible for added profiles and access keys.\n- Third-party providers determine their own service terms.\n- MeowTeam does not control subscription content or third-party server traffic.\n\n## Operation and updates\n\nEtonify is provided **as is**. We improve reliability and security, but cannot guarantee every server, route, DNS resolver, carrier, or modified Android firmware. Updates are installed only after user action and Android system confirmation.\n\n## Feedback\n\nQuestions, bug reports, and feature requests can be sent directly to the developers: **https://t.me/etonify?direct**.\n\nBy continuing, you confirm that you have read these terms and accept responsibility for using the app.",
   "legalPrivacyBody": "# Etonify Privacy Policy\n\n## Summary\n\nEtonify has **no advertising, analytics SDKs, or hidden tracking**. MeowTeam does not sell user data or automatically receive your VPN keys.\n\n## Data stored on the device\n\nSubscriptions, profiles, selected servers, settings, diagnostic logs, and downloaded rule files are stored locally. Backups and exports may contain access keys, so keep them private.\n\n## Network requests\n\n- Subscription imports and refreshes contact the address supplied by the user. That server can see normal request information, including the IP address.\n- Client and routing-rule update checks contact GitHub and the sources named in the interface.\n- HWID is sent to a subscription service only for profiles where the user enables it.\n\n## Android permissions\n\n- **VPN service** creates the system VPN tunnel.\n- **QUERY_ALL_PACKAGES** is used only to display installed apps for split tunneling. The app list is not sent to MeowTeam.\n- **Camera** is used only to scan QR codes.\n- **Notifications** display VPN service state.\n- **APK installation** is used only for user-approved updates. Android shows a separate system confirmation.\n\n## Logs and messages\n\nLogs are stored locally until the user exports or sends them. Review exported files before sharing publicly. Information voluntarily sent through Telegram is handled under Telegram's rules.\n\nPrivacy questions can be sent directly to the developers: **https://t.me/etonify?direct**.",

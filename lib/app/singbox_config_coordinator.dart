@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
+import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
@@ -306,8 +307,15 @@ class SingboxConfigCoordinator {
        _allowRuntimeApply = allowRuntimeApply ?? (() => true),
        _cleanupRouteData =
            cleanupRouteData ??
-           ((paths) => RussiaRouteDataService.instance
-               .cleanupSupersededDomainLists(protectedRuleSetPaths: paths));
+           ((paths) async {
+             final protected = paths.toSet();
+             await RussiaRouteDataService.instance.cleanupSupersededDomainLists(
+               protectedRuleSetPaths: protected,
+             );
+             await AdBlockRuleSetService.instance.cleanupSupersededGenerations(
+               protectedRuleSetPaths: protected,
+             );
+           });
 
   final Duration fullServiceRestartDebounce;
 
@@ -878,6 +886,9 @@ class SingboxConfigCoordinator {
     while (RussiaRouteDataService.instance.generationCleanupInFlight != null) {
       await RussiaRouteDataService.instance.generationCleanupInFlight;
     }
+    while (AdBlockRuleSetService.instance.generationCleanupInFlight != null) {
+      await AdBlockRuleSetService.instance.generationCleanupInFlight;
+    }
     final input = _currentSingboxConfigBuildInput(
       outputConfigPath: stagedConfigPath,
       // A validation-only build has no file to read back. Always return JSON
@@ -887,6 +898,8 @@ class SingboxConfigCoordinator {
       capabilitiesOverride: capabilities,
     );
     _pendingRoutePaths[generation] = {
+      ?input.adBlockBlockRuleSetPath,
+      ?input.adBlockAllowRuleSetPath,
       ?input.russiaCuratedDirectServicesPath,
       ?input.russiaAiServicesPath,
       ?input.russiaSocialServicesPath,

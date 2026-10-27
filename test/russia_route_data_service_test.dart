@@ -174,6 +174,135 @@ void main() {
   });
 
   test(
+    'social preset includes social networks beyond the original vendor list',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final status = await _updateFixture({
+          'category-social-media-!cn': 'include:twitter\ninclude:bluesky',
+          'twitter': 'x.fixture\ntwitter.fixture',
+          'bluesky': 'bsky.fixture',
+        });
+        final domains = await _srsDomains(File(status.socialServicesPath!));
+        expect(
+          domains,
+          containsAll({
+            'suffix:x.fixture',
+            'suffix:twitter.fixture',
+            'suffix:bsky.fixture',
+          }),
+        );
+      });
+    },
+  );
+
+  test('AI rules preserve keyword entries without advertising rules', () async {
+    await _withIsolatedRouteStorage(() async {
+      final status = await _updateFixture({
+        'category-ai-!cn': r'''
+example.fixture
+keyword:example-ai
+keyword:advertising-ai @ads
+''',
+      });
+      final rules = await _srsDomains(File(status.aiServicesPath!));
+      expect(
+        rules,
+        containsAll({'suffix:example.fixture', 'keyword:example-ai'}),
+      );
+      expect(rules, isNot(contains('keyword:advertising-ai')));
+    });
+  });
+
+  test(
+    'generated keyword rules match with local sing-box executable',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final status = await _updateFixture({
+          'category-ai-!cn': 'keyword:assistant-fixture',
+        });
+        Future<ProcessResult> match(String domain) =>
+            Process.run('etonify-core/sing-box.exe', [
+              'rule-set',
+              'match',
+              '--format',
+              'binary',
+              status.aiServicesPath!,
+              domain,
+            ]);
+        final keywordMatch = await match('api.assistant-fixture.example');
+        final unrelated = await match('unrelated.example');
+        expect(
+          keywordMatch.exitCode,
+          0,
+          reason: '${keywordMatch.stdout} ${keywordMatch.stderr}',
+        );
+        expect(
+          '${keywordMatch.stdout}${keywordMatch.stderr}',
+          contains('match rules.'),
+        );
+        expect(
+          unrelated.exitCode,
+          0,
+          reason: '${unrelated.stdout} ${unrelated.stderr}',
+        );
+        expect(
+          '${unrelated.stdout}${unrelated.stderr}',
+          isNot(contains('match rules.')),
+        );
+      });
+    },
+    skip:
+        !Platform.isWindows || !File('etonify-core/sing-box.exe').existsSync(),
+  );
+
+  test(
+    'old cached lists migrate offline and gain social categories on update',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final installed = await _updateFixture({
+          'category-ai-!cn': 'keyword:assistant-fixture',
+          'discord': 'discord.fixture',
+        });
+        final manifest = _manifestFile(installed);
+        final metadata =
+            jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
+        metadata['domainListCommunityCompilerVersion'] = 1;
+        await manifest.writeAsString(jsonEncode(metadata));
+        final newCategory = File(
+          '${manifest.parent.path}/domain-list-community/${Uri.encodeComponent('category-social-media-!cn')}.txt',
+        );
+        await newCategory.delete();
+
+        final migrated = await HttpOverrides.runZoned(
+          () => RussiaRouteDataService.instance.loadStatus(),
+          createHttpClient: (_) =>
+              throw StateError('Migration must stay offline'),
+        );
+        expect(
+          await _srsDomains(File(migrated.aiServicesPath!)),
+          contains('keyword:assistant-fixture'),
+        );
+        expect(
+          await _srsDomains(File(migrated.socialServicesPath!)),
+          contains('suffix:discord.fixture'),
+        );
+        expect(migrated.domainListCommunityCompilerVersion, greaterThan(1));
+
+        final updated = await _updateFixture({
+          'category-ai-!cn': 'keyword:assistant-fixture',
+          'category-social-media-!cn': 'include:twitter',
+          'twitter': 'x.fixture',
+          'discord': 'discord.fixture',
+        }, force: true);
+        expect(
+          await _srsDomains(File(updated.socialServicesPath!)),
+          containsAll({'suffix:discord.fixture', 'suffix:x.fixture'}),
+        );
+      });
+    },
+  );
+
+  test(
     'compiler preserves attributes and selective nested includes in SRS',
     () async {
       await _withIsolatedRouteStorage(() async {
@@ -645,42 +774,59 @@ Future<Set<String>> _srsDomains(File file) async {
   if (rules == 0) return {};
   expect(rules, 1);
   expect(body[offset++], 0);
-  expect(body[offset++], 2);
-  expect(body[offset++], 0);
-  List<int> readBitmap() {
-    final length = readVarint();
-    final view = ByteData.sublistView(body);
-    return List.generate(length, (_) {
-      final word = view.getUint64(offset);
-      offset += 8;
-      return word;
-    });
-  }
-
-  final leaves = readBitmap();
-  final bitmap = readBitmap();
-  final labelCount = readVarint();
-  final labels = body.sublist(offset, offset + labelCount);
-  bool bit(List<int> words, int index) =>
-      (words[index >> 6] & (1 << (index & 63))) != 0;
-  final queue = <String>[''];
   final result = <String>{};
-  var label = 0;
-  var bitmapIndex = 0;
-  for (var node = 0; node < queue.length; node++) {
-    final key = queue[node];
-    if (bit(leaves, node)) {
-      final domain = String.fromCharCodes(key.codeUnits.reversed);
-      result.add(
-        domain.startsWith('\n')
-            ? 'suffix:${domain.substring(1)}'
-            : 'exact:$domain',
-      );
+  var item = body[offset++];
+  if (item == 2) {
+    expect(body[offset++], 0);
+    List<int> readBitmap() {
+      final length = readVarint();
+      final view = ByteData.sublistView(body);
+      return List.generate(length, (_) {
+        final word = view.getUint64(offset);
+        offset += 8;
+        return word;
+      });
     }
-    while (!bit(bitmap, bitmapIndex++)) {
-      queue.add('$key${String.fromCharCode(labels[label++])}');
+
+    final leaves = readBitmap();
+    final bitmap = readBitmap();
+    final labelCount = readVarint();
+    final labels = body.sublist(offset, offset + labelCount);
+    bool bit(List<int> words, int index) =>
+        (words[index >> 6] & (1 << (index & 63))) != 0;
+    final queue = <String>[''];
+    var label = 0;
+    var bitmapIndex = 0;
+    for (var node = 0; node < queue.length; node++) {
+      final key = queue[node];
+      if (bit(leaves, node)) {
+        final domain = String.fromCharCodes(key.codeUnits.reversed);
+        result.add(
+          domain.startsWith('\n')
+              ? 'suffix:${domain.substring(1)}'
+              : 'exact:$domain',
+        );
+      }
+      while (!bit(bitmap, bitmapIndex++)) {
+        queue.add('$key${String.fromCharCode(labels[label++])}');
+      }
     }
+    offset += labelCount;
+    item = body[offset++];
   }
+  if (item == 3) {
+    final count = readVarint();
+    for (var index = 0; index < count; index++) {
+      final length = readVarint();
+      result.add(
+        'keyword:${utf8.decode(body.sublist(offset, offset + length))}',
+      );
+      offset += length;
+    }
+    item = body[offset++];
+  }
+  expect(item, 0xff);
+  expect(body[offset++], 0);
   return result;
 }
 

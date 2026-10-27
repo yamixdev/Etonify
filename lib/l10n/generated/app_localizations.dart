@@ -1757,38 +1757,26 @@ abstract class AppLocalizations {
   /// No description provided for @legalGateTitle.
   ///
   /// In en, this message translates to:
-  /// **'Before using Etonify'**
+  /// **'Disclaimer'**
   String get legalGateTitle;
 
-  /// No description provided for @legalGateSubtitle.
+  /// No description provided for @legalGateBody.
   ///
   /// In en, this message translates to:
-  /// **'Starting with version {version}, please read and accept the Terms and Privacy Policy to continue.'**
-  String legalGateSubtitle(String version);
+  /// **'Etonify does not provide VPN servers. You add your own profiles and are responsible for their use and the security of your access keys.\n\nThe app is provided as is. Third-party servers and networks may be unavailable. Follow applicable laws and the rules of the services you use.\n\nProfiles, settings, and logs are stored on your device. Third-party services may see your IP address when the app sends network requests.'**
+  String get legalGateBody;
 
   /// No description provided for @legalAcceptAction.
   ///
   /// In en, this message translates to:
-  /// **'Accept and continue'**
+  /// **'Accept'**
   String get legalAcceptAction;
 
   /// No description provided for @legalAcceptHint.
   ///
   /// In en, this message translates to:
-  /// **'Open both documents to enable continue.'**
+  /// **'By selecting Accept, you agree to the Terms of Use and acknowledge that you have read the Privacy Policy.'**
   String get legalAcceptHint;
-
-  /// No description provided for @legalDocumentReadAction.
-  ///
-  /// In en, this message translates to:
-  /// **'I have read it'**
-  String get legalDocumentReadAction;
-
-  /// No description provided for @legalContactAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Ask a question'**
-  String get legalContactAction;
 
   /// No description provided for @legalImportBlockedMessage.
   ///

@@ -28,7 +28,12 @@ class SingboxConfigBuilder {
   // user-selected application. Core outbound sockets are VpnService.protect()-ed
   // by MeowVpnPlatformInterface, so they do not loop back into this TUN.
   static const _applicationPackageName = 'com.etonify.meow_client';
-  static const List<String> _russiaDirectDomainSuffixes = ['ru', 'su', 'рф'];
+  static const List<String> _russiaDirectDomainSuffixes = [
+    'ru',
+    'su',
+    'рф',
+    'xn--p1ai',
+  ];
   static const int _urltestInterruptDelayThresholdMs = 300;
   static final RegExp _ipv4LiteralPattern = RegExp(
     r'^\d{1,3}(?:\.\d{1,3}){3}$',
@@ -179,7 +184,7 @@ class SingboxConfigBuilder {
         _validRuleSetPath(russiaGeoipRuWhitelistPath) &&
         _validRuleSetPath(russiaGeoipRuPath);
     final russiaCuratedDirectServicesActive =
-        requestedTrafficRulePreset == TrafficRulePreset.russianServicesDirect &&
+        russiaRouteDataActive &&
         _validRuleSetPath(russiaCuratedDirectServicesPath);
     final aiServicesActive =
         requestedTrafficRulePreset == TrafficRulePreset.aiViaVpn &&
