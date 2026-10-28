@@ -1324,6 +1324,7 @@ class MeowBoxService(
                 if (inbound.optString("type") != "tun") {
                     continue
                 }
+                if (migrateNativeTunStack(inbound)) changed = true
                 splitIncludePackages += readPackageList(inbound.optJSONArray("include_package"))
                 splitExcludePackages += readPackageList(inbound.optJSONArray("exclude_package"))
                 if (inbound.has("include_package")) {

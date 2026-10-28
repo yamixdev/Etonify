@@ -126,28 +126,6 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     super.dispose();
   }
 
-  String _tunImplementationLabel(
-    AppLocalizations l10n,
-    TunImplementationPreference value,
-  ) {
-    return switch (value) {
-      TunImplementationPreference.native => l10n.tunImplementationNative,
-      TunImplementationPreference.system => l10n.tunImplementationSystem,
-    };
-  }
-
-  String _tunImplementationDescription(
-    AppLocalizations l10n,
-    TunImplementationPreference value,
-  ) {
-    return switch (value) {
-      TunImplementationPreference.native =>
-        l10n.tunImplementationNativeSubtitle,
-      TunImplementationPreference.system =>
-        l10n.tunImplementationSystemSubtitle,
-    };
-  }
-
   bool _isValidMtu(String value) {
     final mtu = int.tryParse(value.trim());
     return mtu != null && mtu >= _minimumMtu && mtu <= _maximumMtu;
@@ -207,33 +185,6 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
     }
     setState(() => _vpnMtu = result);
     widget.onVpnMtuChanged(result);
-  }
-
-  Future<void> _showTunImplementationPicker(BuildContext context) async {
-    final l10n = AppLocalizations.of(context);
-    final result = await showModalBottomSheet<TunImplementationPreference>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => _RadioSheet<TunImplementationPreference>(
-        title: l10n.tunImplementationTitle,
-        current: widget.currentVpnTunImplementation,
-        items: [
-          RadioChoice(
-            value: TunImplementationPreference.native,
-            label: l10n.tunImplementationNative,
-            subtitle: l10n.tunImplementationNativeSubtitle,
-          ),
-          RadioChoice(
-            value: TunImplementationPreference.system,
-            label: l10n.tunImplementationSystem,
-            subtitle: l10n.tunImplementationSystemSubtitle,
-          ),
-        ],
-      ),
-    );
-    if (result != null) {
-      widget.onVpnTunImplementationChanged(result);
-    }
   }
 
   void _commitPort() {
@@ -444,10 +395,8 @@ class _SettingsInboundPageState extends State<SettingsInboundPage> {
             ),
             title: Text(l10n.tunImplementationTitle),
             subtitle: Text(
-              '${_tunImplementationLabel(l10n, widget.currentVpnTunImplementation)} • ${_tunImplementationDescription(l10n, widget.currentVpnTunImplementation)}',
+              '${l10n.tunImplementationNative} • ${l10n.tunImplementationNativeSubtitle}',
             ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _showTunImplementationPicker(context),
           ),
         ],
       ),
@@ -785,64 +734,6 @@ class _SectionLabel extends StatelessWidget {
         label,
         style: theme.textTheme.titleSmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-class _RadioSheet<T> extends StatelessWidget {
-  const _RadioSheet({
-    required this.title,
-    required this.current,
-    required this.items,
-  });
-
-  final String title;
-  final T current;
-  final List<RadioChoice<T>> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.75),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
-              const Gap(12),
-              Flexible(
-                child: RadioGroup<T>(
-                  groupValue: current,
-                  onChanged: (value) {
-                    if (value != null) {
-                      Navigator.of(context).pop(value);
-                    }
-                  },
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      for (final item in items)
-                        RadioListTile<T>(
-                          value: item.value,
-                          title: Text(item.label),
-                          subtitle: item.subtitle == null
-                              ? null
-                              : Text(item.subtitle!),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

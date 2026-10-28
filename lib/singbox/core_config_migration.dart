@@ -69,17 +69,24 @@ class CoreConfigMigration {
         blockReason: 'settings_from_newer_client',
       );
     }
-    if (state.coreConfigSchemaVersion == currentCoreConfigSchemaVersion) {
-      return CoreConfigMigrationResult(
-        status: CoreConfigMigrationStatus.notRequired,
-        state: state,
-      );
-    }
     if (capabilities.tunStacks.isEmpty) {
       return CoreConfigMigrationResult(
         status: CoreConfigMigrationStatus.blocked,
         state: state,
         blockReason: 'core_tun_capabilities_missing',
+      );
+    }
+    if (!capabilities.supportsTunStack('native')) {
+      return CoreConfigMigrationResult(
+        status: CoreConfigMigrationStatus.blocked,
+        state: state,
+        blockReason: 'no_compatible_tun_stack',
+      );
+    }
+    if (state.coreConfigSchemaVersion == currentCoreConfigSchemaVersion) {
+      return CoreConfigMigrationResult(
+        status: CoreConfigMigrationStatus.notRequired,
+        state: state,
       );
     }
 
@@ -187,7 +194,7 @@ class CoreConfigMigration {
         ? 1800
         : state.urlTestIntervalSeconds;
     final timeout = state.urlTestTimeoutSeconds <= 0
-        ? 15
+        ? defaultUrlTestTimeoutSeconds
         : state.urlTestTimeoutSeconds;
     final concurrency = state.urlTestConcurrency.clamp(1, 10).toInt();
     final unavailable = state.urlTestUnavailableCheckIntervalSeconds
@@ -386,7 +393,6 @@ class CoreConfigMigration {
   ) {
     for (final candidate in const <TunImplementationPreference>[
       TunImplementationPreference.native,
-      TunImplementationPreference.system,
     ]) {
       if (capabilities.supportsTunStack(candidate.name)) {
         return candidate;

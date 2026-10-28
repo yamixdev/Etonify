@@ -10,6 +10,14 @@ import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 class SubscriptionBackgroundUpdates {
   static const _channel = MethodChannel('meow_client/subscription_refresh');
   static int _configurationGeneration = 0;
+  static void Function()? onDownloadReady;
+
+  static void listen() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'downloadReady') onDownloadReady?.call();
+    });
+  }
+
   static Future<void> invalidatePlan() async {
     ++_configurationGeneration;
     if (Platform.isAndroid) {
@@ -38,6 +46,7 @@ class SubscriptionBackgroundUpdates {
           'token': SubscriptionStore.backgroundRevision(p),
           'headers': await SubscriptionFetcher.backgroundRequestHeaders(p.info),
           'dueAt': dueAt,
+          'intervalMillis': p.autoRefreshMinutes * 60000,
         });
       }
     }
@@ -70,22 +79,23 @@ class SubscriptionBackgroundUpdates {
       if (encoded == null) continue;
       final result = jsonDecode(encoded) as Map;
       if (result['token'] != token) continue;
+      final payload = result['pendingSuccess'] as Map? ?? result;
       SubscriptionFailure? failure;
-      if (result['failure'] != null) {
+      if (payload['failure'] != null) {
         failure = SubscriptionFailure(
           SubscriptionFailureKind.values.firstWhere(
-            (k) => k.name == result['failure'],
+            (k) => k.name == payload['failure'],
             orElse: () => SubscriptionFailureKind.unknown,
           ),
-          httpStatus: result['httpStatus'] as int?,
+          httpStatus: payload['httpStatus'] as int?,
         );
       } else {
         try {
           await SubscriptionStore.applyBackgroundDownload(
             id,
             revision: token,
-            bytes: base64Decode(result['body'] as String),
-            headers: Map<String, String>.from(result['headers'] as Map),
+            bytes: base64Decode(payload['body'] as String),
+            headers: Map<String, String>.from(payload['headers'] as Map),
           );
         } catch (error) {
           failure = classifySubscriptionFailure(error);
@@ -94,17 +104,20 @@ class SubscriptionBackgroundUpdates {
       final entry = SubscriptionRefreshEntry(
         id: id,
         name: profile.name,
-        time: result['time'] as int,
+        time: payload['time'] as int,
         failure: failure,
         background: true,
       );
       await SubscriptionRefreshReports.save([entry]);
       entries.add(entry);
-      await _ack(id, token);
+      await _ack(id, token, attemptTime: result['time'] as int);
     }
     return entries;
   }
 
-  static Future<void> _ack(String id, String token) => _channel
-      .invokeMethod<void>('ack', jsonEncode({'id': id, 'token': token}));
+  static Future<void> _ack(String id, String token, {int? attemptTime}) =>
+      _channel.invokeMethod<void>(
+        'ack',
+        jsonEncode({'id': id, 'token': token, 'time': ?attemptTime}),
+      );
 }

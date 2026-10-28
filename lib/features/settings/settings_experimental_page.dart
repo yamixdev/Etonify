@@ -122,10 +122,6 @@ class SettingsExperimentalPage extends ConsumerWidget {
         settings.experimentalInterruptExistingConnections;
     final currentUrlTestStrictTolerance =
         settings.experimentalUrlTestStrictTolerance;
-    final currentFakeIpEnabled = settings.experimentalFakeIpEnabled;
-    final fakeIpAvailable =
-        settings.vpnInboundEnabled &&
-        settings.splitRoutingMode == SplitRoutingMode.disabled;
     final currentTlsFragmentationMode = settings.tlsFragmentationMode;
     final currentMemoryLimitEnabled = settings.memoryLimitEnabled;
     final currentMemoryLimitWarningDismissed =
@@ -171,17 +167,6 @@ class SettingsExperimentalPage extends ConsumerWidget {
                   description: l10n.experimentalTcpMultiPathSubtitle,
                   value: currentTcpMultiPath,
                   onChanged: commands.setExperimentalTcpMultiPath,
-                ),
-                _ExperimentalSettingTile.toggle(
-                  icon: Icons.dns_rounded,
-                  title: l10n.experimentalFakeIpTitle,
-                  description: fakeIpAvailable
-                      ? l10n.experimentalFakeIpSubtitle
-                      : l10n.experimentalFakeIpUnavailableSubtitle,
-                  value: fakeIpAvailable && currentFakeIpEnabled,
-                  onChanged: fakeIpAvailable
-                      ? commands.setExperimentalFakeIpEnabled
-                      : null,
                 ),
               ],
             ),

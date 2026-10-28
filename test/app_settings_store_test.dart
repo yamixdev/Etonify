@@ -54,6 +54,20 @@ class _CountingSettingsFile extends Fake implements RandomAccessFile {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('legacy System TUN storage and imports normalize to native', () {
+    final store = MemoryAppSettingsStore();
+    final restored = store.mapState({'vpn_tun_implementation': 'system'});
+    expect(restored.vpnTunImplementation, TunImplementationPreference.native);
+    expect(store.stateToMap(restored)['vpn_tun_implementation'], 'native');
+    final imported = store.mergeSafeImportMap(store.mapState({}), {
+      'vpn_tun_implementation': 'system',
+    });
+    expect(imported.vpnTunImplementation, TunImplementationPreference.native);
+    expect(
+      store.stateToSafeExportMap(imported)['vpn_tun_implementation'],
+      'native',
+    );
+  });
   test(
     'bottom navigation style survives storage and safe backup roundtrip',
     () {
@@ -360,10 +374,10 @@ void main() {
     final state = _TestSettingsStore().mapState(const <String, dynamic>{});
 
     expect(state.urlTestIntervalSeconds, 1800);
-    expect(state.urlTestTimeoutSeconds, 15);
+    expect(state.urlTestTimeoutSeconds, 5);
     expect(state.urlTestConcurrency, 10);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
-    expect(state.urlTestUrl, defaultUrlTestUrl);
+    expect(state.urlTestUrl, 'http://cp.cloudflare.com/');
     expect(state.locationLookupLimit, 1);
     expect(state.locationLookupTimeoutSeconds, 3);
     expect(state.locationLookupConcurrency, 1);
@@ -496,7 +510,7 @@ void main() {
     });
 
     expect(state.urlTestIntervalSeconds, 1800);
-    expect(state.urlTestTimeoutSeconds, 15);
+    expect(state.urlTestTimeoutSeconds, 5);
     expect(state.urlTestConcurrency, 10);
     expect(state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(state.locationLookupLimit, 1);
@@ -516,7 +530,7 @@ void main() {
       'location_lookup_concurrency': '1',
     });
     expect(standard.urlTestIntervalSeconds, 1800);
-    expect(standard.urlTestTimeoutSeconds, 15);
+    expect(standard.urlTestTimeoutSeconds, 5);
     expect(standard.urlTestConcurrency, 10);
     expect(standard.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(standard.locationLookupConcurrency, 1);
@@ -539,10 +553,78 @@ void main() {
       'urltest_unavailable_check_interval_seconds': '120',
     });
     expect(economy.urlTestIntervalSeconds, 1800);
-    expect(economy.urlTestTimeoutSeconds, 15);
+    expect(economy.urlTestTimeoutSeconds, 5);
     expect(economy.urlTestConcurrency, 10);
     expect(economy.urlTestUnavailableCheckIntervalSeconds, 120);
   });
+
+  test(
+    'migrates former standard URLTest endpoints but preserves custom URLs',
+    () {
+      final store = _TestSettingsStore();
+      for (final url in [
+        'https://www.gstatic.com/generate_204',
+        'http://connectivitycheck.gstatic.com/generate_204',
+        'https://connectivitycheck.gstatic.com/generate_204',
+        'https://www.google.com/generate_204',
+      ]) {
+        expect(
+          store.mapState({'urltest_url': url}).urlTestUrl,
+          'http://cp.cloudflare.com/',
+        );
+      }
+      const custom = 'https://example.test/custom';
+      expect(store.mapState({'urltest_url': ' $custom '}).urlTestUrl, custom);
+    },
+  );
+
+  test('migrates the old timeout once and preserves custom timeout values', () {
+    final store = _TestSettingsStore();
+    expect(
+      store.mapState({'urltest_timeout_seconds': '15'}).urlTestTimeoutSeconds,
+      5,
+    );
+    for (final timeout in [4, 5, 10, 20]) {
+      expect(
+        store.mapState({
+          'urltest_timeout_seconds': '$timeout',
+        }).urlTestTimeoutSeconds,
+        timeout,
+      );
+    }
+    final custom = store.mapState({}).copyWith(urlTestTimeoutSeconds: 15);
+    expect(store.mapState(store.stateToMap(custom)).urlTestTimeoutSeconds, 15);
+    expect(
+      store
+          .mergeSafeImportMap(
+            store.mapState({}),
+            store.stateToSafeExportMap(custom),
+          )
+          .urlTestTimeoutSeconds,
+      15,
+    );
+    expect(
+      store.mergeSafeImportMap(custom, {
+        'urltest_timeout_seconds': '15',
+      }).urlTestTimeoutSeconds,
+      5,
+    );
+    expect(
+      store.mergeSafeImportMap(custom, {
+        'locale_code': 'ru',
+      }).urlTestTimeoutSeconds,
+      15,
+    );
+  });
+
+  test(
+    'memory settings start with the same URLTest defaults as storage',
+    () async {
+      final state = await MemoryAppSettingsStore().loadState();
+      expect(state.urlTestUrl, 'http://cp.cloudflare.com/');
+      expect(state.urlTestTimeoutSeconds, 5);
+    },
+  );
 
   test('normalizes Russia route DNS resolver', () {
     final store = _TestSettingsStore();

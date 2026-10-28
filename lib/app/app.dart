@@ -164,6 +164,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
   late final AsyncWriteQueue<AppSettingsState> _stateSaveQueue;
   bool _autoRefreshInFlight = false;
   bool _backgroundSubscriptionSyncInFlight = false;
+  bool _backgroundSubscriptionSyncQueued = false;
+  bool _backgroundSubscriptionReloadPending = false;
   bool _ownsStore = false;
   bool _ready = false;
   bool _storageBootstrapFailed = false;
@@ -2148,6 +2150,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
   @override
   void initState() {
     super.initState();
+    if (Platform.isAndroid) {
+      SubscriptionBackgroundUpdates.listen();
+      SubscriptionBackgroundUpdates.onDownloadReady = () {
+        if (mounted && _ready) unawaited(_syncBackgroundSubscriptionUpdates());
+      };
+    }
     _stateSaveQueue = AsyncWriteQueue<AppSettingsState>((state) async {
       final store = _store;
       if (store != null) {
@@ -2444,6 +2452,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   @override
   void dispose() {
+    SubscriptionBackgroundUpdates.onDownloadReady = null;
     _vpnLifecycleCommands.unbind();
     _appSettingsCommands.unbindRoutingHandlers();
     _appSettingsCommands.unbindDnsHandlers();
@@ -4055,15 +4064,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
     } finally {
       _autoRefreshInFlight = false;
+      if (_backgroundSubscriptionSyncQueued && mounted) {
+        _backgroundSubscriptionSyncQueued = false;
+        unawaited(_syncBackgroundSubscriptionUpdates());
+      }
       _startSubscriptionAutoRefresh();
     }
   }
 
   Future<void> _syncBackgroundSubscriptionUpdates() async {
-    if (!Platform.isAndroid ||
-        _backgroundSubscriptionSyncInFlight ||
-        _autoRefreshInFlight ||
-        _automaticSubscriptionUpdatesBlocked) {
+    if (_backgroundSubscriptionSyncInFlight || _autoRefreshInFlight) {
+      _backgroundSubscriptionSyncQueued = true;
+      return;
+    }
+    if (!Platform.isAndroid) {
       return;
     }
     _backgroundSubscriptionSyncInFlight = true;
@@ -4076,12 +4090,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
             await SubscriptionRefreshReports.backoffUntil(),
           );
       if (entries.any((e) => e.succeeded)) {
+        _backgroundSubscriptionReloadPending = true;
+      }
+      if (_backgroundSubscriptionReloadPending && _foregroundLifecycleActive) {
         if (!await _waitForAutomaticSubscriptionApply()) return;
         final activeBefore = _activeSubscription;
-        final activeUpdated = entries.any(
-          (e) => e.succeeded && e.id == _activeSubscription?.id,
-        );
-        final activeAfter = activeUpdated && activeBefore != null
+        final activeAfter = activeBefore != null
             ? await SubscriptionStore.getInBackground(activeBefore.id)
             : null;
         if (!await _waitForAutomaticSubscriptionApply()) return;
@@ -4102,6 +4116,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           urlTestAfterApply: false,
           automatic: true,
         );
+        _backgroundSubscriptionReloadPending = false;
       }
       if (!mounted) return;
       await SubscriptionBackgroundUpdates.configure(
@@ -4115,6 +4130,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
     } finally {
       _backgroundSubscriptionSyncInFlight = false;
+      if (_backgroundSubscriptionSyncQueued && mounted) {
+        _backgroundSubscriptionSyncQueued = false;
+        unawaited(_syncBackgroundSubscriptionUpdates());
+      }
     }
   }
 

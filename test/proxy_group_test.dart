@@ -3658,36 +3658,35 @@ void main() {
     expect(tun['address'], contains('fdfe:dcba:9876::1/126'));
   });
 
-  test(
-    'native TUN omits deprecated stack while compatibility modes keep it',
-    () {
-      const subscription = Subscription(
-        id: 'tun-stack-migration',
-        name: 'TUN stack migration',
-        url: 'https://example.com/sub',
-        outbounds: [],
-      );
-      final nativeConfig = _defaultBuilder(
-        subscription,
-        vpnInboundEnabled: true,
-        vpnTunImplementation: TunImplementationPreference.native,
-      ).build();
-      final nativeTun = (nativeConfig['inbounds'] as List)
-          .cast<Map<dynamic, dynamic>>()
-          .firstWhere((inbound) => inbound['type'] == 'tun');
-      expect(nativeTun, isNot(contains('stack')));
+  test('native and migrated System TUN omit deprecated stack', () {
+    const subscription = Subscription(
+      id: 'tun-stack-migration',
+      name: 'TUN stack migration',
+      url: 'https://example.com/sub',
+      outbounds: [],
+    );
+    final nativeConfig = _defaultBuilder(
+      subscription,
+      vpnInboundEnabled: true,
+      vpnTunImplementation: TunImplementationPreference.native,
+    ).build();
+    final nativeTun = (nativeConfig['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
+    expect(nativeTun, isNot(contains('stack')));
 
-      final compatibilityConfig = _defaultBuilder(
-        subscription,
-        vpnInboundEnabled: true,
-        vpnTunImplementation: TunImplementationPreference.system,
-      ).build();
-      final compatibilityTun = (compatibilityConfig['inbounds'] as List)
-          .cast<Map<dynamic, dynamic>>()
-          .firstWhere((inbound) => inbound['type'] == 'tun');
-      expect(compatibilityTun['stack'], 'system');
-    },
-  );
+    final compatibilityConfig = _defaultBuilder(
+      subscription,
+      vpnInboundEnabled: true,
+      vpnTunImplementation: MemoryAppSettingsStore().mapState({
+        'vpn_tun_implementation': 'system',
+      }).vpnTunImplementation,
+    ).build();
+    final compatibilityTun = (compatibilityConfig['inbounds'] as List)
+        .cast<Map<dynamic, dynamic>>()
+        .firstWhere((inbound) => inbound['type'] == 'tun');
+    expect(compatibilityTun, isNot(contains('stack')));
+  });
 
   test('accepts valid IP proxy servers and filters malformed literals', () {
     const subscription = Subscription(

@@ -98,11 +98,10 @@ void main() {
     await tester.ensureVisible(nativeTile);
     await tester.tap(nativeTile);
     await tester.pumpAndSettle();
-    expect(find.text('Системный (System)'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Системный (System)'), findsNothing);
     expect(find.text('Смешанный (Mixed)'), findsNothing);
     expect(find.text('gVisor'), findsNothing);
-    await tester.tap(find.text('Системный (System)'));
-    await tester.pumpAndSettle();
 
     await tester.drag(find.byType(ListView).first, const Offset(0, 500));
     await tester.pumpAndSettle();

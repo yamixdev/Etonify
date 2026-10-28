@@ -56,25 +56,25 @@ void main() {
     expect(result.state.splitRoutingPackages, original.splitRoutingPackages);
   });
 
-  test('unsupported legacy TUN choice gets a deterministic candidate', () {
+  test('System-only core is blocked without changing settings', () {
     final original = _loadVersion021Fixture(store);
     final result = CoreConfigMigration.plan(
       state: original,
       capabilities: _versionedCapabilities(tunStacks: const <String>{'system'}),
     );
 
-    expect(result.status, CoreConfigMigrationStatus.readyForValidation);
-    expect(
-      result.state.vpnTunImplementation,
-      TunImplementationPreference.system,
-    );
-    expect(result.changes, <String>['vpn_tun_implementation:native->system']);
+    expect(result.status, CoreConfigMigrationStatus.blocked);
+    expect(result.state, same(original));
+    expect(result.blockReason, 'no_compatible_tun_stack');
+    expect(result.changes, isEmpty);
   });
 
-  test('schema 4 keeps an explicit compatibility stack', () {
+  test('schema 4 normalizes stored System to native before migration', () {
     final original = _loadVersion021Fixture(store).copyWith(
       coreConfigSchemaVersion: 4,
-      vpnTunImplementation: TunImplementationPreference.system,
+      vpnTunImplementation: store.mapState({
+        'vpn_tun_implementation': 'system',
+      }).vpnTunImplementation,
     );
     final result = CoreConfigMigration.plan(
       state: original,
@@ -87,9 +87,22 @@ void main() {
     expect(result.state.coreConfigSchemaVersion, 5);
     expect(
       result.state.vpnTunImplementation,
-      TunImplementationPreference.system,
+      TunImplementationPreference.native,
     );
     expect(result.changes, isEmpty);
+  });
+
+  test('current schema cannot bypass a System-only core capability', () {
+    final original = _loadVersion021Fixture(
+      store,
+    ).copyWith(coreConfigSchemaVersion: currentCoreConfigSchemaVersion);
+    final result = CoreConfigMigration.plan(
+      state: original,
+      capabilities: _versionedCapabilities(tunStacks: const {'system'}),
+    );
+    expect(result.status, CoreConfigMigrationStatus.blocked);
+    expect(result.blockReason, 'no_compatible_tun_stack');
+    expect(result.state, same(original));
   });
 
   for (final legacyTag in const <String>[
@@ -135,6 +148,7 @@ void main() {
       dnsProxyResolver: '',
       russiaDnsDirectResolver: '',
       urlTestUrl: '   ',
+      urlTestTimeoutSeconds: 0,
       urlTestConcurrency: 99,
       urlTestUnavailableCheckIntervalSeconds: 1,
       vpnInboundEnabled: true,
@@ -157,6 +171,7 @@ void main() {
       'https://dns.cloudflare.com/dns-query',
     );
     expect(result.state.urlTestUrl, defaultUrlTestUrl);
+    expect(result.state.urlTestTimeoutSeconds, 5);
     expect(result.state.urlTestConcurrency, 10);
     expect(result.state.urlTestUnavailableCheckIntervalSeconds, 120);
     expect(result.state.experimentalFakeIpEnabled, isFalse);

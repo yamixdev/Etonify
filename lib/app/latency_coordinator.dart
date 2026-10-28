@@ -119,7 +119,7 @@ class LatencyCoordinator {
        _expectedTags = expectedTags ?? _emptyExpectedTags,
        _capabilities = capabilities;
 
-  static const _defaultTimeoutMillis = 15000;
+  static const _defaultTimeoutMillis = 5000;
   static const _minimumTimeoutMillis = 500;
   static const _maximumTimeoutMillis = 30000;
   static const _defaultConcurrency = 10;

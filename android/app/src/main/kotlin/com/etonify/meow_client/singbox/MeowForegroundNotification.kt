@@ -45,7 +45,7 @@ internal class MeowForegroundNotification(
         private const val DEFAULT_LATENCY_TIMEOUT_MS = 20_000L
         private const val MAX_TEXT_LENGTH = 120
         private const val DEFAULT_TRAFFIC_REFRESH_SECONDS = 2
-        private const val DEFAULT_PROBE_URL = "https://www.gstatic.com/generate_204"
+        private const val DEFAULT_PROBE_URL = "http://cp.cloudflare.com/"
         private const val PRESENTATION_PREFS = "meow_foreground_notification"
         private const val PREF_DETAILED = "detailed"
         private const val PREF_TRAFFIC_DISPLAY_MODE = "traffic_display_mode"
@@ -146,7 +146,7 @@ internal class MeowForegroundNotification(
                 if (url.isEmpty()) {
                     return null
                 }
-                val timeout = number("timeoutMillis", 15_000).coerceIn(1_000, 30_000)
+                val timeout = number("timeoutMillis", 5_000).coerceIn(1_000, 30_000)
                 return UrlTestRequest(
                     groupTag = tag("groupTag").ifEmpty { "select" },
                     targetOutboundTag = target,
@@ -532,7 +532,7 @@ internal class MeowForegroundNotification(
         val request = if (url.isEmpty()) {
             null
         } else {
-            val timeout = value(PREF_URLTEST_TIMEOUT, 15_000).coerceIn(1_000, 30_000)
+            val timeout = value(PREF_URLTEST_TIMEOUT, 5_000).coerceIn(1_000, 30_000)
             UrlTestRequest(
                 groupTag = tag(PREF_URLTEST_GROUP, "select"),
                 targetOutboundTag = target,
@@ -633,7 +633,7 @@ internal class MeowForegroundNotification(
                 priorityOutboundTag = it,
                 excludeOutboundTag = "",
                 url = DEFAULT_PROBE_URL,
-                timeoutMillis = 15_000,
+                timeoutMillis = 5_000,
                 concurrency = 1,
                 deadlineMillis = 20_000,
             )

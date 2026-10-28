@@ -438,6 +438,29 @@ class _SettingsDnsPageState extends ConsumerState<SettingsDnsPage> {
               child: Column(
                 children: [
                   SwitchListTile(
+                    key: const ValueKey('dns-fake-ip'),
+                    secondary: SettingsLeadingIcon(
+                      icon: Icons.dns_rounded,
+                      color: cs.primary,
+                    ),
+                    title: Text(l10n.experimentalFakeIpTitle),
+                    subtitle: Text(
+                      settings.vpnInboundEnabled &&
+                              settings.splitRoutingMode ==
+                                  SplitRoutingMode.disabled
+                          ? l10n.experimentalFakeIpSubtitle
+                          : l10n.experimentalFakeIpUnavailableSubtitle,
+                    ),
+                    value: settings.experimentalFakeIpEnabled,
+                    onChanged:
+                        settings.vpnInboundEnabled &&
+                            settings.splitRoutingMode ==
+                                SplitRoutingMode.disabled
+                        ? _commands.setExperimentalFakeIpEnabled
+                        : null,
+                  ),
+                  const Divider(height: 1, indent: 72),
+                  SwitchListTile(
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 4,

@@ -33,10 +33,11 @@ import javax.net.ssl.SSLException
  */
 object SubscriptionRefreshJobs {
     private const val JOB_ID = 0x455452
-    private const val PERIOD = 60 * 60 * 1000L
+    private const val PERIOD = 15 * 60 * 1000L
     private const val MAX_BODY = 16 * 1024 * 1024
     @Volatile var foreground = false
     private val io = Executors.newSingleThreadExecutor()
+    @Volatile private var channel: MethodChannel? = null
     private fun root(context: Context) = File(context.noBackupFilesDir, "subscription_refresh").apply { mkdirs() }
     private fun key(context: Context) = SecretKeySpec(
         Base64.decode(SecureHiveKeyProvider.getOrCreateDataKey(context), Base64.NO_WRAP), "AES")
@@ -90,11 +91,10 @@ object SubscriptionRefreshJobs {
             ?.forEach { AtomicFile(it).delete() }
         val scheduler = context.getSystemService(JobScheduler::class.java)
         if (profiles.isEmpty()) { scheduler.cancel(JOB_ID); return }
-        if (scheduler.getPendingJob(JOB_ID) == null) {
+        if (scheduler.getPendingJob(JOB_ID)?.intervalMillis != PERIOD) {
             val job = JobInfo.Builder(JOB_ID, ComponentName(context, SubscriptionRefreshJob::class.java))
                 .setPeriodic(PERIOD)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-                .setRequiresBatteryNotLow(true)
                 .setPersisted(true)
                 .build()
             check(scheduler.schedule(job) == JobScheduler.RESULT_SUCCESS) { "Background scheduling failed" }
@@ -102,7 +102,9 @@ object SubscriptionRefreshJobs {
     }
 
     fun register(context: Context, messenger: BinaryMessenger) {
-        MethodChannel(messenger, "meow_client/subscription_refresh").setMethodCallHandler { call, result ->
+        val registered = MethodChannel(messenger, "meow_client/subscription_refresh")
+        channel = registered
+        registered.setMethodCallHandler { call, result ->
             io.execute {
                 runCatching {
                     when (call.method) {
@@ -117,7 +119,9 @@ object SubscriptionRefreshJobs {
                             val args = JSONObject(call.arguments as String)
                             synchronized(this) {
                                 val name = resultName(args.getString("id"))
-                                if (read(context, name)?.optString("token") == args.getString("token"))
+                                val pending = read(context, name)
+                                if (pending?.optString("token") == args.getString("token") &&
+                                    (!args.has("time") || pending.optLong("time") == args.getLong("time")))
                                     AtomicFile(file(context, name)).delete()
                             }
                             null
@@ -132,6 +136,11 @@ object SubscriptionRefreshJobs {
         }
     }
 
+    fun unregister() {
+        channel?.setMethodCallHandler(null)
+        channel = null
+    }
+
     fun run(context: Context, cancelled: AtomicBoolean, setConnection: (HttpURLConnection?) -> Unit) {
         val deadline = android.os.SystemClock.elapsedRealtime() + 120_000L
         for (profile in plans(context).sortedBy { it.optLong("dueAt") }) {
@@ -140,9 +149,7 @@ object SubscriptionRefreshJobs {
             val token = profile.getString("token")
             if (System.currentTimeMillis() < profile.getLong("dueAt")) continue
             val previous = read(context, resultName(id))
-            // One attempt per plan revision, including failures. No retry loop.
-            // Opening the client acknowledges the result and creates a new plan.
-            if (previous?.optString("token") == token) continue
+            if (!SubscriptionRefreshSchedule.isDue(profile, previous, System.currentTimeMillis())) continue
             val result = JSONObject().put("id", id).put("token", token)
                 .put("time", System.currentTimeMillis())
             try {
@@ -162,17 +169,26 @@ object SubscriptionRefreshJobs {
                     else -> "connection"
                 })
             } finally { setConnection(null) }
+            if (result.has("failure")) {
+                val failures = if (previous?.optString("token") == token)
+                    previous.optInt("failures", 0) else 0
+                result.put("failures", (failures + 1).coerceAtMost(4))
+                SubscriptionRefreshSchedule.retainPendingSuccess(result, previous)
+            }
             synchronized(this) {
                 if (cancelled.get() || foreground) return
                 // Bound encrypted staging on disk, even with many profiles.
                 val used = root(context).listFiles()?.sumOf { it.length() } ?: 0L
                 val resultBytes = result.toString().toByteArray(Charsets.UTF_8).size
-                if (used + resultBytes > 64L * 1024 * 1024) return
+                if (used - file(context, resultName(id)).length() + resultBytes > 64L * 1024 * 1024) return
                 if (plans(context).any {
                         it.optString("id") == id && it.optString("token") == token
                     }
                 ) {
                     write(context, resultName(id), result)
+                    Handler(Looper.getMainLooper()).post {
+                        channel?.invokeMethod("downloadReady", null)
+                    }
                 }
             }
         }

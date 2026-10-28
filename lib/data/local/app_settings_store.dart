@@ -19,7 +19,7 @@ enum HomeNavigationMode { panel, tabs }
 
 enum BottomNavigationStyle { floating, docked }
 
-enum TunImplementationPreference { native, system }
+enum TunImplementationPreference { native }
 
 enum InboundConnectionMode { vpn, proxy }
 
@@ -32,7 +32,8 @@ enum NotificationTrafficDisplayMode { speed, total, both }
 enum TlsFragmentationMode { disabled, record, fragment }
 
 const int maxSplitRoutingPackageCount = 128;
-const String defaultUrlTestUrl = 'https://www.gstatic.com/generate_204';
+const String defaultUrlTestUrl = 'http://cp.cloudflare.com/';
+const int defaultUrlTestTimeoutSeconds = 5;
 const String defaultRussiaDnsDirectResolver = 'udp://77.88.8.8';
 const String defaultProxyUsername = 'etonify';
 const int proxyUsernameMaxLength = 64;
@@ -613,6 +614,8 @@ abstract class AppSettingsStore {
   static const _urlTestUrlKey = 'urltest_url';
   static const _urlTestIntervalSecondsKey = 'urltest_interval_seconds';
   static const _urlTestTimeoutSecondsKey = 'urltest_timeout_seconds';
+  static const _urlTestTimeoutDefaultMigratedKey =
+      'urltest_timeout_default_migrated';
   static const _urlTestConcurrencyKey = 'urltest_concurrency';
   static const _urlTestUnavailableCheckIntervalSecondsKey =
       'urltest_unavailable_check_interval_seconds';
@@ -697,6 +700,7 @@ abstract class AppSettingsStore {
     _urlTestUrlKey,
     _urlTestIntervalSecondsKey,
     _urlTestTimeoutSecondsKey,
+    _urlTestTimeoutDefaultMigratedKey,
     _urlTestConcurrencyKey,
     _urlTestUnavailableCheckIntervalSecondsKey,
     _autoCheckServersKey,
@@ -742,6 +746,10 @@ abstract class AppSettingsStore {
         !sanitized.containsKey(_proxyHideUnavailableKey)) {
       sanitized[_proxyHideUnavailableKey] =
           sanitized[_proxySortKey]?.toString() == 'working' ? '1' : '0';
+    }
+    if (sanitized.containsKey(_urlTestTimeoutSecondsKey) &&
+        !sanitized.containsKey(_urlTestTimeoutDefaultMigratedKey)) {
+      sanitized[_urlTestTimeoutDefaultMigratedKey] = '0';
     }
     final merged = {...currentMap, ...sanitized};
     final mode = merged[_splitRoutingModeKey]?.toString();
@@ -951,10 +959,7 @@ abstract class AppSettingsStore {
       vpnInboundEnabled: boolValue(_vpnInboundEnabledKey, defaultValue: true),
       vpnMtu: _vpnMtuValue(map[_vpnMtuKey]),
       vpnStrictRoute: boolValue(_vpnStrictRouteKey, defaultValue: true),
-      vpnTunImplementation: switch (map[_vpnTunImplementationKey]) {
-        'system' => TunImplementationPreference.system,
-        _ => TunImplementationPreference.native,
-      },
+      vpnTunImplementation: TunImplementationPreference.native,
       vpnEnableIpv6: boolValue(
         _vpnEnableIpv6Key,
         defaultValue: boolValue(_dnsPreferIpv6Key, defaultValue: false),
@@ -1009,8 +1014,10 @@ abstract class AppSettingsStore {
           : urlTestInterval,
       urlTestTimeoutSeconds:
           urlTestTimeout == null ||
-              const <int>{4, 5, 10, 15}.contains(urlTestTimeout)
-          ? 15
+              urlTestTimeout <= 0 ||
+              (urlTestTimeout == 15 &&
+                  map[_urlTestTimeoutDefaultMigratedKey]?.toString() != '1')
+          ? defaultUrlTestTimeoutSeconds
           : urlTestTimeout,
       urlTestConcurrency: normalizedUrlTestConcurrency,
       urlTestUnavailableCheckIntervalSeconds:
@@ -1183,6 +1190,7 @@ abstract class AppSettingsStore {
       _urlTestUrlKey: state.urlTestUrl,
       _urlTestIntervalSecondsKey: state.urlTestIntervalSeconds.toString(),
       _urlTestTimeoutSecondsKey: state.urlTestTimeoutSeconds.toString(),
+      _urlTestTimeoutDefaultMigratedKey: '1',
       _urlTestConcurrencyKey: state.urlTestConcurrency.toString(),
       _urlTestUnavailableCheckIntervalSecondsKey: state
           .urlTestUnavailableCheckIntervalSeconds
@@ -1533,7 +1541,7 @@ class MemoryAppSettingsStore extends AppSettingsStore {
             russiaDnsDirectResolver: defaultRussiaDnsDirectResolver,
             urlTestUrl: defaultUrlTestUrl,
             urlTestIntervalSeconds: 1800,
-            urlTestTimeoutSeconds: 15,
+            urlTestTimeoutSeconds: defaultUrlTestTimeoutSeconds,
             urlTestConcurrency: 10,
             urlTestUnavailableCheckIntervalSeconds: 120,
             locationLookupLimit: 2,
@@ -1570,7 +1578,14 @@ class MemoryAppSettingsStore extends AppSettingsStore {
 String _migrateUrlTestUrl(String? value) {
   final normalized = value?.trim() ?? '';
   if (normalized.isEmpty ||
-      normalized == 'http://connectivitycheck.gstatic.com/generate_204') {
+      const <String>{
+        'http://connectivitycheck.gstatic.com/generate_204',
+        'https://connectivitycheck.gstatic.com/generate_204',
+        'http://www.gstatic.com/generate_204',
+        'https://www.gstatic.com/generate_204',
+        'http://www.google.com/generate_204',
+        'https://www.google.com/generate_204',
+      }.contains(normalized)) {
     return defaultUrlTestUrl;
   }
   return normalized;

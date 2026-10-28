@@ -146,6 +146,16 @@ void main() {
     );
   });
 
+  test('URLTest timeout reset uses five seconds and keeps custom choices', () {
+    final controller = AppSettingsController();
+    expect(controller.urlTestTimeoutSeconds, 5);
+    expect(controller.urlTestUrl, 'http://cp.cloudflare.com/');
+    expect(controller.setUrlTestTimeoutSeconds(15).changed, isTrue);
+    expect(controller.urlTestTimeoutSeconds, 15);
+    expect(controller.setUrlTestTimeoutSeconds(0).changed, isTrue);
+    expect(controller.urlTestTimeoutSeconds, 5);
+  });
+
   test('notification status can be changed without a config rebuild', () {
     final controller = AppSettingsController();
 

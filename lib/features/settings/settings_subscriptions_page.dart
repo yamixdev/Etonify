@@ -71,9 +71,10 @@ class _SettingsSubscriptionsPageState extends State<SettingsSubscriptionsPage> {
     _intervalSeconds = (widget.currentConfig.intervalSeconds ?? 1800)
         .clamp(30, 3600)
         .toInt();
-    _timeoutSeconds = (widget.currentConfig.timeoutSeconds ?? 15)
-        .clamp(1, 60)
-        .toInt();
+    _timeoutSeconds =
+        (widget.currentConfig.timeoutSeconds ?? defaultUrlTestTimeoutSeconds)
+            .clamp(1, 60)
+            .toInt();
     _concurrency = (widget.currentConfig.concurrency ?? 10)
         .clamp(1, 10)
         .toInt();

@@ -2402,6 +2402,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        SubscriptionRefreshJobs.unregister()
         startupTasks?.close()
         startupTasks = null
         SingboxHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, null)

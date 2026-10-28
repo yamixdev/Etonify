@@ -948,37 +948,31 @@ object SingboxController {
         }
     }
 
-    private val standaloneClientLock = Any()
-    @Volatile
-    private var sharedStandaloneClient: CommandClient? = null
+    private val standaloneClients = StandaloneCommandClients(
+        create = { Libbox.newStandaloneCommandClient() },
+        disconnect = { client: CommandClient -> client.disconnect(); Unit },
+    )
 
     private fun cleanupStandaloneClient() {
-        synchronized(standaloneClientLock) {
-            runCatching { sharedStandaloneClient?.disconnect() }
-            sharedStandaloneClient = null
-        }
+        standaloneClients.clear()
     }
 
     private fun <T> withStandaloneCommandClient(block: (CommandClient) -> T): T {
         MeowApplication.ensureLibboxSetup()
-        synchronized(standaloneClientLock) {
-            val client = sharedStandaloneClient ?: Libbox.newStandaloneCommandClient().also {
-                sharedStandaloneClient = it
-            }
-            return try {
-                block(client)
-            } catch (error: Throwable) {
-                runCatching { client.disconnect() }
-                sharedStandaloneClient = null
-                throw error
-            }
-        }
+        return standaloneClients.control(block)
+    }
+
+    private fun <T> withLookupCommandClient(block: (CommandClient) -> T): T {
+        MeowApplication.ensureLibboxSetup()
+        return standaloneClients.lookup(block)
     }
 
     fun selectOutbound(groupTag: String, outboundTag: String, callback: (Result<Unit>) -> Unit) {
         log("info", "libbox selectOutbound group=$groupTag outbound=$outboundTag")
         val operationGeneration = activeRuntimeGeneration
+        val queuedAt = SystemClock.uptimeMillis()
         commandExecutor.execute {
+            val startedAt = SystemClock.uptimeMillis()
             var result = runCatching {
                 check(operationGeneration > 0L && operationGeneration == activeRuntimeGeneration && running) {
                     "stale runtime before select outbound"
@@ -990,6 +984,7 @@ object SingboxController {
             if (result.isSuccess && operationGeneration != activeRuntimeGeneration) {
                 result = Result.failure(IllegalStateException("stale runtime after select outbound"))
             }
+            log("debug", "selector RPC queueMs=${startedAt - queuedAt} rpcMs=${SystemClock.uptimeMillis() - startedAt}")
             result.onFailure {
                 log("error", "libbox selectOutbound failed group=$groupTag outbound=$outboundTag error=${it.message}")
             }
@@ -1359,7 +1354,7 @@ object SingboxController {
     private fun fetchOutboundExternalInfo(outboundTag: String): Map<String, String> {
         val normalizedTag = outboundTag.trim()
         require(normalizedTag.isNotEmpty()) { "Outbound tag is empty" }
-        val info = withStandaloneCommandClient { client ->
+        val info = withLookupCommandClient { client ->
             val externalInfo = client.lookupOutboundExternalInfo(normalizedTag)
             (externalInfo.ip?.trim().orEmpty()) to (externalInfo.countryCode?.trim().orEmpty())
         }
@@ -1381,7 +1376,7 @@ object SingboxController {
         headersJson: String,
         maxBytes: Int,
         timeoutMillis: Int,
-    ): Map<String, Any?> = withStandaloneCommandClient { client ->
+    ): Map<String, Any?> = withLookupCommandClient { client ->
         val method = client.javaClass.methods.firstOrNull { candidate ->
             candidate.parameterCount == 5 &&
                 candidate.name.equals("fetchURLViaOutbound", ignoreCase = true)

@@ -6,7 +6,8 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/platform/windows/desktop_preferences.dart';
 
-const int appSettingsDefaultUrlTestTimeoutSeconds = 15;
+const int appSettingsDefaultUrlTestTimeoutSeconds =
+    defaultUrlTestTimeoutSeconds;
 const int appSettingsDefaultLocationLookupTimeoutSeconds = 3;
 const int appSettingsStandardUrlTestIntervalSeconds = 1800;
 const int appSettingsStandardUrlTestConcurrency = 10;

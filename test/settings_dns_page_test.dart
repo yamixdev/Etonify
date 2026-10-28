@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
@@ -52,6 +53,49 @@ Finder _directResolverField() {
 }
 
 void main() {
+  testWidgets('Fake IP is available in DNS with compatibility guard', (
+    tester,
+  ) async {
+    final controller = AppSettingsController();
+    final commands = AppSettingsCommands();
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsControllerProvider.overrideWithValue(controller),
+        appSettingsCommandsProvider.overrideWithValue(commands),
+      ],
+    );
+    addTearDown(container.dispose);
+    commands.bindExperimentalHandlers(
+      setExperimentalTcpFastOpen: (_) {},
+      setExperimentalTcpMultiPath: (_) {},
+      setExperimentalInterruptExistingConnections: (_) {},
+      setExperimentalUrlTestStrictTolerance: (_) {},
+      setExperimentalFakeIpEnabled: (value) => container
+          .read(appSettingsProvider.notifier)
+          .mutate((c) => c.setExperimentalFakeIpEnabled(value)),
+      setTlsFragmentationMode: (_) {},
+      setMemoryLimitEnabled: (_, {warningDismissed = false}) {},
+    );
+    await tester.pumpWidget(
+      _dnsSettingsApp(
+        harnessKey: GlobalKey<_DnsSettingsHarnessState>(),
+        container: container,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final tile = find.byKey(const ValueKey('dns-fake-ip'));
+    await tester.scrollUntilVisible(tile, 300);
+    expect(tester.widget<SwitchListTile>(tile).onChanged, isNotNull);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(controller.experimentalFakeIpEnabled, isTrue);
+    container
+        .read(appSettingsProvider.notifier)
+        .mutate((c) => c.setSplitRoutingMode(SplitRoutingMode.proxySelected));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(tile).onChanged, isNull);
+    expect(controller.experimentalFakeIpEnabled, isFalse);
+  });
   testWidgets('restored system proxy DNS shows a repair explanation', (
     tester,
   ) async {
