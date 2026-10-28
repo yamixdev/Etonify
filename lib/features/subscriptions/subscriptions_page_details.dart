@@ -874,7 +874,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                         : () async {
                             await Navigator.of(context).push<void>(
                               MaterialPageRoute(
-                          builder: (_) => SubscriptionSourcesPage(
+                                builder: (_) => SubscriptionSourcesPage(
                                   subscriptionId: subscription.id,
                                   hapticEnabled: widget.hapticEnabled,
                                   allowUntrustedSubscriptionCertificates: widget
