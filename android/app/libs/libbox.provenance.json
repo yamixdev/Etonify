@@ -1,7 +1,7 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "0cfadcd8482f9f57fe005efa07de6ef6e9efe8472432ef3268f15289f7b475d7",
-  "source_commit": "f27b9dbcb570d49e32df06dc6fd8f0588d0db04e",
+  "sha256": "7a45e757727339d85b4b8014f8660cf1f3d9fc5d4ea921f81c71038f5c0881d4",
+  "source_commit": "14d1bf1277174543fa68d77e748c98f1d0fe0faa",
   "source_version": "v1.15.0-alpha.10-etonify.3",
   "etonify_version": "v1.15.0-alpha.10-etonify.3",
   "upstream_commit": "c992297988288565a24a6d36e2cf4d77cb835fcd",
@@ -16,7 +16,7 @@
   ],
   "build_tags": "with_quic,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0",
   "sing_tun_repository": "https://github.com/yamixdev/sing-tun.git",
-  "sing_tun_commit": "bb49d6fa49afd191a642debf8a3229fdc18639b0",
+  "sing_tun_commit": "f6c689f33a1294da5bffb38531e33bec922ebb79",
   "sing_tun_upstream_commit": "5c2edb183cc92eb190d41c04dedfa5519ca3e78c",
   "sing_tun_module_version": "v0.9.7-0.20261009022811-5c2edb183cc9"
 }
