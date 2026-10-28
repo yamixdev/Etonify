@@ -398,48 +398,56 @@ void main() {
     );
   });
 
-  test(
-    'targeted check reads only its own baseline in a large profile',
-    () async {
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final times = _ObservedEventTimes({
-        for (var i = 0; i < 3000; i++) 'proxy-$i': now - 1,
-      });
-      var countReads = 0;
-      final requests = <LatencyTestRequest>[];
-      final coordinator = _coordinator(
-        runTest: (request) async => requests.add(request),
-        eventBaselineTimes: () => times,
-        outboundCount: () {
-          countReads++;
-          return 3000;
-        },
-        capabilities: LibboxCapabilities.parseOrLegacy(
-          '{"api_version":1,"supports_targeted_url_test":true}',
-        ),
-      );
-      addTearDown(coordinator.dispose);
-      final result = coordinator.runTarget(
-        targetOutboundTag: 'proxy-2',
-        reason: 'manual_active',
-      );
-      await Future<void>.delayed(Duration.zero);
-      expect(requests.single.targetOutboundTag, 'proxy-2');
-      expect(times.bulkReads, 0);
-      expect(countReads, 0);
-      // The captured target timestamp must still be a snapshot, not a live map.
-      times['proxy-2'] = now + 10;
-      expect(
-        coordinator.handleGroupEvent(
-          tag: 'proxy-2',
-          timeSeconds: now,
-          available: true,
-        ),
-        isTrue,
-      );
-      expect(await result, isTrue);
-    },
-  );
+  testWidgets('targeted check reads only its own baseline in a large profile', (
+    tester,
+  ) async {
+    final baselineTime = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60;
+    final times = _ObservedEventTimes({
+      for (var i = 0; i < 3000; i++) 'proxy-$i': baselineTime,
+    });
+    var countReads = 0;
+    final requests = <LatencyTestRequest>[];
+    final coordinator = _coordinator(
+      runTest: (request) async => requests.add(request),
+      eventBaselineTimes: () => times,
+      outboundCount: () {
+        countReads++;
+        return 3000;
+      },
+      capabilities: LibboxCapabilities.parseOrLegacy(
+        '{"api_version":1,"supports_targeted_url_test":true}',
+      ),
+    );
+    addTearDown(coordinator.dispose);
+    final result = coordinator.runTarget(
+      targetOutboundTag: 'proxy-2',
+      reason: 'manual_active',
+    );
+    await tester.pump();
+    expect(requests.single.targetOutboundTag, 'proxy-2');
+    expect(times.bulkReads, 0);
+    expect(countReads, 0);
+    expect(
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: baselineTime,
+        available: true,
+      ),
+      isFalse,
+    );
+    // The captured target timestamp must still be a snapshot, not a live map.
+    final resultTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    times['proxy-2'] = resultTime + 10;
+    expect(
+      coordinator.handleGroupEvent(
+        tag: 'proxy-2',
+        timeSeconds: resultTime,
+        available: true,
+      ),
+      isTrue,
+    );
+    expect(await result, isTrue);
+  });
 
   test(
     'parallel target publishes a local change without rebuilding a full sweep',
