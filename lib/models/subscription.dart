@@ -636,6 +636,59 @@ class SubscriptionProxyChain {
 }
 
 /// Full subscription model
+class SubscriptionSource {
+  const SubscriptionSource({
+    required this.id,
+    required this.snapshot,
+    this.enabled = true,
+    this.lastAttempt = 0,
+    this.lastError,
+  });
+
+  final String id;
+  final Subscription snapshot;
+  final bool enabled;
+  final int lastAttempt;
+  final String? lastError;
+  String get name => snapshot.name;
+  String get url => snapshot.url;
+  int get lastUpdated => snapshot.lastUpdated;
+
+  SubscriptionSource copyWith({
+    Subscription? snapshot,
+    bool? enabled,
+    int? lastAttempt,
+    String? lastError,
+    bool clearError = false,
+  }) => SubscriptionSource(
+    id: id,
+    snapshot: snapshot ?? this.snapshot,
+    enabled: enabled ?? this.enabled,
+    lastAttempt: lastAttempt ?? this.lastAttempt,
+    lastError: clearError ? null : lastError ?? this.lastError,
+  );
+
+  Map<String, dynamic> toMetadataMap() => {
+    'id': id,
+    'enabled': enabled,
+    'last_attempt': lastAttempt,
+    if (lastError != null) 'last_error': lastError,
+    'snapshot': snapshot.copyWith(sources: const []).toMetadataMap(),
+  };
+
+  factory SubscriptionSource.fromMetadataMap(Map<String, dynamic> map) =>
+      SubscriptionSource(
+        id: map['id'] as String,
+        enabled: map['enabled'] != false,
+        lastAttempt: map['last_attempt'] as int? ?? 0,
+        lastError: map['last_error'] as String?,
+        snapshot: Subscription.fromMetadataMap({
+          ...Map<String, dynamic>.from(map['snapshot'] as Map),
+          'sources': null,
+        }),
+      );
+}
+
 class Subscription {
   const Subscription({
     required this.id,
@@ -657,6 +710,7 @@ class Subscription {
     this.proxyChains = const [],
     this.urlTestConfig = const UrlTestConfig(),
     this.info,
+    this.sources = const [],
   });
 
   final String id;
@@ -679,6 +733,15 @@ class Subscription {
   final List<SubscriptionProxyChain> proxyChains;
   final UrlTestConfig urlTestConfig;
   final SubscriptionInfo? info;
+  final List<SubscriptionSource> sources;
+  List<SubscriptionSource> get effectiveSources => sources.isNotEmpty
+      ? sources
+      : [
+          SubscriptionSource(
+            id: 'primary',
+            snapshot: copyWith(sources: const []),
+          ),
+        ];
 
   Set<String> get concreteServerTags =>
       concreteSubscriptionServerTags(outbounds, groups);
@@ -688,6 +751,15 @@ class Subscription {
   bool get needsRefresh {
     if (disableAutoUpdate || autoRefreshMinutes <= 0) return false;
     final now = DateTime.now().millisecondsSinceEpoch;
+    if (sources.isNotEmpty) {
+      return sources.any(
+        (s) =>
+            s.enabled &&
+            (s.url.startsWith('https://') || s.url.startsWith('http://')) &&
+            now - s.lastUpdated > autoRefreshMinutes * 60000 &&
+            (s.lastError == null || now - s.lastAttempt >= 15 * 60000),
+      );
+    }
     return (now - lastUpdated) > autoRefreshMinutes * 60 * 1000;
   }
 
@@ -718,6 +790,8 @@ class Subscription {
         'proxy_chains': proxyChains.map((chain) => chain.toMap()).toList(),
       'urltest_config': urlTestConfig.toMap(),
       if (info != null) 'info': info!.toMap(),
+      if (sources.isNotEmpty)
+        'sources': sources.map((s) => s.toMetadataMap()).toList(),
     };
   }
 
@@ -725,6 +799,10 @@ class Subscription {
     'raw_content': rawContent,
     'outbounds': outbounds.map((o) => o.toMap()).toList(),
     if (groups.isNotEmpty) 'groups': groups.map((g) => g.toMap()).toList(),
+    if (sources.isNotEmpty)
+      'source_payloads': {
+        for (final source in sources) source.id: source.snapshot.toPayloadMap(),
+      },
   };
 
   Map<String, dynamic> toMap() => {...toMetadataMap(), ...toPayloadMap()};
@@ -736,12 +814,24 @@ class Subscription {
   /// the encrypted payload in Hive stays the source of truth for reparsing and
   /// export.
   Subscription withoutRawContentForRuntime() {
-    if (rawContent.isEmpty) {
+    if (rawContent.isEmpty && sources.isEmpty) {
       return this;
     }
     return copyWith(
       rawContent: '',
       hasRawPayload: hasRawPayload || rawContent.trim().length > 16,
+      sources: sources
+          .map(
+            (s) => s.copyWith(
+              snapshot: s.snapshot.copyWith(
+                rawContent: '',
+                outbounds: const [],
+                groups: const [],
+                sources: const [],
+              ),
+            ),
+          )
+          .toList(growable: false),
     );
   }
 
@@ -789,12 +879,36 @@ class Subscription {
               Map<String, dynamic>.from(map['info'] as Map),
             )
           : null,
+      sources:
+          (map['sources'] as List?)
+              ?.map(
+                (s) => SubscriptionSource.fromMetadataMap(
+                  Map<String, dynamic>.from(s as Map),
+                ),
+              )
+              .toList(growable: false) ??
+          const [],
     );
   }
 
   factory Subscription.fromMap(Map<String, dynamic> map) {
     final metadata = Subscription.fromMetadataMap(map);
     return metadata.copyWith(
+      sources: metadata.sources
+          .map((s) {
+            final payloads = map['source_payloads'] as Map?;
+            final payload = payloads?[s.id] as Map?;
+            return payload == null
+                ? s
+                : s.copyWith(
+                    snapshot: Subscription.fromMap({
+                      ...s.snapshot.toMetadataMap(),
+                      ...Map<String, dynamic>.from(payload),
+                      'sources': null,
+                    }),
+                  );
+          })
+          .toList(growable: false),
       rawContent: map['raw_content'] as String? ?? '',
       outbounds:
           (map['outbounds'] as List?)
@@ -836,6 +950,8 @@ class Subscription {
     List<SubscriptionProxyChain>? proxyChains,
     UrlTestConfig? urlTestConfig,
     SubscriptionInfo? info,
+    bool clearInfo = false,
+    List<SubscriptionSource>? sources,
   }) {
     return Subscription(
       id: id ?? this.id,
@@ -858,7 +974,8 @@ class Subscription {
       groups: groups ?? this.groups,
       proxyChains: proxyChains ?? this.proxyChains,
       urlTestConfig: urlTestConfig ?? this.urlTestConfig,
-      info: info ?? this.info,
+      info: clearInfo ? null : info ?? this.info,
+      sources: sources ?? this.sources,
     );
   }
 

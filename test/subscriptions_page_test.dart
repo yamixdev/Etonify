@@ -850,6 +850,147 @@ void main() {
   );
 
   _testSubscriptionWidgets(
+    'source import keeps the existing profile instead of creating another',
+    (tester) async {
+      await tester.runAsync(
+        () => SubscriptionStore.save(
+          Subscription(
+            id: 'target-profile',
+            name: 'Existing profile',
+            url: 'https://example.com/sub',
+            cachedVisibleProxyCount: 1,
+            outbounds: const [
+              Outbound(
+                tag: 'existing',
+                name: 'Existing server',
+                config: {
+                  'type': 'vless',
+                  'server': 'old.example.com',
+                  'server_port': 443,
+                  'uuid': '00000000-0000-0000-0000-000000000001',
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.getData') {
+            return {
+              'text':
+                  'vless://00000000-0000-0000-0000-000000000002@new.example.com:443?security=none&type=tcp#New',
+            };
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await _openSheet(
+        tester,
+        openAddOnStart: true,
+        targetProfileId: 'target-profile',
+      );
+      expect(find.text('Add source'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.content_paste_rounded));
+      await _pumpUntilFound(tester, find.text('Source added'));
+      final profiles = SubscriptionStore.getAllMetadata();
+      expect(profiles, hasLength(1));
+      expect(profiles.single.id, 'target-profile');
+      expect(profiles.single.name, 'Existing profile');
+      expect(profiles.single.effectiveSources, hasLength(2));
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'profile sources keep the last enabled source protected',
+    (tester) async {
+      await tester.runAsync(
+        () => SubscriptionStore.save(
+          Subscription(
+            id: 'sources-profile',
+            name: 'Sources profile',
+            url: 'https://example.com/sub',
+            cachedVisibleProxyCount: 0,
+          ),
+        ),
+      );
+      await _openDetails(tester, 'sources-profile', 'Sources profile');
+      await tester.tap(find.byKey(const ValueKey('profile-sources')));
+      await _pumpUi(tester);
+      expect(find.text('Profile sources').hitTestable(), findsOneWidget);
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const ValueKey('source-toggle-primary')),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const ValueKey('source-remove-primary')),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'quick import keeps primary actions close to the header and readable',
+    (tester) async {
+      await _openSheet(
+        tester,
+        openAddOnStart: true,
+        locale: const Locale('ru'),
+      );
+      final qr = find.byIcon(Icons.qr_code_scanner_rounded);
+      final card = find.ancestor(of: qr, matching: find.byType(Card)).first;
+      expect(tester.getSize(card).height, greaterThanOrEqualTo(144));
+      final heading = find.text(
+        AppLocalizations.of(tester.element(qr)).addSubscriptionQuickTitle,
+      );
+      expect(
+        tester.getTopLeft(card).dy - tester.getBottomLeft(heading).dy,
+        lessThan(65),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
+    'quick import stays usable with doubled Russian text',
+    (tester) async {
+      await _openSheet(
+        tester,
+        openAddOnStart: true,
+        locale: const Locale('ru'),
+        textScale: 2,
+      );
+      expect(
+        find.byIcon(Icons.qr_code_scanner_rounded).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.byIcon(Icons.content_paste_rounded).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byIcon(Icons.add_rounded));
+      await _pumpUi(tester);
+      expect(find.byType(TextField), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  _testSubscriptionWidgets(
     'add profile morphs in one sheet and keeps its header pinned',
     (tester) async {
       await _openSheet(tester, openAddOnStart: true);
@@ -1484,6 +1625,7 @@ Future<void> _openSheet(
   WidgetTester tester, {
   bool openAddOnStart = false,
   String? activeSubscriptionId,
+  String? targetProfileId,
   Locale locale = const Locale('en'),
   double textScale = 1,
   ScrollBehavior? scrollBehavior,
@@ -1519,6 +1661,7 @@ Future<void> _openSheet(
                 backgroundColor: Colors.transparent,
                 builder: (context) => SubscriptionsPage(
                   activeSubscriptionId: activeSubscriptionId,
+                  targetProfileId: targetProfileId,
                   openAddOnStart: openAddOnStart,
                 ),
               ),

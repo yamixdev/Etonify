@@ -178,6 +178,90 @@ void main() {
     expect(result.refreshedActiveSubscription, refreshed);
     expect(result.activeRuntimeChanged, isTrue);
   });
+
+  test(
+    'auto refresh does not report a skipped source old failure again',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final first = SubscriptionSource(
+        id: 'one',
+        snapshot: _subscription('one'),
+      );
+      final skipped = SubscriptionSource(
+        id: 'two',
+        snapshot: _subscription('two'),
+        lastAttempt: now - 1000,
+        lastError: 'timeout',
+      );
+      final original = _subscription(
+        'combined',
+      ).copyWith(sources: [first, skipped]);
+      final updated = original.copyWith(
+        sources: [
+          first.copyWith(lastAttempt: now),
+          skipped,
+        ],
+      );
+      final coordinator = SubscriptionCoordinator(
+        runtime: SubscriptionRuntimeController(),
+        payloadSnapshotFor: (_) => null,
+        refreshSubscription: (_) async => updated,
+      );
+      final result = await coordinator.refreshDue(
+        subscriptions: [original],
+        activeSubscription: original,
+        concurrency: 1,
+      );
+      expect(result.entries.map((e) => e.sourceId), ['one']);
+      expect(result.entries.single.succeeded, isTrue);
+      expect(result.activeRuntimeChanged, isFalse);
+    },
+  );
+
+  test(
+    'all attempted sources failing does not postpone a different source due soon',
+    () async {
+      final now = DateTime.now();
+      final stamp = now.millisecondsSinceEpoch;
+      final first = SubscriptionSource(
+        id: 'one',
+        snapshot: _subscription('one'),
+      );
+      final soon = SubscriptionSource(
+        id: 'two',
+        snapshot: _subscription('two').copyWith(lastUpdated: stamp - 30000),
+      );
+      final original = _subscription(
+        'combined',
+      ).copyWith(sources: [first, soon]);
+      final updated = original.copyWith(
+        sources: [
+          first.copyWith(lastAttempt: stamp, lastError: 'httpStatus:503'),
+          soon,
+        ],
+      );
+      final runtime = SubscriptionRuntimeController(now: () => now);
+      final coordinator = SubscriptionCoordinator(
+        runtime: runtime,
+        payloadSnapshotFor: (_) => null,
+        loadSubscription: (_) async => updated,
+        refreshSubscription: (_) async =>
+            throw SubscriptionHttpStatusException(503),
+      );
+      final result = await coordinator.refreshDue(
+        subscriptions: [original],
+        activeSubscription: original,
+        concurrency: 1,
+      );
+      expect(result.entries.map((e) => e.sourceId), ['one']);
+      expect(result.entries.single.failure?.httpStatus, 503);
+      expect(result.activeRuntimeChanged, isFalse);
+      expect(
+        coordinator.nextAutoRefreshDelay([updated]),
+        const Duration(seconds: 30),
+      );
+    },
+  );
 }
 
 Subscription _subscription(String id) {

@@ -92,4 +92,37 @@ void main() {
     expect(find.textContaining('502'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test(
+    'source reports merge and back off independently within one profile',
+    () async {
+      await SubscriptionRefreshReports.markRead();
+      SubscriptionRefreshEntry entry(
+        String source,
+        int time, {
+        bool fail = true,
+      }) => SubscriptionRefreshEntry.fromMap({
+        'id': 'combined',
+        'sourceId': source,
+        'name': 'Source $source',
+        'time': time,
+        'kind': fail ? 'timeout' : null,
+      });
+      await SubscriptionRefreshReports.save([
+        entry('one', 1000),
+        entry('two', 2000),
+      ]);
+      final entries = await SubscriptionRefreshReports.latest();
+      expect(entries, hasLength(2));
+      expect(entries.first.toMap()['sourceId'], 'one');
+      final backoff = await SubscriptionRefreshReports.backoffUntil();
+      expect(backoff[jsonEncode(['combined', 'one'])], 1000 + 15 * 60000);
+      expect(backoff[jsonEncode(['combined', 'two'])], 2000 + 15 * 60000);
+      await SubscriptionRefreshReports.save([entry('one', 3000, fail: false)]);
+      final remaining = await SubscriptionRefreshReports.backoffUntil();
+      expect(remaining.containsKey(jsonEncode(['combined', 'one'])), isFalse);
+      expect(remaining[jsonEncode(['combined', 'two'])], 2000 + 15 * 60000);
+      expect(await SubscriptionRefreshReports.latest(), hasLength(2));
+    },
+  );
 }

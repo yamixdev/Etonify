@@ -2908,6 +2908,95 @@ void main() {
     expect((secure['tls'] as Map)['insecure'], isTrue);
   });
 
+  for (final removed in [false, true]) {
+    for (final targetProfileId in ['', 'active', 'external']) {
+      test(
+        'chain snapshot cannot revive ${removed ? 'removed' : 'disabled'} source with target profile "$targetProfileId"',
+        () {
+          const firstHop = Outbound(
+            tag: 'first-hop',
+            name: 'First hop',
+            config: {
+              'type': 'socks',
+              'server': 'first.example.com',
+              'server_port': 1080,
+            },
+          );
+          const targetConfig = <String, dynamic>{
+            'type': 'socks',
+            'server': 'disabled.example.com',
+            'server_port': 1080,
+          };
+          final subscription = Subscription(
+            id: 'active',
+            name: 'Active',
+            url: '',
+            outbounds: const [firstHop],
+            sources: [
+              const SubscriptionSource(
+                id: 'primary',
+                snapshot: Subscription(
+                  id: 'primary',
+                  name: 'Primary',
+                  url: '',
+                  outbounds: [firstHop],
+                ),
+              ),
+              if (!removed)
+                const SubscriptionSource(
+                  id: 'disabled',
+                  enabled: false,
+                  snapshot: Subscription(
+                    id: 'disabled',
+                    name: 'Disabled',
+                    url: '',
+                    outbounds: [
+                      Outbound(
+                        tag: 'target',
+                        name: 'Target',
+                        config: targetConfig,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            proxyChains: [
+              SubscriptionProxyChain(
+                tag: 'chain',
+                name: 'Chain',
+                targetTag: 'target',
+                detourTag: 'first-hop',
+                targetSubscriptionId: targetProfileId,
+                targetConfig: targetConfig,
+              ),
+            ],
+          );
+          final plan = _defaultBuilder(
+            subscription,
+            selectedProxyTag: 'chain',
+          ).buildPlan();
+          final outbounds = (plan.config['outbounds'] as List)
+              .cast<Map<String, dynamic>>();
+          final chains = outbounds.where(
+            (outbound) => outbound['tag'] == 'chain',
+          );
+          if (targetProfileId == 'external') {
+            expect(chains, hasLength(1));
+            expect(chains.single['server'], 'disabled.example.com');
+          } else {
+            expect(chains, isEmpty);
+            expect(
+              outbounds.any(
+                (outbound) => outbound['server'] == 'disabled.example.com',
+              ),
+              isFalse,
+            );
+          }
+        },
+      );
+    }
+  }
+
   test('proxy chain uses cross subscription snapshot on tag collision', () {
     const subscription = Subscription(
       id: 'active',

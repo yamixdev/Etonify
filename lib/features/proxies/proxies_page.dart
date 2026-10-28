@@ -457,6 +457,7 @@ class ProxiesPage extends StatefulWidget {
     required this.onSelected,
     required this.onUrlTest,
     this.onProxyUrlTest,
+    this.onAddProxy,
     this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
     this.loadProxyChainTargetSources,
@@ -488,6 +489,7 @@ class ProxiesPage extends StatefulWidget {
     this.groupChildrenByTag = const <String, List<AppProxySummary>>{},
   });
 
+  final VoidCallback? onAddProxy;
   final String profileId;
   final List<AppProxySummary> proxies;
   final String selectedTag;
@@ -1278,6 +1280,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         actions: [
+          if (widget.onAddProxy != null)
+            IconButton(
+              key: const ValueKey('proxy-add-source'),
+              tooltip: l10n.add,
+              onPressed: widget.onAddProxy,
+              icon: const Icon(Icons.add_rounded),
+            ),
           IconButton(
             tooltip: l10n.sort,
             onPressed: () => _showProxySortPicker(
@@ -1417,6 +1426,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     trafficListenable: widget.trafficListenable,
                     onSortSelected: _setSort,
                     onUrlTest: widget.onUrlTest,
+                    onAddProxy: widget.onAddProxy,
                     onRefreshIp: widget.onActiveProxyIpRefresh,
                     onTap: widget.onHeaderTap,
                   ),

@@ -75,6 +75,7 @@ class ProxiesPresentationCallbacks {
     required this.selectProxy,
     required this.runUrlTest,
     this.runProxyUrlTest,
+    this.addProxy,
     required this.resolveVisibleProxyLocation,
     required this.refreshActiveProxyIp,
     required this.outboundForTag,
@@ -93,6 +94,7 @@ class ProxiesPresentationCallbacks {
   final ValueChanged<String> selectProxy;
   final Future<void> Function() runUrlTest;
   final Future<void> Function(String tag)? runProxyUrlTest;
+  final VoidCallback? addProxy;
   final void Function(String tag, ValueGetter<bool> isVisible)
   resolveVisibleProxyLocation;
   final VoidCallback refreshActiveProxyIp;
@@ -152,6 +154,7 @@ class ProxiesPresentationBuilder {
       onSelected: callbacks.selectProxy,
       onUrlTest: callbacks.runUrlTest,
       onProxyUrlTest: callbacks.runProxyUrlTest,
+      onAddProxy: callbacks.addProxy,
       onVisibleProxyNeedsLocation: callbacks.resolveVisibleProxyLocation,
       onActiveProxyIpRefresh: callbacks.refreshActiveProxyIp,
       outboundForTag: callbacks.outboundForTag,

@@ -43,7 +43,8 @@ class SubscriptionCoordinator {
        _loadSubscription =
            loadSubscription ?? SubscriptionStore.getInBackground,
        _refreshSubscription =
-           refreshSubscription ?? ((id) => SubscriptionStore.refresh(id)),
+           refreshSubscription ??
+           ((id) => SubscriptionStore.refresh(id, onlyDueSources: true)),
        _payloadSnapshotFor =
            payloadSnapshotFor ?? SubscriptionStore.payloadSnapshotFor,
        _ensurePayloadReady =
@@ -197,18 +198,44 @@ class SubscriptionCoordinator {
               'refreshing id=${subscription.id} name=${subscription.name}',
             );
             final updated = await _refreshSubscription(subscription.id);
-            entries.add(
-              SubscriptionRefreshEntry(
-                id: subscription.id,
-                name: subscription.name,
-                time: DateTime.now().millisecondsSinceEpoch,
-              ),
-            );
+            if (updated.sources.isNotEmpty) {
+              entries.addAll(_sourceRefreshEntries(subscription, updated));
+            } else {
+              entries.add(
+                SubscriptionRefreshEntry(
+                  id: subscription.id,
+                  name: subscription.name,
+                  time: DateTime.now().millisecondsSinceEpoch,
+                ),
+              );
+            }
             _runtime.clearAutoRefreshFailure(subscription.id);
             if (updated.id == activeSubscription?.id) {
               refreshedActiveSubscription = updated;
             }
           } catch (error) {
+            if (subscription.sources.isNotEmpty) {
+              _runtime.clearAutoRefreshFailure(subscription.id);
+              try {
+                final updated = await _loadSubscription(subscription.id);
+                if (updated != null) {
+                  entries.addAll(_sourceRefreshEntries(subscription, updated));
+                  if (updated.id == activeSubscription?.id) {
+                    refreshedActiveSubscription = updated;
+                  }
+                  AppLogStore.warning(
+                    'subscription refresh',
+                    'source refresh failed id=${subscription.id}: $error',
+                  );
+                  return;
+                }
+              } catch (loadError) {
+                AppLogStore.warning(
+                  'subscription refresh',
+                  'cannot reload source results id=${subscription.id}: $loadError',
+                );
+              }
+            }
             entries.add(
               SubscriptionRefreshEntry(
                 id: subscription.id,
@@ -217,12 +244,14 @@ class SubscriptionCoordinator {
                 failure: classifySubscriptionFailure(error),
               ),
             );
-            final backoff = _runtime.recordAutoRefreshFailure(subscription.id);
+            final backoff = subscription.sources.isEmpty
+                ? _runtime.recordAutoRefreshFailure(subscription.id)
+                : null;
             AppLogStore.warning(
               'subscription refresh',
               'refresh failed id=${subscription.id} name=${subscription.name} '
-                  'failures=${backoff.failures} '
-                  'backoff=${backoff.backoffMinutes}m: $error',
+                  'failures=${backoff?.failures ?? 0} '
+                  'backoff=${backoff?.backoffMinutes ?? 0}m: $error',
             );
           }
         }),
@@ -239,5 +268,36 @@ class SubscriptionCoordinator {
           activeBeforeFingerprint != null &&
           activeBeforeFingerprint != runtimeFingerprint(refreshedActive),
     );
+  }
+
+  static Iterable<SubscriptionRefreshEntry> _sourceRefreshEntries(
+    Subscription before,
+    Subscription after,
+  ) sync* {
+    final attempts = {for (final s in before.sources) s.id: s.lastAttempt};
+    for (final source in after.sources) {
+      if (!source.enabled ||
+          SubscriptionStore.isLocalFileImportUrl(source.url) ||
+          source.lastAttempt == 0 ||
+          source.lastAttempt == attempts[source.id]) {
+        continue;
+      }
+      final code = source.lastError?.split(':');
+      yield SubscriptionRefreshEntry(
+        id: after.id,
+        sourceId: source.id,
+        name: '${after.name} / ${source.name}',
+        time: source.lastAttempt,
+        failure: code == null
+            ? null
+            : SubscriptionFailure(
+                SubscriptionFailureKind.values.firstWhere(
+                  (k) => k.name == code.first,
+                  orElse: () => SubscriptionFailureKind.unknown,
+                ),
+                httpStatus: code.length > 1 ? int.tryParse(code[1]) : null,
+              ),
+      );
+    }
   }
 }

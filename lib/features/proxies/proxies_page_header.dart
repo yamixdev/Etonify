@@ -124,11 +124,13 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.trafficListenable,
     required this.onSortSelected,
     required this.onUrlTest,
+    this.onAddProxy,
     required this.onRefreshIp,
     required this.onTap,
   });
 
   final double height;
+  final VoidCallback? onAddProxy;
   final double progress;
   final double scrollCollapse;
   final bool canFillScreen;
@@ -228,8 +230,8 @@ class _ProxySheetHeader extends StatelessWidget {
                 ),
               ),
             Positioned(
-              left: 96,
-              right: 96,
+              left: onAddProxy == null ? 96 : 64,
+              right: onAddProxy == null ? 96 : 160,
               top: toolbarTop,
               bottom: toolbarBottom,
               child: Opacity(
@@ -383,6 +385,13 @@ class _ProxySheetHeader extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (onAddProxy != null)
+                          IconButton(
+                            key: const ValueKey('proxy-add-source'),
+                            tooltip: l10n.add,
+                            onPressed: onAddProxy,
+                            icon: const Icon(Icons.add_rounded),
+                          ),
                         if (serverCount > 0)
                           urlTestInFlightListenable != null
                               ? ValueListenableBuilder<bool>(

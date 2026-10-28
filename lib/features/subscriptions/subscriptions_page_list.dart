@@ -250,9 +250,7 @@ class _SubscriptionCard extends StatelessWidget {
         l10n.unlimitedSymbol,
       );
     }
-    final refreshable = !SubscriptionStore.isLocalFileImportUrl(
-      subscription.url,
-    );
+    final refreshable = _hasRefreshableSources(subscription);
     final lastUpdatedText = subscription.lastUpdated > 0
         ? _subscriptionLastUpdatedText(context, subscription.lastUpdated)
         : null;
@@ -310,6 +308,11 @@ class _SubscriptionCard extends StatelessWidget {
                       )
                     : _SubscriptionActionsMenu(
                         refreshable: refreshable,
+                        shareable:
+                            subscription.effectiveSources.length == 1 &&
+                            !SubscriptionStore.isLocalFileImportUrl(
+                              subscription.url,
+                            ),
                         loading: loading,
                         onRefresh: onRefresh,
                         onCopyUrl: onCopyUrl,
@@ -441,6 +444,7 @@ class _SubscriptionCard extends StatelessWidget {
 class _SubscriptionActionsMenu extends StatelessWidget {
   const _SubscriptionActionsMenu({
     required this.refreshable,
+    required this.shareable,
     required this.loading,
     required this.onRefresh,
     required this.onCopyUrl,
@@ -450,6 +454,7 @@ class _SubscriptionActionsMenu extends StatelessWidget {
   });
 
   final bool refreshable;
+  final bool shareable;
   final bool loading;
   final VoidCallback onRefresh;
   final VoidCallback onCopyUrl;
@@ -472,11 +477,11 @@ class _SubscriptionActionsMenu extends StatelessWidget {
           leadingIcon: const Icon(Icons.ios_share_rounded),
           menuChildren: [
             MenuItemButton(
-              onPressed: refreshable ? onCopyUrl : null,
+              onPressed: shareable ? onCopyUrl : null,
               child: Text(l10n.subscriptionCopyUrl),
             ),
             MenuItemButton(
-              onPressed: refreshable ? onShowQr : null,
+              onPressed: shareable ? onShowQr : null,
               child: Text(l10n.subscriptionShowUrlQr),
             ),
           ],

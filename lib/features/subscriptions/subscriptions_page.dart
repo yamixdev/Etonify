@@ -25,6 +25,8 @@ import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 import 'package:meow_client/features/subscriptions/subscription_file_reader.dart';
 import 'package:meow_client/features/subscriptions/subscription_server_catalog.dart';
+import 'package:meow_client/features/subscriptions/subscription_sources_l10n.dart';
+import 'package:meow_client/features/subscriptions/subscription_qr_content.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
@@ -43,6 +45,7 @@ part 'subscriptions_page_details.dart';
 part 'subscriptions_page_list.dart';
 part 'subscriptions_page_qr.dart';
 part 'subscriptions_page_servers.dart';
+part 'subscriptions_page_sources.dart';
 
 const _kSubscriptionProxyPreviewLimit = 5;
 const _kSubscriptionOperationSoftWarningDelay = Duration(seconds: 15);
@@ -52,7 +55,7 @@ const _kSubscriptionSheetAddQuickExtent = .44;
 const _kSubscriptionSheetAddManualExtent = .92;
 const _kSubscriptionSheetMaxExtent = .92;
 const _kSubscriptionSheetHeaderHeight = 104.0;
-const _kAddSubscriptionSheetHeaderHeight = 132.0;
+const _kAddSubscriptionSheetHeaderHeight = 104.0;
 const _kSubscriptionCardHeight = 116.0;
 const _kSubscriptionCardGap = 10.0;
 const _kSubscriptionSheetDragThreshold = appBottomSheetDragThreshold;
@@ -61,17 +64,23 @@ const _kSubscriptionSheetAnimationDuration = appBottomSheetAnimationDuration;
 const _kSubscriptionSummaryHydrationDelay = Duration(milliseconds: 420);
 const _kAutoRefreshOptions = <int>[0, 60, 180, 360, 720, 1440];
 
-double _addSubscriptionQuickButtonHeight(double availableWidth) {
-  return ((availableWidth - 18 * 2 - 10 * 2) / 3).clamp(124.0, 132.0);
+double _addSubscriptionQuickButtonHeight(
+  double availableWidth, {
+  double textExtra = 0,
+}) {
+  return ((availableWidth - 18 * 2 - 10 * 2) / 3).clamp(148.0, 164.0) +
+      textExtra;
 }
 
 double _addSubscriptionQuickContentHeight({
   required double availableWidth,
   required double bottomPadding,
+  double textExtra = 0,
 }) {
   return _kAddSubscriptionSheetHeaderHeight +
+      textExtra +
       8 +
-      _addSubscriptionQuickButtonHeight(availableWidth) +
+      _addSubscriptionQuickButtonHeight(availableWidth, textExtra: textExtra) +
       16 +
       _kAddSubscriptionSecondaryRowHeight +
       18 +
@@ -93,6 +102,14 @@ String _subscriptionLastUpdatedText(BuildContext context, int milliseconds) {
 bool subscriptionCountNeedsHydration(Subscription subscription) =>
     subscription.cachedVisibleProxyCount < 0;
 
+bool _hasRefreshableSources(Subscription subscription) =>
+    subscription.effectiveSources.any(
+      (source) =>
+          source.enabled &&
+          source.url.isNotEmpty &&
+          !SubscriptionStore.isLocalFileImportUrl(source.url),
+    );
+
 enum _HappImportDecision { sendHwid, withoutHwid }
 
 enum _SubscriptionSortMode { manual, name, updated, servers }
@@ -112,12 +129,14 @@ class SubscriptionsPage extends StatefulWidget {
   const SubscriptionsPage({
     super.key,
     this.activeSubscriptionId,
+    this.targetProfileId,
     this.openAddOnStart = false,
     this.hapticEnabled = true,
     this.allowUntrustedSubscriptionCertificates = false,
   });
 
   final String? activeSubscriptionId;
+  final String? targetProfileId;
   final bool openAddOnStart;
   final bool hapticEnabled;
   final bool allowUntrustedSubscriptionCertificates;
@@ -476,6 +495,14 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
           content
               .substring(0, content.length.clamp(0, 4096))
               .contains(EtonifyBackupService.profileMagic)) {
+        if (widget.targetProfileId != null) {
+          AppNotice.show(
+            context,
+            AppLocalizations.of(context).sourceBackupUnsupported,
+            tone: AppNoticeTone.warning,
+          );
+          return false;
+        }
         return await SettingsBackupImportActions.importProfileBytes(
           context,
           utf8.encode(content),
@@ -503,6 +530,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         prepared.fileContent != null
             ? SubscriptionStore.addFromContent(
                 prepared.fileContent!,
+                targetProfileId: widget.targetProfileId,
                 customName: result.name.isNotEmpty ? result.name : null,
                 sourceName: prepared.sourceName,
                 operationTimeout: _kSubscriptionOperationTimeout,
@@ -510,6 +538,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               )
             : SubscriptionStore.addFromUrl(
                 prepared.url!,
+                targetProfileId: widget.targetProfileId,
                 customName: result.name.isNotEmpty ? result.name : null,
                 autoRefreshMinutes: result.autoRefreshMinutes,
                 requestInfo: prepared.requestInfo,
@@ -529,11 +558,13 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
             tone: AppNoticeTone.warning,
           );
         }
-        if (prepared.fileContent == null) {
+        if (prepared.fileContent == null && widget.targetProfileId == null) {
           await _offerLikelyHwidFix(created);
         }
       }
-      await _maybeHandleMovedSubscription(created);
+      if (widget.targetProfileId == null) {
+        await _maybeHandleMovedSubscription(created);
+      }
       if (mounted) {
         setState(() {
           _subscriptionServerCounts[created.id] = created.concreteServerCount;
@@ -666,8 +697,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       return;
     }
     final subscription = SubscriptionStore.getMetadata(id);
-    if (subscription != null &&
-        SubscriptionStore.isLocalFileImportUrl(subscription.url)) {
+    if (subscription != null && !_hasRefreshableSources(subscription)) {
       setState(() {
         _error = AppLocalizations.of(
           context,
@@ -690,19 +720,57 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
         ),
       );
       if (mounted) {
-        if (!SubscriptionStore.isLocalFileImportUrl(updated.url)) {
+        if (updated.effectiveSources.length == 1 &&
+            !SubscriptionStore.isLocalFileImportUrl(updated.url)) {
           await _offerLikelyHwidFix(updated);
         }
       }
-      await _maybeHandleMovedSubscription(updated);
+      if (updated.effectiveSources.length == 1) {
+        await _maybeHandleMovedSubscription(updated);
+      }
       if (mounted) {
         _reload();
+        final l10n = AppLocalizations.of(context);
+        final remote = updated.effectiveSources
+            .where(
+              (source) =>
+                  source.enabled &&
+                  source.url.isNotEmpty &&
+                  !SubscriptionStore.isLocalFileImportUrl(source.url),
+            )
+            .toList();
+        final failed = remote
+            .where((source) => source.lastError != null)
+            .toList();
+        final message = updated.effectiveSources.length > 1 || failed.isNotEmpty
+            ? [
+                l10n.sourcesRefreshSummary(
+                  remote.length - failed.length,
+                  remote.length,
+                ),
+                if (failed.isNotEmpty)
+                  subscriptionSourceErrorMessage(failed.first.lastError!, l10n),
+              ].join('\n')
+            : l10n.activeSubscriptionRefreshComplete(updated.name);
         AppNotice.show(
           context,
-          AppLocalizations.of(
-            context,
-          ).activeSubscriptionRefreshComplete(updated.name),
-          tone: AppNoticeTone.success,
+          message,
+          tone: failed.isNotEmpty
+              ? AppNoticeTone.warning
+              : AppNoticeTone.success,
+          actionLabel: failed.isNotEmpty ? l10n.profileSources : null,
+          onAction: failed.isEmpty
+              ? null
+              : () => Navigator.of(context).push<void>(
+                  MaterialPageRoute(
+                    builder: (_) => SubscriptionSourcesPage(
+                      subscriptionId: updated.id,
+                      hapticEnabled: widget.hapticEnabled,
+                      allowUntrustedSubscriptionCertificates:
+                          widget.allowUntrustedSubscriptionCertificates,
+                    ),
+                  ),
+                ),
         );
       }
     } catch (e) {
@@ -798,7 +866,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     }
     _haptic();
     final refreshable = _subscriptions
-        .where((sub) => !SubscriptionStore.isLocalFileImportUrl(sub.url))
+        .where(_hasRefreshableSources)
         .toList(growable: false);
     setState(() {
       _loading = true;
@@ -834,6 +902,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       );
       final updated = results
           .whereType<BoundedTaskSuccess<Subscription>>()
+          .where(
+            (result) => !result.value.effectiveSources.any(
+              (source) => source.enabled && source.lastError != null,
+            ),
+          )
           .length;
       final failed = results.length - updated;
       _reload();
@@ -1057,6 +1130,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               ? () => _moveSubscriptionUp(subscription.id)
               : null,
           hapticEnabled: widget.hapticEnabled,
+          allowUntrustedSubscriptionCertificates:
+              widget.allowUntrustedSubscriptionCertificates,
         ),
       ),
     );
@@ -1092,6 +1167,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       final requiredHeight = _addSubscriptionQuickContentHeight(
         availableWidth: mediaQuery.size.width,
         bottomPadding: mediaQuery.padding.bottom,
+        textExtra: (mediaQuery.textScaler.scale(52) - 52).clamp(0, 160),
       );
       return requiredHeight
           .clamp(availableHeight * _kSubscriptionSheetAddQuickExtent, maxHeight)
@@ -1146,6 +1222,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               ),
               child: _sheetMode == _SubscriptionsSheetMode.add
                   ? _AddSubscriptionSheet(
+                      addingSource: widget.targetProfileId != null,
                       onAdd: _importAddResult,
                       scrollController: _sheetScrollController,
                       onClose: (changed) =>

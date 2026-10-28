@@ -131,10 +131,28 @@ class SubscriptionRuntimeController {
           subscription.autoRefreshMinutes <= 0) {
         continue;
       }
-      final dueAt =
-          subscription.lastUpdated +
-          subscription.autoRefreshMinutes * Duration.millisecondsPerMinute;
-      final backoffUntil = _autoRefreshBackoffUntil[subscription.id];
+      final sourceDueTimes = subscription.sources
+          .where(
+            (s) =>
+                s.enabled &&
+                (s.url.startsWith('https://') || s.url.startsWith('http://')),
+          )
+          .map(
+            (s) => max(
+              s.lastUpdated +
+                  subscription.autoRefreshMinutes *
+                      Duration.millisecondsPerMinute,
+              s.lastError == null ? 0 : s.lastAttempt + 15 * 60000,
+            ),
+          );
+      if (subscription.sources.isNotEmpty && sourceDueTimes.isEmpty) continue;
+      final dueAt = sourceDueTimes.isEmpty
+          ? subscription.lastUpdated +
+                subscription.autoRefreshMinutes * Duration.millisecondsPerMinute
+          : sourceDueTimes.reduce(min);
+      final backoffUntil = subscription.sources.isEmpty
+          ? _autoRefreshBackoffUntil[subscription.id]
+          : null;
       final effectiveDueAt = backoffUntil == null
           ? dueAt
           : max(dueAt, backoffUntil);
@@ -163,7 +181,9 @@ class SubscriptionRuntimeController {
           if (!subscription.needsRefresh) {
             return false;
           }
-          final backoffUntil = _autoRefreshBackoffUntil[subscription.id];
+          final backoffUntil = subscription.sources.isEmpty
+              ? _autoRefreshBackoffUntil[subscription.id]
+              : null;
           return backoffUntil == null || backoffUntil <= nowMillis;
         })
         .toList(growable: false);

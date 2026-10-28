@@ -105,7 +105,7 @@ class _SubscriptionQrScannerPageState
       if (rawValue.isEmpty) {
         continue;
       }
-      if (!HappCryptoLinkDecoder.isSupportedSubscriptionUrl(rawValue)) {
+      if (!isSupportedSubscriptionQrContent(rawValue)) {
         continue;
       }
       _handled = true;

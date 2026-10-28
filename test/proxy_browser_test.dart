@@ -70,6 +70,7 @@ ProxiesPage _page({
   ValueChanged<String>? select,
   Future<void> Function(String)? ping,
   VoidCallback? back,
+  VoidCallback? add,
   String profileId = 'profile',
   ProxyRuntimeVisualStore? states,
   ({int serial, String? groupTag})? request,
@@ -110,6 +111,7 @@ ProxiesPage _page({
   loading: loading,
   catalogReady: catalogReady,
   onBackAtRoot: back,
+  onAddProxy: add,
   hapticEnabled: false,
   runtimeStates: states,
   onSelected: select ?? (_) {},
@@ -118,6 +120,16 @@ ProxiesPage _page({
 );
 
 void main() {
+  testWidgets('proxy browser add action imports into the current profile', (
+    tester,
+  ) async {
+    var adds = 0;
+    await tester.pumpWidget(_app(_page(add: () => adds++)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('proxy-add-source')));
+    expect(adds, 1);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'sort options remain reachable at narrow width and doubled Russian text',
     (tester) async {

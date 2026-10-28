@@ -6176,7 +6176,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return true;
   }
 
-  Future<void> _showSubscriptionsPage({bool openAddOnStart = false}) async {
+  Future<void> _showSubscriptionsPage({
+    bool openAddOnStart = false,
+    String? targetProfileId,
+  }) async {
     if (_navigatorKey.currentContext == null) return;
 
     final activeProfileId = _activeProfileId;
@@ -6210,6 +6213,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       builder: (context) => SubscriptionsPage(
         activeSubscriptionId: _activeProfileId,
         openAddOnStart: openAddOnStart,
+        targetProfileId: targetProfileId,
         hapticEnabled: _hapticEnabled,
         allowUntrustedSubscriptionCertificates:
             _allowUntrustedSubscriptionCertificates,
@@ -9962,6 +9966,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
             _fullProxyListCacheReady,
       ),
       callbacks: ProxiesPresentationCallbacks(
+        addProxy: _activeProfileId.isEmpty
+            ? null
+            : () => _showSubscriptionsPage(
+                openAddOnStart: true,
+                targetProfileId: _activeProfileId,
+              ),
         changeSort: _setProxySort,
         changeHideUnavailable: _setProxyHideUnavailable,
         selectProxy: _selectProxy,

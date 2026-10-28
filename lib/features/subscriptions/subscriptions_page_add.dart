@@ -3,6 +3,7 @@ part of 'subscriptions_page.dart';
 class _AddSubscriptionSheet extends StatefulWidget {
   const _AddSubscriptionSheet({
     required this.onAdd,
+    this.addingSource = false,
     required this.scrollController,
     required this.onClose,
     required this.onModeChanged,
@@ -12,6 +13,7 @@ class _AddSubscriptionSheet extends StatefulWidget {
   });
 
   final Future<bool> Function(_AddResult result) onAdd;
+  final bool addingSource;
   final ScrollController scrollController;
   final ValueChanged<bool> onClose;
   final ValueChanged<_AddSubscriptionSheetMode> onModeChanged;
@@ -106,7 +108,11 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
         });
         return;
       }
-      setState(() => _stage = l10n.addSubscriptionDone);
+      setState(
+        () => _stage = widget.addingSource
+            ? l10n.sourceAdded
+            : l10n.addSubscriptionDone,
+      );
       await Future<void>.delayed(const Duration(milliseconds: 260));
       if (mounted) {
         widget.onClose(true);
@@ -209,8 +215,18 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       MaterialPageRoute(builder: (_) => const _SubscriptionQrScannerPage()),
     );
     if (!mounted || scannedUrl == null || scannedUrl.isEmpty) return;
-    if (!HappCryptoLinkDecoder.isSupportedSubscriptionUrl(scannedUrl)) {
+    if (!isSupportedSubscriptionQrContent(scannedUrl)) {
       _setError(AppLocalizations.of(context).invalidQrSubscription);
+      return;
+    }
+    if (!HappCryptoLinkDecoder.isSupportedSubscriptionUrl(scannedUrl)) {
+      await _submitResult(
+        _AddResult.file(
+          name: _nameController.text.trim(),
+          fileContent: scannedUrl,
+          sourceName: 'QR',
+        ),
+      );
       return;
     }
     await _submitResult(
@@ -325,15 +341,19 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
     final mediaQuery = MediaQuery.of(context);
     final bottomPadding =
         mediaQuery.padding.bottom + mediaQuery.viewInsets.bottom;
+    final textExtra = (mediaQuery.textScaler.scale(52) - 52).clamp(0.0, 160.0);
+    final headerHeight = _kAddSubscriptionSheetHeaderHeight + textExtra;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final quickButtonHeight = _addSubscriptionQuickButtonHeight(
           constraints.maxWidth,
+          textExtra: textExtra,
         );
         final quickContentHeight = _addSubscriptionQuickContentHeight(
           availableWidth: constraints.maxWidth,
           bottomPadding: bottomPadding,
+          textExtra: textExtra,
         );
         final contentCanScroll =
             _mode == _AddSubscriptionSheetMode.manual ||
@@ -358,7 +378,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                     : const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   18,
-                  _kAddSubscriptionSheetHeaderHeight + 8,
+                  headerHeight + 8,
                   18,
                   18 + bottomPadding,
                 ),
@@ -465,7 +485,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                   onVerticalDragUpdate: widget.onHeaderDragUpdate,
                   onVerticalDragEnd: widget.onHeaderDragEnd,
                   child: SizedBox(
-                    height: _kAddSubscriptionSheetHeaderHeight,
+                    height: headerHeight,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -504,7 +524,9 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                                     children: [
                                       Text(
                                         _mode == _AddSubscriptionSheetMode.quick
-                                            ? l10n.addSubscriptionQuickTitle
+                                            ? widget.addingSource
+                                                  ? l10n.addProfileSource
+                                                  : l10n.addSubscriptionQuickTitle
                                             : l10n.addSubscriptionManual,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -519,7 +541,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                                         _mode == _AddSubscriptionSheetMode.quick
                                             ? l10n.addSubscriptionQuickSubtitle
                                             : l10n.subscriptionUrlOrContentHint,
-                                        maxLines: 2,
+                                        maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodyMedium
                                             ?.copyWith(
@@ -589,7 +611,7 @@ class _AddSubscriptionQuickOptions extends StatelessWidget {
                 height: buttonHeight,
                 icon: Icons.qr_code_scanner_rounded,
                 color: cs.primary,
-                title: l10n.scanQrCode,
+                title: l10n.sourceScanQr,
                 onTap: onScanQr,
               ),
             ),
@@ -690,7 +712,7 @@ class _AddSubscriptionQuickCard extends StatelessWidget {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  style: theme.textTheme.labelLarge?.copyWith(
                     color: cs.onSurface,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
@@ -898,10 +920,15 @@ class _AddSubscriptionManualCard extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
-                      Text(
-                        autoUpdateValue,
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                      Flexible(
+                        child: Text(
+                          autoUpdateValue,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.end,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
                       ),
                     ],
                   ),

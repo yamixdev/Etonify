@@ -19,6 +19,7 @@ import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
+import 'package:meow_client/data/subscription/subscription_sources.dart';
 
 class SubscriptionImportResult {
   const SubscriptionImportResult({required this.subscription, this.warning});
@@ -656,6 +657,10 @@ class SubscriptionStore {
         rawContent: cached.rawContent,
         outbounds: cached.outbounds,
         groups: cached.groups,
+        sources: Subscription.fromMap({
+          ...metadata.toMetadataMap(),
+          ...cached.toPayloadMap(),
+        }).sources,
       );
     }
     final raw = snapshot.raw;
@@ -922,6 +927,25 @@ class SubscriptionStore {
   }
 
   static Future<void> _saveMetadataUnlocked(Subscription sub) async {
+    final previous = getMetadata(sub.id);
+    if (sub.sources.isNotEmpty &&
+        previous != null &&
+        (sub.url != previous.url ||
+            jsonEncode(sub.info?.toMap()) !=
+                jsonEncode(previous.info?.toMap()))) {
+      sub = sub.copyWith(
+        sources: [
+          sub.sources.first.copyWith(
+            snapshot: sub.sources.first.snapshot.copyWith(
+              url: sub.url,
+              info: sub.info,
+              clearInfo: sub.info == null,
+            ),
+          ),
+          ...sub.sources.skip(1),
+        ],
+      );
+    }
     await _metaStore.put(sub.id, jsonEncode(sub.toMetadataMap()));
   }
 
@@ -1075,6 +1099,7 @@ class SubscriptionStore {
   /// Returns the created [Subscription].
   static Future<SubscriptionImportResult> addFromUrl(
     String url, {
+    String? targetProfileId,
     String? customName,
     int autoRefreshMinutes = 360,
     SubscriptionInfo? requestInfo,
@@ -1160,13 +1185,16 @@ class SubscriptionStore {
 
       _logLikelyHwidWarning(sub);
       _throwIfImportCancelled(isCancelled);
-      await save(sub);
+      final saved = targetProfileId == null
+          ? sub
+          : await _addImportedSource(targetProfileId, sub, isCancelled);
+      if (targetProfileId == null) await save(sub);
       if (isCancelled?.call() ?? false) {
-        await delete(id);
+        if (targetProfileId == null) await delete(id);
         throw const SubscriptionImportCancelledException();
       }
       return SubscriptionImportResult(
-        subscription: sub,
+        subscription: saved,
         warning: result.parseResult.hasUnsupportedWireGuard
             ? const SubscriptionContentException(
                 SubscriptionContentFailureKind.wireGuardUnsupported,
@@ -1174,6 +1202,7 @@ class SubscriptionStore {
             : null,
       );
     } catch (error) {
+      if (targetProfileId != null) rethrow;
       if (error is SubscriptionImportCancelledException ||
           (isCancelled?.call() ?? false)) {
         throw const SubscriptionImportCancelledException();
@@ -1216,6 +1245,7 @@ class SubscriptionStore {
 
   static Future<SubscriptionImportResult> addFromContent(
     String content, {
+    String? targetProfileId,
     String? customName,
     String? sourceName,
     Duration? operationTimeout,
@@ -1276,13 +1306,16 @@ class SubscriptionStore {
     );
 
     _throwIfImportCancelled(isCancelled);
-    await save(sub);
+    final saved = targetProfileId == null
+        ? sub
+        : await _addImportedSource(targetProfileId, sub, isCancelled);
+    if (targetProfileId == null) await save(sub);
     if (isCancelled?.call() ?? false) {
-      await delete(sub.id);
+      if (targetProfileId == null) await delete(sub.id);
       throw const SubscriptionImportCancelledException();
     }
     return SubscriptionImportResult(
-      subscription: sub,
+      subscription: saved,
       warning: parseResult.hasUnsupportedWireGuard
           ? const SubscriptionContentException(
               SubscriptionContentFailureKind.wireGuardUnsupported,
@@ -1297,6 +1330,299 @@ class SubscriptionStore {
     }
   }
 
+  static Future<Subscription> _addImportedSource(
+    String id,
+    Subscription imported,
+    bool Function()? isCancelled,
+  ) => _withSubscriptionWriteLock(id, () async {
+    final current = await _getUnlocked(id);
+    if (current == null) throw StateError('Profile no longer exists');
+    final sources = current.effectiveSources;
+    if (!isLocalFileImportUrl(imported.url) &&
+        sources.any((s) => s.url == imported.url)) {
+      throw StateError('This subscription URL is already in the profile');
+    }
+    if (isLocalFileImportUrl(imported.url) &&
+        sources.any(
+          (s) =>
+              isLocalFileImportUrl(s.url) &&
+              s.snapshot.rawContent.trim() == imported.rawContent.trim(),
+        )) {
+      throw StateError('This local import is already in the profile');
+    }
+    _throwIfImportCancelled(isCancelled);
+    final added = SubscriptionSource(
+      id: imported.id,
+      snapshot: imported.copyWith(sources: const []),
+    );
+    final merged = await _composeSources(current, [...sources, added]);
+    await _saveUnlocked(merged);
+    if (isCancelled?.call() ?? false) {
+      await _saveUnlocked(current);
+      throw const SubscriptionImportCancelledException();
+    }
+    return merged;
+  });
+
+  static Future<Subscription> _composeSources(
+    Subscription current,
+    List<SubscriptionSource> sources,
+  ) => Isolate.run(() {
+    final composed = composeSubscriptionSources(sources);
+    final preserved = _preserveUserState(current.outbounds, composed.outbounds);
+    final primary = sources.first.snapshot;
+    return current.copyWith(
+      sources: sources,
+      url: primary.url,
+      info: primary.info,
+      clearInfo: primary.info == null,
+      rawContent: primary.rawContent,
+      outbounds: preserved,
+      groups: composed.groups,
+      lastUpdated: sources.fold<int>(
+        0,
+        (v, s) => s.lastUpdated > v ? s.lastUpdated : v,
+      ),
+      selectedProxyTag: _selectedProxyTagForOutbounds(
+        preserved,
+        preferredTag: current.selectedProxyTag,
+        groups: composed.groups,
+      ),
+      // A local-only profile gains refresh when its first remote source is added.
+      disableAutoUpdate:
+          current.disableAutoUpdate &&
+          !(isLocalFileImportUrl(current.url) &&
+              sources.any((s) => !isLocalFileImportUrl(s.url))),
+    );
+  }, debugName: 'meow-compose-sources');
+
+  static Future<Subscription> setSourceEnabled(
+    String id,
+    String sourceId,
+    bool enabled,
+  ) async {
+    await ensurePayloadReady();
+    return _withSubscriptionWriteLock(id, () async {
+      final current = await _getUnlocked(id);
+      if (current == null) throw StateError('Profile no longer exists');
+      final sources = current.effectiveSources;
+      if (!sources.any((s) => s.id == sourceId)) {
+        throw StateError('Source no longer exists');
+      }
+      final updated = sources
+          .map((s) => s.id == sourceId ? s.copyWith(enabled: enabled) : s)
+          .toList();
+      if (!updated.any((s) => s.enabled)) {
+        throw StateError('At least one source must remain enabled');
+      }
+      final merged = await _composeSources(current, updated);
+      await _saveUnlocked(merged);
+      return merged;
+    });
+  }
+
+  static Future<Subscription> removeSource(String id, String sourceId) async {
+    await ensurePayloadReady();
+    return _withSubscriptionWriteLock(id, () async {
+      final current = await _getUnlocked(id);
+      if (current == null) throw StateError('Profile no longer exists');
+      final sources = current.effectiveSources
+          .where((s) => s.id != sourceId)
+          .toList();
+      if (sources.length == current.effectiveSources.length) {
+        throw StateError('Source no longer exists');
+      }
+      if (sources.isEmpty || !sources.any((s) => s.enabled)) {
+        throw StateError('At least one source must remain enabled');
+      }
+      final merged = await _composeSources(current, sources);
+      await _saveUnlocked(merged);
+      return merged;
+    });
+  }
+
+  static String backgroundSourceRevision(
+    Subscription profile,
+    String sourceId,
+  ) {
+    final source = profile.effectiveSources
+        .where((s) => s.id == sourceId)
+        .firstOrNull;
+    if (source == null) throw StateError('Source no longer exists');
+    return sha256
+        .convert(
+          utf8.encode(
+            jsonEncode({
+              'profile': profile.id,
+              'source': source.id,
+              'url': source.url,
+              'updated': source.lastUpdated,
+              'enabled': source.enabled,
+              'disabled': profile.disableAutoUpdate,
+              'interval': profile.autoRefreshMinutes,
+              'info': source.snapshot.info?.toMap(),
+              'sendHwid': SubscriptionFetcher.sendHwidToProviders,
+            }),
+          ),
+        )
+        .toString();
+  }
+
+  static Future<Subscription> recordSourceFailure(
+    String id,
+    String sourceId,
+    Object error, {
+    String? expectedRevision,
+  }) async {
+    await ensurePayloadReady();
+    return _withSubscriptionWriteLock(id, () async {
+      final current = await _getUnlocked(id);
+      if (current == null) throw StateError('Profile no longer exists');
+      if (expectedRevision != null &&
+          backgroundSourceRevision(current, sourceId) != expectedRevision) {
+        throw StateError('Source changed during refresh');
+      }
+      final failure = classifySubscriptionFailure(error);
+      final message = failure.httpStatus == null
+          ? failure.kind.name
+          : '${failure.kind.name}:${failure.httpStatus}';
+      final sources = current.effectiveSources
+          .map(
+            (s) => s.id == sourceId
+                ? s.copyWith(
+                    lastAttempt: DateTime.now().millisecondsSinceEpoch,
+                    lastError: message,
+                  )
+                : s,
+          )
+          .toList();
+      if (!sources.any((s) => s.id == sourceId)) {
+        throw StateError('Source no longer exists');
+      }
+      final updated = current.copyWith(sources: sources);
+      await _saveUnlocked(updated);
+      return updated;
+    });
+  }
+
+  static Future<Subscription> refreshSource(
+    String id,
+    String sourceId, {
+    bool allowInsecureTls = false,
+    Duration? operationTimeout,
+    SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
+  }) async {
+    await ensurePayloadReady();
+    final profile = await get(id);
+    if (profile == null) throw StateError('Profile no longer exists');
+    final source = profile.effectiveSources
+        .where((s) => s.id == sourceId)
+        .firstOrNull;
+    if (source == null || !source.enabled) {
+      throw StateError('Source is unavailable');
+    }
+    if (isLocalFileImportUrl(source.url)) {
+      throw StateError('Manual imports cannot be refreshed');
+    }
+    final revision = backgroundSourceRevision(profile, sourceId);
+    try {
+      final result = await SubscriptionFetcher.fetch(
+        source.url,
+        requestInfo: source.snapshot.info,
+        allowInsecureTls: allowInsecureTls,
+        operationTimeout: operationTimeout,
+        onRouteAttempt: onRouteAttempt,
+      );
+      return await _applySourceResult(id, sourceId, result, revision);
+    } catch (error) {
+      await recordSourceFailure(
+        id,
+        sourceId,
+        error,
+        expectedRevision: revision,
+      );
+      rethrow;
+    }
+  }
+
+  static Future<Subscription> applyBackgroundSourceDownload(
+    String id,
+    String sourceId, {
+    required String revision,
+    required List<int> bytes,
+    required Map<String, String> headers,
+  }) async {
+    await ensurePayloadReady();
+    final profile = await get(id);
+    if (profile == null ||
+        backgroundSourceRevision(profile, sourceId) != revision) {
+      throw StateError('Source changed since background download');
+    }
+    final source = profile.effectiveSources.firstWhere((s) => s.id == sourceId);
+    final result = await SubscriptionFetcher.parseDownloadedResponse(
+      url: source.url,
+      bytes: bytes,
+      headers: headers,
+    );
+    return _applySourceResult(id, sourceId, result, revision);
+  }
+
+  static Future<Subscription> _applySourceResult(
+    String id,
+    String sourceId,
+    FetchResult result,
+    String revision,
+  ) async {
+    final metadata = getMetadata(id);
+    final source = metadata?.effectiveSources
+        .where((s) => s.id == sourceId)
+        .firstOrNull;
+    if (source == null) throw StateError('Source no longer exists');
+    final payload = await _buildSubscriptionPayloadAsync(
+      result.parseResult,
+      providerName: _providerNameHint(
+        customName: source.name,
+        headerTitle: result.headerInfo.title,
+      ),
+    );
+    if (!_hasUsableOutbounds(payload.outbounds)) {
+      throw const SubscriptionContentException(
+        SubscriptionContentFailureKind.noUsableProxies,
+      );
+    }
+    return _withSubscriptionWriteLock(id, () async {
+      final current = await _getUnlocked(id);
+      if (current == null ||
+          backgroundSourceRevision(current, sourceId) != revision) {
+        throw StateError('Source changed during refresh');
+      }
+      final sources = current.effectiveSources.map((s) {
+        if (s.id != sourceId) return s;
+        final old = s.snapshot;
+        return s.copyWith(
+          clearError: true,
+          lastAttempt: DateTime.now().millisecondsSinceEpoch,
+          snapshot: old.copyWith(
+            rawContent: result.rawContent,
+            outbounds: _preserveUserState(old.outbounds, payload.outbounds),
+            groups: payload.groups,
+            lastUpdated: DateTime.now().millisecondsSinceEpoch,
+            info: result.headerInfo.copyWith(
+              customUserAgent: old.info?.customUserAgent,
+              customRequestHeader: old.info?.customRequestHeader,
+              requireHwid: old.info?.requireHwid ?? false,
+              customHwid: old.info?.customHwid,
+              happCryptoLink: old.info?.happCryptoLink,
+            ),
+          ),
+        );
+      }).toList();
+      final merged = await _composeSources(current, sources);
+      await _saveUnlocked(merged);
+      return merged;
+    });
+  }
+
   static String backgroundRevision(Subscription subscription) => sha256
       .convert(
         utf8.encode(
@@ -1308,6 +1634,9 @@ class SubscriptionStore {
             'info': subscription.info?.toMap(),
             'disabled': subscription.disableAutoUpdate,
             'interval': subscription.autoRefreshMinutes,
+            'sources': subscription.sources
+                .map((s) => s.toMetadataMap())
+                .toList(),
           }),
         ),
       )
@@ -1321,6 +1650,16 @@ class SubscriptionStore {
         utf8.encode(
           jsonEncode({
             'url': subscription.url,
+            'sources': subscription.sources
+                .map(
+                  (s) => {
+                    'id': s.id,
+                    'url': s.url,
+                    'enabled': s.enabled,
+                    'info': s.snapshot.info?.toMap(),
+                  },
+                )
+                .toList(),
             'allowInsecureTls': allowInsecureTls,
             'sendHwid': SubscriptionFetcher.sendHwidToProviders,
             'userAgent': subscription.info?.customUserAgent,
@@ -1361,6 +1700,7 @@ class SubscriptionStore {
   /// Returns the updated [Subscription].
   static Future<Subscription> refresh(
     String id, {
+    bool onlyDueSources = false,
     Duration? operationTimeout,
     bool allowInsecureTls = false,
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
@@ -1368,7 +1708,7 @@ class SubscriptionStore {
     final current = _metaBox?.isOpen == true ? getMetadata(id) : null;
     final requestRevision = current == null
         ? null
-        : _requestRevision(current, allowInsecureTls: allowInsecureTls);
+        : '${_requestRevision(current, allowInsecureTls: allowInsecureTls)}/$onlyDueSources';
     final inFlight = _refreshesInFlight[id];
     if (inFlight != null && inFlight.requestRevision == requestRevision) {
       return inFlight.future;
@@ -1378,6 +1718,7 @@ class SubscriptionStore {
     final operation = _refresh(
       id,
       requestGeneration: generation,
+      onlyDueSources: onlyDueSources,
       operationTimeout: operationTimeout,
       allowInsecureTls: allowInsecureTls,
       onRouteAttempt: onRouteAttempt,
@@ -1395,6 +1736,7 @@ class SubscriptionStore {
 
   static Future<Subscription> _refresh(
     String id, {
+    bool onlyDueSources = false,
     Duration? operationTimeout,
     required bool allowInsecureTls,
     SubscriptionFetchRouteAttemptCallback? onRouteAttempt,
@@ -1421,6 +1763,37 @@ class SubscriptionStore {
     if (expectedRevision != null &&
         backgroundRevision(existingBeforeFetch) != expectedRevision) {
       throw StateError('Subscription changed since background download');
+    }
+    if (existingBeforeFetch.sources.isNotEmpty && downloadedResult == null) {
+      var succeeded = false;
+      Object? lastError;
+      final deadline = _operationDeadline(operationTimeout);
+      for (final source in existingBeforeFetch.sources.where(
+        (s) => s.enabled && !isLocalFileImportUrl(s.url),
+      )) {
+        if (onlyDueSources &&
+            (DateTime.now().millisecondsSinceEpoch - source.lastUpdated <
+                    existingBeforeFetch.autoRefreshMinutes * 60000 ||
+                (source.lastError != null &&
+                    DateTime.now().millisecondsSinceEpoch - source.lastAttempt <
+                        15 * 60000))) {
+          continue;
+        }
+        try {
+          await refreshSource(
+            id,
+            source.id,
+            allowInsecureTls: allowInsecureTls,
+            operationTimeout: _remainingUntil(deadline),
+            onRouteAttempt: onRouteAttempt,
+          );
+          succeeded = true;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!succeeded && lastError != null) throw lastError;
+      return (await get(id)) ?? (throw StateError('Profile no longer exists'));
     }
     if (isLocalFileImportUrl(existingBeforeFetch.url)) {
       throw StateError('Manual imports cannot be refreshed');
@@ -1557,6 +1930,51 @@ class SubscriptionStore {
     final existingBeforeParse = await get(id);
     if (existingBeforeParse == null) {
       throw StateError('Subscription $id not found');
+    }
+    if (existingBeforeParse.sources.isNotEmpty) {
+      final parsed =
+          <
+            String,
+            ({List<Outbound> outbounds, List<SubscriptionGroup> groups})
+          >{};
+      for (final source in existingBeforeParse.sources) {
+        final result = await SubscriptionParser.parseInBackground(
+          source.snapshot.rawContent,
+        );
+        final payload = await _buildSubscriptionPayloadAsync(
+          result,
+          providerName: source.name,
+        );
+        if (!_hasUsableOutbounds(payload.outbounds)) {
+          throw const SubscriptionContentException(
+            SubscriptionContentFailureKind.noUsableProxies,
+          );
+        }
+        parsed[source.id] = payload;
+      }
+      return _withSubscriptionWriteLock(id, () async {
+        final current = await _getUnlocked(id);
+        if (current == null ||
+            current.payloadRevision != existingBeforeParse.payloadRevision) {
+          throw StateError('Profile changed while reparsing');
+        }
+        final sources = current.sources
+            .map(
+              (s) => s.copyWith(
+                snapshot: s.snapshot.copyWith(
+                  outbounds: _preserveUserState(
+                    s.snapshot.outbounds,
+                    parsed[s.id]!.outbounds,
+                  ),
+                  groups: parsed[s.id]!.groups,
+                ),
+              ),
+            )
+            .toList();
+        final merged = await _composeSources(current, sources);
+        await _saveUnlocked(merged);
+        return merged;
+      });
     }
     final rawContent = existingBeforeParse.rawContent.trim();
     if (rawContent.isEmpty) {
@@ -2305,27 +2723,13 @@ class SubscriptionStore {
       if (strict && map['outbounds'] is! List) {
         throw const FormatException('Subscription payload has no server list');
       }
-      return metadata.copyWith(
-        rawContent: map['raw_content'] as String? ?? '',
-        outbounds:
-            (map['outbounds'] as List?)
-                ?.map(
-                  (entry) =>
-                      Outbound.fromMap(Map<String, dynamic>.from(entry as Map)),
-                )
-                .toList() ??
-            const [],
-        groups:
-            (map['groups'] as List?)
-                ?.map(
-                  (entry) => SubscriptionGroup.fromMap(
-                    Map<String, dynamic>.from(entry as Map),
-                  ),
-                )
-                .where((group) => group.tag.isNotEmpty)
-                .toList() ??
-            const [],
-      );
+      return Subscription.fromMap({
+        ...metadata.toMetadataMap(),
+        'raw_content': map['raw_content'],
+        'outbounds': map['outbounds'],
+        'groups': map['groups'],
+        'source_payloads': map['source_payloads'],
+      });
     } catch (_) {
       if (strict) rethrow;
       return metadata;

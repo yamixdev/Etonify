@@ -950,7 +950,11 @@ class SingboxConfigBuilder {
         targetSubscriptionId != activeSubscriptionId) {
       return _snapshotOutboundFor(chain);
     }
-    return outboundByTag[chain.targetTag.trim()] ?? _snapshotOutboundFor(chain);
+    final target = outboundByTag[chain.targetTag.trim()];
+    if (target != null || activeSubscription?.sources.isNotEmpty == true) {
+      return target;
+    }
+    return _snapshotOutboundFor(chain);
   }
 
   Outbound? _snapshotOutboundFor(SubscriptionProxyChain chain) {

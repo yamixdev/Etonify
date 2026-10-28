@@ -218,6 +218,62 @@ void main() {
     }
   });
   test(
+    'Shadowsocks UoT preserves provider mux rather than applying an ignored override',
+    () {
+      for (final uot in [
+        true,
+        {'enabled': true, 'version': 2},
+      ]) {
+        final outbound = <String, dynamic>{
+          'type': 'shadowsocks',
+          'tag': 'uot',
+          'udp_over_tcp': uot,
+          'multiplex': {'enabled': false},
+        };
+        expect(CoreMuxSettings.supports(outbound), isFalse);
+        final value = <String, dynamic>{
+          'outbounds': [outbound],
+        };
+        applyCoreSettings(
+          value,
+          const CoreSettings().withMux(
+            'p',
+            'uot',
+            const CoreMuxSettings(mode: CoreMuxMode.manual),
+          ),
+          profileId: 'p',
+        );
+        expect(outbound['multiplex'], {'enabled': false});
+      }
+    },
+  );
+  test('Shadowsocks with disabled UoT still supports manual sing-mux', () {
+    for (final uot in [
+      false,
+      {'enabled': false},
+      <String, dynamic>{},
+    ]) {
+      final outbound = <String, dynamic>{
+        'type': 'shadowsocks',
+        'tag': 'plain',
+        'udp_over_tcp': uot,
+      };
+      final value = <String, dynamic>{
+        'outbounds': [outbound],
+      };
+      applyCoreSettings(
+        value,
+        const CoreSettings().withMux(
+          'p',
+          'plain',
+          const CoreMuxSettings(mode: CoreMuxMode.manual),
+        ),
+        profileId: 'p',
+      );
+      expect(outbound['multiplex']['enabled'], isTrue);
+    }
+  });
+  test(
     'an old standalone override does not change a node now owned by a group',
     () {
       final settings = const CoreSettings().withMux(

@@ -189,6 +189,13 @@ extension _ProxyBrowser on _ProxiesPageState {
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
+            if (widget.onAddProxy != null)
+              IconButton(
+                key: const ValueKey('proxy-add-source'),
+                tooltip: l10n.add,
+                onPressed: widget.onAddProxy,
+                icon: const Icon(Icons.add_rounded),
+              ),
             if (widget.urlTestInFlightListenable case final inFlight?)
               ValueListenableBuilder<bool>(
                 valueListenable: inFlight,

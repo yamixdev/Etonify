@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:hive_ce/hive.dart';
 import 'dart:io';
 import 'package:meow_client/data/local/secure_hive_storage.dart';
@@ -10,6 +11,7 @@ class SubscriptionRefreshEntry {
     required this.time,
     this.failure,
     this.background = false,
+    this.sourceId,
   });
 
   final String id;
@@ -17,6 +19,8 @@ class SubscriptionRefreshEntry {
   final int time;
   final SubscriptionFailure? failure;
   final bool background;
+  final String? sourceId;
+  String get key => sourceId == null ? id : jsonEncode([id, sourceId]);
   bool get succeeded => failure == null;
 
   Map<String, Object?> toMap() => {
@@ -26,6 +30,7 @@ class SubscriptionRefreshEntry {
     'kind': failure?.kind.name,
     'httpStatus': failure?.httpStatus,
     'background': background,
+    if (sourceId != null) 'sourceId': sourceId,
   };
 
   factory SubscriptionRefreshEntry.fromMap(Map<dynamic, dynamic> map) {
@@ -35,6 +40,7 @@ class SubscriptionRefreshEntry {
       name: map['name'] as String,
       time: map['time'] as int,
       background: map['background'] == true,
+      sourceId: map['sourceId'] as String?,
       failure: kind == null
           ? null
           : SubscriptionFailure(
@@ -82,7 +88,7 @@ class SubscriptionRefreshReports {
       box.get('attempts', defaultValue: <String, dynamic>{}) as Map,
     );
     for (final entry in entries) {
-      final previous = attempts[entry.id] as Map?;
+      final previous = attempts[entry.key] as Map?;
       final failures = entry.succeeded
           ? 0
           : ((previous?['failures'] as int?) ?? 0) + 1;
@@ -93,7 +99,7 @@ class SubscriptionRefreshReports {
         3 => 180,
         _ => 360,
       };
-      attempts[entry.id] = {
+      attempts[entry.key] = {
         'failures': failures,
         'until': entry.time + minutes * 60000,
       };
@@ -104,7 +110,7 @@ class SubscriptionRefreshReports {
         ? await latest()
         : <SubscriptionRefreshEntry>[];
     final merged = {
-      for (final e in [...previous, ...entries]) e.id: e,
+      for (final e in [...previous, ...entries]) e.key: e,
     };
     await box.put('latest', merged.values.map((e) => e.toMap()).toList());
     await box.put('unread', true);

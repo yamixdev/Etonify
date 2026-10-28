@@ -119,6 +119,11 @@ void main() {
             name: 'Visible server',
             config: {'type': 'trojan'},
           ),
+          Outbound(
+            tag: 'uot',
+            name: 'Shadowsocks UoT',
+            config: {'type': 'shadowsocks', 'udp_over_tcp': true},
+          ),
         ],
       );
       await tester.pumpWidget(app(subscription: subscription));
@@ -129,6 +134,7 @@ void main() {
       expect(find.text('Visible server'), findsOneWidget);
       expect(find.text('Ordinary-looking name'), findsNothing);
       expect(find.text('Hidden'), findsNothing);
+      expect(find.text('Shadowsocks UoT'), findsNothing);
     },
   );
 

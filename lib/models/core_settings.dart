@@ -64,6 +64,10 @@ class CoreMuxSettings {
         'trojan',
         'shadowsocks',
       }.contains(outbound['type']) &&
+      !(outbound['type'] == 'shadowsocks' &&
+          (outbound['udp_over_tcp'] == true ||
+              (outbound['udp_over_tcp'] is Map &&
+                  outbound['udp_over_tcp']['enabled'] == true))) &&
       (outbound['flow']?.toString().isEmpty ?? true) &&
       !(outbound['transport'] is Map &&
           const {'xhttp', 'splithttp'}.contains(outbound['transport']['type']));

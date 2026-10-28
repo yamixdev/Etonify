@@ -1,6 +1,21 @@
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
+String subscriptionSourceErrorMessage(String code, AppLocalizations l10n) {
+  final parts = code.split(':');
+  final kind = SubscriptionFailureKind.values.firstWhere(
+    (value) => value.name == parts.first,
+    orElse: () => SubscriptionFailureKind.unknown,
+  );
+  return subscriptionErrorMessage(
+    SubscriptionFailure(
+      kind,
+      httpStatus: parts.length == 2 ? int.tryParse(parts.last) : null,
+    ),
+    l10n,
+  );
+}
+
 String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
   final failure = classifySubscriptionFailure(error);
   return switch (failure.kind) {

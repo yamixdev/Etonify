@@ -6,6 +6,35 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
+  test(
+    'multisource scheduling ignores obsolete profile-level failure backoff',
+    () {
+      final now = DateTime.now();
+      final stamp = now.millisecondsSinceEpoch;
+      final controller = SubscriptionRuntimeController(now: () => now);
+      controller.restoreAutoRefreshBackoff({'combined': stamp + 3600000});
+      final profile = _subscription(id: 'combined', autoRefreshMinutes: 1)
+          .copyWith(
+            sources: [
+              SubscriptionSource(
+                id: 'failed',
+                snapshot: _subscription(id: 'failed', lastUpdated: 0),
+                lastAttempt: stamp,
+                lastError: 'timeout',
+              ),
+              SubscriptionSource(
+                id: 'due',
+                snapshot: _subscription(id: 'due', lastUpdated: 0),
+              ),
+            ],
+          );
+      expect(controller.dueAutoRefreshSubscriptions([profile]), [profile]);
+      expect(
+        controller.nextAutoRefreshDelay([profile]),
+        const Duration(seconds: 30),
+      );
+    },
+  );
   test('group labels do not invalidate the running configuration', () {
     final controller = SubscriptionRuntimeController();
     const group = SubscriptionGroup(

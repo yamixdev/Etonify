@@ -7,6 +7,7 @@ class _SubscriptionDetailsPage extends StatefulWidget {
     required this.onDelete,
     required this.onMoveUp,
     required this.hapticEnabled,
+    required this.allowUntrustedSubscriptionCertificates,
   });
 
   final String subscriptionId;
@@ -14,6 +15,7 @@ class _SubscriptionDetailsPage extends StatefulWidget {
   final Future<void> Function() onDelete;
   final Future<void> Function()? onMoveUp;
   final bool hapticEnabled;
+  final bool allowUntrustedSubscriptionCertificates;
 
   @override
   State<_SubscriptionDetailsPage> createState() =>
@@ -669,7 +671,12 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
     final l10n = AppLocalizations.of(context);
     final subscription = _subscription;
     if (subscription == null) return const SizedBox.shrink();
-    final local = SubscriptionStore.isLocalFileImportUrl(subscription.url);
+    final multiSource = subscription.effectiveSources.length > 1;
+    final local = subscription.effectiveSources.every(
+      (source) =>
+          source.url.isEmpty ||
+          SubscriptionStore.isLocalFileImportUrl(source.url),
+    );
     final info = subscription.info;
     final count = _hydratedSubscription != null
         ? _serverCatalog?.visibleProxyCount ?? 0
@@ -743,7 +750,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                 }
               },
               itemBuilder: (_) => [
-                if (subscription.hasRawPayload)
+                if (!multiSource && subscription.hasRawPayload)
                   PopupMenuItem(
                     value: 'reparse',
                     child: Text(l10n.reparseProxies),
@@ -856,6 +863,30 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                   ),
                 ),
                 const Gap(12),
+                Card(
+                  child: ListTile(
+                    key: const ValueKey('profile-sources'),
+                    leading: const Icon(Icons.source_outlined),
+                    title: Text(l10n.profileSources),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: _busy
+                        ? null
+                        : () async {
+                            await Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                          builder: (_) => SubscriptionSourcesPage(
+                                  subscriptionId: subscription.id,
+                                  hapticEnabled: widget.hapticEnabled,
+                                  allowUntrustedSubscriptionCertificates: widget
+                                      .allowUntrustedSubscriptionCertificates,
+                                ),
+                              ),
+                            );
+                            if (mounted) setState(_reloadCurrentSubscription);
+                          },
+                  ),
+                ),
+                const Gap(12),
                 _SubscriptionActionPair(
                   labels: [
                     if (!local) l10n.refresh,
@@ -879,72 +910,77 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                   ],
                 ),
                 const Gap(20),
-                _DetailsBlock(
-                  title: local
-                      ? l10n.subscriptionLocalFile
-                      : l10n.subscriptionUrl,
-                  trailing: local
-                      ? null
-                      : IconButton(
-                          key: const ValueKey('edit_subscription_url_button'),
-                          tooltip: l10n.editSubscriptionUrlAction,
-                          onPressed: _busy
-                              ? null
-                              : () => _editSubscriptionUrl(subscription),
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                        ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: .45),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: SelectableText(
-                          local
-                              ? SubscriptionStore.localFileImportDisplayName(
-                                      subscription.url,
-                                    ) ??
-                                    l10n.subscriptionLocalFile
-                              : subscription.url,
-                          scrollPhysics: const _StationaryTextScrollPhysics(),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface,
+                if (!multiSource)
+                  _DetailsBlock(
+                    title: local
+                        ? l10n.subscriptionLocalFile
+                        : l10n.subscriptionUrl,
+                    trailing: local
+                        ? null
+                        : IconButton(
+                            key: const ValueKey('edit_subscription_url_button'),
+                            tooltip: l10n.editSubscriptionUrlAction,
+                            onPressed: _busy
+                                ? null
+                                : () => _editSubscriptionUrl(subscription),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                          ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: .45),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: SelectableText(
+                            local
+                                ? SubscriptionStore.localFileImportDisplayName(
+                                        subscription.url,
+                                      ) ??
+                                      l10n.subscriptionLocalFile
+                                : subscription.url,
+                            scrollPhysics: const _StationaryTextScrollPhysics(),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                            ),
                           ),
                         ),
-                      ),
-                      if (!local) ...[
-                        const Gap(12),
-                        _SubscriptionActionPair(
-                          labels: [l10n.subscriptionCopy, l10n.showQrCode],
-                          children: [
-                            OutlinedButton.icon(
-                              style: _subscriptionActionStyle(context),
-                              onPressed: () =>
-                                  SensitiveClipboard.copy(subscription.url),
-                              icon: const Icon(Icons.copy_outlined, size: 18),
-                              label: Text(l10n.subscriptionCopy),
-                            ),
-                            OutlinedButton.icon(
-                              style: _subscriptionActionStyle(context),
-                              onPressed: () => _showSubscriptionQr(
-                                _qrShareValue(subscription),
-                                title: subscription.name,
+                        if (!local) ...[
+                          const Gap(12),
+                          _SubscriptionActionPair(
+                            labels: [l10n.subscriptionCopy, l10n.showQrCode],
+                            children: [
+                              OutlinedButton.icon(
+                                style: _subscriptionActionStyle(context),
+                                onPressed: () =>
+                                    SensitiveClipboard.copy(subscription.url),
+                                icon: const Icon(Icons.copy_outlined, size: 18),
+                                label: Text(l10n.subscriptionCopy),
                               ),
-                              icon: const Icon(Icons.qr_code_rounded, size: 18),
-                              label: Text(l10n.showQrCode),
-                            ),
-                          ],
-                        ),
+                              OutlinedButton.icon(
+                                style: _subscriptionActionStyle(context),
+                                onPressed: () => _showSubscriptionQr(
+                                  _qrShareValue(subscription),
+                                  title: subscription.name,
+                                ),
+                                icon: const Icon(
+                                  Icons.qr_code_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(l10n.showQrCode),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                if (movedUrl != null &&
+                if (!multiSource &&
+                    movedUrl != null &&
                     movedUrl.isNotEmpty &&
                     movedUrl != subscription.url &&
                     info?.ignoreSubscriptionMoved != true)
@@ -1063,7 +1099,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                       ],
                     ),
                   ),
-                if (!local)
+                if (!local && !multiSource)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: ExpansionTile(
