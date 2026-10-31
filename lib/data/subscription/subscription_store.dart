@@ -1376,6 +1376,11 @@ class SubscriptionStore {
       url: primary.url,
       info: primary.info,
       clearInfo: primary.info == null,
+      autoRefreshMinutes:
+          !current.autoRefreshOverridden &&
+              primary.info?.updateIntervalHours != null
+          ? primary.info!.updateIntervalHours! * 60
+          : current.autoRefreshMinutes,
       rawContent: primary.rawContent,
       outbounds: preserved,
       groups: composed.groups,
@@ -1459,7 +1464,7 @@ class SubscriptionStore {
               'updated': source.lastUpdated,
               'enabled': source.enabled,
               'disabled': profile.disableAutoUpdate,
-              'interval': profile.autoRefreshMinutes,
+              'autoRefreshEnabled': profile.autoRefreshMinutes > 0,
               'info': source.snapshot.info?.toMap(),
               'sendHwid': SubscriptionFetcher.sendHwidToProviders,
             }),
@@ -1603,6 +1608,9 @@ class SubscriptionStore {
           clearError: true,
           lastAttempt: DateTime.now().millisecondsSinceEpoch,
           snapshot: old.copyWith(
+            autoRefreshMinutes: result.headerInfo.updateIntervalHours != null
+                ? result.headerInfo.updateIntervalHours! * 60
+                : old.autoRefreshMinutes,
             rawContent: result.rawContent,
             outbounds: _preserveUserState(old.outbounds, payload.outbounds),
             groups: payload.groups,

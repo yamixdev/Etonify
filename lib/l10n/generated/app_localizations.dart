@@ -6587,6 +6587,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not open battery settings. Open them from Android settings.'**
   String get batteryOptimizationOpenFailed;
+
+  /// No description provided for @rootModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Root Mode'**
+  String get rootModeTitle;
+
+  /// No description provided for @rootModeExperimental.
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental'**
+  String get rootModeExperimental;
+
+  /// No description provided for @rootModeDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the connection through a separately downloaded root module instead of Android VPN. Requires a rooted device and explicit superuser permission. Without root, the module cannot start.'**
+  String get rootModeDescription;
+
+  /// No description provided for @rootModeRootStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Superuser access'**
+  String get rootModeRootStatus;
+
+  /// No description provided for @rootModeModuleStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Root module'**
+  String get rootModeModuleStatus;
+
+  /// No description provided for @rootModeChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get rootModeChecking;
+
+  /// No description provided for @rootModeRootUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Not checked — no permission requested'**
+  String get rootModeRootUnknown;
+
+  /// No description provided for @rootModeRootUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Superuser access is unavailable'**
+  String get rootModeRootUnavailable;
+
+  /// No description provided for @rootModeRootGranted.
+  ///
+  /// In en, this message translates to:
+  /// **'Permission granted'**
+  String get rootModeRootGranted;
+
+  /// No description provided for @rootModeRootDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Superuser permission denied'**
+  String get rootModeRootDenied;
+
+  /// No description provided for @rootModeNotInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed'**
+  String get rootModeNotInstalled;
+
+  /// No description provided for @rootModeDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading module…'**
+  String get rootModeDownloading;
+
+  /// No description provided for @rootModeVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying signature and integrity…'**
+  String get rootModeVerifying;
+
+  /// No description provided for @rootModeInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing module…'**
+  String get rootModeInstalling;
+
+  /// No description provided for @rootModeReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified and ready'**
+  String get rootModeReady;
+
+  /// No description provided for @rootModeIncompatible.
+  ///
+  /// In en, this message translates to:
+  /// **'Incompatible module'**
+  String get rootModeIncompatible;
+
+  /// No description provided for @rootModeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Module unavailable'**
+  String get rootModeFailed;
+
+  /// No description provided for @rootModeVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String rootModeVersion(String version);
+
+  /// No description provided for @rootModeUseRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Use root instead of VPN'**
+  String get rootModeUseRoot;
+
+  /// No description provided for @rootModeUseRootSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to the next connection. Requires superuser permission and a verified module. Privileges are checked again before starting.'**
+  String get rootModeUseRootSummary;
+
+  /// No description provided for @rootModeCheckRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Check root'**
+  String get rootModeCheckRoot;
+
+  /// No description provided for @rootModeDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download / update module'**
+  String get rootModeDownload;
+
+  /// No description provided for @rootModeCheckUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get rootModeCheckUpdate;
+
+  /// No description provided for @rootModeUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Module version {version} is available'**
+  String rootModeUpdateAvailable(String version);
+
+  /// No description provided for @rootModeUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'The module is up to date'**
+  String get rootModeUpToDate;
+
+  /// No description provided for @rootModeRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove module'**
+  String get rootModeRemove;
+
+  /// No description provided for @rootModeRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the root module?'**
+  String get rootModeRemoveTitle;
+
+  /// No description provided for @rootModeRemoveMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Root Mode will be turned off and its downloaded module removed. Your profiles and VPN settings will be kept.'**
+  String get rootModeRemoveMessage;
+
+  /// No description provided for @rootModeSafety.
+  ///
+  /// In en, this message translates to:
+  /// **'The module is not bundled with the app. Downloads must pass signature, integrity and compatibility checks. Device verification is still pending; this experimental mode is not ready for release.'**
+  String get rootModeSafety;
+
+  /// No description provided for @rootModeTrustUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'A trusted module release is not configured. Download and activation remain unavailable.'**
+  String get rootModeTrustUnavailable;
+
+  /// No description provided for @rootModeDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The module could not be downloaded. Check your connection and try again.'**
+  String get rootModeDownloadFailed;
+
+  /// No description provided for @rootModeVerificationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Module verification failed. It will not be installed or started.'**
+  String get rootModeVerificationFailed;
+
+  /// No description provided for @rootModeCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation cancelled.'**
+  String get rootModeCancelled;
+
+  /// No description provided for @rootModeInvalidResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The system returned an unsupported module status. Root Mode remains unavailable.'**
+  String get rootModeInvalidResponse;
+
+  /// No description provided for @rootModeStopFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop the current connection before changing Root Mode.'**
+  String get rootModeStopFirst;
+
+  /// No description provided for @rootModeOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation could not be completed. Check root access and module status, then try again.'**
+  String get rootModeOperationFailed;
+
+  /// No description provided for @rootModeDnsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Root Mode cannot safely apply this DNS configuration. Keep using VPN mode.'**
+  String get rootModeDnsUnavailable;
+
+  /// No description provided for @rootModeConfigUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This configuration is not supported in Root Mode. App-based split routing and mixed inbound are not bypassed silently; use VPN mode.'**
+  String get rootModeConfigUnsupported;
 }
 
 class _AppLocalizationsDelegate

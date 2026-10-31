@@ -5,6 +5,16 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RuntimeServiceModeResolverTest {
+    @Test fun explicitRootRequiresTunAndIsNotInferredFromTunAlone() {
+        assertEquals("root", RuntimeServiceModeResolver.requestedMode("root", listOf("tun")))
+        assertEquals("vpn", RuntimeServiceModeResolver.requestedMode(null, listOf("tun")))
+        assertNull(RuntimeServiceModeResolver.requestedMode("root", listOf("mixed")))
+    }
+
+    @Test fun runningRootWinsOverOldVpnRecord() {
+        assertEquals("root", RuntimeServiceModeResolver.activeMode("root", true, false))
+    }
+
     @Test
     fun `tun takes priority when local proxy is also enabled`() {
         assertEquals(

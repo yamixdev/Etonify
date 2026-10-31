@@ -82,6 +82,7 @@ import 'package:meow_client/features/settings/settings_backup_actions.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/features/settings/settings_core_page.dart';
+import 'package:meow_client/features/settings/settings_root_mode_page.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/features/settings/settings_logs_page.dart';
@@ -4553,7 +4554,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       final status = await _singboxRuntime.status();
       if (status['running'] == true &&
-          status['mode'] == 'vpn' &&
+          runtimeModeMatches(status['mode']?.toString(), useVpn: true) &&
           _connected &&
           await _runtimeOperations.refreshUrlTestReadiness(
             () => _networkInterfaceUsable(reason: 'offline_handoff_ready'),
@@ -6357,10 +6358,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
         resetSettings: () => unawaited(_resetSettingsToDefaults()),
         openExperimental: _showExperimentalSettingsPage,
         openCore: _showCoreSettingsPage,
+        openRoot: Platform.isAndroid ? _showRootModePage : null,
         openLogs: _showLogsPage,
         openAbout: _showAboutSettingsPage,
       ),
     ).build();
+  }
+
+  Future<void> _showRootModePage() async {
+    await _navigatorKey.currentState?.push<void>(
+      MaterialPageRoute<void>(builder: (_) => const SettingsRootModePage()),
+    );
   }
 
   Future<List<Map<String, dynamic>>> _warmInstalledApps() {

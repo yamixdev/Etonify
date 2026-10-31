@@ -17,11 +17,18 @@ if (keyPropertiesFile.exists()) {
 }
 val allowDebugReleaseSigning =
     System.getenv("MEOW_ALLOW_DEBUG_RELEASE_SIGNING")?.equals("true", ignoreCase = true) == true
+// A missing key disables optional root-module installation, never verification.
+val rootModulePublicKey = System.getenv("ROOT_MODULE_PUBLIC_KEY")?.trim().orEmpty()
+check(rootModulePublicKey.isEmpty() || rootModulePublicKey.matches(Regex("[A-Za-z0-9+/=]+"))) {
+    "ROOT_MODULE_PUBLIC_KEY must be a base64 DER public key"
+}
 
 android {
     namespace = "com.etonify.meow_client"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    buildFeatures { buildConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -37,6 +44,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        buildConfigField("String", "ROOT_MODULE_PUBLIC_KEY", "\"$rootModulePublicKey\"")
     }
 
     signingConfigs {

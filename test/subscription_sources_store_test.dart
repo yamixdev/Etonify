@@ -14,6 +14,7 @@ void main() {
   late HttpServer server;
   var secondFails = false;
   var firstNode = 'first.test';
+  var providerIntervals = <String, int>{};
   Completer<void>? started;
   Completer<void>? release;
   String node(String host) =>
@@ -26,6 +27,10 @@ void main() {
     await SubscriptionStore.init();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
+      final interval = providerIntervals[request.uri.path];
+      if (interval != null) {
+        request.response.headers.set('profile-update-interval', interval);
+      }
       if (request.uri.path == '/two' && started != null) {
         started!.complete();
         await release!.future;
@@ -46,6 +51,52 @@ void main() {
     await directory.delete(recursive: true);
   });
   String url(String path) => 'http://127.0.0.1:${server.port}/$path';
+
+  for (final overridden in [false, true]) {
+    test(
+      'primary source refresh honors provider interval unless manual override=$overridden',
+      () async {
+        providerIntervals = {
+          '/interval-primary': 24,
+          '/interval-secondary': 12,
+        };
+        final first = (await SubscriptionStore.addFromUrl(
+          url('interval-primary'),
+        )).subscription;
+        final combined = (await SubscriptionStore.addFromUrl(
+          url('interval-secondary'),
+          targetProfileId: first.id,
+        )).subscription;
+        await SubscriptionStore.save(
+          combined.copyWith(
+            autoRefreshMinutes: overridden ? 180 : 1440,
+            autoRefreshOverridden: overridden,
+          ),
+        );
+        providerIntervals['/interval-primary'] = 1;
+        final updated = await SubscriptionStore.refreshSource(
+          first.id,
+          'primary',
+        );
+        expect(updated.autoRefreshMinutes, overridden ? 180 : 60);
+        expect(updated.autoRefreshOverridden, overridden);
+        expect(updated.sources.first.snapshot.autoRefreshMinutes, 60);
+        expect(
+          (await SubscriptionStore.get(first.id))!.autoRefreshMinutes,
+          overridden ? 180 : 60,
+        );
+
+        providerIntervals['/interval-secondary'] = 2;
+        final secondary = await SubscriptionStore.refreshSource(
+          first.id,
+          combined.sources.last.id,
+        );
+        expect(secondary.autoRefreshMinutes, overridden ? 180 : 60);
+        expect(secondary.sources.last.snapshot.autoRefreshMinutes, 120);
+        providerIntervals = {};
+      },
+    );
+  }
 
   test(
     'legacy profile gains sources and refresh replaces only its own servers',
@@ -220,4 +271,37 @@ void main() {
     expect(remaining.sources.length, 1);
     expect(remaining.outbounds.length, 1);
   });
+
+  test(
+    'primary interval change does not reject an in-flight secondary refresh',
+    () async {
+      providerIntervals = {'/concurrent-primary': 24, '/two': 12};
+      final first = (await SubscriptionStore.addFromUrl(
+        url('concurrent-primary'),
+      )).subscription;
+      final added = (await SubscriptionStore.addFromUrl(
+        url('two'),
+        targetProfileId: first.id,
+      )).subscription;
+      started = Completer<void>();
+      release = Completer<void>();
+      final secondary = SubscriptionStore.refreshSource(
+        first.id,
+        added.sources.last.id,
+      );
+      final completed = expectLater(secondary, completes);
+      await started!.future;
+      providerIntervals['/concurrent-primary'] = 1;
+      await SubscriptionStore.refreshSource(first.id, 'primary');
+      release!.complete();
+      await completed;
+      started = null;
+      release = null;
+      providerIntervals = {};
+      final stored = (await SubscriptionStore.get(first.id))!;
+      expect(stored.autoRefreshMinutes, 60);
+      expect(stored.sources.last.lastError, isNull);
+      expect(stored.sources.last.snapshot.autoRefreshMinutes, 720);
+    },
+  );
 }

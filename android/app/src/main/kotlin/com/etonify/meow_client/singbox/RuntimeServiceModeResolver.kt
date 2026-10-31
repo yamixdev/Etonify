@@ -4,8 +4,12 @@ object RuntimeServiceModeResolver {
     const val VPN = "vpn"
     const val PROXY = "proxy"
     const val PROBE = "probe"
+    const val ROOT = "root"
 
     fun requestedMode(explicitMode: String?, inboundTypes: Iterable<String>): String? {
+        if (explicitMode?.trim()?.lowercase() == ROOT) {
+            return if (configuredMode(inboundTypes) == VPN) ROOT else null
+        }
         return if (explicitMode?.trim()?.lowercase() == PROBE &&
             configuredMode(inboundTypes) == null
         ) PROBE else configuredMode(inboundTypes)
@@ -30,6 +34,7 @@ object RuntimeServiceModeResolver {
             VPN -> VPN
             PROXY -> PROXY
             PROBE -> PROBE
+            ROOT -> ROOT
             else -> when {
                 vpnRecorded -> VPN
                 proxyRecorded -> PROXY

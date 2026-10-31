@@ -181,7 +181,9 @@ void main() {
   test(
     'staged successes for separate sources both apply despite aggregate changes',
     () async {
-      await SubscriptionStore.save(profile('success'));
+      await SubscriptionStore.save(
+        profile('success').copyWith(autoRefreshMinutes: 1440),
+      );
       await SubscriptionBackgroundUpdates.configure([
         SubscriptionStore.getMetadata('success')!,
       ]);
@@ -197,7 +199,9 @@ void main() {
               'vless://11111111-1111-4111-8111-111111111111@server$i.example.test:443?security=tls&type=tcp#Node$i',
             ),
           ),
-          'headers': <String, String>{},
+          'headers': <String, String>{
+            'profile-update-interval': i == 0 ? '1' : '2',
+          },
         };
       }
       final entries = await SubscriptionBackgroundUpdates.applyPending();
@@ -206,6 +210,7 @@ void main() {
       expect(entries.every((e) => e.succeeded), isTrue);
       expect(acknowledged, hasLength(2));
       final stored = (await SubscriptionStore.get('success'))!;
+      expect(stored.autoRefreshMinutes, 60);
       expect(stored.effectiveSources[0].snapshot.outbounds, hasLength(1));
       expect(stored.effectiveSources[1].snapshot.outbounds, hasLength(1));
       expect(
@@ -218,6 +223,68 @@ void main() {
       );
     },
   );
+
+  for (final interval in [180, 0, -60]) {
+    test(
+      'staged source content survives manual interval $interval only when enabled',
+      () async {
+        final id = 'manual-interval-$interval';
+        await SubscriptionStore.save(profile(id));
+        await SubscriptionBackgroundUpdates.configure([
+          SubscriptionStore.getMetadata(id)!,
+        ]);
+        final plan = plans.first;
+        pending = [
+          {'id': plan['id'], 'token': plan['token']},
+        ];
+        results[plan['id'] as String] = {
+          'token': plan['token'],
+          'time': 9000,
+          'body': base64Encode(
+            utf8.encode(
+              'vless://11111111-1111-4111-8111-111111111111@manual-interval.example.test:443?security=tls&type=tcp#Interval',
+            ),
+          ),
+          'headers': <String, String>{},
+        };
+        final current = (await SubscriptionStore.get(id))!;
+        await SubscriptionStore.save(
+          current.copyWith(
+            autoRefreshMinutes: interval,
+            autoRefreshOverridden: true,
+          ),
+        );
+        if (interval <= 0) {
+          await expectLater(
+            SubscriptionStore.applyBackgroundSourceDownload(
+              id,
+              'a',
+              revision: plan['token'] as String,
+              bytes: base64Decode(results[plan['id']]!['body'] as String),
+              headers: const {},
+            ),
+            throwsStateError,
+          );
+        }
+        final entries = await SubscriptionBackgroundUpdates.applyPending();
+        final stored = (await SubscriptionStore.get(id))!;
+        expect(stored.autoRefreshMinutes, interval);
+        expect(acknowledged, [plan['id']]);
+        if (interval > 0) {
+          expect(entries, hasLength(1));
+          expect(entries.single.succeeded, isTrue);
+          expect(
+            stored.sources.first.snapshot.outbounds.single.config['server'],
+            'manual-interval.example.test',
+          );
+        } else {
+          expect(entries, isEmpty);
+          expect(stored.sources.first.lastUpdated, 1000);
+          expect(stored.sources.first.snapshot.outbounds, isEmpty);
+        }
+      },
+    );
+  }
 
   test('legacy pending ids and profile tokens remain applicable', () async {
     await SubscriptionStore.save(
@@ -250,6 +317,54 @@ void main() {
     expect((await SubscriptionStore.get('legacy'))!.outbounds, hasLength(1));
     expect(acknowledged, ['legacy']);
   });
+
+  for (final overridden in [false, true]) {
+    test(
+      'legacy source background download updates interval unless manual override=$overridden',
+      () async {
+        final id = 'legacy-interval-$overridden';
+        await SubscriptionStore.save(
+          Subscription(
+            id: id,
+            name: 'Legacy interval',
+            url: 'https://interval.example.test/sub',
+            lastUpdated: 1000,
+            autoRefreshMinutes: overridden ? 180 : 1440,
+            autoRefreshOverridden: overridden,
+            info: const SubscriptionInfo(updateIntervalHours: 24),
+          ),
+        );
+        await SubscriptionBackgroundUpdates.configure([
+          SubscriptionStore.getMetadata(id)!,
+        ]);
+        final plan = plans.single;
+        pending = [
+          {'id': plan['id'], 'token': plan['token']},
+        ];
+        results[plan['id'] as String] = {
+          'token': plan['token'],
+          'time': 9000,
+          'body': base64Encode(
+            utf8.encode(
+              'vless://11111111-1111-4111-8111-111111111111@interval.example.test:443?security=tls&type=tcp#Interval',
+            ),
+          ),
+          'headers': {'profile-update-interval': '1'},
+        };
+        final entries = await SubscriptionBackgroundUpdates.applyPending();
+        expect(entries.single.succeeded, isTrue);
+        final stored = (await SubscriptionStore.get(id))!;
+        expect(stored.autoRefreshMinutes, overridden ? 180 : 60);
+        expect(stored.sources.single.snapshot.autoRefreshMinutes, 60);
+        expect(stored.autoRefreshOverridden, overridden);
+        await SubscriptionBackgroundUpdates.configure([stored]);
+        expect(
+          plans.single['dueAt'],
+          stored.sources.single.lastUpdated + (overridden ? 180 : 60) * 60000,
+        );
+      },
+    );
+  }
 
   test(
     'disabling one source discards its staged result without a failure report',

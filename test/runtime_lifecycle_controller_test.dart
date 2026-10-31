@@ -8,6 +8,40 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
   test(
+    'confirmed root tunnel satisfies VPN startup without a second VPN',
+    () async {
+      final runtime = _FakeRuntime(
+        running: false,
+        confirmStartImmediately: false,
+      );
+      runtime.statusResponse = () async => <String, dynamic>{
+        'running': true,
+        'mode': 'root',
+        'runtimeGeneration': 2,
+        'recordedServiceAlive': true,
+        'activeRuntimeOwner': true,
+      };
+      final controller = RuntimeLifecycleController(
+        runtime: runtime,
+        startTimeout: const Duration(milliseconds: 50),
+      );
+      addTearDown(controller.dispose);
+      final result = await controller.startRuntimeWithBuild(
+        build: _build(),
+        useVpn: true,
+        promotePreparedConfig: (_) {},
+        cacheStartedBuild: (_) {},
+        logCall: (_, _) {},
+        trimMemory: (_) {},
+        onWatchdogTimeout: (_) {},
+      );
+      expect(result.success, isTrue);
+      expect(runtime.stopCalls, 0);
+      expect(runtime.startPreparedCalls, 1);
+    },
+  );
+
+  test(
     'safe restart preserves its stop revision across delayed promotion',
     () async {
       final runtime = _FakeRuntime();

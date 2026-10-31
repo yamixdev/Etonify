@@ -117,7 +117,7 @@ class QuickTileStopCleanupTest {
         assertNull(MeowApplication.readServiceState())
         val stopped = generateSequence { shadowOf(MeowApplication.application).nextStoppedService }
             .map { it.component!!.className.substringAfterLast('.') }.toList()
-        assertEquals(listOf("MeowVpnService", "MeowProxyService", "MeowProbeService"), stopped)
+        assertEquals(listOf("MeowVpnService", "MeowProxyService", "MeowProbeService", "RootRuntimeService"), stopped)
     }
 
     private fun stopFromTile() {

@@ -7,6 +7,10 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 enum RuntimeApplyPolicy { logOnly, safeCoreRestart, fullServiceRestart }
 
+/// Root is a confirmed system tunnel, not a local proxy or an offline probe.
+bool runtimeModeMatches(String? mode, {required bool useVpn}) =>
+    useVpn ? mode == 'vpn' || mode == 'root' : mode == 'proxy';
+
 class RuntimeLifecycleResult {
   const RuntimeLifecycleResult({
     required this.success,
@@ -335,12 +339,13 @@ class RuntimeLifecycleController {
         (event) {
           final type = event['type']?.toString() ?? '';
           if (type == pigeon.runtimeEventState) {
-            final expectedMode = useVpn ? 'vpn' : 'proxy';
             final running = event['running'] == true;
             final mode = event['mode']?.toString() ?? '';
             final runtimeGeneration =
                 (event['runtimeGeneration'] as num?)?.toInt() ?? 0;
-            if (running && mode == expectedMode && runtimeGeneration > 0) {
+            if (running &&
+                runtimeModeMatches(mode, useVpn: useVpn) &&
+                runtimeGeneration > 0) {
               AppLogStore.info(
                 'runtime',
                 'runtime start confirmed via event mode=$mode '
@@ -420,11 +425,10 @@ class RuntimeLifecycleController {
     Map<String, dynamic> status, {
     required bool useVpn,
   }) {
-    final expectedMode = useVpn ? 'vpn' : 'proxy';
     final runtimeGeneration =
         (status['runtimeGeneration'] as num?)?.toInt() ?? 0;
     return status['running'] == true &&
-        status['mode'] == expectedMode &&
+        runtimeModeMatches(status['mode']?.toString(), useVpn: useVpn) &&
         status['recordedServiceAlive'] == true &&
         status['activeRuntimeOwner'] == true &&
         runtimeGeneration > 0;

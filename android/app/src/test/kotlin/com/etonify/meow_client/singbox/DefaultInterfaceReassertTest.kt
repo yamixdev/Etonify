@@ -7,6 +7,9 @@ import android.net.NetworkInfo
 import android.net.Network
 import android.net.VpnService
 import com.etonify.meow_client.MeowApplication
+import com.etonify.meow_client.root.RootRuntimeService
+import com.etonify.meow_client.root.RootRuntimeSession
+import java.net.InetAddress
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import java.net.NetworkInterface
 import java.util.concurrent.CountDownLatch
@@ -36,6 +39,37 @@ import org.robolectric.util.ReflectionHelpers
 @Config(application = MeowApplication::class, sdk = [28], manifest = Config.NONE,
     shadows = [DefaultInterfaceReassertTest.BindingShadow::class])
 class DefaultInterfaceReassertTest {
+    @Test fun `root monitor dispatches without app-side libbox listener including DNS-only updates`() {
+        installInterface { }
+        MeowDefaultNetworkMonitor.setListener(null)
+        val service = Robolectric.buildService(RootRuntimeService::class.java).create().get()
+        val session = ReflectionHelpers.getField<RootRuntimeSession>(service, "session")
+        session.markReady(session.beginStart(0)!!, 0)
+        val generation = ReflectionHelpers.getField<AtomicLong>(MeowDefaultNetworkMonitor, "networkInterfaceGeneration")
+        val worker = ReflectionHelpers.getField<ExecutorService>(MeowDefaultNetworkMonitor, "notifyExecutor")
+        try {
+            val before = generation.get()
+            MeowDefaultNetworkMonitor.reassertDefaultInterface("root_test")
+            shadowOf(android.os.Looper.getMainLooper()).idle()
+            val networkHandler = ReflectionHelpers.getField<android.os.Handler>(MeowDefaultNetworkMonitor, "networkHandler")
+            shadowOf(networkHandler.looper).idle()
+            worker.submit {}.get(3, TimeUnit.SECONDS)
+            assertTrue("root path must be reached without a platform listener", generation.get() > before)
+            val current = generation.get()
+            val shadow = shadowOf(MeowApplication.connectivity)
+            val network = ShadowNetwork.newInstance(101)
+            val properties = MeowApplication.connectivity.getLinkProperties(network)!!
+            LinkProperties::class.java.getDeclaredMethod("setDnsServers", Collection::class.java)
+                .apply { isAccessible = true }.invoke(properties, listOf(InetAddress.getByName("192.168.1.1")))
+            shadow.setLinkProperties(network, properties)
+            val notifyGeneration = ReflectionHelpers.getField<AtomicLong>(MeowDefaultNetworkMonitor, "notifyDebounceGeneration")
+            val method = MeowDefaultNetworkMonitor::class.java.getDeclaredMethod("notifyListenerInternal", java.lang.Long.TYPE, Network::class.java, java.lang.Boolean.TYPE).apply { isAccessible = true }
+            method.invoke(MeowDefaultNetworkMonitor, notifyGeneration.incrementAndGet(), network, false)
+            assertTrue("DNS-only changes must not be treated as duplicates", generation.get() > current)
+        } finally {
+            ReflectionHelpers.setStaticField(RootRuntimeService::class.java, "owner", null)
+        }
+    }
     private var originalRetryDelays: LongArray? = null
     @Implements(VpnService::class)
     class BindingShadow {

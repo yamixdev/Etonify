@@ -1,5 +1,9 @@
 package com.etonify.meow_client
 
+import com.etonify.meow_client.root.RootModeChannels
+import com.etonify.meow_client.root.RootModuleManager
+import com.etonify.meow_client.root.RootRuntimeService
+
 import android.app.ActivityManager
 import android.app.StatusBarManager
 import android.Manifest
@@ -74,6 +78,7 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterFragmentActivity() {
+    private var rootModeChannels: RootModeChannels? = null
     companion object {
         private const val TAG = "MeowMainActivity"
         private const val QUICK_TILE_LABEL_FILE = "quick_tile_label.txt"
@@ -960,8 +965,9 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun currentRuntimeModeForStop(): String {
+        if (RootRuntimeService.hasActiveOwner()) return RootRuntimeService.MODE
         val controllerMode = SingboxController.serviceMode.trim().lowercase()
-        if (controllerMode == "vpn" || controllerMode == "proxy" || controllerMode == "probe") {
+        if (controllerMode == "vpn" || controllerMode == "proxy" || controllerMode == "probe" || controllerMode == "root") {
             return controllerMode
         }
         val recordedMode = MeowApplication.readServiceState()?.mode?.trim()?.lowercase().orEmpty()
@@ -974,6 +980,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun runtimeStopTargetForMode(mode: String): Class<out android.app.Service> {
         return when (mode) {
+            "root" -> RootRuntimeService::class.java
             "proxy" -> MeowProxyService::class.java
             "probe" -> MeowProbeService::class.java
             else -> MeowVpnService::class.java
@@ -988,6 +995,7 @@ class MainActivity : FlutterFragmentActivity() {
             MeowVpnService::class.java,
             MeowProxyService::class.java,
             MeowProbeService::class.java,
+            RootRuntimeService::class.java,
         ).distinct()
     }
 
@@ -1200,11 +1208,19 @@ class MainActivity : FlutterFragmentActivity() {
             TAG,
             "start requested useVpn=$useVpn running=${SingboxController.running} mode=${SingboxController.serviceMode}",
         )
-        val targetMode = if (useVpn) "vpn" else "proxy"
-        val targetService = if (useVpn) {
+        val useRoot = useVpn && RootModuleManager.enabled(this)
+        val targetMode = if (useRoot) "root" else if (useVpn) "vpn" else "proxy"
+        val targetService = if (useRoot) {
+            RootRuntimeService::class.java
+        } else if (useVpn) {
             MeowVpnService::class.java
         } else {
             MeowProxyService::class.java
+        }
+        if (useRoot && RootRuntimeService.hasActiveOwner()) {
+            if (RootRuntimeService.hasRunningOwner() || RootRuntimeService.isStartPending()) result.success(true)
+            else result.error("runtime_busy", "Root cleanup is not complete", null)
+            return
         }
         if (SingboxController.running && SingboxController.serviceMode == targetMode) {
             val serviceIntent = runtimeStartIntent(targetService, expectedExternalStopRevision)
@@ -1293,8 +1309,9 @@ class MainActivity : FlutterFragmentActivity() {
             MeowApplication.singboxWorkingDirectory,
         )
         val effectiveRestartCore = restartCore || dnsCacheClearPending
-        val targetMode = if (useVpn) "vpn" else "proxy"
-        val serviceClass = if (useVpn) MeowVpnService::class.java else MeowProxyService::class.java
+        val useRoot = useVpn && RootModuleManager.enabled(this)
+        val targetMode = if (useRoot) "root" else if (useVpn) "vpn" else "proxy"
+        val serviceClass = if (useRoot) RootRuntimeService::class.java else if (useVpn) MeowVpnService::class.java else MeowProxyService::class.java
         Log.i(
             TAG,
             "applyConfig useVpn=$useVpn restartCore=$effectiveRestartCore dnsCacheClearPending=$dnsCacheClearPending running=${SingboxController.running} mode=${SingboxController.serviceMode} target=${serviceClass.simpleName}",
@@ -1617,7 +1634,7 @@ class MainActivity : FlutterFragmentActivity() {
                     requiresVpn: Boolean,
                     callback: (Result<Boolean>) -> Unit,
                 ) {
-                    if (!requiresVpn) {
+                    if (!requiresVpn || RootModuleManager.enabled(this@MainActivity)) {
                         callback(Result.success(true))
                         return
                     }
@@ -1631,7 +1648,7 @@ class MainActivity : FlutterFragmentActivity() {
                 }
 
                 override fun vpnPermissionStatus(callback: (Result<Map<String?, Any?>>) -> Unit) {
-                    callback(Result.success(mapOf("granted" to (VpnService.prepare(this@MainActivity) == null))))
+                    callback(Result.success(mapOf("granted" to (RootModuleManager.enabled(this@MainActivity) || VpnService.prepare(this@MainActivity) == null))))
                 }
 
                 override fun start(config: String, useVpn: Boolean, expectedExternalStopRevision: Long?, callback: (Result<Unit>) -> Unit) {
@@ -1810,6 +1827,7 @@ class MainActivity : FlutterFragmentActivity() {
 
                 override fun reload(callback: (Result<Unit>) -> Unit) {
                     val serviceClass = when (SingboxController.serviceMode) {
+                        "root" -> RootRuntimeService::class.java
                         "proxy" -> MeowProxyService::class.java
                         "probe" -> MeowProbeService::class.java
                         else -> MeowVpnService::class.java
@@ -2271,6 +2289,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        rootModeChannels?.close()
+        rootModeChannels = RootModeChannels(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         startupTasks?.close()
         val startup = StartupTaskRunner { command -> mainHandler.post(command) }
         startupTasks = startup
@@ -2402,6 +2422,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        rootModeChannels?.close()
+        rootModeChannels = null
         SubscriptionRefreshJobs.unregister()
         startupTasks?.close()
         startupTasks = null

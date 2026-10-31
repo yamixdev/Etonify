@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import com.etonify.meow_client.MeowApplication
 import com.etonify.meow_client.MeowQuickSettingsTileService
+import com.etonify.meow_client.root.RootRuntimeService
 
 /**
  * Handles notification buttons without starting a VPN Service just to deliver
@@ -79,6 +80,7 @@ class MeowNotificationActionReceiver : BroadcastReceiver() {
         context.stopService(Intent(context, MeowVpnService::class.java))
         context.stopService(Intent(context, MeowProxyService::class.java))
         context.stopService(Intent(context, MeowProbeService::class.java))
+        context.stopService(Intent(context, RootRuntimeService::class.java))
         MeowDefaultNetworkMonitor.stop()
         if (SingboxController.running && !MeowBoxService.hasActiveRuntimeOwner()) {
             // With no foreground service in this process there is no live

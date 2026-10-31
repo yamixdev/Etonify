@@ -1213,7 +1213,7 @@ class SingboxConfigCoordinator {
         transitionInProgress;
     final policy = forceFullServiceRestart && serviceMayBeAlive
         ? RuntimeApplyPolicy.fullServiceRestart
-        : running && currentMode == targetMode
+        : running && runtimeModeMatches(currentMode, useVpn: useVpn)
         ? RuntimeApplyPolicy.safeCoreRestart
         : (serviceMayBeAlive || restartRuntime
               ? RuntimeApplyPolicy.fullServiceRestart

@@ -134,6 +134,16 @@
                   android:value="user-initiated proxy server connectivity checks without a VPN" />
           </service>
 
+        <service
+            android:name=".root.RootRuntimeService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="user-initiated optional root network tunnel" />
+        </service>
+
         <receiver
             android:name=".singbox.MeowNotificationActionReceiver"
             android:exported="false" />

@@ -3715,4 +3715,134 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get batteryOptimizationOpenFailed =>
       'Could not open battery settings. Open them from Android settings.';
+
+  @override
+  String get rootModeTitle => 'Root Mode';
+
+  @override
+  String get rootModeExperimental => 'Experimental';
+
+  @override
+  String get rootModeDescription =>
+      'Run the connection through a separately downloaded root module instead of Android VPN. Requires a rooted device and explicit superuser permission. Without root, the module cannot start.';
+
+  @override
+  String get rootModeRootStatus => 'Superuser access';
+
+  @override
+  String get rootModeModuleStatus => 'Root module';
+
+  @override
+  String get rootModeChecking => 'Checking…';
+
+  @override
+  String get rootModeRootUnknown => 'Not checked — no permission requested';
+
+  @override
+  String get rootModeRootUnavailable => 'Superuser access is unavailable';
+
+  @override
+  String get rootModeRootGranted => 'Permission granted';
+
+  @override
+  String get rootModeRootDenied => 'Superuser permission denied';
+
+  @override
+  String get rootModeNotInstalled => 'Not installed';
+
+  @override
+  String get rootModeDownloading => 'Downloading module…';
+
+  @override
+  String get rootModeVerifying => 'Verifying signature and integrity…';
+
+  @override
+  String get rootModeInstalling => 'Installing module…';
+
+  @override
+  String get rootModeReady => 'Verified and ready';
+
+  @override
+  String get rootModeIncompatible => 'Incompatible module';
+
+  @override
+  String get rootModeFailed => 'Module unavailable';
+
+  @override
+  String rootModeVersion(String version) {
+    return 'Version $version';
+  }
+
+  @override
+  String get rootModeUseRoot => 'Use root instead of VPN';
+
+  @override
+  String get rootModeUseRootSummary =>
+      'Applies to the next connection. Requires superuser permission and a verified module. Privileges are checked again before starting.';
+
+  @override
+  String get rootModeCheckRoot => 'Check root';
+
+  @override
+  String get rootModeDownload => 'Download / update module';
+
+  @override
+  String get rootModeCheckUpdate => 'Check for updates';
+
+  @override
+  String rootModeUpdateAvailable(String version) {
+    return 'Module version $version is available';
+  }
+
+  @override
+  String get rootModeUpToDate => 'The module is up to date';
+
+  @override
+  String get rootModeRemove => 'Remove module';
+
+  @override
+  String get rootModeRemoveTitle => 'Remove the root module?';
+
+  @override
+  String get rootModeRemoveMessage =>
+      'Root Mode will be turned off and its downloaded module removed. Your profiles and VPN settings will be kept.';
+
+  @override
+  String get rootModeSafety =>
+      'The module is not bundled with the app. Downloads must pass signature, integrity and compatibility checks. Device verification is still pending; this experimental mode is not ready for release.';
+
+  @override
+  String get rootModeTrustUnavailable =>
+      'A trusted module release is not configured. Download and activation remain unavailable.';
+
+  @override
+  String get rootModeDownloadFailed =>
+      'The module could not be downloaded. Check your connection and try again.';
+
+  @override
+  String get rootModeVerificationFailed =>
+      'Module verification failed. It will not be installed or started.';
+
+  @override
+  String get rootModeCancelled => 'Operation cancelled.';
+
+  @override
+  String get rootModeInvalidResponse =>
+      'The system returned an unsupported module status. Root Mode remains unavailable.';
+
+  @override
+  String get rootModeStopFirst =>
+      'Stop the current connection before changing Root Mode.';
+
+  @override
+  String get rootModeOperationFailed =>
+      'The operation could not be completed. Check root access and module status, then try again.';
+
+  @override
+  String get rootModeDnsUnavailable =>
+      'Root Mode cannot safely apply this DNS configuration. Keep using VPN mode.';
+
+  @override
+  String get rootModeConfigUnsupported =>
+      'This configuration is not supported in Root Mode. App-based split routing and mixed inbound are not bypassed silently; use VPN mode.';
 }

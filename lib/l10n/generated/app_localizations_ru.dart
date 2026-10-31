@@ -3717,4 +3717,134 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get batteryOptimizationOpenFailed =>
       'Не удалось открыть настройки батареи. Откройте их в настройках Android.';
+
+  @override
+  String get rootModeTitle => 'Root Mode';
+
+  @override
+  String get rootModeExperimental => 'Экспериментально';
+
+  @override
+  String get rootModeDescription =>
+      'Подключение через отдельно скачиваемый root-модуль вместо Android VPN. Нужны root на устройстве и явное разрешение суперпользователя. Без root модуль не запустится.';
+
+  @override
+  String get rootModeRootStatus => 'Доступ суперпользователя';
+
+  @override
+  String get rootModeModuleStatus => 'Root-модуль';
+
+  @override
+  String get rootModeChecking => 'Проверка…';
+
+  @override
+  String get rootModeRootUnknown => 'Не проверен — разрешение не запрашивалось';
+
+  @override
+  String get rootModeRootUnavailable => 'Доступ суперпользователя недоступен';
+
+  @override
+  String get rootModeRootGranted => 'Разрешение получено';
+
+  @override
+  String get rootModeRootDenied => 'В доступе суперпользователя отказано';
+
+  @override
+  String get rootModeNotInstalled => 'Не установлен';
+
+  @override
+  String get rootModeDownloading => 'Загрузка модуля…';
+
+  @override
+  String get rootModeVerifying => 'Проверка подписи и целостности…';
+
+  @override
+  String get rootModeInstalling => 'Установка модуля…';
+
+  @override
+  String get rootModeReady => 'Проверен и готов';
+
+  @override
+  String get rootModeIncompatible => 'Несовместимый модуль';
+
+  @override
+  String get rootModeFailed => 'Модуль недоступен';
+
+  @override
+  String rootModeVersion(String version) {
+    return 'Версия $version';
+  }
+
+  @override
+  String get rootModeUseRoot => 'Root вместо VPN';
+
+  @override
+  String get rootModeUseRootSummary =>
+      'Применяется при следующем подключении. Нужны разрешение суперпользователя и проверенный модуль. Перед запуском права проверяются повторно.';
+
+  @override
+  String get rootModeCheckRoot => 'Проверить root';
+
+  @override
+  String get rootModeDownload => 'Скачать / обновить модуль';
+
+  @override
+  String get rootModeCheckUpdate => 'Проверить обновления';
+
+  @override
+  String rootModeUpdateAvailable(String version) {
+    return 'Доступна версия модуля $version';
+  }
+
+  @override
+  String get rootModeUpToDate => 'Установлена актуальная версия модуля';
+
+  @override
+  String get rootModeRemove => 'Удалить модуль';
+
+  @override
+  String get rootModeRemoveTitle => 'Удалить root-модуль?';
+
+  @override
+  String get rootModeRemoveMessage =>
+      'Root Mode будет выключен, а скачанный модуль удалён. Профили и настройки VPN сохранятся.';
+
+  @override
+  String get rootModeSafety =>
+      'Модуль не включён в приложение. Перед установкой обязательны проверки подписи, целостности и совместимости. Проверка на устройстве ещё не завершена: экспериментальный режим пока не готов к релизу.';
+
+  @override
+  String get rootModeTrustUnavailable =>
+      'Доверенный релиз модуля не настроен. Скачивание и включение недоступны.';
+
+  @override
+  String get rootModeDownloadFailed =>
+      'Не удалось скачать модуль. Проверьте подключение и повторите попытку.';
+
+  @override
+  String get rootModeVerificationFailed =>
+      'Модуль не прошёл проверку. Он не будет установлен или запущен.';
+
+  @override
+  String get rootModeCancelled => 'Операция отменена.';
+
+  @override
+  String get rootModeInvalidResponse =>
+      'Система вернула неподдерживаемый статус модуля. Root Mode остаётся недоступным.';
+
+  @override
+  String get rootModeStopFirst =>
+      'Остановите текущее подключение перед изменением Root Mode.';
+
+  @override
+  String get rootModeOperationFailed =>
+      'Не удалось выполнить операцию. Проверьте root-доступ и состояние модуля, затем повторите попытку.';
+
+  @override
+  String get rootModeDnsUnavailable =>
+      'Root Mode не может безопасно применить эту конфигурацию DNS. Используйте режим VPN.';
+
+  @override
+  String get rootModeConfigUnsupported =>
+      'Эта конфигурация не поддерживается в Root Mode. Раздельная маршрутизация приложений и смешанный вход не будут молча проигнорированы: используйте режим VPN.';
 }

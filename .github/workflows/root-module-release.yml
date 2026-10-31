@@ -1,0 +1,151 @@
+name: Etonify · Root module release
+
+on:
+  workflow_dispatch:
+    inputs:
+      module_version:
+        description: "Independent module version (numeric major.minor.patch)"
+        type: string
+        required: true
+        default: '0.1.0'
+      version_code:
+        description: "Monotonically increasing module versionCode (positive integer)"
+        type: string
+        required: true
+        default: '1'
+      draft:
+        description: "Keep release private as a draft (publish manually after device verification)"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: root-module-v${{ inputs.module_version }}
+  cancel-in-progress: false
+
+env:
+  ROOT_MODULE_VERSION: ${{ inputs.module_version }}
+  ROOT_MODULE_VERSION_CODE: ${{ inputs.version_code }}
+  ROOT_MODULE_ASSET: etonify-root-arm64-v8a.zip
+  ROOT_BUILD_TAGS: with_quic,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0
+
+jobs:
+  validate:
+    name: Test root module packaging and policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test signing and tamper rejection with temporary keys
+        run: python3 -B root-module/package_test.py
+      - name: Validate release metadata
+        run: python3 -B root-module/package.py --validate-metadata --module-version "$ROOT_MODULE_VERSION" --version-code "$ROOT_MODULE_VERSION_CODE"
+      - name: Initialize pinned core and TUN dependencies
+        run: |
+          git submodule update --init --depth 1 -- etonify-core
+          git -C etonify-core submodule update --init --depth 1 -- third_party/sing-tun
+          test "$(git rev-parse HEAD:etonify-core)" = "$(git -C etonify-core rev-parse HEAD)"
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: etonify-core/go.sum
+      - name: Test Linux root policy and TUN paths
+        working-directory: etonify-core
+        run: go test -count=1 -tags "$ROOT_BUILD_TAGS" ./experimental/rootmode ./protocol/tun ./cmd/etonify-root
+
+  release:
+    name: Build and sign standalone Android arm64 module
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require configured release signing
+        env:
+          ROOT_MODULE_SIGNING_KEY: ${{ secrets.ROOT_MODULE_SIGNING_KEY }}
+          ROOT_MODULE_PUBLIC_KEY: ${{ vars.ROOT_MODULE_PUBLIC_KEY || secrets.ROOT_MODULE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ROOT_MODULE_SIGNING_KEY" || { echo '::error::ROOT_MODULE_SIGNING_KEY is not configured'; exit 1; }
+          test -n "$ROOT_MODULE_PUBLIC_KEY" || { echo '::error::ROOT_MODULE_PUBLIC_KEY is not configured'; exit 1; }
+      - name: Bind release tag to validated module version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B root-module/package.py --validate-metadata \
+            --module-version "$ROOT_MODULE_VERSION" --version-code "$ROOT_MODULE_VERSION_CODE"
+          echo "ROOT_MODULE_TAG=root-module-v$ROOT_MODULE_VERSION" >> "$GITHUB_ENV"
+      - name: Initialize pinned core and record immutable source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 -- etonify-core
+          git -C etonify-core submodule update --init --depth 1 -- third_party/sing-tun
+          core_commit="$(git rev-parse HEAD:etonify-core)"
+          test "$core_commit" = "$(git -C etonify-core rev-parse HEAD)"
+          test -f etonify-core/cmd/etonify-root/main.go
+          echo "CORE_COMMIT=$core_commit" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: etonify-core/go.sum
+      - name: Cross-build module only (not an APK)
+        working-directory: etonify-core
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../root-module/dist
+          go build -trimpath -buildvcs=false -tags "$ROOT_BUILD_TAGS" \
+            -ldflags "-s -w -buildid= -checklinkname=0 -X main.coreCommit=$CORE_COMMIT -X main.moduleVersion=$ROOT_MODULE_VERSION" \
+            -o ../root-module/dist/etonify-root ./cmd/etonify-root
+      - name: Sign manifest and verify packaged bytes
+        env:
+          ROOT_MODULE_SIGNING_KEY: ${{ secrets.ROOT_MODULE_SIGNING_KEY }}
+          ROOT_MODULE_PUBLIC_KEY: ${{ vars.ROOT_MODULE_PUBLIC_KEY || secrets.ROOT_MODULE_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B root-module/package.py \
+            --binary root-module/dist/etonify-root \
+            --core-commit "$CORE_COMMIT" \
+            --module-version "$ROOT_MODULE_VERSION" --version-code "$ROOT_MODULE_VERSION_CODE" \
+            --output "root-module/dist/$ROOT_MODULE_ASSET"
+      - name: Create immutable release (draft by default)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_DRAFT: ${{ inputs.draft }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$CORE_COMMIT" "$ROOT_MODULE_VERSION" <<'PY'
+          from pathlib import Path
+          import sys
+          Path('root-module/dist/release-notes.txt').write_text(
+              'Experimental standalone Root Mode module ' + sys.argv[2] + ' (arm64-v8a, protocol 1).\n\n'
+              'Requires Android API 26+, Etonify client versionCode 42+, root access, and an APK built with the matching ROOT_MODULE_PUBLIC_KEY.\n\n'
+              'Core source: ' + sys.argv[1] + '\n\n'
+              'A draft is not downloadable by the app. Publish this release manually only after real-device installation, routing, DNS and cleanup verification.\n',
+              encoding='utf-8',
+          )
+          PY
+          draft_args=()
+          if [ "$RELEASE_DRAFT" = 'true' ]; then draft_args+=(--draft); fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$ROOT_MODULE_TAG" -f "sha=$GITHUB_SHA" > /dev/null
+          gh release create "$ROOT_MODULE_TAG" "root-module/dist/$ROOT_MODULE_ASSET" \
+            --verify-tag --title "Root module $ROOT_MODULE_VERSION (experimental)" \
+            --prerelease --notes-file root-module/dist/release-notes.txt "${draft_args[@]}"
