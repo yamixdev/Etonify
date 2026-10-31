@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: etonify-core/go.sum
       - name: Test Linux root policy and TUN paths
         working-directory: etonify-core
-        run: go test -count=1 -tags "$ROOT_BUILD_TAGS" ./experimental/rootmode ./protocol/tun ./cmd/etonify-root
+        run: go test -count=1 -ldflags="-checklinkname=0" -tags "$ROOT_BUILD_TAGS" ./experimental/rootmode ./protocol/tun ./cmd/etonify-root
 
   release:
     name: Build and sign standalone Android arm64 module
