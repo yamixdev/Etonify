@@ -3832,6 +3832,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'The module could not start correctly. Reinstall it or keep using VPN mode.';
 
   @override
+  String get rootModeWorkDirDenied =>
+      'The module cannot access its private working directory. Keep using VPN mode and share the diagnostic code with the developer.';
+
+  @override
+  String get rootModeLockDenied =>
+      'The module could not access its runtime lock. Root Mode was not activated.';
+
+  @override
+  String get rootModeJournalDenied =>
+      'Previous session data could not be verified. Cleanup was stopped to avoid changing unrelated network settings.';
+
+  @override
+  String get rootModeCleanupFailed =>
+      'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.';
+
+  @override
   String get rootModeTrustUnavailable =>
       'A trusted module release is not configured. Download and activation remain unavailable.';
 

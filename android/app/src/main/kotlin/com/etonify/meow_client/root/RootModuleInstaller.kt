@@ -2,6 +2,7 @@ package com.etonify.meow_client.root
 
 import java.util.UUID
 import org.json.JSONObject
+import com.etonify.meow_client.singbox.MeowDiagnostics
 
 internal class RootModuleInstaller(private val runner: RootProcessRunner) {
     fun install(module: VerifiedRootModule, commitMetadata: () -> Unit) {
@@ -90,6 +91,15 @@ internal class RootModuleInstaller(private val runner: RootProcessRunner) {
 
 internal fun requireCleanupSuccess(result: RootCommandResult) {
     if (result.exitCode == 0) return
-    val reason = runCatching { JSONObject(result.stdout).optString("reason") }.getOrNull()
-    throw RootModuleException(if (reason == "already_running") "runtime_busy" else "module_cleanup_failed")
+    val reason = runCatching {
+        val response = JSONObject(result.stdout)
+        if (response.opt("protocol") == 1 && response.opt("ready") == false) response.optString("reason") else null
+    }.getOrNull()
+    val code = when (reason) {
+        "already_running" -> "runtime_busy"
+        "work_dir_denied", "lock_denied", "journal_denied", "cleanup_failed", "root_required" -> "module_cleanup_$reason"
+        else -> "module_cleanup_failed"
+    }
+    MeowDiagnostics.log("RootModuleInstaller", "cleanup failed exitCode=${result.exitCode} reason=$code")
+    throw RootModuleException(code)
 }

@@ -3834,6 +3834,22 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось корректно запустить модуль. Переустановите его или используйте режим VPN.';
 
   @override
+  String get rootModeWorkDirDenied =>
+      'Модуль не получил доступ к своему рабочему каталогу. Используйте режим VPN и передайте разработчику код ошибки.';
+
+  @override
+  String get rootModeLockDenied =>
+      'Модуль не получил доступ к файлу блокировки. Root Mode не включён.';
+
+  @override
+  String get rootModeJournalDenied =>
+      'Не удалось проверить данные предыдущего запуска. Очистка остановлена, чтобы не затронуть посторонние настройки сети.';
+
+  @override
+  String get rootModeCleanupFailed =>
+      'Не удалось завершить безопасную очистку. Root Mode не включён. Используйте режим VPN и передайте разработчику код ошибки.';
+
+  @override
   String get rootModeTrustUnavailable =>
       'Доверенный релиз модуля не настроен. Скачивание и включение недоступны.';
 

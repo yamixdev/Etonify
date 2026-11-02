@@ -152,17 +152,19 @@ class RootModuleManager(
     private fun operation(name: String, preserveInstalledState: Boolean = false, requiresStoppedRuntime: Boolean = true, action: () -> Unit): Map<String, Any?> {
         if (!busy.compareAndSet(false, true)) return snapshot() + ("reason" to "operation_busy")
         val initialState = moduleState
+        fun preservesInstalledState(): Boolean = cached != null &&
+            (preserveInstalledState || (name == "install" && moduleState in setOf("downloading", "verifying")))
         try {
             if (requiresStoppedRuntime && isRuntimeActive()) throw RootModuleException("runtime_busy")
             reason = null
             action()
         } catch (error: RootModuleException) {
             reason = error.code
-            if (preserveInstalledState && cached != null) moduleState = initialState
+            if (preservesInstalledState()) moduleState = initialState
             else if (error.code !in setOf("runtime_busy", "operation_busy", "root_denied", "su_not_found")) {
                 moduleState = if (error.code in setOf("abi_unsupported", "client_incompatible", "protocol_unsupported")) "incompatible" else "failed"
             }
-        } catch (_: Exception) { reason = "root_operation_failed"; moduleState = if (preserveInstalledState && cached != null) initialState else "failed"
+        } catch (_: Exception) { reason = "root_operation_failed"; moduleState = if (preservesInstalledState()) initialState else "failed"
         } finally {
             busy.set(false)
             MeowDiagnostics.log("RootModuleManager", "operation=$name state=$moduleState root=$rootAvailability reason=${reason ?: "none"}")

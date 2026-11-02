@@ -53,7 +53,15 @@ void main() {
     'module_activation_failed':
         'The module could not start correctly. Reinstall it or keep using VPN mode.',
     'module_cleanup_failed':
-        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+        'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.',
+    'module_cleanup_work_dir_denied':
+        'The module cannot access its private working directory. Keep using VPN mode and share the diagnostic code with the developer.',
+    'module_cleanup_lock_denied':
+        'The module could not access its runtime lock. Root Mode was not activated.',
+    'module_cleanup_journal_denied':
+        'Previous session data could not be verified. Cleanup was stopped to avoid changing unrelated network settings.',
+    'module_cleanup_cleanup_failed':
+        'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.',
     'integrity_failed':
         'Module verification failed. It will not be installed or started.',
     'module_integrity_failed':

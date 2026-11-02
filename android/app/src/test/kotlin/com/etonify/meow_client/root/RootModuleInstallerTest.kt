@@ -10,6 +10,42 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class RootModuleInstallerTest {
+    @Test fun `cleanup keeps known native failure reason instead of discarding it`() {
+        for (reason in listOf("work_dir_denied", "lock_denied", "journal_denied", "cleanup_failed", "root_required")) {
+            val error = assertThrows(RootModuleException::class.java) {
+                requireCleanupSuccess(RootCommandResult(1, """{"ready":false,"protocol":1,"reason":"$reason"}""", ""))
+            }
+            assertEquals("module_cleanup_$reason", error.code)
+        }
+    }
+
+    @Test fun `cleanup never publishes arbitrary stdout or stderr as a reason`() {
+        for (output in listOf("not json", """{"ready":false,"protocol":1,"reason":"https://private.example/token"}""", """{"ready":false,"protocol":2,"reason":"work_dir_denied"}""")) {
+            assertEquals("module_cleanup_failed", assertThrows(RootModuleException::class.java) {
+                requireCleanupSuccess(RootCommandResult(1, output, "private shell output"))
+            }.code)
+        }
+    }
+
+    @Test fun `cleanup failure prevents activation and metadata commit`() {
+        val root = object : RootProcessRunner() {
+            override fun executeStreaming(command: String, input: java.io.InputStream?, timeoutMs: Long): RootCommandResult {
+                input?.readBytes()
+                return RootCommandResult(0, health, "")
+            }
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long): RootCommandResult {
+                if (command.contains(" cleanup --work-dir ")) return RootCommandResult(1, """{"ready":false,"protocol":1,"reason":"work_dir_denied"}""", "")
+                if (command.contains("mv -Tf")) fail("activation must not follow cleanup failure")
+                return RootCommandResult(0, "", "")
+            }
+        }
+        val module = module()
+        try {
+            assertEquals("module_cleanup_work_dir_denied", assertThrows(RootModuleException::class.java) {
+                RootModuleInstaller(root).install(module) { fail("metadata must not be committed") }
+            }.code)
+        } finally { module.binary.delete() }
+    }
     private class RootFixture(private val health: String, private val failActivate: Boolean = false, private val runtimeBusy: Boolean = false) : RootProcessRunner() {
         var activated = false
         override fun executeStreaming(command: String, input: java.io.InputStream?, timeoutMs: Long): RootCommandResult {

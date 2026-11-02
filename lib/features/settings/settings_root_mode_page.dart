@@ -189,11 +189,16 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
     'archive_entry_invalid' ||
     'manifest_invalid' ||
     'release_version_mismatch' => l.rootModeVerificationFailed,
+    'module_cleanup_work_dir_denied' => l.rootModeWorkDirDenied,
+    'module_cleanup_lock_denied' => l.rootModeLockDenied,
+    'module_cleanup_journal_denied' => l.rootModeJournalDenied,
+    'module_cleanup_root_required' => l.rootModeRootDenied,
+    'module_cleanup_failed' ||
+    'module_cleanup_cleanup_failed' => l.rootModeCleanupFailed,
     'healthcheck_failed' ||
     'activation_failed' ||
     'module_healthcheck_failed' ||
     'module_activation_failed' ||
-    'module_cleanup_failed' ||
     'module_rollback_failed' => l.rootModeActivationFailed,
     'abi_unsupported' ||
     'protocol_unsupported' ||

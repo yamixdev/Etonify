@@ -6798,6 +6798,30 @@ abstract class AppLocalizations {
   /// **'The module could not start correctly. Reinstall it or keep using VPN mode.'**
   String get rootModeActivationFailed;
 
+  /// Root module safe cleanup cannot access its private directory.
+  ///
+  /// In en, this message translates to:
+  /// **'The module cannot access its private working directory. Keep using VPN mode and share the diagnostic code with the developer.'**
+  String get rootModeWorkDirDenied;
+
+  /// Root module runtime lock access failed, not evidence of a running instance.
+  ///
+  /// In en, this message translates to:
+  /// **'The module could not access its runtime lock. Root Mode was not activated.'**
+  String get rootModeLockDenied;
+
+  /// Root module ownership journal failed verification.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous session data could not be verified. Cleanup was stopped to avoid changing unrelated network settings.'**
+  String get rootModeJournalDenied;
+
+  /// Safe cleanup failed; activation remains blocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.'**
+  String get rootModeCleanupFailed;
+
   /// No description provided for @rootModeTrustUnavailable.
   ///
   /// In en, this message translates to:

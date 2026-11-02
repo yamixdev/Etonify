@@ -14,6 +14,59 @@ import java.util.Base64
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class RootModuleManagerTest {
+    @Test fun `update download timeout retains ready installed module`() {
+        assertPreinstallFailurePreservesModule("download_timeout")
+    }
+
+    @Test fun `cancelled update retains ready installed module`() {
+        assertPreinstallFailurePreservesModule("operation_cancelled")
+    }
+
+    private fun assertPreinstallFailurePreservesModule(code: String) {
+        val key = KeyPairGenerator.getInstance("RSA").apply { initialize(3072) }.generateKeyPair()
+        val publicKey = Base64.getEncoder().encodeToString(key.public.encoded)
+        val manifest = """{"protocol":1,"moduleVersion":"0.1.0","versionCode":1,"coreCommit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","abi":"arm64-v8a","minAndroidApi":26,"minClientVersionCode":41,"files":[{"path":"etonify-root","size":3,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}""".toByteArray()
+        val signature = Signature.getInstance("SHA256withRSA").apply { initSign(key.private); update(manifest) }.sign()
+        context.getSharedPreferences("etonify_root_module", 0).edit()
+            .putString("manifest", Base64.getEncoder().encodeToString(manifest))
+            .putString("signature", Base64.getEncoder().encodeToString(signature)).commit()
+        var rootRequests = 0
+        val runner = object : RootProcessRunner() {
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long): RootCommandResult {
+                rootRequests++
+                return if (command == "id -u") RootCommandResult(0, "0\n", "")
+                else RootCommandResult(1, "", "")
+            }
+        }
+        val manager = RootModuleManager(context, publicKey, { false }, runner,
+            RootModuleVerifier(publicKey, "arm64-v8a", 28, 41),
+            { throw RootModuleException(code) })
+        val result = manager.install()
+        assertEquals(code, result["reason"])
+        assertEquals("ready", result["moduleState"])
+        assertEquals("granted", result["rootAvailability"])
+        assertEquals("0.1.0", result["moduleVersion"])
+        assertEquals(false, result["enabled"])
+        assertEquals(false, result["busy"])
+        val afterEnable = manager.setEnabled(true)
+        assertEquals("module_integrity_failed", afterEnable["reason"])
+        assertEquals("failed", afterEnable["moduleState"])
+        assertEquals(false, afterEnable["enabled"])
+        assertEquals(3, rootRequests)
+    }
+
+    @Test fun `failed first download does not report installed module ready`() {
+        val runner = object : RootProcessRunner() {
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long) = RootCommandResult(0, "0\n", "")
+        }
+        val manager = RootModuleManager(context, "configured", { false }, runner,
+            releaseIndexSource = { throw RootModuleException("download_timeout") })
+        val result = manager.install()
+        assertEquals("download_timeout", result["reason"])
+        assertEquals("failed", result["moduleState"])
+        assertNull(result["moduleVersion"])
+    }
+
     @Test fun `authorization timeout preserves installed module for successful retry`() {
         val key = KeyPairGenerator.getInstance("RSA").apply { initialize(3072) }.generateKeyPair()
         val publicKey = Base64.getEncoder().encodeToString(key.public.encoded)
