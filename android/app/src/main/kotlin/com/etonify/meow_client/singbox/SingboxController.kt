@@ -384,6 +384,7 @@ object SingboxController {
                     sessionId = result.sessionID,
                     error = result.error.orEmpty(),
                     selectionEpoch = context.selection,
+                    logicalSessionId = result.logicalSessionID.orEmpty(),
                 )
                 }
             }

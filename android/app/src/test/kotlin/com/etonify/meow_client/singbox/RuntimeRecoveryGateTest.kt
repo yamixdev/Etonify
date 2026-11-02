@@ -6,6 +6,16 @@ import org.junit.Test
 
 class RuntimeRecoveryGateTest {
     @Test
+    fun `screen wake cannot consume the first physical handover of its generation`() {
+        val gate = RuntimeRecoveryGate(minimumIntervalMillis = 1_000L)
+        assertTrue(gate.tryAcquire(10_000L, 4L))
+        assertTrue(gate.tryAcquire(10_001L, 4L, networkChange = true))
+        assertFalse(gate.tryAcquire(10_002L, 4L, networkChange = true))
+        assertFalse(gate.tryAcquire(10_003L, 4L))
+        assertTrue(gate.tryAcquire(10_004L, 5L, networkChange = true))
+    }
+
+    @Test
     fun `returning physical network is not suppressed by an earlier wake without a network`() {
         val gate = RuntimeRecoveryGate(minimumIntervalMillis = 1_000L)
         assertTrue(gate.tryAcquire(10_000L, 4L))

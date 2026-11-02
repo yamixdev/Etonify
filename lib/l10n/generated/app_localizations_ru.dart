@@ -3726,7 +3726,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rootModeDescription =>
-      'Подключение через отдельно скачиваемый root-модуль вместо Android VPN. Нужны root на устройстве и явное разрешение суперпользователя. Без root модуль не запустится.';
+      'Подключение без Android VPN. Нужны root-доступ и модуль Etonify.';
 
   @override
   String get rootModeRootStatus => 'Доступ суперпользователя';
@@ -3779,8 +3779,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get rootModeUseRoot => 'Root вместо VPN';
 
   @override
-  String get rootModeUseRootSummary =>
-      'Применяется при следующем подключении. Нужны разрешение суперпользователя и проверенный модуль. Перед запуском права проверяются повторно.';
+  String get rootModeUseRootSummary => 'Для следующего подключения.';
 
   @override
   String get rootModeCheckRoot => 'Проверить root';
@@ -3811,7 +3810,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rootModeSafety =>
-      'Модуль не включён в приложение. Перед установкой обязательны проверки подписи, целостности и совместимости. Проверка на устройстве ещё не завершена: экспериментальный режим пока не готов к релизу.';
+      'Устанавливайте модуль здесь, в Etonify, а не через менеджер root: это не ZIP для Magisk. Приложение скачает модуль отдельно и проверит подпись, целостность и совместимость. При запросе предоставьте Etonify права суперпользователя. Для подключения нужны проверенный модуль и повторная проверка root-доступа. Режим экспериментальный: если на вашем устройстве он не работает, используйте VPN.';
+
+  @override
+  String get rootModeAbout => 'Об установке и безопасности';
+
+  @override
+  String get rootModeInstallModule => 'Установить модуль';
+
+  @override
+  String get rootModeUpdateModule => 'Обновить модуль';
+
+  @override
+  String get rootModePermissionTimeout =>
+      'Root-команда не завершилась вовремя. Проверьте менеджер суперпользователя и повторите попытку.';
+
+  @override
+  String get rootModeReleaseUnavailable =>
+      'Опубликованный релиз модуля недоступен. Повторите попытку позже.';
+
+  @override
+  String get rootModeActivationFailed =>
+      'Не удалось корректно запустить модуль. Переустановите его или используйте режим VPN.';
 
   @override
   String get rootModeTrustUnavailable =>
@@ -3838,7 +3858,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rootModeOperationFailed =>
-      'Не удалось выполнить операцию. Проверьте root-доступ и состояние модуля, затем повторите попытку.';
+      'Не удалось выполнить операцию. Повторите попытку или используйте режим VPN.';
 
   @override
   String get rootModeDnsUnavailable =>

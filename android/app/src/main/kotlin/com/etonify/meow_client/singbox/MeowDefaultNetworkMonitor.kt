@@ -46,6 +46,8 @@ object MeowDefaultNetworkMonitor {
     private var currentNetwork: Network? = null
     private var listener: InterfaceUpdateListener? = null
     private var appliedInterfaceKey: String? = null
+    private var committedPhysicalKey: String? = null
+    private var selectedNetworkLossSerial = 0L
     private var heartbeatFuture: ScheduledFuture<*>? = null
     private var pendingNotifyRunnable: Runnable? = null
     private var interfaceRetryFuture: ScheduledFuture<*>? = null
@@ -101,6 +103,7 @@ object MeowDefaultNetworkMonitor {
             val replacementNetwork = resolveBestNetwork(exclude = network)
             val decision = synchronized(lock) {
                 decideLostNetworkCallback(currentNetwork, replacementNetwork, network).also {
+                    if (it.shouldCheckInterface) selectedNetworkLossSerial++
                     currentNetwork = it.nextNetwork
                 }
             }
@@ -132,6 +135,7 @@ object MeowDefaultNetworkMonitor {
             started = false
             currentNetwork = null
             appliedInterfaceKey = null
+            committedPhysicalKey = null
             interfaceUpdateGate.reset()
             pendingNotifyRunnable?.let(networkHandler::removeCallbacks)
             pendingNotifyRunnable = null
@@ -208,7 +212,8 @@ object MeowDefaultNetworkMonitor {
     private fun listenerInterfaceLikelyStale(network: Network): Boolean {
         val name = MeowApplication.connectivity.getLinkProperties(network)?.interfaceName ?: return true
         val index = runCatching { NetworkInterface.getByName(name)?.index ?: -1 }.getOrDefault(-1)
-        return index < 0 || synchronized(lock) { appliedInterfaceKey != "$network:$name:$index" }
+        val key = physicalInterfaceKey(network, name, index)
+        return index < 0 || synchronized(lock) { appliedInterfaceKey != key }
     }
 
     fun require(): Network {
@@ -308,8 +313,9 @@ object MeowDefaultNetworkMonitor {
             runCatching { NetworkInterface.getByName(interfaceName)?.index ?: -1 }
                 .getOrDefault(-1)
         }
+        val key = physicalInterfaceKey(network, interfaceName, index)
         val delivered = synchronized(lock) {
-            RootRuntimeService.hasRunningOwner() || (listener != null && appliedInterfaceKey == "$network:$interfaceName:$index")
+            RootRuntimeService.hasRunningOwner() || (listener != null && appliedInterfaceKey == key)
         }
         return InterfaceState(
             available = interfaceName.isNotEmpty() && index >= 0 && delivered,
@@ -435,6 +441,7 @@ object MeowDefaultNetworkMonitor {
             val replacementNetwork = resolveBestNetwork(exclude = network)
             val decision = synchronized(lock) {
                 decideLostNetworkCallback(currentNetwork, replacementNetwork, network).also {
+                    if (it.shouldCheckInterface) selectedNetworkLossSerial++
                     currentNetwork = it.nextNetwork
                 }
             }
@@ -538,7 +545,7 @@ object MeowDefaultNetworkMonitor {
             val name = properties?.interfaceName.orEmpty()
             val index = if (name.isBlank()) -1 else runCatching { NetworkInterface.getByName(name)?.index ?: -1 }.getOrDefault(-1)
             val dnsAddresses = properties?.dnsServers?.mapNotNull { it.hostAddress } ?: emptyList()
-            val key = "root:$network:$name:$index:${dnsAddresses.joinToString(",")}"
+            val key = "root:${physicalInterfaceKey(network, name, index, properties)}"
             val decision = interfaceUpdateGate.evaluate(key, force)
             if (!decision.shouldDispatch) return true
             synchronized(lock) { if (started) currentNetwork = network }
@@ -576,7 +583,12 @@ object MeowDefaultNetworkMonitor {
                     interfaceUpdateGate.failed("none")
                     Log.e(TAG, "updateDefaultInterface failed", it)
                 }.isSuccess
-            if (updated) synchronized(lock) { if (listener === currentListener) appliedInterfaceKey = null }
+            if (updated) synchronized(lock) {
+                if (listener === currentListener) {
+                    appliedInterfaceKey = null
+                    committedPhysicalKey = null
+                }
+            }
             if (!gateDecision.duplicate) {
                 SingboxController.emitNetworkChanged(
                     "default_interface_lost",
@@ -591,8 +603,8 @@ object MeowDefaultNetworkMonitor {
         synchronized(lock) {
             if (started) currentNetwork = effectiveNetwork
         }
-        val interfaceName =
-            MeowApplication.connectivity.getLinkProperties(effectiveNetwork)?.interfaceName
+        val properties = MeowApplication.connectivity.getLinkProperties(effectiveNetwork)
+        val interfaceName = properties?.interfaceName
         if (interfaceName.isNullOrBlank()) {
             if (notifyDebounceGeneration.get() != generation) return false
             val gateDecision = interfaceUpdateGate.evaluate("missing:$effectiveNetwork", force)
@@ -614,7 +626,12 @@ object MeowDefaultNetworkMonitor {
                     interfaceUpdateGate.failed("missing:$effectiveNetwork")
                     Log.e(TAG, "updateDefaultInterface failed", it)
                 }.onSuccess {
-                    synchronized(lock) { if (listener === currentListener) appliedInterfaceKey = null }
+                    synchronized(lock) {
+                        if (listener === currentListener) {
+                            appliedInterfaceKey = null
+                            committedPhysicalKey = null
+                        }
+                    }
                 }
             if (!gateDecision.duplicate) {
                 SingboxController.emitNetworkChanged(
@@ -645,7 +662,7 @@ object MeowDefaultNetworkMonitor {
             MeowDiagnostics.log(TAG, "interface_index_unavailable interface=$interfaceName")
             return false
         }
-        val notifyKey = "$effectiveNetwork:$interfaceName:$index"
+        val notifyKey = physicalInterfaceKey(effectiveNetwork, interfaceName, index, properties)
         val gateDecision = synchronized(lock) {
             if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
             // An attempted delivery is not a committed interface. A newer
@@ -688,23 +705,21 @@ object MeowDefaultNetworkMonitor {
             MeowDiagnostics.log(TAG, "interface_not_ready coreApplied=$updated bindingApplied=$bindingApplied bindingRequired=$bindingRequired")
             return false
         }
-        val stillCurrent = synchronized(lock) {
-            (listener === currentListener && notifyDebounceGeneration.get() == generation).also {
-                if (it) appliedInterfaceKey = notifyKey
-            }
-        }
-        if (!stillCurrent) return false
-        val nextGen = if (!gateDecision.duplicate) {
-            networkInterfaceGeneration.incrementAndGet()
-        } else {
-            networkInterfaceGeneration.get()
+        val physicalChanged: Boolean
+        val nextGen: Long
+        synchronized(lock) {
+            if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
+            appliedInterfaceKey = notifyKey
+            physicalChanged = committedPhysicalKey != notifyKey
+            committedPhysicalKey = notifyKey
+            nextGen = if (physicalChanged) networkInterfaceGeneration.incrementAndGet() else networkInterfaceGeneration.get()
         }
         SingboxController.noteNetworkGeneration(nextGen)
-        if (!gateDecision.duplicate) {
+        if (physicalChanged) {
             MeowBasePlatformInterface.cancelPendingDnsQueries("network_handover:$interfaceName")
         }
         MeowBoxService.onDefaultNetworkChanged(true)
-        if (!gateDecision.duplicate) {
+        if (physicalChanged) {
             SingboxController.emitNetworkChanged(
                 "default_interface",
                 describeNetwork(effectiveNetwork),
@@ -721,6 +736,21 @@ object MeowDefaultNetworkMonitor {
             )
         }
         return true
+    }
+
+    private fun physicalInterfaceKey(
+        network: Network?,
+        name: String,
+        index: Int,
+        properties: LinkProperties? = network?.let { MeowApplication.connectivity.getLinkProperties(it) },
+    ): String {
+        val addresses = properties?.linkAddresses?.map {
+            "${it.address.hostAddress}/${it.prefixLength}"
+        }?.sorted().orEmpty()
+        val routes = properties?.routes?.map { it.toString() }?.sorted().orEmpty()
+        val dns = properties?.dnsServers?.map { it.hostAddress }.orEmpty()
+        val lossSerial = synchronized(lock) { selectedNetworkLossSerial }
+        return "$network:$name:$index:$addresses:$routes:$dns:$lossSerial"
     }
 
     private fun resolveBestNetwork(

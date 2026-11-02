@@ -3724,7 +3724,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rootModeDescription =>
-      'Run the connection through a separately downloaded root module instead of Android VPN. Requires a rooted device and explicit superuser permission. Without root, the module cannot start.';
+      'Connect without Android VPN. Requires root access and the Etonify module.';
 
   @override
   String get rootModeRootStatus => 'Superuser access';
@@ -3777,8 +3777,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rootModeUseRoot => 'Use root instead of VPN';
 
   @override
-  String get rootModeUseRootSummary =>
-      'Applies to the next connection. Requires superuser permission and a verified module. Privileges are checked again before starting.';
+  String get rootModeUseRootSummary => 'Applies to the next connection.';
 
   @override
   String get rootModeCheckRoot => 'Check root';
@@ -3809,7 +3808,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rootModeSafety =>
-      'The module is not bundled with the app. Downloads must pass signature, integrity and compatibility checks. Device verification is still pending; this experimental mode is not ready for release.';
+      'Install the module here in Etonify, not in your root manager: it is not a Magisk ZIP. Etonify downloads it separately and checks its signature, integrity and compatibility. Grant Etonify superuser permission when asked. A verified module and fresh root authorization are required to connect. This mode is experimental; keep VPN mode available if it does not work on your device.';
+
+  @override
+  String get rootModeAbout => 'About installation and safety';
+
+  @override
+  String get rootModeInstallModule => 'Install module';
+
+  @override
+  String get rootModeUpdateModule => 'Update module';
+
+  @override
+  String get rootModePermissionTimeout =>
+      'The root command timed out. Check your superuser manager and try again.';
+
+  @override
+  String get rootModeReleaseUnavailable =>
+      'The published module release is unavailable. Try again later.';
+
+  @override
+  String get rootModeActivationFailed =>
+      'The module could not start correctly. Reinstall it or keep using VPN mode.';
 
   @override
   String get rootModeTrustUnavailable =>
@@ -3836,7 +3856,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rootModeOperationFailed =>
-      'The operation could not be completed. Check root access and module status, then try again.';
+      'The operation could not be completed. Try again or use VPN mode.';
 
   @override
   String get rootModeDnsUnavailable =>

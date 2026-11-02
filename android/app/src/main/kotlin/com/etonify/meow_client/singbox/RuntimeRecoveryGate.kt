@@ -11,22 +11,25 @@ internal class RuntimeRecoveryGate(
 ) {
     private var lastAcceptedAtMillis = NO_TIMESTAMP
     private var lastNetworkGeneration = 0L
+    private var lastHandoverGeneration = NO_TIMESTAMP
 
     init {
         require(minimumIntervalMillis >= 0L)
     }
 
     @Synchronized
-    fun tryAcquire(nowMillis: Long, networkGeneration: Long = 0L): Boolean {
+    fun tryAcquire(nowMillis: Long, networkGeneration: Long = 0L, networkChange: Boolean = false): Boolean {
         if (lastAcceptedAtMillis != NO_TIMESTAMP) {
             if (networkGeneration < lastNetworkGeneration) return false
-            if (networkGeneration == lastNetworkGeneration &&
+            val firstHandover = networkChange && networkGeneration > lastHandoverGeneration
+            if (!firstHandover && networkGeneration == lastNetworkGeneration &&
                 nowMillis >= lastAcceptedAtMillis &&
                 nowMillis - lastAcceptedAtMillis < minimumIntervalMillis
             ) return false
         }
         lastAcceptedAtMillis = nowMillis
         lastNetworkGeneration = networkGeneration
+        if (networkChange) lastHandoverGeneration = networkGeneration
         return true
     }
 
@@ -34,6 +37,7 @@ internal class RuntimeRecoveryGate(
     fun reset() {
         lastAcceptedAtMillis = NO_TIMESTAMP
         lastNetworkGeneration = 0L
+        lastHandoverGeneration = NO_TIMESTAMP
     }
 
     private companion object {

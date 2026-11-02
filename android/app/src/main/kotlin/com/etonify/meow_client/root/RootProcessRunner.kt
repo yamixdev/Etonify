@@ -12,7 +12,8 @@ data class RootCommandResult(val exitCode: Int, val stdout: String, val stderr: 
 class RootCapabilityProbe(private val command: () -> RootCommandResult = { RootProcessRunner().execute("id -u") }) {
     fun requestAuthorization(): String = try {
         val result = command()
-        if (result.exitCode == 0 && (result.stdout == "0\n" || result.stdout == "0")) "granted" else "denied"
+        if (result.exitCode == 0 && result.stdout.trim() == "0") "granted" else "denied"
+    } catch (error: RootModuleException) { throw error
     } catch (_: IOException) { "noSu"
     } catch (_: Exception) { "denied" }
 }

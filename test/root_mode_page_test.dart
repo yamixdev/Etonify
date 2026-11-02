@@ -8,8 +8,12 @@ import 'package:meow_client/platform/android/root_mode_client.dart';
 
 import 'root_mode_client_test.dart' show RootTransportFake, statusMap;
 
-Widget rootApp(RootTransportFake transport, {double scale = 1}) => MaterialApp(
-  locale: const Locale('en'),
+Widget rootApp(
+  RootTransportFake transport, {
+  double scale = 1,
+  Locale locale = const Locale('en'),
+}) => MaterialApp(
+  locale: locale,
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
   builder: (context, child) => MediaQuery(
@@ -29,6 +33,69 @@ Future<void> reveal(WidgetTester tester, String key) async {
 }
 
 void main() {
+  for (final entry in <String, String>{
+    'runtime_busy': 'Stop the current connection before changing Root Mode.',
+    'su_not_found': 'Superuser access is unavailable',
+    'root_command_timeout':
+        'The root command timed out. Check your superuser manager and try again.',
+    'release_discovery_failed':
+        'The published module release is unavailable. Try again later.',
+    'module_release_unavailable':
+        'The published module release is unavailable. Try again later.',
+    'download_http_error':
+        'The module could not be downloaded. Check your connection and try again.',
+    'healthcheck_failed':
+        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+    'module_healthcheck_failed':
+        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+    'activation_failed':
+        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+    'module_activation_failed':
+        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+    'module_cleanup_failed':
+        'The module could not start correctly. Reinstall it or keep using VPN mode.',
+    'integrity_failed':
+        'Module verification failed. It will not be installed or started.',
+    'module_integrity_failed':
+        'Module verification failed. It will not be installed or started.',
+    'unknown_safe_code':
+        'The operation could not be completed. Try again or use VPN mode.',
+  }.entries) {
+    testWidgets('failure ${entry.key} gives specific guidance and safe code', (
+      tester,
+    ) async {
+      final transport = RootTransportFake()
+        ..response = {...statusMap(), 'reason': entry.key};
+      await tester.pumpWidget(rootApp(transport));
+      await tester.pumpAndSettle();
+      await reveal(tester, 'root-reason');
+      expect(find.text(entry.value), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is SelectableText && widget.data == entry.key,
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await transport.close();
+    });
+  }
+
+  testWidgets('installation explanation stays behind explicit disclosure', (
+    tester,
+  ) async {
+    final transport = RootTransportFake();
+    await tester.pumpWidget(rootApp(transport));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Magisk'), findsNothing);
+    await reveal(tester, 'root-info');
+    await tester.tap(find.byKey(const ValueKey('root-info')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('not a Magisk ZIP'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await transport.close();
+  });
+
   testWidgets(
     'own pending install remains cancellable without duplicate requests',
     (tester) async {
@@ -341,20 +408,30 @@ void main() {
     },
   );
 
-  testWidgets(
-    'narrow screen with large font stays scrollable without overflow',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final transport = RootTransportFake();
-      await tester.pumpWidget(rootApp(transport, scale: 2));
-      await tester.pumpAndSettle();
-      await reveal(tester, 'root-remove');
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
-      await transport.controller.close();
-    },
-  );
+  for (final language in ['en', 'ru']) {
+    testWidgets(
+      'narrow $language screen with large font stays scrollable without overflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final transport = RootTransportFake();
+        await tester.pumpWidget(
+          rootApp(transport, scale: 2, locale: Locale(language)),
+        );
+        await tester.pumpAndSettle();
+        await reveal(tester, 'root-remove');
+        expect(tester.takeException(), isNull);
+        await reveal(tester, 'root-info');
+        await tester.tap(find.byKey(const ValueKey('root-info')));
+        await tester.pumpAndSettle();
+        await tester.drag(find.byType(ListView), const Offset(0, -600));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+        await transport.controller.close();
+      },
+    );
+  }
 }

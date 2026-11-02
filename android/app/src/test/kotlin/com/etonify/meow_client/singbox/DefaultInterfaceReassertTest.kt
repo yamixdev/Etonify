@@ -2,6 +2,9 @@ package com.etonify.meow_client.singbox
 
 import android.net.ConnectivityManager
 import android.net.LinkProperties
+import android.net.LinkAddress
+import android.net.RouteInfo
+import android.net.IpPrefix
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
 import android.net.Network
@@ -39,6 +42,100 @@ import org.robolectric.util.ReflectionHelpers
 @Config(application = MeowApplication::class, sdk = [28], manifest = Config.NONE,
     shadows = [DefaultInterfaceReassertTest.BindingShadow::class])
 class DefaultInterfaceReassertTest {
+    @Test fun `same network address change advances generation only once despite forced reassertions`() {
+        installInterface {}
+        val before = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        val network = ShadowNetwork.newInstance(101)
+        val properties = MeowApplication.connectivity.getLinkProperties(network)!!
+        val address = LinkAddress::class.java.getDeclaredConstructor(InetAddress::class.java, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }.newInstance(InetAddress.getByName("192.168.2.10"), 24)
+        LinkProperties::class.java.getDeclaredMethod("addLinkAddress", LinkAddress::class.java)
+            .apply { isAccessible = true }.invoke(properties, address)
+        shadowOf(MeowApplication.connectivity).setLinkProperties(network, properties)
+        assertFalse("changed upstream must not inherit committed readiness", MeowDefaultNetworkMonitor.currentInterfaceState().available)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+        repeat(3) { assertTrue(MeowDefaultNetworkMonitor.reassertDefaultInterfaceAndWait("screen_on")) }
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+    }
+
+    @Test fun `same network DNS and route changes each advance generation`() {
+        installInterface {}
+        val before = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        val network = ShadowNetwork.newInstance(101)
+        val properties = MeowApplication.connectivity.getLinkProperties(network)!!
+        properties.setDnsServers(listOf(InetAddress.getByName("192.168.2.1")))
+        shadowOf(MeowApplication.connectivity).setLinkProperties(network, properties)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+        val prefix = IpPrefix(InetAddress.getByName("10.0.0.0"), 8)
+        val route = RouteInfo::class.java.getDeclaredConstructor(IpPrefix::class.java, InetAddress::class.java, String::class.java)
+            .apply { isAccessible = true }.newInstance(prefix, InetAddress.getByName("192.168.2.1"), properties.interfaceName)
+        properties.addRoute(route)
+        shadowOf(MeowApplication.connectivity).setLinkProperties(network, properties)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 2, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+        repeat(5) { assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration())) }
+        assertEquals(before + 2, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+    }
+
+    @Test fun `loss and reacquisition inside debounce retains physical transition`() {
+        MeowDefaultNetworkMonitor.start()
+        installInterface {}
+        val before = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        val network = ShadowNetwork.newInstance(101)
+        val callback = ReflectionHelpers.getField<ConnectivityManager.NetworkCallback>(MeowDefaultNetworkMonitor, "callback")
+        val shadow = shadowOf(MeowApplication.connectivity)
+        val info = MeowApplication.connectivity.getNetworkInfo(network)!!
+        val capabilities = MeowApplication.connectivity.getNetworkCapabilities(network)!!
+        val properties = MeowApplication.connectivity.getLinkProperties(network)!!
+        shadow.clearAllNetworks()
+        callback.onLost(network)
+        shadow.addNetwork(network, info)
+        shadow.setNetworkCapabilities(network, capabilities)
+        shadow.setLinkProperties(network, properties)
+        callback.onAvailable(network)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+        callback.onCapabilitiesChanged(network, capabilities)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertTrue(MeowDefaultNetworkMonitor.reassertDefaultInterfaceAndWait("screen_on"))
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+    }
+
+    @Test fun `forced binding recovery on unchanged upstream does not invent a generation`() {
+        installVpnOwner()
+        installInterface {}
+        val before = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        BindingShadow.accept = false
+        assertFalse(MeowDefaultNetworkMonitor.reassertDefaultInterfaceAndWait("binding_lost", 300))
+        BindingShadow.accept = true
+        assertTrue(MeowDefaultNetworkMonitor.reassertDefaultInterfaceAndWait("binding_recovered"))
+        assertEquals(before, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+    }
+
+    private fun notifyGeneration(): Long = ReflectionHelpers.getField<AtomicLong>(
+        MeowDefaultNetworkMonitor, "notifyDebounceGeneration",
+    ).get()
+
+    @Test fun `observed unavailable interface then same upstream returns advances generation again`() {
+        installInterface {}
+        val before = MeowDefaultNetworkMonitor.currentInterfaceState().generation
+        val network = ShadowNetwork.newInstance(101)
+        val shadow = shadowOf(MeowApplication.connectivity)
+        val info = MeowApplication.connectivity.getNetworkInfo(network)!!
+        val capabilities = MeowApplication.connectivity.getNetworkCapabilities(network)!!
+        val properties = MeowApplication.connectivity.getLinkProperties(network)!!
+        shadow.clearAllNetworks()
+        assertFalse(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 1, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+        shadow.addNetwork(network, info)
+        shadow.setNetworkCapabilities(network, capabilities)
+        shadow.setLinkProperties(network, properties)
+        assertTrue(deliverOrdinaryInterfaceUpdate(notifyGeneration()))
+        assertEquals(before + 2, MeowDefaultNetworkMonitor.currentInterfaceState().generation)
+    }
+
     @Test fun `root monitor dispatches without app-side libbox listener including DNS-only updates`() {
         installInterface { }
         MeowDefaultNetworkMonitor.setListener(null)

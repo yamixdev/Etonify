@@ -2,6 +2,7 @@ package com.etonify.meow_client.root
 
 import android.content.Context
 import android.os.Build
+import com.etonify.meow_client.singbox.MeowDiagnostics
 import java.io.File
 import java.net.URL
 import java.util.Base64
@@ -46,11 +47,11 @@ class RootModuleManager(
         "authorizationCached" to (rootAvailability == "granted"),
     )
 
-    fun requestAuthorization(): Map<String, Any?> = operation {
+    fun requestAuthorization(): Map<String, Any?> = operation("authorize", preserveInstalledState = true, requiresStoppedRuntime = false) {
         if (!authorize()) throw RootModuleException(if (rootAvailability == "noSu") "su_not_found" else "root_denied")
     }
 
-    fun install(onProgress: (Map<String, Any?>) -> Unit = {}): Map<String, Any?> = operation {
+    fun install(onProgress: (Map<String, Any?>) -> Unit = {}): Map<String, Any?> = operation("install") {
         requireSigning()
         if (!authorize()) throw RootModuleException(if (rootAvailability == "noSu") "su_not_found" else "root_denied")
         val stage = createStage()
@@ -82,7 +83,7 @@ class RootModuleManager(
         }
     }
 
-    fun remove(): Map<String, Any?> = operation {
+    fun remove(): Map<String, Any?> = operation("remove") {
         if (cached != null) {
             if (!authorizeRuntime()) throw RootModuleException(reason ?: "root_denied")
             requireCleanupSuccess(runner.execute("exec timeout -s KILL 15 $ROOT/current/etonify-root cleanup --work-dir $ROOT/runtime", timeoutMs = 20_000))
@@ -100,7 +101,7 @@ class RootModuleManager(
     fun checkUpdate(): Map<String, Any?> {
         var available = false
         var availableVersion: String? = null
-        val result = operation(preserveInstalledState = true) {
+        val result = operation("check_update", preserveInstalledState = true, requiresStoppedRuntime = false) {
             requireSigning()
             val stage = createStage()
             try {
@@ -120,7 +121,7 @@ class RootModuleManager(
             if (!prefs.edit().putBoolean("enabled", false).commit()) reason = "module_metadata_failed"
             return snapshot()
         }
-        return operation {
+        return operation("enable") {
             if (!authorizeRuntime()) throw RootModuleException(reason ?: "module_not_ready")
             if (!prefs.edit().putBoolean("enabled", true).commit()) throw RootModuleException("module_metadata_failed")
         }
@@ -143,15 +144,16 @@ class RootModuleManager(
     }
 
     private fun authorize(): Boolean {
+        rootAvailability = "unknown"
         rootAvailability = RootCapabilityProbe { runner.execute("id -u", timeoutMs = 30_000) }.requestAuthorization()
         return rootAvailability == "granted"
     }
 
-    private fun operation(preserveInstalledState: Boolean = false, action: () -> Unit): Map<String, Any?> {
+    private fun operation(name: String, preserveInstalledState: Boolean = false, requiresStoppedRuntime: Boolean = true, action: () -> Unit): Map<String, Any?> {
         if (!busy.compareAndSet(false, true)) return snapshot() + ("reason" to "operation_busy")
         val initialState = moduleState
         try {
-            if (isRuntimeActive()) throw RootModuleException("runtime_busy")
+            if (requiresStoppedRuntime && isRuntimeActive()) throw RootModuleException("runtime_busy")
             reason = null
             action()
         } catch (error: RootModuleException) {
@@ -161,7 +163,10 @@ class RootModuleManager(
                 moduleState = if (error.code in setOf("abi_unsupported", "client_incompatible", "protocol_unsupported")) "incompatible" else "failed"
             }
         } catch (_: Exception) { reason = "root_operation_failed"; moduleState = if (preserveInstalledState && cached != null) initialState else "failed"
-        } finally { busy.set(false) }
+        } finally {
+            busy.set(false)
+            MeowDiagnostics.log("RootModuleManager", "operation=$name state=$moduleState root=$rootAvailability reason=${reason ?: "none"}")
+        }
         return snapshot()
     }
 

@@ -168,16 +168,41 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
     'trust_key_not_configured' ||
     'release_not_configured' => l.rootModeTrustUnavailable,
     'root_denied' || 'authorization_denied' => l.rootModeRootDenied,
-    'no_su' || 'root_unavailable' => l.rootModeRootUnavailable,
-    'download_failed' || 'network_error' => l.rootModeDownloadFailed,
+    'no_su' ||
+    'su_not_found' ||
+    'root_unavailable' => l.rootModeRootUnavailable,
+    'root_command_timeout' => l.rootModePermissionTimeout,
+    'module_release_unavailable' => l.rootModeReleaseUnavailable,
+    final String reason when reason.startsWith('release_discovery') =>
+      l.rootModeReleaseUnavailable,
+    'network_error' => l.rootModeDownloadFailed,
+    final String reason when reason.startsWith('download_') =>
+      l.rootModeDownloadFailed,
     'verification_failed' ||
     'signature_invalid' ||
     'binary_hash_mismatch' ||
     'binary_size_mismatch' ||
-    'hash_mismatch' => l.rootModeVerificationFailed,
+    'hash_mismatch' ||
+    'integrity_failed' ||
+    'module_integrity_failed' ||
+    'archive_invalid' ||
+    'archive_entry_invalid' ||
+    'manifest_invalid' ||
+    'release_version_mismatch' => l.rootModeVerificationFailed,
+    'healthcheck_failed' ||
+    'activation_failed' ||
+    'module_healthcheck_failed' ||
+    'module_activation_failed' ||
+    'module_cleanup_failed' ||
+    'module_rollback_failed' => l.rootModeActivationFailed,
+    'abi_unsupported' ||
+    'protocol_unsupported' ||
+    'client_incompatible' => l.rootModeIncompatible,
     'cancelled' || 'operation_cancelled' => l.rootModeCancelled,
     'invalid_response' => l.rootModeInvalidResponse,
-    'vpn_active' || 'stop_connection_first' => l.rootModeStopFirst,
+    'vpn_active' ||
+    'runtime_busy' ||
+    'stop_connection_first' => l.rootModeStopFirst,
     'root_dns_unavailable' => l.rootModeDnsUnavailable,
     'root_config_unsupported' => l.rootModeConfigUnsupported,
     _ => l.rootModeOperationFailed,
@@ -254,15 +279,6 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
                         : l.rootModeUpToDate,
                   ),
                 ),
-              SwitchListTile(
-                key: const ValueKey('root-enabled'),
-                title: Text(l.rootModeUseRoot),
-                subtitle: Text(l.rootModeUseRootSummary),
-                value: _status.enabled,
-                onChanged: !_busy && (_status.canEnable || _status.enabled)
-                    ? (value) => _run(() => _client.setEnabled(value))
-                    : null,
-              ),
             ],
           ),
           if (_status.busy || _pending || _loading) ...[
@@ -284,13 +300,29 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
                 color: theme.colorScheme.error,
               ),
             ),
+            SelectableText(
+              _status.reason!,
+              key: const ValueKey('root-reason-code'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
           const SizedBox(height: settingsSectionGap),
+          FilledButton.icon(
+            key: const ValueKey('root-install'),
+            onPressed: _busy || !granted ? null : () => _run(_client.install),
+            icon: const Icon(Icons.download_rounded),
+            label: Text(
+              removable ? l.rootModeUpdateModule : l.rootModeInstallModule,
+              textAlign: TextAlign.center,
+            ),
+          ),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton.icon(
+              TextButton.icon(
                 key: const ValueKey('root-check'),
                 onPressed: _busy
                     ? null
@@ -298,15 +330,7 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
                 icon: const Icon(Icons.verified_user_outlined),
                 label: Text(l.rootModeCheckRoot),
               ),
-              FilledButton.icon(
-                key: const ValueKey('root-install'),
-                onPressed: _busy || !granted
-                    ? null
-                    : () => _run(_client.install),
-                icon: const Icon(Icons.download_rounded),
-                label: Text(l.rootModeDownload),
-              ),
-              OutlinedButton.icon(
+              TextButton.icon(
                 key: const ValueKey('root-check-update'),
                 onPressed: _busy ? null : () => _run(_client.checkUpdate),
                 icon: const Icon(Icons.refresh_rounded),
@@ -329,11 +353,32 @@ class _SettingsRootModePageState extends State<SettingsRootModePage>
             ],
           ),
           const SizedBox(height: settingsSectionGap),
-          Text(
-            l.rootModeSafety,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          SettingsTileGroup(
+            children: [
+              SwitchListTile(
+                key: const ValueKey('root-enabled'),
+                title: Text(l.rootModeUseRoot),
+                subtitle: Text(l.rootModeUseRootSummary),
+                value: _status.enabled,
+                onChanged: !_busy && (_status.canEnable || _status.enabled)
+                    ? (value) => _run(() => _client.setEnabled(value))
+                    : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: settingsSectionGap),
+          SettingsTileGroup(
+            children: [
+              ExpansionTile(
+                key: const ValueKey('root-info'),
+                leading: const Icon(Icons.info_outline_rounded),
+                title: Text(l.rootModeAbout),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  Text(l.rootModeSafety, style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ],
           ),
         ],
       ),

@@ -14,6 +14,65 @@ import java.util.Base64
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class RootModuleManagerTest {
+    @Test fun `authorization timeout preserves installed module for successful retry`() {
+        val key = KeyPairGenerator.getInstance("RSA").apply { initialize(3072) }.generateKeyPair()
+        val publicKey = Base64.getEncoder().encodeToString(key.public.encoded)
+        val manifest = """{"protocol":1,"moduleVersion":"0.1.0","versionCode":1,"coreCommit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","abi":"arm64-v8a","minAndroidApi":26,"minClientVersionCode":41,"files":[{"path":"etonify-root","size":3,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}""".toByteArray()
+        val signature = Signature.getInstance("SHA256withRSA").apply { initSign(key.private); update(manifest) }.sign()
+        context.getSharedPreferences("etonify_root_module", 0).edit()
+            .putString("manifest", Base64.getEncoder().encodeToString(manifest))
+            .putString("signature", Base64.getEncoder().encodeToString(signature)).commit()
+        var timeout = true
+        val runner = object : RootProcessRunner() {
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long): RootCommandResult {
+                if (timeout) throw RootModuleException("root_command_timeout")
+                return RootCommandResult(0, "0\n", "")
+            }
+        }
+        val manager = RootModuleManager(context, publicKey, { false }, runner,
+            RootModuleVerifier(publicKey, "arm64-v8a", 28, 41))
+        assertEquals("ready", manager.snapshot()["moduleState"])
+        assertEquals("ready", manager.requestAuthorization()["moduleState"])
+        timeout = false
+        val retried = manager.requestAuthorization()
+        assertEquals("ready", retried["moduleState"])
+        assertEquals("granted", retried["rootAvailability"])
+        assertNull(retried["reason"])
+    }
+    @Test fun `checking permission remains available while VPN is running`() {
+        val runner = object : RootProcessRunner() {
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long) = RootCommandResult(0, "0\n", "")
+        }
+        val result = RootModuleManager(context, "", { true }, runner).requestAuthorization()
+        assertEquals("granted", result["rootAvailability"])
+        assertNull(result["reason"])
+    }
+
+    @Test fun `update discovery works during VPN without authorizing root`() {
+        var discovered = false
+        val manager = RootModuleManager(context, "configured", { true }, ForbiddenRoot(), releaseIndexSource = {
+            discovered = true
+            throw RootModuleException("release_discovery_failed")
+        })
+        assertEquals("release_discovery_failed", manager.checkUpdate()["reason"])
+        assertTrue(discovered)
+    }
+
+    @Test fun `failed reauthorization clears previously granted status and preserves timeout`() {
+        var timeout = false
+        val runner = object : RootProcessRunner() {
+            override fun execute(command: String, input: ByteArray?, timeoutMs: Long): RootCommandResult {
+                if (timeout) throw RootModuleException("root_command_timeout")
+                return RootCommandResult(0, "0\n", "")
+            }
+        }
+        val manager = RootModuleManager(context, "", { false }, runner)
+        assertEquals("granted", manager.requestAuthorization()["rootAvailability"])
+        timeout = true
+        val result = manager.requestAuthorization()
+        assertEquals("unknown", result["rootAvailability"])
+        assertEquals("root_command_timeout", result["reason"])
+    }
     private val context get() = RuntimeEnvironment.getApplication()
     private class ForbiddenRoot : RootProcessRunner() {
         override fun execute(command: String, input: ByteArray?, timeoutMs: Long): RootCommandResult =

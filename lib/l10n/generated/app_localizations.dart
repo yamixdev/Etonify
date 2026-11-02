@@ -6603,7 +6603,7 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeDescription.
   ///
   /// In en, this message translates to:
-  /// **'Run the connection through a separately downloaded root module instead of Android VPN. Requires a rooted device and explicit superuser permission. Without root, the module cannot start.'**
+  /// **'Connect without Android VPN. Requires root access and the Etonify module.'**
   String get rootModeDescription;
 
   /// No description provided for @rootModeRootStatus.
@@ -6705,7 +6705,7 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeUseRootSummary.
   ///
   /// In en, this message translates to:
-  /// **'Applies to the next connection. Requires superuser permission and a verified module. Privileges are checked again before starting.'**
+  /// **'Applies to the next connection.'**
   String get rootModeUseRootSummary;
 
   /// No description provided for @rootModeCheckRoot.
@@ -6759,8 +6759,44 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeSafety.
   ///
   /// In en, this message translates to:
-  /// **'The module is not bundled with the app. Downloads must pass signature, integrity and compatibility checks. Device verification is still pending; this experimental mode is not ready for release.'**
+  /// **'Install the module here in Etonify, not in your root manager: it is not a Magisk ZIP. Etonify downloads it separately and checks its signature, integrity and compatibility. Grant Etonify superuser permission when asked. A verified module and fresh root authorization are required to connect. This mode is experimental; keep VPN mode available if it does not work on your device.'**
   String get rootModeSafety;
+
+  /// Expandable root mode installation and safety information
+  ///
+  /// In en, this message translates to:
+  /// **'About installation and safety'**
+  String get rootModeAbout;
+
+  /// Primary action when no root module is installed
+  ///
+  /// In en, this message translates to:
+  /// **'Install module'**
+  String get rootModeInstallModule;
+
+  /// Primary action for an installed root module
+  ///
+  /// In en, this message translates to:
+  /// **'Update module'**
+  String get rootModeUpdateModule;
+
+  /// A root command timed out during authorization or module management
+  ///
+  /// In en, this message translates to:
+  /// **'The root command timed out. Check your superuser manager and try again.'**
+  String get rootModePermissionTimeout;
+
+  /// Published release discovery or availability failed, not a root access failure
+  ///
+  /// In en, this message translates to:
+  /// **'The published module release is unavailable. Try again later.'**
+  String get rootModeReleaseUnavailable;
+
+  /// Module activation, health check or rollback failed
+  ///
+  /// In en, this message translates to:
+  /// **'The module could not start correctly. Reinstall it or keep using VPN mode.'**
+  String get rootModeActivationFailed;
 
   /// No description provided for @rootModeTrustUnavailable.
   ///
@@ -6801,7 +6837,7 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeOperationFailed.
   ///
   /// In en, this message translates to:
-  /// **'The operation could not be completed. Check root access and module status, then try again.'**
+  /// **'The operation could not be completed. Try again or use VPN mode.'**
   String get rootModeOperationFailed;
 
   /// No description provided for @rootModeDnsUnavailable.

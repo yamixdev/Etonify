@@ -130,6 +130,7 @@ internal class MeowForegroundNotification(
         val timeoutMillis: Int,
         val concurrency: Int,
         val deadlineMillis: Int,
+        val logicalSessionId: String = "",
     ) {
         companion object {
             fun fromArguments(arguments: Map<*, *>): UrlTestRequest? {
@@ -229,6 +230,12 @@ internal class MeowForegroundNotification(
     private var latencyActionInFlight = false
     private var measurementNotBeforeSeconds = 0L
     private var latencyTimeoutRunnable: Runnable? = null
+    private data class LatencyActionContext(
+        val runtime: Long, val network: Long, val selection: Long, val target: String,
+        val startedAtMillis: Long, val minimumRevision: Long, val requestId: String,
+    )
+    private var latencyActionContext: LatencyActionContext? = null
+    private val latencyCompletionObservers = mutableListOf<(Boolean) -> Unit>()
     private data class Outbound(
         val type: String,
         val members: List<String>,
@@ -268,6 +275,7 @@ internal class MeowForegroundNotification(
             }
             lifecycleStatus = status
             if (status in setOf("Starting", "Restarting", "Reloading", "Stopping")) {
+                cancelLatencyObserversLocked()
                 startupRuntimeGeneration = 0L
                 startupOwnership.update(0L, startupNetworkGeneration, "", false, tileStartup)
             }
@@ -362,6 +370,7 @@ internal class MeowForegroundNotification(
     }
 
     private fun deactivateLocked(): Runnable? {
+        cancelLatencyObserversLocked()
         foregroundStarted = false
         notificationGeneration++
         refreshPending = false
@@ -393,6 +402,7 @@ internal class MeowForegroundNotification(
         sessionId: Long = 0L,
         error: String = "",
         selectionEpoch: Long? = null,
+        logicalSessionId: String = "",
     ) {
         val normalizedTag = tag?.trim().orEmpty()
         synchronized(this) {
@@ -416,7 +426,20 @@ internal class MeowForegroundNotification(
                 return
             }
             val attributed = runtimeGeneration != null && networkGeneration != null && revision > 0L && sessionId > 0L
-            if (nativeStartupToken == null || attributed) {
+            val recoveryPending = latencyCompletionObservers.isNotEmpty()
+            val context = latencyActionContext
+            val ownsRecovery = recoveryPending && attributed && selectionEpoch != null && context != null &&
+                context.runtime == runtimeGeneration && context.network == networkGeneration &&
+                context.selection == selectionEpoch && context.target == normalizedTag &&
+                context.requestId == logicalSessionId && measuredAtMillis >= context.startedAtMillis &&
+                revision > context.minimumRevision
+            val terminalRecovery = ownsRecovery &&
+                (status == "unavailable" || status == "cancelled" || (status == "available" && delayMillis > 0L))
+            if (terminalRecovery) {
+                if (status == "cancelled") latencyCompletionObservers.clear()
+                else dispatchLatencyCompletionLocked(status == "available" && delayMillis > 0L)
+            }
+            if ((!recoveryPending && (nativeStartupToken == null || attributed)) || terminalRecovery) {
                 latencyActionInFlight = false
                 latencyChecking = false
                 latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
@@ -441,20 +464,40 @@ internal class MeowForegroundNotification(
         }
     }
 
-    fun requestLatencyRefresh(startup: Boolean = false): Boolean {
+    fun requestLatencyRefresh(startup: Boolean = false, onComplete: ((Boolean) -> Unit)? = null): Boolean {
         val request: UrlTestRequest
         val actionGeneration: Long
         val timeoutCallback: Runnable
         synchronized(this) {
-            request = presentation.urlTestRequest ?: return false
-            if (request.targetOutboundTag.isEmpty() || lifecycleStatus != "Connected" || latencyActionInFlight) {
+            val selectedRequest = presentation.urlTestRequest ?: return false
+            if (!foregroundStarted || selectedRequest.targetOutboundTag.isEmpty() || lifecycleStatus != "Connected") {
                 return false
             }
+            if (latencyActionInFlight) {
+                val context = latencyActionContext
+                if (onComplete == null || context == null || !latencyContextCurrentLocked(context)) return false
+                latencyCompletionObservers += onComplete
+                return true
+            }
+            if (onComplete != null && clientStartupRequest?.let {
+                    it.runtime == startupRuntimeGeneration && it.network == startupNetworkGeneration &&
+                        coversPingTarget(it.group, it.target, it.included, it.excluded)
+                } == true) return false
             latencyActionInFlight = true
             latencyChecking = true
             if (!startup) nativeStartupToken = null
             actionGeneration = ++latencyActionGeneration
-            latencyActionStartedAtSeconds = System.currentTimeMillis() / 1_000L
+            val startedAt = System.currentTimeMillis()
+            latencyActionStartedAtSeconds = startedAt / 1_000L
+            request = selectedRequest.copy(logicalSessionId = "notification-${java.util.UUID.randomUUID()}")
+            latencyActionContext = LatencyActionContext(
+                startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch, request.targetOutboundTag,
+                startedAt, SingboxController.cachedNotificationLatency(request.targetOutboundTag,
+                    startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch)?.revision ?: 0L,
+                request.logicalSessionId,
+            )
+            latencyCompletionObservers.clear()
+            onComplete?.let(latencyCompletionObservers::add)
             latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
             timeoutCallback = Runnable { completeLatencyAction(actionGeneration, null) }
             latencyTimeoutRunnable = timeoutCallback
@@ -468,23 +511,53 @@ internal class MeowForegroundNotification(
             if (result.isFailure) completeLatencyAction(actionGeneration, null)
         }
         val runner = latencyTestRunner
-        if (runner != null) {
-            runner(request, !startup, callback)
-        } else SingboxController.urlTest(
-            groupTag = request.groupTag,
-            targetOutboundTag = request.targetOutboundTag,
-            priorityOutboundTag = request.priorityOutboundTag,
-            excludeOutboundTag = request.excludeOutboundTag,
-            url = request.url,
-            timeoutMillis = request.timeoutMillis,
-            concurrency = request.concurrency,
-            deadlineMillis = request.deadlineMillis,
-            force = !startup,
-            notificationStartup = startup,
-            notificationStartupToken = if (startup) nativeStartupToken ?: 0L else 0L,
-            callback = callback,
-        )
+        try {
+            if (runner != null) {
+                runner(request, !startup, callback)
+            } else SingboxController.urlTest(
+                groupTag = request.groupTag,
+                targetOutboundTag = request.targetOutboundTag,
+                priorityOutboundTag = request.priorityOutboundTag,
+                excludeOutboundTag = request.excludeOutboundTag,
+                url = request.url,
+                timeoutMillis = request.timeoutMillis,
+                concurrency = request.concurrency,
+                deadlineMillis = request.deadlineMillis,
+                force = !startup,
+                logicalSessionId = request.logicalSessionId,
+                notificationStartup = startup,
+                notificationStartupToken = if (startup) nativeStartupToken ?: 0L else 0L,
+                callback = callback,
+            )
+        } catch (_: Exception) {
+            completeLatencyAction(actionGeneration, null)
+        }
         return true
+    }
+
+    private fun latencyContextCurrentLocked(context: LatencyActionContext): Boolean =
+        foregroundStarted && lifecycleStatus == "Connected" && context.runtime == startupRuntimeGeneration &&
+            context.network == startupNetworkGeneration && context.selection == selectionEpoch &&
+            context.target == presentation.urlTestRequest?.targetOutboundTag
+
+    private fun cancelLatencyObserversLocked() {
+        latencyCompletionObservers.clear()
+        latencyActionContext = null
+    }
+
+    private fun dispatchLatencyCompletionLocked(success: Boolean) {
+        val context = latencyActionContext ?: return
+        val generation = latencyActionGeneration
+        val observers = latencyCompletionObservers.toList()
+        latencyCompletionObservers.clear()
+        if (observers.isEmpty()) return
+        mainHandler.post {
+            val valid = synchronized(this) {
+                generation == latencyActionGeneration && latencyActionContext === context &&
+                    latencyContextCurrentLocked(context)
+            }
+            if (valid) observers.forEach { it(success) }
+        }
     }
 
     private fun completeLatencyAction(
@@ -497,6 +570,7 @@ internal class MeowForegroundNotification(
             }
             latencyActionInFlight = false
             latencyChecking = false
+            cancelLatencyObserversLocked()
             nativeStartupToken?.let { token ->
                 // Dispatch failure and no-result deadline both release the
                 // lease without inventing a core measurement. Later client
@@ -639,6 +713,7 @@ internal class MeowForegroundNotification(
             )
         }
         // An outstanding action belongs to the previous outbound/network.
+        cancelLatencyObserversLocked()
         latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
         latencyTimeoutRunnable = null
         latencyActionGeneration++
@@ -669,6 +744,7 @@ internal class MeowForegroundNotification(
     fun onRuntimeReady(runtimeGeneration: Long, networkGeneration: Long, tileStartup: Boolean) {
         synchronized(this) {
             if (runtimeGeneration != this.startupRuntimeGeneration) {
+                cancelLatencyObserversLocked()
                 startupMeasurementFinished = false
                 selectionEpoch = 0L
                 selectedOutboundsReady = false

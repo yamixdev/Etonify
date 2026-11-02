@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import com.etonify.meow_client.MeowApplication
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +26,36 @@ import java.nio.file.StandardWatchEventKinds
 @RunWith(RobolectricTestRunner::class)
 @Config(application = MeowApplication::class, sdk = [28], manifest = Config.NONE)
 class VpnScheduledRestartTest {
+    @Test
+    fun `stop invalidates handover recovery before queued native shutdown`() {
+        withBlockedBox { _, box, _, _ ->
+            val gate = ReflectionHelpers.getField<NetworkHandoverProbeGate>(box, "networkHandoverProbeGate")
+            val probe = gate.replace()
+            box.requestStop("test_manual_stop")
+            assertFalse("delayed health result must not revive a stopping VPN", gate.isCurrent(probe))
+        }
+    }
+
+    @Test
+    fun `notification stop invalidates handover before queued shutdown`() {
+        withBlockedBox { _, box, _, _ ->
+            val gate = ReflectionHelpers.getField<NetworkHandoverProbeGate>(box, "networkHandoverProbeGate")
+            val probe = gate.replace()
+            box.onStartCommand(Intent().setAction(MeowBoxService.ACTION_STOP), 1)
+            assertFalse(gate.isCurrent(probe))
+        }
+    }
+
+    @Test
+    fun `platform stop invalidates handover before queued shutdown`() {
+        withBlockedBox { _, box, _, _ ->
+            val gate = ReflectionHelpers.getField<NetworkHandoverProbeGate>(box, "networkHandoverProbeGate")
+            val probe = gate.replace()
+            box.serviceStop()
+            assertFalse(gate.isCurrent(probe))
+        }
+    }
+
     @Test
     fun `external stop snapshots retain their coherent state and intent epochs`() {
         SingboxController.setRunning(false)
