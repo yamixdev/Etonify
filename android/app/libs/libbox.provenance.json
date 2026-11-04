@@ -1,13 +1,13 @@
 {
   "artifact": "libbox.aar",
-  "sha256": "da872f69b054b7628e047c8fee5ba876381d1da1e655ac34eb05033b60bddfdf",
-  "source_commit": "93d5191f715b15c667fc5be79841582e59ee9813",
-  "source_version": "v1.15.0-alpha.10-etonify.6",
-  "etonify_version": "v1.15.0-alpha.10-etonify.6",
+  "sha256": "838e931357ac6f0607bb1f7b95972c3ce37fc9b80fbe913cc0ea38391e60fe65",
+  "source_commit": "c27bd8123195196b86cdebfbf7c8b09780b39803",
+  "source_version": "v1.15.0-alpha.10-etonify.7",
+  "etonify_version": "v1.15.0-alpha.10-etonify.7",
   "upstream_commit": "c992297988288565a24a6d36e2cf4d77cb835fcd",
   "go": "go version go1.27.1 linux/amd64",
   "gomobile": "v0.1.13",
-  "java": "openjdk 17.0.21 2026-10-20",
+  "java": "openjdk 17.0.20.1 2026-08-18",
   "android_ndk": "r28",
   "android_api": 24,
   "android_abis": [
@@ -16,7 +16,7 @@
   ],
   "build_tags": "with_quic,with_utls,with_naive_outbound,with_clash_api,badlinkname,tfogo_checklinkname0",
   "sing_tun_repository": "https://github.com/yamixdev/sing-tun.git",
-  "sing_tun_commit": "5cc657d28879cfb90cd9d6d2dfaae58259973588",
+  "sing_tun_commit": "594888885f54f7ac21bf7cd8adf32df911aa7c47",
   "sing_tun_upstream_commit": "5c2edb183cc92eb190d41c04dedfa5519ca3e78c",
   "sing_tun_module_version": "v0.9.7-0.20261009022811-5c2edb183cc9"
 }
