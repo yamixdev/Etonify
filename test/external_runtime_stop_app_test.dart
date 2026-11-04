@@ -15,6 +15,7 @@ import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/features/home/home_page.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
+import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
@@ -45,6 +46,17 @@ class _Runtime extends Fake implements SingboxRuntime {
   var stateRevision = 1;
   var runtimeGeneration = 1;
   var prepareCalls = 0;
+  bool rejectExclusions = false;
+  final exclusionCalls = <(List<String>, int)>[];
+  @override
+  Future<void> setUrlTestExcludedOutbounds({
+    required List<String> tags,
+    required int runtimeGeneration,
+  }) async {
+    exclusionCalls.add((List.of(tags), runtimeGeneration));
+    if (rejectExclusions) throw StateError('native policy rejected');
+  }
+
   Completer<bool>? prepareGate;
   Map<String, dynamic> externalIpInfo = {};
   NetworkInterfaceSnapshot network = const NetworkInterfaceSnapshot(
@@ -202,6 +214,129 @@ void main() {
           .setMockMethodCallHandler(MethodChannel(name), null);
     }
   });
+
+  for (final rejected in [false, true]) {
+    testWidgets(
+      'live exclusion ${rejected ? 'rejection preserves saved policy' : 'keeps current connection and card'}',
+      (tester) async {
+        runtime.rejectExclusions = rejected;
+        final state = AppSettingsController()
+            .toState(
+              onboardingCompleted: true,
+              acceptedLegalVersion: '0.2.1',
+              acceptedLegalAtMillis: 1,
+              activeProfileId: _subscription.id,
+              selectedProxyTag: 'test',
+            )
+            .copyWith(
+              localeCode: 'en',
+              autoConnectOnLaunch: false,
+              autoCheckServers: false,
+              autoCheckNoticeAcknowledged: true,
+              hwidDefaultNoticeShown: true,
+              homeNavigationMode: HomeNavigationMode.tabs,
+            );
+        final store = MemoryAppSettingsStore(state);
+        final container = ProviderContainer(
+          overrides: [singboxRuntimeProvider.overrideWithValue(runtime)],
+        );
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(seconds: 16));
+          container.dispose();
+        });
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MeowClient(store: store),
+          ),
+        );
+        await tester.pumpAndSettle();
+        container
+            .read(subscriptionCatalogProvider.notifier)
+            .replace(
+              subscriptions: [_subscription],
+              activeProfileId: _subscription.id,
+              selectedProxyTag: 'test',
+            );
+        await tester.pumpAndSettle();
+        runtime.stateRevision++;
+        runtime.controller.add({'type': 'state', ...runtime.snapshot()});
+        await tester.pump();
+        runtime.controller.add({
+          'type': 'network',
+          'reason': 'default_interface',
+          'networkGeneration': 1,
+          'interfaceName': 'wlan0',
+          'interfaceIndex': 1,
+        });
+        await tester.pump();
+        runtime.controller.add({
+          'type': 'groups',
+          'runtimeGeneration': 1,
+          'networkGeneration': 1,
+          'groups': [
+            {
+              'tag': 'select',
+              'selected': 'test',
+              'items': [
+                {'tag': 'test', 'type': 'socks'},
+              ],
+            },
+          ],
+        });
+        await tester.pump();
+        tester.widget<HomePage>(find.byType(HomePage)).actions.openProxies!();
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        tester
+            .widget<ProxiesPage>(find.byType(ProxiesPage))
+            .onEditExclusions!();
+        for (
+          var i = 0;
+          i < 20 &&
+              find
+                  .byKey(const ValueKey('proxy-exclusion-test'))
+                  .evaluate()
+                  .isEmpty;
+          i++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.tap(find.byKey(const ValueKey('proxy-exclusion-test')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('proxy-exclusions-apply')));
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump();
+        expect(runtime.exclusionCalls, hasLength(1));
+        expect(runtime.exclusionCalls.single.$1, ['test']);
+        expect(runtime.exclusionCalls.single.$2, 1);
+        expect(runtime.running, isTrue);
+        expect(runtime.startCalls, 0);
+        expect(runtime.stopCalls, 0);
+        final saved = await store.loadState();
+        expect(
+          saved.proxyExclusionsByProfile[_subscription.id]?.excludedTags ??
+              <String>{},
+          rejected ? isEmpty : {'test'},
+        );
+        final page = tester.widget<ProxiesPage>(find.byType(ProxiesPage));
+        expect(page.selectedTag, 'test');
+        expect(page.activeProxy?.tag, 'test');
+        expect(page.connected, isTrue);
+      },
+    );
+  }
 
   for (final queryOnly in [false, true]) {
     testWidgets(

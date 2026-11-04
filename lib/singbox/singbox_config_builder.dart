@@ -268,8 +268,13 @@ class SingboxConfigBuilder {
         adBlockEnabled && _validRuleSetPath(adBlockBlockRuleSetPath);
     final adBlockAllowActive =
         adBlockActive && _validRuleSetPath(adBlockAllowRuleSetPath);
+    final blockedTags = _userExclusionTags();
     final normalizedSelectedProxyTag = normalizeProxySelectionTag(
-      selectedProxyTag,
+      blockedTags.contains(selectedProxyTag)
+          ? activeSubscription!.concreteServerTags.firstWhere(
+              (tag) => !blockedTags.contains(tag),
+            )
+          : selectedProxyTag,
     );
     final selectorDefault = hasProxies
         ? (normalizedSelectedProxyTag.isNotEmpty &&
@@ -321,6 +326,10 @@ class SingboxConfigBuilder {
     final plan = SingboxBuildPlan(
       config: {
         'log': {'level': logLevel},
+        if (blockedTags.isNotEmpty)
+          'experimental': {
+            'url_test_excluded_tags': blockedTags.toList()..sort(),
+          },
         if (_supportsLegacyUrlTestConfigExtensions)
           'global': {
             'urltest_concurrency_limit': _urltestConcurrency(
@@ -696,6 +705,12 @@ class SingboxConfigBuilder {
     if (subscription == null) {
       return const [];
     }
+    if (subscription.concreteServerTags
+            .difference(_userExclusionTags())
+            .isEmpty &&
+        _userExclusionTags().isNotEmpty) {
+      throw StateError('No eligible proxy servers remain after exclusions.');
+    }
     return subscription.outbounds
         .where((outbound) => !outbound.info.deleted)
         .where((outbound) => isSupportedOutboundConfig(outbound.config))
@@ -703,6 +718,20 @@ class SingboxConfigBuilder {
         .where(_isUsableOutbound)
         .toList(growable: false);
   }
+
+  Set<String> _userExclusionTags() => {
+    for (final node in activeSubscription?.outbounds ?? const <Outbound>[])
+      if (node.config['_excluded_by_user'] == true) node.tag,
+    for (final group
+        in activeSubscription?.groups ?? const <SubscriptionGroup>[])
+      if (group.config['_direct_outbounds']
+          case final Map<dynamic, dynamic> direct)
+        for (final entry in direct.entries)
+          if (entry.value is Map &&
+              (entry.value as Map<dynamic, dynamic>)['_excluded_by_user'] ==
+                  true)
+            entry.key.toString(),
+  };
 
   List<SubscriptionGroup> _visibleGroups(Set<String> visibleOutboundTags) {
     final subscription = activeSubscription;

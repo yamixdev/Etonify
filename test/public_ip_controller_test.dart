@@ -4,6 +4,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
 
 void main() {
+  testWidgets(
+    'network invalidation clears old address and cooldown immediately',
+    (tester) async {
+      final controller = PublicIpController(
+        load: () async =>
+            const PublicIpInfo(ip: '203.0.113.8', countryCode: 'SE'),
+      );
+      await controller.refresh();
+      expect(controller.info?.ip, '203.0.113.8');
+      expect(controller.canRefresh, isFalse);
+      final dynamic api = controller;
+      expect(() => api.invalidate(), returnsNormally);
+      expect(controller.info, isNull);
+      expect(controller.failed, isFalse);
+      expect(controller.loading, isFalse);
+      expect(controller.canRefresh, isTrue);
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'network invalidation rejects late result from previous network',
+    (tester) async {
+      final pending = Completer<PublicIpInfo>();
+      var calls = 0;
+      final controller = PublicIpController(
+        load: () => ++calls == 1
+            ? pending.future
+            : Future.value(
+                const PublicIpInfo(ip: '203.0.113.9', countryCode: 'FI'),
+              ),
+      );
+      final old = controller.refresh();
+      final dynamic api = controller;
+      expect(() => api.invalidate(), returnsNormally);
+      await controller.refresh();
+      pending.complete(
+        const PublicIpInfo(ip: '203.0.113.8', countryCode: 'SE'),
+      );
+      await old;
+      expect(controller.info?.ip, '203.0.113.9');
+      expect(controller.info?.countryCode, 'FI');
+      expect(controller.loading, isFalse);
+      controller.dispose();
+    },
+  );
+
   test('trace uses client country, not the Cloudflare data center', () {
     final info = PublicIpInfo.fromTrace('ip=203.0.113.8\nloc=se\ncolo=AMS\n');
     expect(info.ip, '203.0.113.8');

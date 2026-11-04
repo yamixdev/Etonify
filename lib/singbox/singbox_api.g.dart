@@ -24,9 +24,9 @@ const String notificationTrafficModeTotal = 'total';
 const String notificationTrafficModeBoth = 'both';
 
 Object? _extractReplyValueOrThrow(
-    List<Object?>? replyList,
-    String channelName, {
-    required bool isNullValid,
+  List<Object?>? replyList,
+  String channelName, {
+  required bool isNullValid,
 }) {
   if (replyList == null) {
     throw PlatformException(
@@ -60,8 +60,9 @@ bool _deepEquals(Object? a, Object? b) {
   }
   if (a is List && b is List) {
     return a.length == b.length &&
-        a.indexed
-            .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
+        a.indexed.every(
+          ((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]),
+        );
   }
   if (a is Map && b is Map) {
     if (a.length != b.length) {
@@ -110,7 +111,6 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
-
 class RuntimeFlagsMessage {
   RuntimeFlagsMessage({
     this.wakeLockEnabled,
@@ -137,7 +137,8 @@ class RuntimeFlagsMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static RuntimeFlagsMessage decode(Object result) {
     result as List<Object?>;
@@ -158,7 +159,13 @@ class RuntimeFlagsMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(wakeLockEnabled, other.wakeLockEnabled) && _deepEquals(networkHeartbeatEnabled, other.networkHeartbeatEnabled) && _deepEquals(networkHeartbeatIntervalSeconds, other.networkHeartbeatIntervalSeconds) && _deepEquals(memoryLimitEnabled, other.memoryLimitEnabled);
+    return _deepEquals(wakeLockEnabled, other.wakeLockEnabled) &&
+        _deepEquals(networkHeartbeatEnabled, other.networkHeartbeatEnabled) &&
+        _deepEquals(
+          networkHeartbeatIntervalSeconds,
+          other.networkHeartbeatIntervalSeconds,
+        ) &&
+        _deepEquals(memoryLimitEnabled, other.memoryLimitEnabled);
   }
 
   @override
@@ -205,7 +212,8 @@ class NetworkInterfaceStateMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static NetworkInterfaceStateMessage decode(Object result) {
     result as List<Object?>;
@@ -222,13 +230,19 @@ class NetworkInterfaceStateMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! NetworkInterfaceStateMessage || other.runtimeType != runtimeType) {
+    if (other is! NetworkInterfaceStateMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(available, other.available) && _deepEquals(interfaceName, other.interfaceName) && _deepEquals(interfaceIndex, other.interfaceIndex) && _deepEquals(generation, other.generation) && _deepEquals(reason, other.reason) && _deepEquals(updatedAtMillis, other.updatedAtMillis);
+    return _deepEquals(available, other.available) &&
+        _deepEquals(interfaceName, other.interfaceName) &&
+        _deepEquals(interfaceIndex, other.interfaceIndex) &&
+        _deepEquals(generation, other.generation) &&
+        _deepEquals(reason, other.reason) &&
+        _deepEquals(updatedAtMillis, other.updatedAtMillis);
   }
 
   @override
@@ -307,7 +321,8 @@ class UrlTestRequestMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static UrlTestRequestMessage decode(Object result) {
     result as List<Object?>;
@@ -338,7 +353,20 @@ class UrlTestRequestMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(force, other.force) && _deepEquals(mode, other.mode) && _deepEquals(includeOutboundTags, other.includeOutboundTags) && _deepEquals(logicalSessionId, other.logicalSessionId) && _deepEquals(physicalNetworkEpoch, other.physicalNetworkEpoch) && _deepEquals(startupLeaseToken, other.startupLeaseToken);
+    return _deepEquals(groupTag, other.groupTag) &&
+        _deepEquals(targetOutboundTag, other.targetOutboundTag) &&
+        _deepEquals(priorityOutboundTag, other.priorityOutboundTag) &&
+        _deepEquals(excludeOutboundTag, other.excludeOutboundTag) &&
+        _deepEquals(url, other.url) &&
+        _deepEquals(timeoutMillis, other.timeoutMillis) &&
+        _deepEquals(concurrency, other.concurrency) &&
+        _deepEquals(deadlineMillis, other.deadlineMillis) &&
+        _deepEquals(force, other.force) &&
+        _deepEquals(mode, other.mode) &&
+        _deepEquals(includeOutboundTags, other.includeOutboundTags) &&
+        _deepEquals(logicalSessionId, other.logicalSessionId) &&
+        _deepEquals(physicalNetworkEpoch, other.physicalNetworkEpoch) &&
+        _deepEquals(startupLeaseToken, other.startupLeaseToken);
   }
 
   @override
@@ -437,7 +465,8 @@ class VpnNotificationPresentationMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static VpnNotificationPresentationMessage decode(Object result) {
     result as List<Object?>;
@@ -467,13 +496,32 @@ class VpnNotificationPresentationMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! VpnNotificationPresentationMessage || other.runtimeType != runtimeType) {
+    if (other is! VpnNotificationPresentationMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(detailed, other.detailed) && _deepEquals(trafficDisplayMode, other.trafficDisplayMode) && _deepEquals(trafficRefreshSeconds, other.trafficRefreshSeconds) && _deepEquals(title, other.title) && _deepEquals(latencyMillis, other.latencyMillis) && _deepEquals(groupTag, other.groupTag) && _deepEquals(targetOutboundTag, other.targetOutboundTag) && _deepEquals(priorityOutboundTag, other.priorityOutboundTag) && _deepEquals(excludeOutboundTag, other.excludeOutboundTag) && _deepEquals(url, other.url) && _deepEquals(timeoutMillis, other.timeoutMillis) && _deepEquals(concurrency, other.concurrency) && _deepEquals(deadlineMillis, other.deadlineMillis) && _deepEquals(connectedText, other.connectedText) && _deepEquals(checkingText, other.checkingText) && _deepEquals(unavailableText, other.unavailableText) && _deepEquals(totalLabel, other.totalLabel) && _deepEquals(refreshLabel, other.refreshLabel) && _deepEquals(stopLabel, other.stopLabel);
+    return _deepEquals(detailed, other.detailed) &&
+        _deepEquals(trafficDisplayMode, other.trafficDisplayMode) &&
+        _deepEquals(trafficRefreshSeconds, other.trafficRefreshSeconds) &&
+        _deepEquals(title, other.title) &&
+        _deepEquals(latencyMillis, other.latencyMillis) &&
+        _deepEquals(groupTag, other.groupTag) &&
+        _deepEquals(targetOutboundTag, other.targetOutboundTag) &&
+        _deepEquals(priorityOutboundTag, other.priorityOutboundTag) &&
+        _deepEquals(excludeOutboundTag, other.excludeOutboundTag) &&
+        _deepEquals(url, other.url) &&
+        _deepEquals(timeoutMillis, other.timeoutMillis) &&
+        _deepEquals(concurrency, other.concurrency) &&
+        _deepEquals(deadlineMillis, other.deadlineMillis) &&
+        _deepEquals(connectedText, other.connectedText) &&
+        _deepEquals(checkingText, other.checkingText) &&
+        _deepEquals(unavailableText, other.unavailableText) &&
+        _deepEquals(totalLabel, other.totalLabel) &&
+        _deepEquals(refreshLabel, other.refreshLabel) &&
+        _deepEquals(stopLabel, other.stopLabel);
   }
 
   @override
@@ -487,24 +535,19 @@ class VpnNotificationPresentationMessage {
 }
 
 class HttpHeaderMessage {
-  HttpHeaderMessage({
-    required this.name,
-    required this.value,
-  });
+  HttpHeaderMessage({required this.name, required this.value});
 
   String name;
 
   String value;
 
   List<Object?> _toList() {
-    return <Object?>[
-      name,
-      value,
-    ];
+    return <Object?>[name, value];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static HttpHeaderMessage decode(Object result) {
     result as List<Object?>;
@@ -553,16 +596,12 @@ class UnderlyingNetworkFetchRequestMessage {
   int timeoutMillis;
 
   List<Object?> _toList() {
-    return <Object?>[
-      url,
-      headers,
-      maxBytes,
-      timeoutMillis,
-    ];
+    return <Object?>[url, headers, maxBytes, timeoutMillis];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static UnderlyingNetworkFetchRequestMessage decode(Object result) {
     result as List<Object?>;
@@ -577,13 +616,17 @@ class UnderlyingNetworkFetchRequestMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! UnderlyingNetworkFetchRequestMessage || other.runtimeType != runtimeType) {
+    if (other is! UnderlyingNetworkFetchRequestMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(url, other.url) && _deepEquals(headers, other.headers) && _deepEquals(maxBytes, other.maxBytes) && _deepEquals(timeoutMillis, other.timeoutMillis);
+    return _deepEquals(url, other.url) &&
+        _deepEquals(headers, other.headers) &&
+        _deepEquals(maxBytes, other.maxBytes) &&
+        _deepEquals(timeoutMillis, other.timeoutMillis);
   }
 
   @override
@@ -616,17 +659,12 @@ class UnderlyingNetworkFetchResponseMessage {
   String network;
 
   List<Object?> _toList() {
-    return <Object?>[
-      statusCode,
-      body,
-      headers,
-      finalUrl,
-      network,
-    ];
+    return <Object?>[statusCode, body, headers, finalUrl, network];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static UnderlyingNetworkFetchResponseMessage decode(Object result) {
     result as List<Object?>;
@@ -642,13 +680,18 @@ class UnderlyingNetworkFetchResponseMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! UnderlyingNetworkFetchResponseMessage || other.runtimeType != runtimeType) {
+    if (other is! UnderlyingNetworkFetchResponseMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(statusCode, other.statusCode) && _deepEquals(body, other.body) && _deepEquals(headers, other.headers) && _deepEquals(finalUrl, other.finalUrl) && _deepEquals(network, other.network);
+    return _deepEquals(statusCode, other.statusCode) &&
+        _deepEquals(body, other.body) &&
+        _deepEquals(headers, other.headers) &&
+        _deepEquals(finalUrl, other.finalUrl) &&
+        _deepEquals(network, other.network);
   }
 
   @override
@@ -681,17 +724,12 @@ class OutboundFetchRequestMessage {
   int timeoutMillis;
 
   List<Object?> _toList() {
-    return <Object?>[
-      outboundTag,
-      url,
-      headers,
-      maxBytes,
-      timeoutMillis,
-    ];
+    return <Object?>[outboundTag, url, headers, maxBytes, timeoutMillis];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static OutboundFetchRequestMessage decode(Object result) {
     result as List<Object?>;
@@ -707,13 +745,18 @@ class OutboundFetchRequestMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! OutboundFetchRequestMessage || other.runtimeType != runtimeType) {
+    if (other is! OutboundFetchRequestMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(outboundTag, other.outboundTag) && _deepEquals(url, other.url) && _deepEquals(headers, other.headers) && _deepEquals(maxBytes, other.maxBytes) && _deepEquals(timeoutMillis, other.timeoutMillis);
+    return _deepEquals(outboundTag, other.outboundTag) &&
+        _deepEquals(url, other.url) &&
+        _deepEquals(headers, other.headers) &&
+        _deepEquals(maxBytes, other.maxBytes) &&
+        _deepEquals(timeoutMillis, other.timeoutMillis);
   }
 
   @override
@@ -760,7 +803,8 @@ class UnderlyingNetworkDownloadRequestMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static UnderlyingNetworkDownloadRequestMessage decode(Object result) {
     result as List<Object?>;
@@ -777,13 +821,22 @@ class UnderlyingNetworkDownloadRequestMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! UnderlyingNetworkDownloadRequestMessage || other.runtimeType != runtimeType) {
+    if (other is! UnderlyingNetworkDownloadRequestMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(url, other.url) && _deepEquals(headers, other.headers) && _deepEquals(destinationPath, other.destinationPath) && _deepEquals(maxBytes, other.maxBytes) && _deepEquals(responseStartTimeoutMillis, other.responseStartTimeoutMillis) && _deepEquals(idleTimeoutMillis, other.idleTimeoutMillis);
+    return _deepEquals(url, other.url) &&
+        _deepEquals(headers, other.headers) &&
+        _deepEquals(destinationPath, other.destinationPath) &&
+        _deepEquals(maxBytes, other.maxBytes) &&
+        _deepEquals(
+          responseStartTimeoutMillis,
+          other.responseStartTimeoutMillis,
+        ) &&
+        _deepEquals(idleTimeoutMillis, other.idleTimeoutMillis);
   }
 
   @override
@@ -816,17 +869,12 @@ class UnderlyingNetworkDownloadResponseMessage {
   String network;
 
   List<Object?> _toList() {
-    return <Object?>[
-      statusCode,
-      downloadedBytes,
-      headers,
-      finalUrl,
-      network,
-    ];
+    return <Object?>[statusCode, downloadedBytes, headers, finalUrl, network];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static UnderlyingNetworkDownloadResponseMessage decode(Object result) {
     result as List<Object?>;
@@ -842,13 +890,18 @@ class UnderlyingNetworkDownloadResponseMessage {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! UnderlyingNetworkDownloadResponseMessage || other.runtimeType != runtimeType) {
+    if (other is! UnderlyingNetworkDownloadResponseMessage ||
+        other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(statusCode, other.statusCode) && _deepEquals(downloadedBytes, other.downloadedBytes) && _deepEquals(headers, other.headers) && _deepEquals(finalUrl, other.finalUrl) && _deepEquals(network, other.network);
+    return _deepEquals(statusCode, other.statusCode) &&
+        _deepEquals(downloadedBytes, other.downloadedBytes) &&
+        _deepEquals(headers, other.headers) &&
+        _deepEquals(finalUrl, other.finalUrl) &&
+        _deepEquals(network, other.network);
   }
 
   @override
@@ -911,7 +964,8 @@ class ApkInspectionMessage {
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static ApkInspectionMessage decode(Object result) {
     result as List<Object?>;
@@ -938,7 +992,19 @@ class ApkInspectionMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(valid, other.valid) && _deepEquals(packageName, other.packageName) && _deepEquals(installedPackageName, other.installedPackageName) && _deepEquals(versionName, other.versionName) && _deepEquals(versionCode, other.versionCode) && _deepEquals(minSdk, other.minSdk) && _deepEquals(targetSdk, other.targetSdk) && _deepEquals(deviceSdk, other.deviceSdk) && _deepEquals(signingCertificateSha256, other.signingCertificateSha256) && _deepEquals(installedCertificateSha256, other.installedCertificateSha256);
+    return _deepEquals(valid, other.valid) &&
+        _deepEquals(packageName, other.packageName) &&
+        _deepEquals(installedPackageName, other.installedPackageName) &&
+        _deepEquals(versionName, other.versionName) &&
+        _deepEquals(versionCode, other.versionCode) &&
+        _deepEquals(minSdk, other.minSdk) &&
+        _deepEquals(targetSdk, other.targetSdk) &&
+        _deepEquals(deviceSdk, other.deviceSdk) &&
+        _deepEquals(signingCertificateSha256, other.signingCertificateSha256) &&
+        _deepEquals(
+          installedCertificateSha256,
+          other.installedCertificateSha256,
+        );
   }
 
   @override
@@ -968,16 +1034,12 @@ class InstalledAppMessage {
   bool launchable;
 
   List<Object?> _toList() {
-    return <Object?>[
-      packageName,
-      label,
-      system,
-      launchable,
-    ];
+    return <Object?>[packageName, label, system, launchable];
   }
 
   Object encode() {
-    return _toList();  }
+    return _toList();
+  }
 
   static InstalledAppMessage decode(Object result) {
     result as List<Object?>;
@@ -998,7 +1060,10 @@ class InstalledAppMessage {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(packageName, other.packageName) && _deepEquals(label, other.label) && _deepEquals(system, other.system) && _deepEquals(launchable, other.launchable);
+    return _deepEquals(packageName, other.packageName) &&
+        _deepEquals(label, other.label) &&
+        _deepEquals(system, other.system) &&
+        _deepEquals(launchable, other.launchable);
   }
 
   @override
@@ -1011,7 +1076,6 @@ class InstalledAppMessage {
   }
 }
 
-
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -1019,40 +1083,40 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is RuntimeFlagsMessage) {
+    } else if (value is RuntimeFlagsMessage) {
       buffer.putUint8(129);
       writeValue(buffer, value.encode());
-    }    else if (value is NetworkInterfaceStateMessage) {
+    } else if (value is NetworkInterfaceStateMessage) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    }    else if (value is UrlTestRequestMessage) {
+    } else if (value is UrlTestRequestMessage) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is VpnNotificationPresentationMessage) {
+    } else if (value is VpnNotificationPresentationMessage) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is HttpHeaderMessage) {
+    } else if (value is HttpHeaderMessage) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkFetchRequestMessage) {
+    } else if (value is UnderlyingNetworkFetchRequestMessage) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkFetchResponseMessage) {
+    } else if (value is UnderlyingNetworkFetchResponseMessage) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is OutboundFetchRequestMessage) {
+    } else if (value is OutboundFetchRequestMessage) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkDownloadRequestMessage) {
+    } else if (value is UnderlyingNetworkDownloadRequestMessage) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is UnderlyingNetworkDownloadResponseMessage) {
+    } else if (value is UnderlyingNetworkDownloadResponseMessage) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is ApkInspectionMessage) {
+    } else if (value is ApkInspectionMessage) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is InstalledAppMessage) {
+    } else if (value is InstalledAppMessage) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else {
@@ -1080,9 +1144,13 @@ class _PigeonCodec extends StandardMessageCodec {
       case 136:
         return OutboundFetchRequestMessage.decode(readValue(buffer)!);
       case 137:
-        return UnderlyingNetworkDownloadRequestMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkDownloadRequestMessage.decode(
+          readValue(buffer)!,
+        );
       case 138:
-        return UnderlyingNetworkDownloadResponseMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkDownloadResponseMessage.decode(
+          readValue(buffer)!,
+        );
       case 139:
         return ApkInspectionMessage.decode(readValue(buffer)!);
       case 140:
@@ -1098,39 +1166,42 @@ class SingboxHostApi {
   /// available for dependency injection. If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
   SingboxHostApi({
-      BinaryMessenger? binaryMessenger, 
-      String messageChannelSuffix = '', 
-      })
-      : pigeonVar_binaryMessenger = binaryMessenger,
-        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) : pigeonVar_binaryMessenger = binaryMessenger,
+       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
+           ? '.$messageChannelSuffix'
+           : '';
 
   final BinaryMessenger? pigeonVar_binaryMessenger;
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   final String pigeonVar_messageChannelSuffix;
 
-
   Future<bool> prepareVpn(bool requiresVpn) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.prepareVpn$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.prepareVpn$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[requiresVpn]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[requiresVpn],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<Map<String?, Object?>> vpnPermissionStatus() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.vpnPermissionStatus$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.vpnPermissionStatus$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1140,70 +1211,84 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
-  Future<void> start(String config, bool useVpn, int? expectedExternalStopRevision) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.start$pigeonVar_messageChannelSuffix';
+  Future<void> start(
+    String config,
+    bool useVpn,
+    int? expectedExternalStopRevision,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.start$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn, expectedExternalStopRevision]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[config, useVpn, expectedExternalStopRevision],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> startPrepared(bool useVpn, int? expectedExternalStopRevision) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.startPrepared$pigeonVar_messageChannelSuffix';
+  Future<void> startPrepared(
+    bool useVpn,
+    int? expectedExternalStopRevision,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.startPrepared$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn, expectedExternalStopRevision]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[useVpn, expectedExternalStopRevision],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> startProbe(String config) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.startProbe$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.startProbe$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[config],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> stopProbe() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.stopProbe$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.stopProbe$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1213,51 +1298,64 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> applyConfig(String config, bool useVpn, bool restartCore, int? expectedExternalStopRevision) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.applyConfig$pigeonVar_messageChannelSuffix';
+  Future<void> applyConfig(
+    String config,
+    bool useVpn,
+    bool restartCore,
+    int? expectedExternalStopRevision,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.applyConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config, useVpn, restartCore, expectedExternalStopRevision]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[config, useVpn, restartCore, expectedExternalStopRevision],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
-  Future<void> applyPreparedConfig(bool useVpn, bool restartCore, int? expectedExternalStopRevision) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.applyPreparedConfig$pigeonVar_messageChannelSuffix';
+  Future<void> applyPreparedConfig(
+    bool useVpn,
+    bool restartCore,
+    int? expectedExternalStopRevision,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.applyPreparedConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[useVpn, restartCore, expectedExternalStopRevision]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[useVpn, restartCore, expectedExternalStopRevision],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<String> getConfigPath() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getConfigPath$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getConfigPath$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1267,16 +1365,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as String;
   }
 
   Future<Map<String?, Object?>> getRuntimeFlags() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeFlags$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeFlags$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1286,52 +1384,57 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<void> setRuntimeFlags(RuntimeFlagsMessage flags) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.setRuntimeFlags$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.setRuntimeFlags$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[flags]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[flags],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> setRuntimeUiForeground(bool foreground) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.setRuntimeUiForeground$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.setRuntimeUiForeground$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[foreground]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[foreground],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<bool> ensureNotificationPermission() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.ensureNotificationPermission$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.ensureNotificationPermission$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1341,34 +1444,38 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
-  Future<void> updateVpnNotificationPresentation(VpnNotificationPresentationMessage presentation) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.updateVpnNotificationPresentation$pigeonVar_messageChannelSuffix';
+  Future<void> updateVpnNotificationPresentation(
+    VpnNotificationPresentationMessage presentation,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.updateVpnNotificationPresentation$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[presentation]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[presentation],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> reload() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.reload$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.reload$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1378,107 +1485,144 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> stop(String reason) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.stop$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.stop$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[reason]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[reason],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> selectOutbound(String groupTag, String outboundTag) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.selectOutbound$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.selectOutbound$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[groupTag, outboundTag]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[groupTag, outboundTag],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> setUrlTestExcludedOutbounds(
+    List<String> tags,
+    int runtimeGeneration,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.setUrlTestExcludedOutbounds$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[tags, runtimeGeneration],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> urlTest(UrlTestRequestMessage request) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.urlTest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.urlTest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   /// Shares the tile's one startup leaf measurement with the client sweep.
-  Future<Map<String?, Object?>> prepareStartupUrlTest(int runtimeGeneration, List<String> coveredTags) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.prepareStartupUrlTest$pigeonVar_messageChannelSuffix';
+  Future<Map<String?, Object?>> prepareStartupUrlTest(
+    int runtimeGeneration,
+    List<String> coveredTags,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.prepareStartupUrlTest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[runtimeGeneration, coveredTags]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[runtimeGeneration, coveredTags],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<void> cancelUrlTest(String groupTag, String targetOutboundTag) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUrlTest$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUrlTest$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[groupTag, targetOutboundTag]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[groupTag, targetOutboundTag],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<Map<String?, Object?>> status() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.status$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.status$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1488,16 +1632,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<Map<String?, Object?>> querySelectedOutbounds() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.querySelectedOutbounds$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.querySelectedOutbounds$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1507,35 +1652,41 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
-  Future<Map<String?, Object?>> lookupOutboundExternalInfo(String outboundTag) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.lookupOutboundExternalInfo$pigeonVar_messageChannelSuffix';
+  Future<Map<String?, Object?>> lookupOutboundExternalInfo(
+    String outboundTag,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.lookupOutboundExternalInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[outboundTag]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[outboundTag],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<NetworkInterfaceStateMessage> getNetworkInterfaceState() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getNetworkInterfaceState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getNetworkInterfaceState$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1545,35 +1696,37 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as NetworkInterfaceStateMessage;
   }
 
   Future<String?> exportLogs(String content, String suggestedName) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.exportLogs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.exportLogs$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[content, suggestedName]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[content, suggestedName],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
     return pigeonVar_replyValue as String?;
   }
 
   Future<bool> canInstallApks() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.canInstallApks$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.canInstallApks$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1583,16 +1736,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<bool> openApkInstallSettings() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.openApkInstallSettings$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.openApkInstallSettings$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1602,16 +1755,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as bool;
   }
 
   Future<void> installDownloadedApk() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.installDownloadedApk$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.installDownloadedApk$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1621,110 +1774,128 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<ApkInspectionMessage> inspectDownloadedApk(String path) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.inspectDownloadedApk$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.inspectDownloadedApk$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[path]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[path],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as ApkInspectionMessage;
   }
 
-  Future<Map<String?, Object?>> fetchUrlViaOutbound(OutboundFetchRequestMessage request) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlViaOutbound$pigeonVar_messageChannelSuffix';
+  Future<Map<String?, Object?>> fetchUrlViaOutbound(
+    OutboundFetchRequestMessage request,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlViaOutbound$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
-  Future<UnderlyingNetworkFetchResponseMessage> fetchUrlOnUnderlyingNetwork(UnderlyingNetworkFetchRequestMessage request) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
+  Future<UnderlyingNetworkFetchResponseMessage> fetchUrlOnUnderlyingNetwork(
+    UnderlyingNetworkFetchRequestMessage request,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.fetchUrlOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as UnderlyingNetworkFetchResponseMessage;
   }
 
-  Future<UnderlyingNetworkDownloadResponseMessage> downloadUrlOnUnderlyingNetwork(UnderlyingNetworkDownloadRequestMessage request) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.downloadUrlOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
+  Future<UnderlyingNetworkDownloadResponseMessage>
+  downloadUrlOnUnderlyingNetwork(
+    UnderlyingNetworkDownloadRequestMessage request,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.downloadUrlOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as UnderlyingNetworkDownloadResponseMessage;
   }
 
   Future<List<String?>> resolveHostOnUnderlyingNetwork(String host) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.resolveHostOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.resolveHostOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[host]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[host],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return (pigeonVar_replyValue! as List<Object?>).cast<String?>();
   }
 
   Future<String> getAndroidId() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getAndroidId$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getAndroidId$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1734,16 +1905,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as String;
   }
 
   Future<Map<String?, Object?>> getSubscriptionRequestDeviceInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getSubscriptionRequestDeviceInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getSubscriptionRequestDeviceInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1753,16 +1924,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<Map<String?, Object?>> getPlatformDeviceInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getPlatformDeviceInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getPlatformDeviceInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1772,16 +1944,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<Map<String?, Object?>> getAppVersionInfo() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getAppVersionInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getAppVersionInfo$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1791,16 +1964,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<String> getCoreVersion() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getCoreVersion$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getCoreVersion$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1810,16 +1984,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as String;
   }
 
   Future<String> getCoreCapabilities() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getCoreCapabilities$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getCoreCapabilities$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1829,34 +2003,36 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as String;
   }
 
   Future<void> checkConfig(String config) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.checkConfig$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.checkConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[config]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[config],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<Map<String?, Object?>> getPerformanceSnapshot() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getPerformanceSnapshot$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getPerformanceSnapshot$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1866,34 +2042,37 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<void> startRuntimeMeasurement(int durationSeconds) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.startRuntimeMeasurement$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.startRuntimeMeasurement$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[durationSeconds]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[durationSeconds],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<void> stopRuntimeMeasurement() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.stopRuntimeMeasurement$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.stopRuntimeMeasurement$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1903,15 +2082,15 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<Map<String?, Object?>> getRuntimeMeasurement() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeMeasurement$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeMeasurement$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1921,16 +2100,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<String> getRuntimeMeasurementReport() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeMeasurementReport$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getRuntimeMeasurementReport$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1940,16 +2120,16 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
     return pigeonVar_replyValue! as String;
   }
 
   Future<Map<String?, Object?>> getHappCrypt5Support() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getHappCrypt5Support$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getHappCrypt5Support$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1959,16 +2139,17 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as Map<Object?, Object?>).cast<String?, Object?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as Map<Object?, Object?>)
+        .cast<String?, Object?>();
   }
 
   Future<List<InstalledAppMessage?>> getInstalledApps() async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getInstalledApps$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getInstalledApps$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -1978,48 +2159,52 @@ class SingboxHostApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: false,
-    )
-    ;
-    return (pigeonVar_replyValue! as List<Object?>).cast<InstalledAppMessage?>();
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>)
+        .cast<InstalledAppMessage?>();
   }
 
   Future<Uint8List?> getInstalledAppIcon(String packageName, int sizePx) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.getInstalledAppIcon$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.getInstalledAppIcon$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[packageName, sizePx]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[packageName, sizePx],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
     return pigeonVar_replyValue as Uint8List?;
   }
 
   Future<void> setQuickSettingsTileLabel(String label) async {
-    final pigeonVar_channelName = 'dev.flutter.pigeon.meow_client.SingboxHostApi.setQuickSettingsTileLabel$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.setQuickSettingsTileLabel$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[label]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[label],
+    );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-        pigeonVar_replyList,
-        pigeonVar_channelName,
-        isNullValid: true,
-    )
-    ;
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 }

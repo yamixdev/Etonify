@@ -263,15 +263,20 @@ class _SnapshotSectionState<T> extends State<_SnapshotSection<T>> {
 }
 
 class _DashboardCard extends StatelessWidget {
-  const _DashboardCard({super.key, required this.children});
+  const _DashboardCard({
+    super.key,
+    required this.children,
+    this.padding = const EdgeInsets.all(16),
+  });
   final List<Widget> children;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
     elevation: 0,
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
@@ -575,43 +580,20 @@ class _PublicIpSection extends StatelessWidget {
     final failed = controller?.failed ?? false;
     return _DashboardCard(
       key: const ValueKey('traffic-dashboard-public-ip'),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionTitle(
-                    icon: Icons.public_rounded,
-                    label: l10n.trafficDashboardPublicIp,
-                  ),
-                  const Gap(12),
-                  Row(
-                    children: [
-                      CountryFlagBadge(
-                        countryCode: info?.countryCode ?? '',
-                        size: 28,
-                      ),
-                      const Gap(10),
-                      Expanded(
-                        child: Text(
-                          _displayIp(info?.ip ?? '', hideIp, l10n),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: _SectionTitle(
+                icon: Icons.public_rounded,
+                label: l10n.trafficDashboardPublicIp,
               ),
             ),
             IconButton(
               key: const ValueKey('public-ip-refresh'),
-              alignment: Alignment.topCenter,
-              padding: EdgeInsets.zero,
+              alignment: Alignment.center,
+              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
               tooltip: controller?.canRefresh == true
                   ? l10n.trafficDashboardPublicIpRefresh
                   : l10n.trafficDashboardPublicIpCooldown,
@@ -627,6 +609,34 @@ class _PublicIpSection extends StatelessWidget {
             ),
           ],
         ),
+        const Gap(4),
+        Row(
+          children: [
+            CountryFlagBadge(
+              countryCode: info?.countryCode ?? '',
+              size: 28,
+              circular: true,
+            ),
+            const Gap(10),
+            Expanded(
+              child: Text(
+                _displayIp(info?.ip ?? '', hideIp, l10n),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (failed && info != null) ...[
+          const Gap(8),
+          Text(
+            l10n.trafficDashboardPublicIpCached,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
         const Gap(8),
         Text(
           failed

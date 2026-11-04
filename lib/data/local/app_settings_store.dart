@@ -1,6 +1,7 @@
 import 'dart:io' show File, InternetAddress, InternetAddressType, Platform;
 import 'dart:math';
 import 'dart:convert';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:meow_client/core/platform/android_files_dir.dart';
@@ -164,6 +165,7 @@ class AppSettingsState {
     required this.selectedProxyTag,
     this.proxySort = 'source',
     this.proxyHideUnavailable = false,
+    this.proxyExclusionsByProfile = const {},
     required this.localeCode,
     required this.themePreference,
     required this.accentColorHex,
@@ -247,6 +249,7 @@ class AppSettingsState {
   final String selectedProxyTag;
   final String proxySort;
   final bool proxyHideUnavailable;
+  final Map<String, ProxyExclusionRules> proxyExclusionsByProfile;
   final String localeCode;
   final AppThemePreference themePreference;
   final String accentColorHex; // e.g. "2D5BFF" or "default"
@@ -330,6 +333,7 @@ class AppSettingsState {
     String? selectedProxyTag,
     String? proxySort,
     bool? proxyHideUnavailable,
+    Map<String, ProxyExclusionRules>? proxyExclusionsByProfile,
     String? localeCode,
     AppThemePreference? themePreference,
     String? accentColorHex,
@@ -417,6 +421,9 @@ class AppSettingsState {
       selectedProxyTag: selectedProxyTag ?? this.selectedProxyTag,
       proxySort: proxySort ?? this.proxySort,
       proxyHideUnavailable: proxyHideUnavailable ?? this.proxyHideUnavailable,
+      proxyExclusionsByProfile: proxyExclusionsByProfile == null
+          ? this.proxyExclusionsByProfile
+          : Map.unmodifiable(proxyExclusionsByProfile),
       localeCode: localeCode ?? this.localeCode,
       themePreference: themePreference ?? this.themePreference,
       accentColorHex: accentColorHex ?? this.accentColorHex,
@@ -565,6 +572,7 @@ abstract class AppSettingsStore {
   static const _selectedProxyTagKey = 'selected_proxy_tag';
   static const _proxySortKey = 'proxy_sort';
   static const _proxyHideUnavailableKey = 'proxy_hide_unavailable';
+  static const _proxyExclusionsByProfileKey = 'proxy_exclusions_by_profile';
   static const _localeCodeKey = 'locale_code';
   static const _themePreferenceKey = 'theme_preference';
   static const _accentColorHexKey = 'accent_color_hex';
@@ -774,6 +782,22 @@ abstract class AppSettingsStore {
   }
 
   AppSettingsState mapState(Map<String, dynamic> map) {
+    final exclusions = <String, ProxyExclusionRules>{};
+    try {
+      final raw = map[_proxyExclusionsByProfileKey];
+      final decoded = raw is String ? jsonDecode(raw) : raw;
+      if (decoded is Map) {
+        for (final entry in decoded.entries) {
+          if (entry.key is String && entry.value is Map) {
+            exclusions[entry.key as String] = ProxyExclusionRules.fromMap(
+              entry.value as Map,
+            );
+          }
+        }
+      }
+    } on FormatException {
+      // Missing/invalid old settings must not prevent startup.
+    }
     Map<String, Object?> stringMap(Object? raw) {
       if (raw is String) {
         try {
@@ -881,6 +905,7 @@ abstract class AppSettingsStore {
         _ => 'source',
       },
       localeCode: map[_localeCodeKey]?.toString() ?? 'system',
+      proxyExclusionsByProfile: Map.unmodifiable(exclusions),
       proxyHideUnavailable: map[_proxyHideUnavailableKey] == null
           ? map[_proxySortKey]?.toString() == 'working'
           : map[_proxyHideUnavailableKey]?.toString() == '1',
@@ -1139,6 +1164,10 @@ abstract class AppSettingsStore {
       _selectedProxyTagKey: state.selectedProxyTag,
       _proxySortKey: state.proxySort,
       _proxyHideUnavailableKey: state.proxyHideUnavailable ? '1' : '0',
+      _proxyExclusionsByProfileKey: jsonEncode({
+        for (final entry in state.proxyExclusionsByProfile.entries)
+          entry.key: entry.value.toMap(),
+      }),
       _localeCodeKey: state.localeCode,
       _themePreferenceKey: state.themePreference.name,
       _accentColorHexKey: state.accentColorHex,

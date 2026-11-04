@@ -17,6 +17,56 @@ const _testPolicy = LatencyUiPolicy(
 
 void main() {
   test(
+    'exclusions filter full checks and prevent excluded targeted checks',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        expectedTags: () => ['proxy-1', 'allowed'],
+        excludedTags: () => ['proxy-1'],
+        runTest: (request) async {
+          requests.add(request);
+          throw PlatformException(code: 'controlled_dispatch_failure');
+        },
+      );
+      addTearDown(coordinator.dispose);
+      expect(
+        await coordinator.runTarget(
+          targetOutboundTag: 'proxy-1',
+          reason: 'test',
+        ),
+        isFalse,
+      );
+      expect(requests, isEmpty);
+      await coordinator.runFull(reason: 'test');
+      expect(requests.single.includeOutboundTags, ['allowed']);
+      expect(requests.single.priorityOutboundTag, isEmpty);
+    },
+  );
+
+  test(
+    'all excluded never falls back to a profile wide native sweep',
+    () async {
+      var dispatches = 0;
+      final coordinator = _coordinator(
+        expectedTags: () => ['proxy-1'],
+        excludedTags: () => ['proxy-1'],
+        runTest: (_) async {
+          dispatches++;
+        },
+      );
+      addTearDown(coordinator.dispose);
+      expect(await coordinator.runFull(reason: 'test'), isFalse);
+      expect(
+        await coordinator.runFull(
+          reason: 'test',
+          includeOutboundTags: ['proxy-1'],
+        ),
+        isFalse,
+      );
+      expect(dispatches, 0);
+    },
+  );
+  test(
     'startup reprepare sees released coordinator and dispatches original coverage',
     () async {
       final requests = <LatencyTestRequest>[];
@@ -2099,6 +2149,7 @@ LatencyCoordinator _coordinator({
   LatencyEventTimesReader? eventBaselineTimes,
   LatencyIntReader? operationGeneration,
   LatencyExpectedTagsReader? expectedTags,
+  LatencyExpectedTagsReader? excludedTags,
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
   LatencyUiPolicy uiPolicy = _testPolicy,
 }) {
@@ -2113,6 +2164,7 @@ LatencyCoordinator _coordinator({
     concurrency: concurrency ?? () => 8,
     eventBaselineTimes: eventBaselineTimes,
     expectedTags: expectedTags,
+    excludedTags: excludedTags,
     operationGeneration: operationGeneration,
     capabilities: capabilities,
     onSessionChanged: (_, _, _) {},

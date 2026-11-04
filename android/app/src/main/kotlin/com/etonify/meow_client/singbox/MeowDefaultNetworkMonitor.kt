@@ -1,6 +1,5 @@
 package com.etonify.meow_client.singbox
 
-import com.etonify.meow_client.root.RootRuntimeService
 
 import android.annotation.TargetApi
 import android.net.ConnectivityManager
@@ -315,7 +314,7 @@ object MeowDefaultNetworkMonitor {
         }
         val key = physicalInterfaceKey(network, interfaceName, index)
         val delivered = synchronized(lock) {
-            RootRuntimeService.hasRunningOwner() || (listener != null && appliedInterfaceKey == key)
+            listener != null && appliedInterfaceKey == key
         }
         return InterfaceState(
             available = interfaceName.isNotEmpty() && index >= 0 && delivered,
@@ -385,7 +384,7 @@ object MeowDefaultNetworkMonitor {
             TAG,
             "reassertDefaultInterface reason=$reason listener=$hasListener current=${describeCurrentState()}",
         )
-        if (!hasListener && !RootRuntimeService.hasRunningOwner()) return
+        if (!hasListener) return
         notifyListener(immediate = true, force = true)
     }
 
@@ -485,7 +484,7 @@ object MeowDefaultNetworkMonitor {
     private fun notifyListener(immediate: Boolean = false, force: Boolean = false) {
         val generation = advanceNotifyGeneration()
         val capturedNetwork = synchronized(lock) {
-            if (listener == null && !RootRuntimeService.hasRunningOwner()) return
+            if (listener == null) return
             currentNetwork
         }
         val runnable = Runnable {
@@ -539,24 +538,6 @@ object MeowDefaultNetworkMonitor {
         force: Boolean,
     ): Boolean {
         if (notifyDebounceGeneration.get() != generation) return false
-        if (RootRuntimeService.hasRunningOwner()) {
-            val network = resolveBestNetwork()
-            val properties = network?.let { MeowApplication.connectivity.getLinkProperties(it) }
-            val name = properties?.interfaceName.orEmpty()
-            val index = if (name.isBlank()) -1 else runCatching { NetworkInterface.getByName(name)?.index ?: -1 }.getOrDefault(-1)
-            val dnsAddresses = properties?.dnsServers?.mapNotNull { it.hostAddress } ?: emptyList()
-            val key = "root:${physicalInterfaceKey(network, name, index, properties)}"
-            val decision = interfaceUpdateGate.evaluate(key, force)
-            if (!decision.shouldDispatch) return true
-            synchronized(lock) { if (started) currentNetwork = network }
-            val next = if (!decision.duplicate) networkInterfaceGeneration.incrementAndGet() else networkInterfaceGeneration.get()
-            SingboxController.noteNetworkGeneration(next)
-            val available = name.isNotBlank() && index >= 0
-            SingboxController.emitNetworkChanged("root_physical_network", describeCurrentState(), name.takeIf { available }, index, next)
-            MeowBoxService.onDefaultNetworkChanged(available)
-            RootRuntimeService.onPhysicalDnsChanged(dnsAddresses)
-            return true
-        }
         val currentListener = synchronized(lock) { listener } ?: return false
         val bestNetwork = resolveBestNetwork()
         val effectiveNetwork = bestNetwork ?: capturedNetwork?.takeIf(::isSelectableNetwork)

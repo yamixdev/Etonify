@@ -451,6 +451,18 @@ class SingboxRuntime {
     return _hostApi.selectOutbound(groupTag, outboundTag);
   }
 
+  Future<void> setUrlTestExcludedOutbounds({
+    required List<String> tags,
+    required int runtimeGeneration,
+  }) {
+    if (!Platform.isAndroid || _isWindows) {
+      return Future.error(
+        UnsupportedError('Live server exclusions require Android'),
+      );
+    }
+    return _hostApi.setUrlTestExcludedOutbounds(tags, runtimeGeneration);
+  }
+
   Future<void> urlTest({
     required String groupTag,
     String targetOutboundTag = '',

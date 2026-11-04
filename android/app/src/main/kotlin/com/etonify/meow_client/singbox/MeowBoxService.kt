@@ -1,7 +1,5 @@
 package com.etonify.meow_client.singbox
 
-import com.etonify.meow_client.root.RootRuntimeService
-
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -60,14 +58,13 @@ class MeowBoxService(
         private val activeServices = CopyOnWriteArraySet<MeowBoxService>()
 
         fun requestStopAll(source: String) {
-            RootRuntimeService.requestStop(source)
             for (boxService in activeServices) {
                 boxService.requestStop(source)
             }
         }
 
         fun requestTerminalForceStopAll(source: String): Boolean {
-            var requested = RootRuntimeService.requestStop(source)
+            var requested = false
             for (boxService in activeServices) {
                 if (boxService.ownsActiveRuntime()) {
                     requested = true
@@ -82,7 +79,6 @@ class MeowBoxService(
         }
 
         fun requestStopForMode(mode: String, source: String): Boolean {
-            if (mode == RootRuntimeService.MODE) return RootRuntimeService.requestStop(source)
             var requested = false
             for (boxService in activeServices) {
                 if (boxService.currentMode() == mode) {
@@ -98,13 +94,12 @@ class MeowBoxService(
         }
 
         fun hasActiveRuntimeOwner(mode: String? = null): Boolean {
-            return ((mode == null || mode == RootRuntimeService.MODE) && RootRuntimeService.hasActiveOwner()) || activeServices.any { service ->
+            return activeServices.any { service ->
                 service.ownsActiveRuntime(mode)
             }
         }
 
         fun onDefaultNetworkChanged(available: Boolean) {
-            RootRuntimeService.notification()?.buildForForeground(if (available) "Connected" else "Waiting for network")
             for (boxService in activeServices) {
                 if (SingboxController.running && boxService.ownsActiveRuntime() && !boxService.runtimeStarting) {
                     boxService.showForeground(if (available) "Connected" else "Waiting for network")
@@ -124,7 +119,7 @@ class MeowBoxService(
          * running. Keep the notification snapshot with the foreground service.
          */
         fun updateNotificationPresentation(arguments: Map<*, *>): Boolean {
-            var updated = RootRuntimeService.notification()?.updatePresentation(arguments) ?: false
+            var updated = false
             for (boxService in activeServices) {
                 updated = boxService.foregroundNotification.updatePresentation(arguments) || updated
             }
@@ -142,7 +137,6 @@ class MeowBoxService(
             downlinkTotal: Long,
             trafficAvailable: Boolean,
         ) {
-            RootRuntimeService.notification()?.updateTraffic(uplink, downlink, uplinkTotal, downlinkTotal, trafficAvailable)
             for (boxService in activeServices) {
                 boxService.foregroundNotification.updateTraffic(
                     uplink = uplink,
@@ -160,7 +154,6 @@ class MeowBoxService(
                 val member = group["selected"] as? String ?: return@mapNotNull null
                 tag to member
             }.toMap()
-            RootRuntimeService.notification()?.updateSelectedOutbounds(selected, runtimeGeneration, networkGeneration, startProbe = false)
             for (boxService in activeServices) {
                 if (boxService.ownsActiveRuntime()) {
                     boxService.foregroundNotification.updateSelectedOutbounds(selected, runtimeGeneration, networkGeneration, startProbe = false)
@@ -182,10 +175,6 @@ class MeowBoxService(
             selectionEpoch: Long? = null,
             logicalSessionId: String = "",
         ) {
-            if (RootRuntimeService.runtimeGeneration() == runtimeGeneration) RootRuntimeService.notification()?.onUrlTestResult(
-                tag, delayMillis, timeSeconds, status, runtimeGeneration, networkGeneration, measuredAtMillis,
-                revision, sessionId, error, selectionEpoch, logicalSessionId,
-            )
             for (boxService in activeServices) {
                 if (!boxService.ownsActiveRuntime() || boxService.serviceGeneration != runtimeGeneration) continue
                 boxService.foregroundNotification.onUrlTestResult(
@@ -206,15 +195,13 @@ class MeowBoxService(
         }
 
         internal fun finishNotificationGroupsSnapshot(runtimeGeneration: Long, networkGeneration: Long) {
-            if (RootRuntimeService.runtimeGeneration() == runtimeGeneration && SingboxController.currentNetworkGeneration == networkGeneration)
-                RootRuntimeService.notification()?.onGroupsSnapshotReady()
             for (owner in activeServices) if (owner.ownsActiveRuntime() && owner.serviceGeneration == runtimeGeneration &&
                 SingboxController.currentNetworkGeneration == networkGeneration
             ) owner.foregroundNotification.onGroupsSnapshotReady()
         }
 
         fun requestNotificationLatencyRefresh(): Boolean {
-            var accepted = RootRuntimeService.notification()?.requestLatencyRefresh() ?: false
+            var accepted = false
             for (boxService in activeServices) {
                 accepted = boxService.foregroundNotification.requestLatencyRefresh() || accepted
             }
@@ -222,28 +209,25 @@ class MeowBoxService(
         }
 
         fun prepareStartupUrlTest(runtimeGeneration: Long, tags: Set<String>, callback: (Map<String?, Any?>) -> Unit) {
-            RootRuntimeService.notification()?.let { it.prepareStartupUrlTest(runtimeGeneration, tags, callback); return }
             val owner = activeServices.firstOrNull { it.ownsActiveRuntime() }
             if (owner == null) callback(emptyMap()) else
                 owner.foregroundNotification.prepareStartupUrlTest(runtimeGeneration, tags, callback)
         }
 
         internal fun noteNetworkGeneration(networkGeneration: Long) {
-            RootRuntimeService.notification()?.onNetworkGenerationChanged(networkGeneration)
             for (boxService in activeServices) if (boxService.ownsActiveRuntime()) {
                 boxService.foregroundNotification.onNetworkGenerationChanged(networkGeneration)
             }
         }
 
         internal fun onClientUrlTestRequested(group: String, target: String, included: List<String>, excluded: String, deadlineMillis: Int, requestId: String): List<Pair<MeowForegroundNotification, Long>> =
-            (activeServices.filter { it.ownsActiveRuntime() }.map { it.foregroundNotification } + listOfNotNull(RootRuntimeService.notification())).mapNotNull { notification ->
+            activeServices.filter { it.ownsActiveRuntime() }.map { it.foregroundNotification }.mapNotNull { notification ->
                 val token = notification.onClientUrlTestRequested(group, target, included, excluded, deadlineMillis, requestId)
                 token?.let { token -> notification to token }
             }
 
         private fun notificationForGeneration(runtime: Long): MeowForegroundNotification? =
             activeServices.firstOrNull { it.ownsActiveRuntime() && it.serviceGeneration == runtime }?.foregroundNotification
-                ?: if (runtime > 0 && RootRuntimeService.runtimeGeneration() == runtime) RootRuntimeService.notification() else null
 
         internal fun dispatchStartupUrlTest(token: Long, runtime: Long, network: Long, group: String, target: String,
             included: List<String>, excluded: String, deadlineMillis: Int, requestId: String,
@@ -260,7 +244,6 @@ class MeowBoxService(
             notificationForGeneration(runtime)?.validateNativeStartup(token, runtime, network, selection) == true
 
         internal fun onClientStartupSessionTerminal(requestId: String, runtime: Long, network: Long) {
-            if (RootRuntimeService.runtimeGeneration() == runtime) RootRuntimeService.notification()?.onClientStartupSessionTerminal(requestId, runtime, network)
             for (owner in activeServices) if (owner.ownsActiveRuntime() && owner.serviceGeneration == runtime)
                 owner.foregroundNotification.onClientStartupSessionTerminal(requestId, runtime, network)
         }

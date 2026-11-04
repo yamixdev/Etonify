@@ -100,6 +100,7 @@ class LatencyCoordinator {
     LatencyIntReader? operationGeneration,
     LatencyEventTimesReader? eventBaselineTimes,
     LatencyExpectedTagsReader? expectedTags,
+    LatencyExpectedTagsReader? excludedTags,
     LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
     this.uiPolicy = const LatencyUiPolicy(),
   }) : _runTest = runTest,
@@ -117,6 +118,7 @@ class LatencyCoordinator {
        _operationGeneration = operationGeneration ?? _zeroGeneration,
        _eventBaselineTimes = eventBaselineTimes ?? _emptyEventTimes,
        _expectedTags = expectedTags ?? _emptyExpectedTags,
+       _excludedTags = excludedTags ?? _emptyExpectedTags,
        _capabilities = capabilities;
 
   static const _defaultTimeoutMillis = 5000;
@@ -141,6 +143,7 @@ class LatencyCoordinator {
   final LatencyIntReader _operationGeneration;
   final LatencyEventTimesReader _eventBaselineTimes;
   final LatencyExpectedTagsReader _expectedTags;
+  final LatencyExpectedTagsReader _excludedTags;
   LibboxCapabilities _capabilities;
   final LatencyUiPolicy uiPolicy;
 
@@ -305,6 +308,7 @@ class LatencyCoordinator {
     final requested = tags
         .map((tag) => tag.trim())
         .where((tag) => tag.isNotEmpty)
+        .where((tag) => !_excludedTags().contains(tag))
         .toSet();
     if (requested.isEmpty) return false;
     final cancellation = _cancellationGeneration;
@@ -377,6 +381,7 @@ class LatencyCoordinator {
     int startupLeaseToken = 0,
   }) {
     final targetTag = targetOutboundTag.trim();
+    if (_excludedTags().contains(targetTag)) return Future.value(false);
     if (targetTag.isEmpty || !_capabilities.supportsTargetedUrlTest) {
       AppLogStore.warning(
         'latency',
@@ -827,9 +832,18 @@ class LatencyCoordinator {
   }) {
     final manual = mode == 'manual' && _capabilities.supportsUrlTestExhaustive;
     final effectiveConcurrency = _configuredConcurrency;
+    final excluded = _excludedTags().toSet();
+    final allowed = excluded.isEmpty
+        ? includeOutboundTags
+        : (includeOutboundTags.isEmpty ? _expectedTags() : includeOutboundTags)
+              .where((tag) => !excluded.contains(tag))
+              .toSet()
+              .toList();
     return LatencyTestRequest(
       groupTag: 'select',
-      priorityOutboundTag: _activeOutboundTag().trim(),
+      priorityOutboundTag: excluded.contains(_activeOutboundTag().trim())
+          ? ''
+          : _activeOutboundTag().trim(),
       url: _testUrl(),
       timeoutMillis: _configuredTimeoutMillis,
       concurrency: effectiveConcurrency,
@@ -837,7 +851,7 @@ class LatencyCoordinator {
           ? 0
           : _fullDeadlineMillisForConcurrency(effectiveConcurrency),
       mode: manual ? 'manual' : 'background',
-      includeOutboundTags: includeOutboundTags,
+      includeOutboundTags: allowed,
       logicalSessionId: logicalSessionId,
       physicalNetworkEpoch: physicalNetworkEpoch,
       startupLeaseToken: startupLeaseToken,
@@ -852,18 +866,23 @@ class LatencyCoordinator {
     String logicalSessionId = '',
     int physicalNetworkEpoch = 0,
     int startupLeaseToken = 0,
-  }) => _runSession(
-    kind: kind,
-    reason: reason,
-    targetTag: '',
-    request: _groupRequest(
-      mode,
-      includeOutboundTags: includeOutboundTags,
-      logicalSessionId: logicalSessionId,
-      physicalNetworkEpoch: physicalNetworkEpoch,
-      startupLeaseToken: startupLeaseToken,
-    ),
-  );
+  }) =>
+      _excludedTags().isNotEmpty &&
+          (includeOutboundTags.isEmpty ? _expectedTags() : includeOutboundTags)
+              .every((tag) => _excludedTags().contains(tag))
+      ? Future.value(false)
+      : _runSession(
+          kind: kind,
+          reason: reason,
+          targetTag: '',
+          request: _groupRequest(
+            mode,
+            includeOutboundTags: includeOutboundTags,
+            logicalSessionId: logicalSessionId,
+            physicalNetworkEpoch: physicalNetworkEpoch,
+            startupLeaseToken: startupLeaseToken,
+          ),
+        );
 
   Future<bool> _runSession({
     required LatencySessionKind kind,

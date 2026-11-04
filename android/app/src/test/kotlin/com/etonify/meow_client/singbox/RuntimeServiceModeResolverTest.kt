@@ -5,14 +5,16 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RuntimeServiceModeResolverTest {
-    @Test fun explicitRootRequiresTunAndIsNotInferredFromTunAlone() {
-        assertEquals("root", RuntimeServiceModeResolver.requestedMode("root", listOf("tun")))
+    @Test fun legacyRootPreferenceUsesSupportedInboundWithoutRootRuntime() {
+        assertEquals("vpn", RuntimeServiceModeResolver.requestedMode("root", listOf("tun")))
         assertEquals("vpn", RuntimeServiceModeResolver.requestedMode(null, listOf("tun")))
-        assertNull(RuntimeServiceModeResolver.requestedMode("root", listOf("mixed")))
+        assertEquals("proxy", RuntimeServiceModeResolver.requestedMode("root", listOf("mixed")))
+        assertNull(RuntimeServiceModeResolver.requestedMode("root", emptyList()))
     }
 
-    @Test fun runningRootWinsOverOldVpnRecord() {
-        assertEquals("root", RuntimeServiceModeResolver.activeMode("root", true, false))
+    @Test fun removedRootRuntimeIsNotReportedAsAnActiveService() {
+        assertNull(RuntimeServiceModeResolver.activeMode("root", false, false))
+        assertEquals("vpn", RuntimeServiceModeResolver.activeMode("root", true, false))
     }
 
     @Test

@@ -3719,14 +3719,63 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось открыть настройки батареи. Откройте их в настройках Android.';
 
   @override
-  String get rootModeTitle => 'Root Mode';
+  String get proxyExclusionsTitle => 'Исключения серверов';
+
+  @override
+  String get proxyExclusionsApplyFailed =>
+      'Не удалось применить исключения. Настройки не сохранены.';
+
+  @override
+  String get proxyExclusionsHint =>
+      'Исключённые серверы скрываются из списка и не участвуют в проверках и автовыборе. Текущее подключение сохраняется.';
+
+  @override
+  String get proxyExclusionsSearch => 'Поиск серверов';
+
+  @override
+  String get proxyExclusionsConditions => 'Условия исключения';
+
+  @override
+  String get proxyExclusionsAddCondition => 'Добавить условие';
+
+  @override
+  String get proxyExclusionsConditionHint =>
+      'Все выбранные параметры должны совпасть.';
+
+  @override
+  String get proxyExclusionsProtocol => 'Протокол';
+
+  @override
+  String get proxyExclusionsSecurity => 'Защита';
+
+  @override
+  String get proxyExclusionsTransport => 'Транспорт';
+
+  @override
+  String get proxyExclusionsCountry => 'Страна';
+
+  @override
+  String get proxyExclusionsAny => 'Любой';
+
+  @override
+  String get proxyExclusionsEmpty => 'Серверы не найдены';
+
+  @override
+  String get proxyExclusionsManual => 'Отдельные серверы';
+
+  @override
+  String get trafficDashboardPublicIpCached =>
+      'Последний известный IP · не удалось обновить';
+
+  @override
+  String get rootModeTitle => 'Удаление старого модуля';
 
   @override
   String get rootModeExperimental => 'Экспериментально';
 
   @override
   String get rootModeDescription =>
-      'Подключение без Android VPN. Нужны root-доступ и модуль Etonify.';
+      'Root Mode удалён. Здесь можно удалить ранее установленный модуль и его копии. Разрешение root запрашивается только после подтверждения удаления.';
 
   @override
   String get rootModeRootStatus => 'Доступ суперпользователя';
@@ -3750,7 +3799,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get rootModeRootDenied => 'В доступе суперпользователя отказано';
 
   @override
-  String get rootModeNotInstalled => 'Не установлен';
+  String get rootModeNotInstalled => 'Нет проверенных данных о старом модуле';
 
   @override
   String get rootModeDownloading => 'Загрузка модуля…';
@@ -3806,7 +3855,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get rootModeRemoveMessage =>
-      'Root Mode будет выключен, а скачанный модуль удалён. Профили и настройки VPN сохранятся.';
+      'Будет запрошено разрешение root. Проверенный старый модуль сначала уберёт свои сетевые правила, затем будут удалены его файлы и копии. При ошибке файлы сохранятся. Профили и настройки VPN не изменятся.';
+
+  @override
+  String get rootModeMetadataMissing =>
+      'Нет сохранённых данных подписи модуля. Без них нельзя безопасно запустить очистку сетевых правил и удалить root-файлы. Автоматическое удаление остановлено.';
 
   @override
   String get rootModeSafety =>

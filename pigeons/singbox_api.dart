@@ -330,6 +330,9 @@ abstract class SingboxHostApi {
   void selectOutbound(String groupTag, String outboundTag);
 
   @asyncCallback
+  void setUrlTestExcludedOutbounds(List<String> tags, int runtimeGeneration);
+
+  @asyncCallback
   void urlTest(UrlTestRequestMessage request);
 
   /// Shares the tile's one startup leaf measurement with the client sweep.

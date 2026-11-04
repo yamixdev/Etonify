@@ -18,8 +18,6 @@ import com.etonify.meow_client.singbox.MeowProbeService
 import com.etonify.meow_client.singbox.MeowVpnService
 import com.etonify.meow_client.singbox.RuntimeServiceModeResolver
 import com.etonify.meow_client.singbox.SingboxController
-import com.etonify.meow_client.root.RootModuleManager
-import com.etonify.meow_client.root.RootRuntimeService
 import org.json.JSONObject
 
 class MeowQuickSettingsTileService : TileService() {
@@ -86,7 +84,7 @@ class MeowQuickSettingsTileService : TileService() {
         scheduleRefreshes()
     }
 
-    private fun activeRuntimeMode(): String? = if (RootRuntimeService.hasActiveOwner()) RuntimeServiceModeResolver.ROOT else RuntimeServiceModeResolver.activeMode(
+    private fun activeRuntimeMode(): String? = RuntimeServiceModeResolver.activeMode(
         runningMode = SingboxController.serviceMode.takeIf { SingboxController.running },
         vpnRecorded = MeowApplication.isRecordedServiceAlive(RuntimeServiceModeResolver.VPN),
         proxyRecorded = MeowApplication.isRecordedServiceAlive(RuntimeServiceModeResolver.PROXY),
@@ -107,7 +105,6 @@ class MeowQuickSettingsTileService : TileService() {
                 stopService(Intent(this, MeowVpnService::class.java))
                 stopService(Intent(this, MeowProxyService::class.java))
                 stopService(Intent(this, MeowProbeService::class.java))
-                stopService(Intent(this, RootRuntimeService::class.java))
                 MeowApplication.clearServiceState()
                 MeowApplication.clearRuntimeIntent()
                 requestRefresh(this)
@@ -146,7 +143,6 @@ class MeowQuickSettingsTileService : TileService() {
 
     private fun serviceClass(mode: String): Class<out android.app.Service> =
         when (mode) {
-            RuntimeServiceModeResolver.ROOT -> RootRuntimeService::class.java
             RuntimeServiceModeResolver.PROXY -> MeowProxyService::class.java
             RuntimeServiceModeResolver.PROBE -> MeowProbeService::class.java
             else -> MeowVpnService::class.java
@@ -164,7 +160,7 @@ class MeowQuickSettingsTileService : TileService() {
                 }
             }
             RuntimeServiceModeResolver.requestedMode(
-                if (RootModuleManager.enabled(this) && types.any { it == "tun" }) RuntimeServiceModeResolver.ROOT else null,
+                null,
                 types,
             )
         }.getOrNull()

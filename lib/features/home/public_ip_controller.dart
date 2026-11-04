@@ -164,6 +164,19 @@ class PublicIpController extends ChangeNotifier {
     }
   }
 
+  /// A different network/route makes a retained address no longer current.
+  void invalidate() {
+    if (_disposed) return;
+    _generation++;
+    _cancel();
+    _cooldown?.cancel();
+    _cooldown = null;
+    _info = null;
+    _loading = false;
+    _failed = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     cancel();

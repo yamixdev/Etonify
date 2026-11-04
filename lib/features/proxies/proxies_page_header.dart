@@ -125,12 +125,14 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.onSortSelected,
     required this.onUrlTest,
     this.onAddProxy,
+    this.onEditExclusions,
     required this.onRefreshIp,
     required this.onTap,
   });
 
   final double height;
   final VoidCallback? onAddProxy;
+  final VoidCallback? onEditExclusions;
   final double progress;
   final double scrollCollapse;
   final bool canFillScreen;
@@ -385,6 +387,12 @@ class _ProxySheetHeader extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (onEditExclusions != null)
+                          IconButton(
+                            tooltip: l10n.proxyExclusionsTitle,
+                            onPressed: onEditExclusions,
+                            icon: const Icon(Icons.filter_alt_off_outlined),
+                          ),
                         if (onAddProxy != null)
                           IconButton(
                             key: const ValueKey('proxy-add-source'),

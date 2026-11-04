@@ -8,10 +8,12 @@ class CountryFlagBadge extends StatelessWidget {
     super.key,
     required this.countryCode,
     this.size = 40,
+    this.circular = false,
   });
 
   final String countryCode;
   final double size;
+  final bool circular;
 
   static String? circleFlagCodeFor(String countryCode) {
     final normalizedCode = countryCode.trim().toUpperCase();
@@ -50,12 +52,12 @@ class CountryFlagBadge extends StatelessWidget {
         child: Center(
           child: circleFlagCode != null
               ? ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(circular ? size : 8),
                   clipBehavior: Clip.hardEdge,
                   child: CircleFlag(
                     circleFlagCode,
                     size: size - 8,
-                    shape: null,
+                    shape: circular ? const CircleBorder() : null,
                   ),
                 )
               : Container(
@@ -63,7 +65,8 @@ class CountryFlagBadge extends StatelessWidget {
                   height: size - 8,
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    shape: circular ? BoxShape.circle : BoxShape.rectangle,
+                    borderRadius: circular ? null : BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.public_rounded,

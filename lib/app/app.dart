@@ -23,6 +23,9 @@ import 'package:meow_client/app/coordinators/app_traffic_monitor.dart';
 import 'package:meow_client/app/coordinators/deep_link_import_coordinator.dart';
 import 'package:meow_client/app/group_url_test_scheduler.dart';
 import 'package:meow_client/app/latency_coordinator.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
+import 'package:meow_client/app/proxy_exclusion_sync.dart';
+import 'package:meow_client/features/proxies/proxy_exclusions_page.dart';
 import 'package:meow_client/app/latency_dependencies.dart';
 import 'package:meow_client/app/network_recovery_controller.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
@@ -337,6 +340,138 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Set<String> get _excludedRuntimeOutboundTags =>
       _runtimeRecovery.excludedOutboundTags;
 
+  static final _noProxyExclusions = ProxyExclusionRules();
+  Subscription? _exclusionCacheSource;
+  ProxyExclusionRules? _exclusionCacheRules;
+  Set<String> _excludedTagsCache = const {};
+  Subscription? _eligibleSubscriptionCache;
+  Subscription? _runtimeSubscriptionCache;
+  late final _liveExclusionSync = ProxyExclusionSync(
+    apply: (tags, generation) => _singboxRuntime.setUrlTestExcludedOutbounds(
+      tags: tags,
+      runtimeGeneration: generation,
+    ),
+  );
+
+  ProxyExclusionRules _exclusionsFor(Subscription? subscription) =>
+      _settings.proxyExclusionsByProfile[subscription?.id] ??
+      _noProxyExclusions;
+
+  void _ensureExclusionCache(Subscription? subscription) {
+    final rules = _exclusionsFor(subscription);
+    if (identical(subscription, _exclusionCacheSource) &&
+        identical(rules, _exclusionCacheRules)) {
+      return;
+    }
+    _exclusionCacheSource = subscription;
+    _exclusionCacheRules = rules;
+    _excludedTagsCache = subscription == null || rules.isEmpty
+        ? const {}
+        : rules.excludedTagsFor(subscription);
+    _eligibleSubscriptionCache = subscription == null
+        ? null
+        : rules.eligibleSubscription(subscription);
+    _runtimeSubscriptionCache = subscription == null
+        ? null
+        : rules.runtimeSubscription(subscription);
+  }
+
+  Set<String> get _userExcludedTags {
+    _ensureExclusionCache(_activeSubscription);
+    return _excludedTagsCache;
+  }
+
+  Subscription? _eligibleSubscription(Subscription? subscription) {
+    _ensureExclusionCache(subscription);
+    return _eligibleSubscriptionCache;
+  }
+
+  Subscription? _runtimeSubscription() {
+    _ensureExclusionCache(_activeSubscription);
+    return _runtimeSubscriptionCache;
+  }
+
+  void _syncLiveExclusionPolicy() {
+    if (!Platform.isAndroid ||
+        !_connected ||
+        !_runtimeOperations.diagnosticsReady) {
+      return;
+    }
+    final generation = _runtimeOperations.nativeRuntimeGeneration;
+    if (generation <= 0) return;
+    final tags = _userExcludedTags.toList()..sort();
+    if (tags.isEmpty && !_liveExclusionSync.hasPolicy) return;
+    unawaited(
+      _liveExclusionSync
+          .synchronize(tags: tags, runtimeGeneration: generation)
+          .catchError((Object error) {
+            // Retry only on a later real policy/runtime event, never a polling loop.
+            AppLogStore.warning(
+              'proxy exclusions',
+              'Policy sync rejected: $error',
+            );
+          }),
+    );
+  }
+
+  Future<void> _showProxyExclusions() async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null ||
+        !await _ensureActiveSubscriptionHydratedForRuntime() ||
+        !mounted) {
+      return;
+    }
+    final subscription = _activeSubscription;
+    if (subscription == null) return;
+    final rules = await navigator.push<ProxyExclusionRules>(
+      MaterialPageRoute(
+        builder: (_) => ProxyExclusionsPage(
+          subscription: subscription,
+          rules: _exclusionsFor(subscription),
+        ),
+      ),
+    );
+    if (rules == null || !mounted) return;
+    if (_activeSubscription?.id != subscription.id ||
+        _activeSubscription?.payloadRevision != subscription.payloadRevision) {
+      return;
+    }
+    final runtimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
+    if (_connected) {
+      try {
+        await _liveExclusionSync.synchronize(
+          tags: rules.excludedTagsFor(subscription).toList(growable: false),
+          runtimeGeneration: runtimeGeneration,
+        );
+      } catch (error) {
+        AppLogStore.warning('proxy exclusions', 'Live policy rejected: $error');
+        final context = _navigatorKey.currentContext;
+        if (mounted && context != null && context.mounted) {
+          _showAppSnackBar(
+            AppLocalizations.of(context).proxyExclusionsApplyFailed,
+          );
+        }
+        return;
+      }
+      if (!mounted ||
+          _activeSubscription?.id != subscription.id ||
+          _activeSubscription?.payloadRevision !=
+              subscription.payloadRevision ||
+          _runtimeOperations.nativeRuntimeGeneration != runtimeGeneration) {
+        return;
+      }
+    }
+    setState(() {
+      _settings.proxyExclusionsByProfile = Map.unmodifiable({
+        ..._settings.proxyExclusionsByProfile,
+        subscription.id: rules,
+      });
+      _rebuildDerivedCaches();
+    });
+    _lastAppliedSettingsState = _currentSettingsState();
+    await _persistState();
+  }
+
   bool get _legalAccepted => _acceptedLegalVersion == _requiredLegalVersion;
 
   AppSettingsController get _settings =>
@@ -544,6 +679,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _rebuildDerivedCaches() {
+    _syncLiveExclusionPolicy();
     ++_derivedCacheBuildGeneration;
     final subscription = _activeSubscription;
     if (subscription == null) {
@@ -784,7 +920,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<ProxyCacheBuildInput> _currentProxyCacheBuildInput(
     Subscription? subscription,
   ) async {
-    final snapshot = await _proxyPresentationSnapshots.get(subscription);
+    final snapshot = await _proxyPresentationSnapshots.get(
+      _eligibleSubscription(subscription),
+    );
     return ProxyCacheBuildInput(
       subscription: snapshot,
       selectedProxyTag: _selectedProxyTag,
@@ -803,7 +941,29 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   AppProxySummary? get _displayProxy {
-    final proxy = _displayProxyCache;
+    var proxy = _displayProxyCache;
+    if (_connected && _userExcludedTags.isNotEmpty) {
+      final actual = _currentResolvedActiveOutbound();
+      if (actual != null && _userExcludedTags.contains(actual.tag)) {
+        final group = _subscriptionGroupForTag(_selectedProxyTag);
+        if (group != null) {
+          proxy = _displaySummaryForGroup(group);
+        } else if (isLowestProxyTag(_selectedProxyTag)) {
+          final leaf = _displaySummaryForOutbound(actual);
+          proxy = leaf.copyWith(
+            tag: _selectedProxyTag,
+            displayName: lowestProxyDisplayName(
+              _selectedProxyTag,
+              leaf.displayName,
+            ),
+            selectedChildTag: actual.tag,
+            selectedChildName: leaf.displayName,
+          );
+        } else {
+          proxy = _displaySummaryForOutbound(actual);
+        }
+      }
+    }
     if (!Platform.isAndroid ||
         proxy == null ||
         !_connected ||
@@ -2269,6 +2429,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       operationGeneration: () => _runtimeOperations.urlTestGeneration,
       eventBaselineTimes: () => _proxyRuntime.runtimeLatencyTimes,
       expectedTags: () => _expectedLatencyTagsForSession(''),
+      excludedTags: () => _userExcludedTags,
       onTargetCheckChanged: (tag) {
         if (!mounted) return;
         _publishProxyRuntimeVisualStatesForUrlTestTags([tag]);
@@ -3716,9 +3877,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
           .transitionTo(phase, retryScheduled: retryScheduled);
     }
     if (transition.becameConnected) {
+      _publicIpController.invalidate();
       _connectedSince = DateTime.now();
     }
     if (transition.becameDisconnected) {
+      _publicIpController.invalidate();
       _startupLatencyDeadline.resetForNextService();
       _startupGroupUrlTestNativeGeneration = 0;
       _urlTestInFlightNotifier.value = false;
@@ -4504,7 +4667,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
       setState(() {
         _setConnectionPhase(AppConnectionPhase.starting);
       });
-      final selectedTagForStart = _selectedProxyTag.trim();
+      var selectedTagForStart = _selectedProxyTag.trim();
+      if (_userExcludedTags.contains(selectedTagForStart)) {
+        // The builder has selected an eligible default. Do not immediately
+        // reassert the previous, now-excluded manual choice over that default.
+        final rootSelector = (build.plan.config['outbounds'] as List)
+            .whereType<Map<String, dynamic>>()
+            .firstWhere((outbound) => outbound['tag'] == 'select');
+        selectedTagForStart = rootSelector['default'] as String;
+        setState(() => _selectedProxyTag = selectedTagForStart);
+        _saveStateSoon();
+      }
       if (selectedTagForStart.isNotEmpty) {
         _proxySelection.guardCurrentSelectionForRuntime(
           tag: selectedTagForStart,
@@ -4613,6 +4786,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _selectProxy(String tag) {
+    if (_userExcludedTags.contains(tag)) return;
     final activeSubscription = _activeSubscription;
     if (activeSubscription == null ||
         _proxySelection.pendingRuntimeSelectTag == tag ||
@@ -4852,7 +5026,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Set<String> _userVisibleServerTags() {
-    return _proxyServerCatalog.tagsFor(_activeSubscription);
+    return _proxyServerCatalog
+        .tagsFor(_activeSubscription)
+        .difference(_userExcludedTags);
   }
 
   void _synchronizeUrlTestProgressCatalog() {
@@ -7376,7 +7552,20 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runActiveProxyUrlTest({bool haptic = true}) async {
+    final members = _concreteTagsForProxyGroup(_selectedProxyTag);
+    if (members.isNotEmpty) {
+      if (!await _prepareManualUrlTest('manual_active_group')) return;
+      if (haptic) _haptic();
+      _groupUrlTestScheduler.cancel();
+      await _checkProxyGroup(
+        _selectedProxyTag,
+        force: true,
+        reason: 'manual_active_group',
+      );
+      return;
+    }
     final pendingTarget = _currentResolvedActiveOutboundTag()?.trim() ?? '';
+    if (_userExcludedTags.contains(pendingTarget)) return;
     if (pendingTarget.isNotEmpty &&
         (_latencyCoordinator.hasActiveTargetCheck(pendingTarget) ||
             (_latencyCoordinator.kind == LatencySessionKind.targeted &&
@@ -7412,6 +7601,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   Future<void> _runProxyUrlTest(String tag) async {
+    if (_userExcludedTags.contains(tag)) return;
     if (!_connected) {
       if (!_foregroundLifecycleActive || _automaticSubscriptionApplyInFlight) {
         return;
@@ -7484,9 +7674,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await test;
   }
 
-  List<String> _concreteTagsForProxyGroup(String tag) {
+  List<String> _concreteTagsForProxyGroup(
+    String tag, {
+    bool includeExcluded = false,
+  }) {
     _ensureActiveLookupCaches();
-    final visible = _activeSubscription?.concreteServerTags ?? const <String>{};
+    final visible =
+        (_activeSubscription?.concreteServerTags ?? const <String>{})
+            .difference(includeExcluded ? const {} : _userExcludedTags);
     if (isLowestProxyTag(tag)) return visible.toList(growable: false);
     if (!_activeGroupByTagLookup.containsKey(tag)) return const [];
     return latencyConcreteGroupTags(tag, {
@@ -7516,7 +7711,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         revision == _activeSubscription?.payloadRevision &&
         epoch == _physicalNetworkEpoch &&
         _proxySelection.isCurrentGeneration(selection);
-    final members = _concreteTagsForProxyGroup(tag);
+    final members = <String>{
+      ..._concreteTagsForProxyGroup(tag),
+      if (reason == 'manual_active_group')
+        ...[
+          ?_currentResolvedActiveOutboundTag(),
+        ].where((active) => !_userExcludedTags.contains(active)),
+    }.toList(growable: false);
     final success = await _latencyCoordinator.runMembers(
       tags: members,
       reason: reason,
@@ -7909,7 +8110,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       connected: _connected,
       runtimeTransitionInProgress: _runtimeTransitionInProgress,
       externalStopRevision: _runtimeIntent.externalStopRevision,
-      activeSubscription: _activeSubscription,
+      activeSubscription: _runtimeSubscription(),
       selectedProxyTag: _selectedProxyTag,
       excludedOutboundTags: _excludedRuntimeOutboundTags,
       vpnInboundEnabled: _vpnInboundEnabled,
@@ -8176,6 +8377,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (physicalChanged) {
       ++_physicalNetworkEpoch;
+      _publicIpController.invalidate();
       final logicalSession = _offlineUrlTestSession;
       if (logicalSession != null && !logicalSession.isTerminal) {
         logicalSession.reconcile(
@@ -9337,6 +9539,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _onRuntimeDiagnosticsReady() {
+    _syncLiveExclusionPolicy();
     AppLogStore.info(
       'runtime',
       'runtime diagnostics ready nativeGeneration='
@@ -9465,7 +9668,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _runtimeGroupSelections,
     );
     if (runtimeSelectedTag != null &&
-        _concreteTagsForProxyGroup(group.tag).contains(runtimeSelectedTag)) {
+        _concreteTagsForProxyGroup(
+          group.tag,
+          includeExcluded: true,
+        ).contains(runtimeSelectedTag)) {
       final outbound = _activeOutboundByTagLookup[runtimeSelectedTag];
       if (outbound != null) {
         return outbound;
@@ -9693,12 +9899,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     final updatedSubscription = replacement.subscription;
     final changedTags = updates.keys.toSet();
+    final previousExclusions = _userExcludedTags;
     // Composition did not change. Swap the worker-built metadata indexes and
     // notify only affected rows instead of rebuilding the full proxy catalog.
     _subscriptions = _replaceSubscription(updatedSubscription);
+    _syncLiveExclusionPolicy();
     _activeLookupSubscription = updatedSubscription;
     _activeOutboundByTagLookup = replacement.outboundByTag;
     _activeVisibleOutboundsLookup = replacement.visibleOutbounds;
+    if (!setEquals(previousExclusions, _userExcludedTags)) {
+      _rebuildDerivedCaches();
+    }
     _publishProxyRuntimeVisualStatesForUrlTestTags(changedTags);
     _applyRuntimeStateToDerivedCaches();
     final sourceCountriesByTag = <String, String?>{
@@ -9974,6 +10185,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
             _fullProxyListCacheReady,
       ),
       callbacks: ProxiesPresentationCallbacks(
+        editExclusions: _activeSubscription == null
+            ? null
+            : () => unawaited(_showProxyExclusions()),
         addProxy: _activeProfileId.isEmpty
             ? null
             : () => _showSubscriptionsPage(

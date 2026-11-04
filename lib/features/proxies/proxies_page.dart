@@ -458,6 +458,7 @@ class ProxiesPage extends StatefulWidget {
     required this.onUrlTest,
     this.onProxyUrlTest,
     this.onAddProxy,
+    this.onEditExclusions,
     this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
     this.loadProxyChainTargetSources,
@@ -490,6 +491,7 @@ class ProxiesPage extends StatefulWidget {
   });
 
   final VoidCallback? onAddProxy;
+  final VoidCallback? onEditExclusions;
   final String profileId;
   final List<AppProxySummary> proxies;
   final String selectedTag;
@@ -1280,6 +1282,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
         surfaceTintColor: Colors.transparent,
         shadowColor: Colors.transparent,
         actions: [
+          if (widget.onEditExclusions != null)
+            IconButton(
+              key: const ValueKey('proxy-exclusions-open'),
+              tooltip: l10n.proxyExclusionsTitle,
+              onPressed: widget.onEditExclusions,
+              icon: const Icon(Icons.filter_alt_off_outlined),
+            ),
           if (widget.onAddProxy != null)
             IconButton(
               key: const ValueKey('proxy-add-source'),
@@ -1427,6 +1436,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     onSortSelected: _setSort,
                     onUrlTest: widget.onUrlTest,
                     onAddProxy: widget.onAddProxy,
+                    onEditExclusions: widget.onEditExclusions,
                     onRefreshIp: widget.onActiveProxyIpRefresh,
                     onTap: widget.onHeaderTap,
                   ),

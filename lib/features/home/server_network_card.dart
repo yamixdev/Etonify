@@ -76,7 +76,7 @@ class _ServerNetworkCardState extends State<ServerNetworkCard> {
       key: const ValueKey('server-network-card'),
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -93,6 +93,11 @@ class _ServerNetworkCardState extends State<ServerNetworkCard> {
                   ),
                 ),
                 IconButton(
+                  constraints: const BoxConstraints.tightFor(
+                    width: 48,
+                    height: 48,
+                  ),
+                  alignment: Alignment.center,
                   tooltip: l10n.serverNetworkRefresh,
                   onPressed:
                       !info.connected || widget.controller?.loading == true
@@ -114,15 +119,14 @@ class _ServerNetworkCardState extends State<ServerNetworkCard> {
                   : info.connected
                   ? l10n.serverNetworkPending
                   : l10n.trafficDashboardStateDisconnected,
+              leading: info.countryCode.isNotEmpty && available
+                  ? CountryFlagBadge(
+                      countryCode: info.countryCode,
+                      size: 24,
+                      circular: true,
+                    )
+                  : null,
             ),
-            if (info.countryCode.isNotEmpty && available)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: CountryFlagBadge(
-                  countryCode: info.countryCode,
-                  size: 24,
-                ),
-              ),
             _NetworkRow(
               l10n.serverNetworkOrganization,
               value(available ? metadata?.organization ?? '' : ''),
@@ -179,9 +183,10 @@ class _ServerNetworkCardState extends State<ServerNetworkCard> {
 }
 
 class _NetworkRow extends StatelessWidget {
-  const _NetworkRow(this.label, this.value);
+  const _NetworkRow(this.label, this.value, {this.leading});
   final String label;
   final String value;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -196,7 +201,14 @@ class _NetworkRow extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 3),
-        Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        Row(
+          children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 8)],
+            Expanded(
+              child: Text(value, style: Theme.of(context).textTheme.bodyMedium),
+            ),
+          ],
+        ),
       ],
     ),
   );

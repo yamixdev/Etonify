@@ -1078,6 +1078,7 @@ interface SingboxHostApi {
   fun reload(callback: (Result<Unit>) -> Unit)
   fun stop(reason: String, callback: (Result<Unit>) -> Unit)
   fun selectOutbound(groupTag: String, outboundTag: String, callback: (Result<Unit>) -> Unit)
+  fun setUrlTestExcludedOutbounds(tags: List<String>, runtimeGeneration: Long, callback: (Result<Unit>) -> Unit)
   fun urlTest(request: UrlTestRequestMessage, callback: (Result<Unit>) -> Unit)
   /** Shares the tile's one startup leaf measurement with the client sweep. */
   fun prepareStartupUrlTest(runtimeGeneration: Long, coveredTags: List<String>, callback: (Result<Map<String?, Any?>>) -> Unit)
@@ -1434,6 +1435,26 @@ interface SingboxHostApi {
             val groupTagArg = args[0] as String
             val outboundTagArg = args[1] as String
             api.selectOutbound(groupTagArg, outboundTagArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.setUrlTestExcludedOutbounds$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val tagsArg = args[0] as List<String>
+            val runtimeGenerationArg = args[1] as Long
+            api.setUrlTestExcludedOutbounds(tagsArg, runtimeGenerationArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SingboxApiPigeonUtils.wrapError(error))

@@ -11,11 +11,177 @@ import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/features/subscriptions/subscription_server_catalog.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 
 void main() {
+  test(
+    'runtime retains membership so removing an exclusion needs no restart',
+    () {
+      const source = Subscription(
+        id: 'live',
+        name: 'Live',
+        url: '',
+        outbounds: [
+          Outbound(
+            tag: 'a',
+            name: 'A',
+            config: {
+              'type': 'trojan',
+              'server': 'a.example',
+              'server_port': 443,
+              'password': 'p',
+            },
+          ),
+          Outbound(
+            tag: 'b',
+            name: 'B',
+            config: {
+              'type': 'trojan',
+              'server': 'b.example',
+              'server_port': 443,
+              'password': 'p',
+            },
+          ),
+        ],
+        groups: [
+          SubscriptionGroup(
+            tag: 'auto',
+            name: 'Auto',
+            outboundTags: ['a', 'b'],
+          ),
+        ],
+      );
+      final dynamic policy = ProxyExclusionRules(excludedTags: {'a'});
+      final Subscription runtime =
+          policy.runtimeSubscription(source) as Subscription;
+      final config = _defaultBuilder(runtime, selectedProxyTag: 'a').build();
+      final outbounds = (config['outbounds'] as List)
+          .cast<Map<dynamic, dynamic>>();
+      final auto = outbounds.firstWhere((n) => n['tag'] == 'auto');
+      expect(auto['outbounds'], containsAll(['a', 'b']));
+      final selector = outbounds.firstWhere((n) => n['tag'] == 'select');
+      expect(selector['outbounds'], containsAll(['a', 'b']));
+      expect(selector['default'], isNot('a'));
+      expect((config['experimental'] as Map)['url_test_excluded_tags'], ['a']);
+      expect(
+        source.outbounds.first.config,
+        isNot(contains('_excluded_by_user')),
+      );
+    },
+  );
+
+  test(
+    'a chain through an auto group with no eligible leaves is not usable',
+    () {
+      const source = Subscription(
+        id: 'group-dependency',
+        name: 'Group dependency',
+        url: '',
+        outbounds: [
+          Outbound(
+            tag: 'leaf',
+            name: 'Leaf',
+            config: {
+              'type': 'trojan',
+              'server': 'leaf.example',
+              'server_port': 443,
+              'password': 'p',
+            },
+          ),
+          Outbound(
+            tag: 'chain',
+            name: 'Chain',
+            config: {
+              'type': 'trojan',
+              'server': 'chain.example',
+              'server_port': 443,
+              'password': 'p',
+              'detour': 'group',
+            },
+          ),
+          Outbound(
+            tag: 'safe',
+            name: 'Safe',
+            config: {
+              'type': 'trojan',
+              'server': 'safe.example',
+              'server_port': 443,
+              'password': 'p',
+            },
+          ),
+        ],
+        groups: [
+          SubscriptionGroup(
+            tag: 'group',
+            name: 'Group',
+            outboundTags: ['leaf'],
+          ),
+        ],
+      );
+      final projection = ProxyExclusionRules(
+        excludedTags: {'leaf'},
+      ).eligibleSubscription(source);
+      expect(projection.concreteServerTags, {'safe'});
+      final runtime = _defaultBuilder(projection).build()['outbounds'] as List;
+      expect(
+        runtime.where((dynamic node) => (node as Map)['tag'] == 'chain'),
+        isEmpty,
+      );
+      final select =
+          runtime.firstWhere((dynamic node) => (node as Map)['tag'] == 'select')
+              as Map;
+      expect(select['outbounds'], ['safe']);
+    },
+  );
+  test('excluded choice stays a core detour dependency but not selectable', () {
+    const source = Subscription(
+      id: 'exclusions',
+      name: 'Exclusions',
+      url: '',
+      outbounds: [
+        Outbound(
+          tag: 'dep',
+          name: 'Dependency',
+          config: {
+            'type': 'trojan',
+            'server': 'dep.example',
+            'server_port': 443,
+            'password': 'p',
+          },
+        ),
+        Outbound(
+          tag: 'chain',
+          name: 'Chain',
+          config: {
+            'type': 'trojan',
+            'server': 'chain.example',
+            'server_port': 443,
+            'password': 'p',
+            'detour': 'dep',
+          },
+        ),
+      ],
+    );
+    final projection = ProxyExclusionRules(
+      excludedTags: {'dep'},
+    ).eligibleSubscription(source);
+    final runtime = _defaultBuilder(projection).build()['outbounds'] as List;
+    expect(
+      runtime.where((dynamic node) => (node as Map)['tag'] == 'dep'),
+      hasLength(1),
+    );
+    final select =
+        runtime.firstWhere((dynamic node) => (node as Map)['tag'] == 'select')
+            as Map;
+    expect(select['outbounds'], ['chain']);
+    final none = ProxyExclusionRules(
+      excludedTags: {'dep', 'chain'},
+    ).eligibleSubscription(source);
+    expect(() => _defaultBuilder(none).build(), throwsStateError);
+  });
   test('group members and nested groups are valid manual runtime choices', () {
     const subscription = Subscription(
       id: 'manual-member',

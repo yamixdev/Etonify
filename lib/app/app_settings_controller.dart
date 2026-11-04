@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
@@ -143,6 +144,7 @@ class AppSettingsController {
   bool sendHwidToProviders = true;
   String proxySort = 'source';
   bool proxyHideUnavailable = false;
+  Map<String, ProxyExclusionRules> proxyExclusionsByProfile = const {};
   bool progressiveBlurEnabled = false;
   bool vpnInboundEnabled = true;
   int vpnMtu = 1500;
@@ -226,6 +228,7 @@ class AppSettingsController {
       selectedProxyTag: selectedProxyTag,
       proxySort: proxySort,
       proxyHideUnavailable: proxyHideUnavailable,
+      proxyExclusionsByProfile: proxyExclusionsByProfile,
       localeCode: localeCode,
       themePreference: themePreference,
       accentColorHex: accentColorHex,
@@ -304,6 +307,7 @@ class AppSettingsController {
     bool progressiveBlurEnabledOverride = false,
   }) {
     windowsModes = state.windowsModes;
+    proxyExclusionsByProfile = state.proxyExclusionsByProfile;
     windowsPresentation = state.windowsPresentation;
     windowsUnknown = state.windowsUnknown;
     coreConfigSchemaVersion = state.coreConfigSchemaVersion;

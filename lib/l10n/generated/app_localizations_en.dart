@@ -3717,14 +3717,61 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not open battery settings. Open them from Android settings.';
 
   @override
-  String get rootModeTitle => 'Root Mode';
+  String get proxyExclusionsTitle => 'Server exclusions';
+
+  @override
+  String get proxyExclusionsApplyFailed =>
+      'Could not apply exclusions. Settings were not saved.';
+
+  @override
+  String get proxyExclusionsHint =>
+      'Excluded servers are omitted from the list, checks and auto selection. Your current connection is not interrupted.';
+
+  @override
+  String get proxyExclusionsSearch => 'Search servers';
+
+  @override
+  String get proxyExclusionsConditions => 'Exclusion conditions';
+
+  @override
+  String get proxyExclusionsAddCondition => 'Add condition';
+
+  @override
+  String get proxyExclusionsConditionHint => 'All selected fields must match.';
+
+  @override
+  String get proxyExclusionsProtocol => 'Protocol';
+
+  @override
+  String get proxyExclusionsSecurity => 'Security';
+
+  @override
+  String get proxyExclusionsTransport => 'Transport';
+
+  @override
+  String get proxyExclusionsCountry => 'Country';
+
+  @override
+  String get proxyExclusionsAny => 'Any';
+
+  @override
+  String get proxyExclusionsEmpty => 'No servers found';
+
+  @override
+  String get proxyExclusionsManual => 'Individual servers';
+
+  @override
+  String get trafficDashboardPublicIpCached => 'Last known IP · refresh failed';
+
+  @override
+  String get rootModeTitle => 'Legacy module cleanup';
 
   @override
   String get rootModeExperimental => 'Experimental';
 
   @override
   String get rootModeDescription =>
-      'Connect without Android VPN. Requires root access and the Etonify module.';
+      'Root Mode has been removed. You can remove a previously installed module and its copies here. Root permission is requested only after you confirm removal.';
 
   @override
   String get rootModeRootStatus => 'Superuser access';
@@ -3748,7 +3795,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rootModeRootDenied => 'Superuser permission denied';
 
   @override
-  String get rootModeNotInstalled => 'Not installed';
+  String get rootModeNotInstalled => 'No verified legacy module metadata';
 
   @override
   String get rootModeDownloading => 'Downloading module…';
@@ -3804,7 +3851,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rootModeRemoveMessage =>
-      'Root Mode will be turned off and its downloaded module removed. Your profiles and VPN settings will be kept.';
+      'Root permission will be requested. The verified legacy module will remove its network rules before its files and copies are deleted. Files are kept if cleanup fails. Your profiles and VPN settings will not change.';
+
+  @override
+  String get rootModeMetadataMissing =>
+      'The saved module signature data is missing. Without it, network cleanup and root-file removal cannot run safely. Automatic removal has been stopped.';
 
   @override
   String get rootModeSafety =>

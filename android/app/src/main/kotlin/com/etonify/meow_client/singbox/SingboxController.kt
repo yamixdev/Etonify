@@ -968,6 +968,32 @@ object SingboxController {
         return standaloneClients.lookup(block)
     }
 
+    private val liveExclusionGate = LiveUrlTestExclusionGate()
+
+    fun setUrlTestExcludedOutbounds(tags: List<String>, runtimeGeneration: Long, callback: (Result<Unit>) -> Unit) {
+        commandExecutor.execute {
+            val result = runCatching {
+                withStandaloneCommandClient { client ->
+                    liveExclusionGate.apply(
+                        runtimeGeneration,
+                        tags,
+                        { if (running) activeRuntimeGeneration else 0L },
+                        { (client.javaClass.getMethod("getStartedAt").invoke(client) as Number).toLong() },
+                    ) { excluded, stamp ->
+                        val request = JSONObject()
+                            .put("excluded_tags", org.json.JSONArray(excluded))
+                            .put("expected_started_at", stamp)
+                        // Keep compilation compatible with the previous AAR; an old
+                        // core fails explicitly instead of pretending the policy applied.
+                        client.javaClass.getMethod("setURLTestExcludedOutboundsJSON", String::class.java)
+                            .invoke(client, request.toString())
+                    }
+                }
+            }.map { Unit }
+            mainHandler.post { callback(result) }
+        }
+    }
+
     fun selectOutbound(groupTag: String, outboundTag: String, callback: (Result<Unit>) -> Unit) {
         log("info", "libbox selectOutbound group=$groupTag outbound=$outboundTag")
         val operationGeneration = activeRuntimeGeneration

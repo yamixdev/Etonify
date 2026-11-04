@@ -6588,10 +6588,100 @@ abstract class AppLocalizations {
   /// **'Could not open battery settings. Open them from Android settings.'**
   String get batteryOptimizationOpenFailed;
 
+  /// No description provided for @proxyExclusionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server exclusions'**
+  String get proxyExclusionsTitle;
+
+  /// No description provided for @proxyExclusionsApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply exclusions. Settings were not saved.'**
+  String get proxyExclusionsApplyFailed;
+
+  /// No description provided for @proxyExclusionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Excluded servers are omitted from the list, checks and auto selection. Your current connection is not interrupted.'**
+  String get proxyExclusionsHint;
+
+  /// No description provided for @proxyExclusionsSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search servers'**
+  String get proxyExclusionsSearch;
+
+  /// No description provided for @proxyExclusionsConditions.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusion conditions'**
+  String get proxyExclusionsConditions;
+
+  /// No description provided for @proxyExclusionsAddCondition.
+  ///
+  /// In en, this message translates to:
+  /// **'Add condition'**
+  String get proxyExclusionsAddCondition;
+
+  /// No description provided for @proxyExclusionsConditionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'All selected fields must match.'**
+  String get proxyExclusionsConditionHint;
+
+  /// No description provided for @proxyExclusionsProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol'**
+  String get proxyExclusionsProtocol;
+
+  /// No description provided for @proxyExclusionsSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get proxyExclusionsSecurity;
+
+  /// No description provided for @proxyExclusionsTransport.
+  ///
+  /// In en, this message translates to:
+  /// **'Transport'**
+  String get proxyExclusionsTransport;
+
+  /// No description provided for @proxyExclusionsCountry.
+  ///
+  /// In en, this message translates to:
+  /// **'Country'**
+  String get proxyExclusionsCountry;
+
+  /// No description provided for @proxyExclusionsAny.
+  ///
+  /// In en, this message translates to:
+  /// **'Any'**
+  String get proxyExclusionsAny;
+
+  /// No description provided for @proxyExclusionsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No servers found'**
+  String get proxyExclusionsEmpty;
+
+  /// No description provided for @proxyExclusionsManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Individual servers'**
+  String get proxyExclusionsManual;
+
+  /// No description provided for @trafficDashboardPublicIpCached.
+  ///
+  /// In en, this message translates to:
+  /// **'Last known IP · refresh failed'**
+  String get trafficDashboardPublicIpCached;
+
   /// No description provided for @rootModeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Root Mode'**
+  /// **'Legacy module cleanup'**
   String get rootModeTitle;
 
   /// No description provided for @rootModeExperimental.
@@ -6603,7 +6693,7 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeDescription.
   ///
   /// In en, this message translates to:
-  /// **'Connect without Android VPN. Requires root access and the Etonify module.'**
+  /// **'Root Mode has been removed. You can remove a previously installed module and its copies here. Root permission is requested only after you confirm removal.'**
   String get rootModeDescription;
 
   /// No description provided for @rootModeRootStatus.
@@ -6651,7 +6741,7 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeNotInstalled.
   ///
   /// In en, this message translates to:
-  /// **'Not installed'**
+  /// **'No verified legacy module metadata'**
   String get rootModeNotInstalled;
 
   /// No description provided for @rootModeDownloading.
@@ -6753,8 +6843,14 @@ abstract class AppLocalizations {
   /// No description provided for @rootModeRemoveMessage.
   ///
   /// In en, this message translates to:
-  /// **'Root Mode will be turned off and its downloaded module removed. Your profiles and VPN settings will be kept.'**
+  /// **'Root permission will be requested. The verified legacy module will remove its network rules before its files and copies are deleted. Files are kept if cleanup fails. Your profiles and VPN settings will not change.'**
   String get rootModeRemoveMessage;
+
+  /// No description provided for @rootModeMetadataMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The saved module signature data is missing. Without it, network cleanup and root-file removal cannot run safely. Automatic removal has been stopped.'**
+  String get rootModeMetadataMissing;
 
   /// No description provided for @rootModeSafety.
   ///
