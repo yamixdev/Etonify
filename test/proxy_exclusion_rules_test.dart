@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/subscription/subscription_sources.dart';
 
 Outbound node(
   String tag, {
@@ -27,6 +28,241 @@ Outbound node(
 );
 
 void main() {
+  test('adding another source does not change existing primary identity', () {
+    final source = Subscription(
+      id: 'profile',
+      name: 'P',
+      url: 'https://primary.test',
+      outbounds: [node('a')],
+    );
+    final rules = ProxyExclusionRules(
+      excludedTags: {'a'},
+    ).bindLegacyTags(source);
+    final primary = SubscriptionSource(id: 'primary', snapshot: source);
+    final secondary = SubscriptionSource(
+      id: 'second',
+      snapshot: source.copyWith(url: 'https://second.test'),
+    );
+    final merged = composeSubscriptionSources([primary, secondary]);
+    expect(
+      rules.excludedTagsFor(
+        source.copyWith(
+          sources: [primary, secondary],
+          outbounds: merged.outbounds,
+          groups: merged.groups,
+        ),
+      ),
+      {'a'},
+    );
+  });
+
+  test('prepared projections scan the concrete graph only once', () {
+    final source = _CountingSubscription();
+    final result = ProxyExclusionRules(
+      conditions: [ProxyExclusionCondition(protocol: 'vless')],
+    ).prepare(source);
+    expect(result.excludedTags, {'a'});
+    expect(
+      result.runtimeSubscription.outbounds.single.config['_excluded_by_user'],
+      isTrue,
+    );
+    expect(
+      result.eligibleSubscription.outbounds.single.config['_group_only'],
+      isTrue,
+    );
+    expect(source.concreteScans, 1);
+  });
+
+  test(
+    'stable exclusions distinguish composed sources and canonicalize metadata',
+    () {
+      final endpoint = node('a');
+      Subscription profile(List<SubscriptionSource> sources) {
+        final merged = composeSubscriptionSources(sources);
+        return Subscription(
+          id: 'profile',
+          name: 'Profile',
+          url: '',
+          sources: sources,
+          outbounds: merged.outbounds,
+          groups: merged.groups,
+        );
+      }
+
+      final primary = SubscriptionSource(
+        id: 'primary',
+        snapshot: Subscription(
+          id: 'p',
+          name: 'P',
+          url: 'https://primary.test/private-token',
+          outbounds: [endpoint],
+        ),
+      );
+      final second = SubscriptionSource(
+        id: 'second',
+        snapshot: Subscription(
+          id: 's',
+          name: 'S',
+          url: 'https://second.test/private-token',
+          outbounds: [endpoint],
+        ),
+      );
+      final original = profile([primary, second]);
+      final rules = ProxyExclusionRules(
+        excludedTags: {'source:second:a'},
+      ).bindLegacyTags(original);
+      expect(rules.excludedTagsFor(original), {'source:second:a'});
+      final renamed = second.copyWith(
+        snapshot: second.snapshot.copyWith(
+          outbounds: [
+            endpoint.copyWith(
+              tag: 'new',
+              name: 'New',
+              config: {
+                '_source_order': 999,
+                '_name': 'New',
+                'tag': 'new',
+                for (final entry in endpoint.config.entries.toList().reversed)
+                  entry.key: entry.value,
+              },
+            ),
+          ],
+        ),
+      );
+      expect(rules.excludedTagsFor(profile([primary, renamed])), {
+        'source:second:new',
+      });
+      expect(
+        rules.excludedTagsFor(
+          profile([
+            primary,
+            second.copyWith(
+              snapshot: second.snapshot.copyWith(
+                url: 'https://replacement.test',
+              ),
+            ),
+          ]),
+        ),
+        isEmpty,
+      );
+      expect(rules.toMap().toString(), isNot(contains('private-token')));
+    },
+  );
+
+  test('legacy binding follows endpoint across duplicate-name tag reorder', () {
+    final a = node(
+      'same',
+    ).copyWith(config: {...node('same').config, 'server': 'a.test'});
+    final b = node(
+      'same-2',
+    ).copyWith(config: {...node('same-2').config, 'server': 'b.test'});
+    final source = Subscription(
+      id: 'one',
+      name: 'One',
+      url: 'https://one.test',
+      outbounds: [a, b],
+    );
+    final rules = ProxyExclusionRules(
+      excludedTags: {'same'},
+    ).bindLegacyTags(source);
+    final reordered = source.copyWith(
+      outbounds: [
+        b.copyWith(tag: 'same'),
+        a.copyWith(tag: 'same-2', name: 'Renamed'),
+      ],
+    );
+    expect(rules.excludedTagsFor(reordered), {'same-2'});
+    expect(
+      rules.excludedTagsFor(
+        source.copyWith(outbounds: [b.copyWith(tag: 'same')]),
+      ),
+      isEmpty,
+    );
+    expect(
+      rules.excludedTagsFor(source.copyWith(url: 'https://other.test')),
+      isEmpty,
+    );
+    expect(rules.excludedTagsFor(source.copyWith(id: 'two')), isEmpty);
+    final restored = ProxyExclusionRules.fromMap(rules.toMap());
+    expect(restored.bindLegacyTags(reordered).excludedTagsFor(reordered), {
+      'same-2',
+    });
+    expect(restored.toMap().toString(), isNot(contains('a.test')));
+    expect(restored.toMap().toString(), isNot(contains('00000000-0000')));
+  });
+
+  test('missing legacy tag is retired once rather than rebound on refresh', () {
+    final source = Subscription(
+      id: 'one',
+      name: 'One',
+      url: '',
+      outbounds: [node('other')],
+    );
+    final rules = ProxyExclusionRules(
+      excludedTags: {'missing'},
+    ).bindLegacyTags(source);
+    final updated = source.copyWith(outbounds: [node('missing')]);
+    expect(rules.bindLegacyTags(updated).excludedTagsFor(updated), isEmpty);
+    expect(
+      ProxyExclusionRules.fromMap(rules.toMap()).excludedTagsFor(updated),
+      isEmpty,
+    );
+  });
+
+  test(
+    'prepared projection evaluates embedded stable exclusions consistently',
+    () {
+      const source = Subscription(
+        id: 'one',
+        name: 'One',
+        url: '',
+        groups: [
+          SubscriptionGroup(
+            tag: 'group',
+            name: 'Group',
+            outboundTags: ['embedded'],
+            config: {
+              'outbounds': ['embedded'],
+              '_direct_outbounds': {
+                'embedded': {
+                  'type': 'trojan',
+                  'server': 'a.test',
+                  'password': 'secret',
+                },
+              },
+            },
+          ),
+        ],
+      );
+      final rules = ProxyExclusionRules(
+        excludedTags: {'embedded'},
+      ).bindLegacyTags(source);
+      final projection = rules.prepare(source);
+      expect(projection.excludedTags, {'embedded'});
+      expect(projection.runtimeSubscription.groups.single.outboundTags, [
+        'embedded',
+      ]);
+      expect(
+        (projection
+                .runtimeSubscription
+                .groups
+                .single
+                .config['_direct_outbounds']
+            as Map)['embedded']['_excluded_by_user'],
+        isTrue,
+      );
+      expect(
+        projection.eligibleSubscription.groups.single.outboundTags,
+        isEmpty,
+      );
+      expect(
+        projection.eligibleSubscription.outbounds.single.config['_group_only'],
+        isTrue,
+      );
+      expect(source.groups.single.outboundTags, ['embedded']);
+    },
+  );
+
   test('native UDP protocols never match a TCP transport rule', () {
     final condition = ProxyExclusionCondition(transport: 'tcp');
     for (final type in ['hysteria', 'hysteria2', 'tuic', 'wireguard']) {
@@ -209,4 +445,15 @@ void main() {
       );
     },
   );
+}
+
+class _CountingSubscription extends Subscription {
+  _CountingSubscription()
+    : super(id: 'one', name: 'One', url: '', outbounds: [node('a')]);
+  int concreteScans = 0;
+  @override
+  Set<String> get concreteServerTags {
+    concreteScans++;
+    return super.concreteServerTags;
+  }
 }

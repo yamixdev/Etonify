@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -46,6 +47,7 @@ class _Runtime extends Fake implements SingboxRuntime {
   var stateRevision = 1;
   var runtimeGeneration = 1;
   var prepareCalls = 0;
+  String? configPath;
   bool rejectExclusions = false;
   final exclusionCalls = <(List<String>, int)>[];
   @override
@@ -160,7 +162,7 @@ class _Runtime extends Fake implements SingboxRuntime {
       return Future<String?>.value('1.15.0');
     }
     if (invocation.memberName == #getConfigPath) {
-      return Future<String?>.value(null);
+      return Future<String?>.value(configPath);
     }
     if ([
       #querySelectedOutbounds,
@@ -215,127 +217,197 @@ void main() {
     }
   });
 
-  for (final rejected in [false, true]) {
-    testWidgets(
-      'live exclusion ${rejected ? 'rejection preserves saved policy' : 'keeps current connection and card'}',
-      (tester) async {
-        runtime.rejectExclusions = rejected;
-        final state = AppSettingsController()
-            .toState(
-              onboardingCompleted: true,
-              acceptedLegalVersion: '0.2.1',
-              acceptedLegalAtMillis: 1,
-              activeProfileId: _subscription.id,
-              selectedProxyTag: 'test',
-            )
-            .copyWith(
-              localeCode: 'en',
-              autoConnectOnLaunch: false,
-              autoCheckServers: false,
-              autoCheckNoticeAcknowledged: true,
-              hwidDefaultNoticeShown: true,
-              homeNavigationMode: HomeNavigationMode.tabs,
+  for (final connected in [false, true]) {
+    for (final hasEligible in [false, true]) {
+      for (final rejected in [false, true]) {
+        testWidgets(
+          'live exclusion connected=$connected eligible=$hasEligible ${rejected ? 'rejection preserves saved policy' : 'keeps current connection and card'}',
+          (tester) async {
+            runtime.running = connected;
+            final profile = hasEligible
+                ? _subscription.copyWith(
+                    outbounds: [
+                      ..._subscription.outbounds,
+                      const Outbound(
+                        tag: 'other',
+                        name: 'Other',
+                        config: {
+                          'type': 'socks',
+                          'server': '192.0.2.2',
+                          'server_port': 1080,
+                        },
+                      ),
+                    ],
+                  )
+                : _subscription;
+            await tester.runAsync(() => SubscriptionStore.save(profile));
+            final cachedConfig = File('${directory.path}/runtime-config.json');
+            cachedConfig.writeAsStringSync('{"old":true}');
+            runtime.configPath = cachedConfig.path;
+            runtime.rejectExclusions = rejected;
+            final state = AppSettingsController()
+                .toState(
+                  onboardingCompleted: true,
+                  acceptedLegalVersion: '0.2.1',
+                  acceptedLegalAtMillis: 1,
+                  activeProfileId: _subscription.id,
+                  selectedProxyTag: 'test',
+                )
+                .copyWith(
+                  localeCode: 'en',
+                  autoConnectOnLaunch: false,
+                  autoCheckServers: false,
+                  autoCheckNoticeAcknowledged: true,
+                  hwidDefaultNoticeShown: true,
+                  homeNavigationMode: HomeNavigationMode.tabs,
+                );
+            final store = MemoryAppSettingsStore(state);
+            final container = ProviderContainer(
+              overrides: [singboxRuntimeProvider.overrideWithValue(runtime)],
             );
-        final store = MemoryAppSettingsStore(state);
-        final container = ProviderContainer(
-          overrides: [singboxRuntimeProvider.overrideWithValue(runtime)],
-        );
-        addTearDown(() async {
-          await tester.pumpWidget(const SizedBox.shrink());
-          await tester.pump(const Duration(seconds: 16));
-          container.dispose();
-        });
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: MeowClient(store: store),
-          ),
-        );
-        await tester.pumpAndSettle();
-        container
-            .read(subscriptionCatalogProvider.notifier)
-            .replace(
-              subscriptions: [_subscription],
-              activeProfileId: _subscription.id,
-              selectedProxyTag: 'test',
+            addTearDown(() async {
+              await tester.pumpWidget(const SizedBox.shrink());
+              await tester.pump(const Duration(seconds: 16));
+              container.dispose();
+            });
+            await tester.pumpWidget(
+              UncontrolledProviderScope(
+                container: container,
+                child: MeowClient(store: store),
+              ),
             );
-        await tester.pumpAndSettle();
-        runtime.stateRevision++;
-        runtime.controller.add({'type': 'state', ...runtime.snapshot()});
-        await tester.pump();
-        runtime.controller.add({
-          'type': 'network',
-          'reason': 'default_interface',
-          'networkGeneration': 1,
-          'interfaceName': 'wlan0',
-          'interfaceIndex': 1,
-        });
-        await tester.pump();
-        runtime.controller.add({
-          'type': 'groups',
-          'runtimeGeneration': 1,
-          'networkGeneration': 1,
-          'groups': [
-            {
-              'tag': 'select',
-              'selected': 'test',
-              'items': [
-                {'tag': 'test', 'type': 'socks'},
+            await tester.pumpAndSettle();
+            container
+                .read(subscriptionCatalogProvider.notifier)
+                .replace(
+                  subscriptions: [profile],
+                  activeProfileId: _subscription.id,
+                  selectedProxyTag: 'test',
+                );
+            await tester.pumpAndSettle();
+            runtime.stateRevision++;
+            runtime.controller.add({'type': 'state', ...runtime.snapshot()});
+            await tester.pump();
+            runtime.controller.add({
+              'type': 'network',
+              'reason': 'default_interface',
+              'networkGeneration': 1,
+              'interfaceName': 'wlan0',
+              'interfaceIndex': 1,
+            });
+            await tester.pump();
+            runtime.controller.add({
+              'type': 'groups',
+              'runtimeGeneration': 1,
+              'networkGeneration': 1,
+              'groups': [
+                {
+                  'tag': 'select',
+                  'selected': 'test',
+                  'items': [
+                    {'tag': 'test', 'type': 'socks'},
+                  ],
+                },
               ],
-            },
-          ],
-        });
-        await tester.pump();
-        tester.widget<HomePage>(find.byType(HomePage)).actions.openProxies!();
-        await tester.pump(const Duration(milliseconds: 350));
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+            });
+            await tester.pump();
+            tester
+                .widget<HomePage>(find.byType(HomePage))
+                .actions
+                .openProxies!();
+            await tester.pump(const Duration(milliseconds: 350));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 100)),
+            );
+            await tester.pump();
+            tester
+                .widget<ProxiesPage>(find.byType(ProxiesPage))
+                .onEditExclusions!();
+            for (
+              var i = 0;
+              i < 20 &&
+                  find
+                      .byKey(const ValueKey('proxy-exclusion-test'))
+                      .evaluate()
+                      .isEmpty;
+              i++
+            ) {
+              await tester.runAsync(
+                () => Future<void>.delayed(const Duration(milliseconds: 20)),
+              );
+              await tester.pump(const Duration(milliseconds: 50));
+            }
+            await tester.pump(const Duration(milliseconds: 350));
+            await tester.tap(
+              find.byKey(const ValueKey('proxy-exclusion-test')),
+            );
+            await tester.pump();
+            await tester.tap(
+              find.byKey(const ValueKey('proxy-exclusions-apply')),
+            );
+            await tester.pump(const Duration(milliseconds: 350));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 100)),
+            );
+            await tester.pump();
+            expect(runtime.exclusionCalls, hasLength(connected ? 1 : 0));
+            if (connected) {
+              expect(runtime.exclusionCalls.single.$1, ['test']);
+              expect(runtime.exclusionCalls.single.$2, 1);
+            }
+            expect(runtime.running, connected);
+            expect(runtime.startCalls, 0);
+            expect(runtime.stopCalls, 0);
+            if (!(rejected && connected)) {
+              for (
+                var i = 0;
+                i < 100 &&
+                    cachedConfig.existsSync() &&
+                    cachedConfig.readAsStringSync() == '{"old":true}';
+                i++
+              ) {
+                await tester.runAsync(
+                  () => Future<void>.delayed(const Duration(milliseconds: 25)),
+                );
+                await tester.pump();
+              }
+            }
+            if (rejected && connected) {
+              expect(cachedConfig.readAsStringSync(), '{"old":true}');
+            } else if (!hasEligible) {
+              expect(
+                cachedConfig.existsSync(),
+                isFalse,
+                reason:
+                    'No eligible servers: tile must not reload stale policy',
+              );
+            } else {
+              final config =
+                  jsonDecode(cachedConfig.readAsStringSync())
+                      as Map<String, dynamic>;
+              expect(
+                (config['experimental'] as Map)['url_test_excluded_tags'],
+                ['test'],
+              );
+              final selector = (config['outbounds'] as List)
+                  .cast<Map<String, dynamic>>()
+                  .firstWhere((o) => o['tag'] == 'select');
+              expect(selector['default'], isNot('test'));
+            }
+            final saved = await store.loadState();
+            expect(
+              saved.proxyExclusionsByProfile[_subscription.id]?.excludedTags ??
+                  <String>{},
+              rejected && connected ? isEmpty : {'test'},
+            );
+            final page = tester.widget<ProxiesPage>(find.byType(ProxiesPage));
+            expect(page.selectedTag, 'test');
+            expect(page.activeProxy?.tag, 'test');
+            expect(page.connected, connected);
+          },
         );
-        await tester.pump();
-        tester
-            .widget<ProxiesPage>(find.byType(ProxiesPage))
-            .onEditExclusions!();
-        for (
-          var i = 0;
-          i < 20 &&
-              find
-                  .byKey(const ValueKey('proxy-exclusion-test'))
-                  .evaluate()
-                  .isEmpty;
-          i++
-        ) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 20)),
-          );
-          await tester.pump(const Duration(milliseconds: 50));
-        }
-        await tester.pump(const Duration(milliseconds: 350));
-        await tester.tap(find.byKey(const ValueKey('proxy-exclusion-test')));
-        await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('proxy-exclusions-apply')));
-        await tester.pump(const Duration(milliseconds: 350));
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 100)),
-        );
-        await tester.pump();
-        expect(runtime.exclusionCalls, hasLength(1));
-        expect(runtime.exclusionCalls.single.$1, ['test']);
-        expect(runtime.exclusionCalls.single.$2, 1);
-        expect(runtime.running, isTrue);
-        expect(runtime.startCalls, 0);
-        expect(runtime.stopCalls, 0);
-        final saved = await store.loadState();
-        expect(
-          saved.proxyExclusionsByProfile[_subscription.id]?.excludedTags ??
-              <String>{},
-          rejected ? isEmpty : {'test'},
-        );
-        final page = tester.widget<ProxiesPage>(find.byType(ProxiesPage));
-        expect(page.selectedTag, 'test');
-        expect(page.activeProxy?.tag, 'test');
-        expect(page.connected, isTrue);
-      },
-    );
+      }
+    }
   }
 
   for (final queryOnly in [false, true]) {

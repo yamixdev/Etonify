@@ -13,6 +13,39 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
   test(
+    'old exclusion policy cannot delete a newer profile snapshot after path lookup',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'exclusion-snapshot-race-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final target = File('${dir.path}/config.json');
+      await target.writeAsString('new profile');
+      final path = Completer<String?>();
+      final pathRequested = Completer<void>();
+      var current = true;
+      final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () {
+          pathRequested.complete();
+          return path.future;
+        },
+      );
+      addTearDown(coordinator.dispose);
+      final update = coordinator.persistCachedConfigSnapshot(
+        hasEligibleServers: false,
+        isCurrent: () => current,
+      );
+      await pathRequested.future;
+      current = false;
+      path.complete(target.path);
+      await update;
+      expect(await target.readAsString(), 'new profile');
+    },
+  );
+  test(
     'generated builds protect AdBlock artifacts for current and rollback runtime',
     () async {
       final directory = await Directory.systemTemp.createTemp(

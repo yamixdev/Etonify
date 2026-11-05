@@ -53,5 +53,20 @@ void main() {
     await tester.tap(find.byKey(const Key('proxy-exclusions-apply')));
     await tester.pumpAndSettle();
     expect(saved!.excludedTags, {'absent', 'b'});
+    expect(
+      saved!.excludedTagsFor(
+        subscription.copyWith(
+          outbounds: [
+            subscription.outbounds.first.copyWith(tag: 'b'),
+            subscription.outbounds.last.copyWith(
+              tag: 'renamed',
+              name: 'Renamed',
+            ),
+          ],
+        ),
+      ),
+      {'renamed'},
+    );
+    expect(saved!.excludedTagsFor(subscription.copyWith(id: 'other')), isEmpty);
   });
 }

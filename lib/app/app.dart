@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:collection';
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -346,6 +347,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Set<String> _excludedTagsCache = const {};
   Subscription? _eligibleSubscriptionCache;
   Subscription? _runtimeSubscriptionCache;
+  Future<void>? _legacyExclusionBinding;
+  String? _savedExclusionSnapshotKey;
+  String? _pendingExclusionSnapshotKey;
+  Future<void>? _pendingExclusionSnapshot;
   late final _liveExclusionSync = ProxyExclusionSync(
     apply: (tags, generation) => _singboxRuntime.setUrlTestExcludedOutbounds(
       tags: tags,
@@ -365,15 +370,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _exclusionCacheSource = subscription;
     _exclusionCacheRules = rules;
-    _excludedTagsCache = subscription == null || rules.isEmpty
-        ? const {}
-        : rules.excludedTagsFor(subscription);
-    _eligibleSubscriptionCache = subscription == null
+    final projection = subscription == null || rules.isEmpty
         ? null
-        : rules.eligibleSubscription(subscription);
-    _runtimeSubscriptionCache = subscription == null
-        ? null
-        : rules.runtimeSubscription(subscription);
+        : rules.prepare(subscription);
+    _excludedTagsCache = projection?.excludedTags ?? const {};
+    _eligibleSubscriptionCache =
+        projection?.eligibleSubscription ?? subscription;
+    _runtimeSubscriptionCache = projection?.runtimeSubscription ?? subscription;
   }
 
   Set<String> get _userExcludedTags {
@@ -404,6 +407,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     unawaited(
       _liveExclusionSync
           .synchronize(tags: tags, runtimeGeneration: generation)
+          .then((_) => _persistExclusionSnapshot())
           .catchError((Object error) {
             // Retry only on a later real policy/runtime event, never a polling loop.
             AppLogStore.warning(
@@ -412,6 +416,66 @@ class _MeowClientState extends ConsumerState<MeowClient>
             );
           }),
     );
+  }
+
+  Future<void> _persistExclusionSnapshot() {
+    final subscription = _activeSubscription;
+    if (subscription == null) return Future.value();
+    final rules = _exclusionsFor(subscription);
+    final excluded = _userExcludedTags.toList()..sort();
+    final key = jsonEncode([
+      subscription.id,
+      subscription.payloadRevision,
+      identityHashCode(rules),
+      _proxySelection.generation,
+      excluded,
+    ]);
+    if (_savedExclusionSnapshotKey == key) return Future.value();
+    if (_pendingExclusionSnapshotKey == key) return _pendingExclusionSnapshot!;
+    final selection = _proxySelection.generation;
+    bool current() =>
+        mounted &&
+        _activeSubscription?.id == subscription.id &&
+        _activeSubscription?.payloadRevision == subscription.payloadRevision &&
+        _proxySelection.isCurrentGeneration(selection) &&
+        identical(_exclusionsFor(_activeSubscription), rules) &&
+        setEquals(_userExcludedTags, excluded.toSet());
+    final task = Future<void>(() async {
+      if (!current()) return;
+      try {
+        await _configCoordinator.persistCachedConfigSnapshot(
+          hasEligibleServers: subscription.concreteServerTags
+              .difference(excluded.toSet())
+              .isNotEmpty,
+          isCurrent: current,
+        );
+        if (current()) _savedExclusionSnapshotKey = key;
+      } catch (_) {
+        if (current()) {
+          _savedExclusionSnapshotKey = null;
+          await _configCoordinator.invalidateCachedRuntimeConfig(
+            isCurrent: current,
+          );
+        }
+        rethrow;
+      }
+    });
+    _pendingExclusionSnapshotKey = key;
+    _pendingExclusionSnapshot = task;
+    void clear() {
+      if (identical(_pendingExclusionSnapshot, task)) {
+        _pendingExclusionSnapshot = null;
+        _pendingExclusionSnapshotKey = null;
+      }
+    }
+
+    unawaited(
+      task.then(
+        (_) => clear(),
+        onError: (Object error, StackTrace stack) => clear(),
+      ),
+    );
+    return task;
   }
 
   Future<void> _showProxyExclusions() async {
@@ -469,7 +533,37 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _rebuildDerivedCaches();
     });
     _lastAppliedSettingsState = _currentSettingsState();
-    await _persistState();
+    final snapshotSelection = _proxySelection.generation;
+    bool snapshotCurrent() =>
+        mounted &&
+        _activeSubscription?.id == subscription.id &&
+        _activeSubscription?.payloadRevision == subscription.payloadRevision &&
+        _proxySelection.isCurrentGeneration(snapshotSelection) &&
+        identical(_exclusionsFor(_activeSubscription), rules);
+    try {
+      await _persistState();
+      if (!snapshotCurrent()) return;
+      // Explicit Apply also repairs an externally invalidated next-start file.
+      _savedExclusionSnapshotKey = null;
+      await _persistExclusionSnapshot();
+    } catch (error) {
+      if (!snapshotCurrent()) return;
+      _savedExclusionSnapshotKey = null;
+      // Never leave a startable old policy behind after a failed refresh.
+      await _configCoordinator.invalidateCachedRuntimeConfig(
+        isCurrent: snapshotCurrent,
+      );
+      AppLogStore.warning(
+        'proxy exclusions',
+        'Saved config unavailable: $error',
+      );
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null && context.mounted) {
+        _showAppSnackBar(
+          AppLocalizations.of(context).proxyExclusionsApplyFailed,
+        );
+      }
+    }
   }
 
   bool get _legalAccepted => _acceptedLegalVersion == _requiredLegalVersion;
@@ -2516,6 +2610,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       onRuntimeLifecycleTimeout: _handleRuntimeLifecycleTimeout,
       cacheStartedBuild: _cacheLastStartedBuild,
       syncRuntimeState: _syncRuntimeState,
+      readConfigPath: _singboxRuntime.getConfigPath,
       refreshCapabilities: _refreshCoreCapabilities,
       allowRuntimeApply: () => !_splitRoutingResetSession.pending,
     );
@@ -3569,6 +3664,59 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  Future<void> _bindLegacyProxyExclusions() async {
+    var changed = false;
+    final previous = _settings.proxyExclusionsByProfile;
+    final migrated = <String, ProxyExclusionRules>{};
+    for (final entry in _settings.proxyExclusionsByProfile.entries.toList()) {
+      if (entry.value.legacyTagsBound || entry.value.excludedTags.isEmpty) {
+        continue;
+      }
+      final metadata = _subscriptions
+          .where((s) => s.id == entry.key)
+          .firstOrNull;
+      if (metadata == null) continue;
+      final hydrated = await SubscriptionStore.withPayloadInBackground(
+        metadata,
+      );
+      if (!mounted) return;
+      if (!identical(
+        _settings.proxyExclusionsByProfile[entry.key],
+        entry.value,
+      )) {
+        continue;
+      }
+      _settings.proxyExclusionsByProfile = Map.unmodifiable({
+        ..._settings.proxyExclusionsByProfile,
+        entry.key: entry.value.bindLegacyTags(hydrated),
+      });
+      migrated[entry.key] = _settings.proxyExclusionsByProfile[entry.key]!;
+      changed = true;
+    }
+    if (changed && mounted) {
+      _rebuildDerivedCaches();
+      try {
+        await _persistState();
+      } catch (_) {
+        _settings.proxyExclusionsByProfile = Map.unmodifiable({
+          ..._settings.proxyExclusionsByProfile,
+          for (final entry in migrated.entries)
+            if (identical(
+              _settings.proxyExclusionsByProfile[entry.key],
+              entry.value,
+            ))
+              entry.key: previous[entry.key]!,
+        });
+        _rebuildDerivedCaches();
+        rethrow;
+      }
+      _lastAppliedSettingsState =
+          (_lastAppliedSettingsState ?? _currentSettingsState()).copyWith(
+            proxyExclusionsByProfile: _settings.proxyExclusionsByProfile,
+          );
+    }
+  }
+
   Future<void> _persistState() async {
     final store = _store;
     if (store == null) return;
@@ -4138,6 +4286,32 @@ class _MeowClientState extends ConsumerState<MeowClient>
         !mounted ||
         !_foregroundLifecycleActive ||
         !_ready) {
+      return;
+    }
+    if (_settings.proxyExclusionsByProfile.entries.any(
+      (entry) =>
+          !entry.value.legacyTagsBound &&
+          entry.value.excludedTags.isNotEmpty &&
+          _subscriptions.any((sub) => sub.id == entry.key),
+    )) {
+      if (_legacyExclusionBinding == null) {
+        _legacyExclusionBinding = _bindLegacyProxyExclusions();
+        unawaited(
+          _legacyExclusionBinding!.then(
+            (_) {
+              _legacyExclusionBinding = null;
+              if (mounted) _startSubscriptionAutoRefresh();
+            },
+            onError: (Object error, StackTrace stack) {
+              _legacyExclusionBinding = null;
+              AppLogStore.error(
+                'proxy exclusions',
+                'Legacy migration failed: $error\n$stack',
+              );
+            },
+          ),
+        );
+      }
       return;
     }
     if (!_automaticSubscriptionUpdatesBlocked) {

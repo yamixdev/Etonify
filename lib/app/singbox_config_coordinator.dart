@@ -1015,12 +1015,43 @@ class SingboxConfigCoordinator {
     );
   }
 
-  /// Call only after the native service has stopped. Prevents the Android tile
-  /// from reusing a configuration invalidated by a settings migration.
-  Future<void> invalidateCachedRuntimeConfig() async {
+  /// Updates only the next-start snapshot, never the running native instance.
+  Future<void> persistCachedConfigSnapshot({
+    required bool hasEligibleServers,
+    bool Function()? isCurrent,
+  }) async {
+    if (isCurrent?.call() == false) return;
+    if (!hasEligibleServers) {
+      // Existing flows stay alive, but a tile/recovery must not revive a
+      // manually selected server which is now excluded.
+      await invalidateCachedRuntimeConfig(isCurrent: isCurrent);
+      return;
+    }
+    final build = await buildCurrentSingboxConfigInBackground(
+      returnConfig: false,
+    );
+    if (build == null) throw StateError('Config snapshot was superseded');
+    try {
+      if (isCurrent?.call() == false) return;
+      await promotePreparedConfigBuild(build);
+    } finally {
+      discardPreparedConfigCandidate(build);
+    }
+  }
+
+  /// Removes the next-start snapshot only. It never stops an active instance.
+  Future<void> invalidateCachedRuntimeConfig({
+    bool Function()? isCurrent,
+  }) async {
     final path = await ensureSingboxConfigPath();
     if (path == null || path.trim().isEmpty) return;
     final file = File(path);
+    if (isCurrent != null) {
+      // Check and unlink in one event-loop turn, after the asynchronous path
+      // lookup; an old policy must not delete a newer profile's snapshot.
+      if (isCurrent() && file.existsSync()) file.deleteSync();
+      return;
+    }
     if (await file.exists()) await file.delete();
   }
 

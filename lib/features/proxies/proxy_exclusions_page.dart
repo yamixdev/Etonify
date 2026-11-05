@@ -20,6 +20,8 @@ class ProxyExclusionsPage extends StatefulWidget {
 class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
   late final List<Outbound> _servers;
   late final Set<String> _tags;
+  late final Set<String> _serverIds;
+  late final Map<String, String> _identityByTag;
   late final List<ProxyExclusionCondition> _conditions;
   String _query = '';
   final _search = TextEditingController();
@@ -28,7 +30,12 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
   void initState() {
     super.initState();
     _servers = ProxyExclusionRules.concreteServers(widget.subscription);
-    _tags = {...widget.rules.excludedTags};
+    final rules = widget.rules.bindLegacyTags(widget.subscription);
+    _tags = {...rules.excludedTags};
+    _serverIds = {...rules.excludedServerIds};
+    _identityByTag = ProxyExclusionRules.manualServerIdsFor(
+      widget.subscription,
+    );
     _conditions = [...widget.rules.conditions];
   }
 
@@ -168,10 +175,19 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
         .toList(growable: false);
     final rules = ProxyExclusionRules(
       excludedTags: _tags,
+      excludedServerIds: _serverIds,
+      legacyTagsBound: true,
       conditions: _conditions,
     );
     final excludedCount = _servers
-        .where((node) => rules.excludes(node, countryCode: _country(node)))
+        .where(
+          (node) =>
+              _serverIds.contains(_identityByTag[node.tag]) ||
+              _conditions.any(
+                (condition) =>
+                    condition.matches(node, countryCode: _country(node)),
+              ),
+        )
         .length;
     return Scaffold(
       appBar: AppBar(
@@ -182,6 +198,7 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
             icon: const Icon(Icons.restart_alt),
             onPressed: () => setState(() {
               _tags.clear();
+              _serverIds.clear();
               _conditions.clear();
             }),
           ),
@@ -272,12 +289,14 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                       if (byCondition) l.proxyExclusionsConditions,
                     ].where((s) => s.isNotEmpty).join(' · '),
                   ),
-                  value: _tags.contains(node.tag),
+                  value: _serverIds.contains(_identityByTag[node.tag]),
                   onChanged: (selected) => setState(() {
                     if (selected == true) {
                       _tags.add(node.tag);
+                      _serverIds.add(_identityByTag[node.tag]!);
                     } else {
                       _tags.remove(node.tag);
+                      _serverIds.remove(_identityByTag[node.tag]);
                     }
                   }),
                 );
