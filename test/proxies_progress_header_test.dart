@@ -458,7 +458,7 @@ void main() {
     expect(translucentBand, lessThanOrEqualTo(20));
   });
 
-  testWidgets('collapsed header fits the wrapped progress line', (
+  testWidgets('collapsed header fits progress above its separate action row', (
     tester,
   ) async {
     final progressNotifier = ValueNotifier<UrlTestProgressState>(
@@ -479,15 +479,40 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    final header = find.byKey(const ValueKey('proxy-sheet-header'));
+    final expandedHeight = tester.getSize(header).height;
     // Drag past the collapse distance so the compact header is the one under
     // test; it is the tighter of the two.
     await tester.drag(find.byType(ListView), const Offset(0, -160));
     await tester.pumpAndSettle();
 
-    expect(
-      tester.getSize(find.byKey(const ValueKey('proxy-sheet-header'))).height,
-      closeTo(100, 0.5),
+    final headerRect = tester.getRect(header);
+    expect(headerRect.height, lessThan(expandedHeight));
+    final titleRect = tester.getRect(find.text('Прокси'));
+    final workingRect = tester.getRect(find.text('Работает 38 / 57'));
+    final testedRect = tester.getRect(find.text('Проверено 41 / 57'));
+    final progressRect = tester.getRect(
+      find.byKey(const ValueKey('proxy-test-progress-bar')),
     );
+    expect(workingRect.top, greaterThanOrEqualTo(titleRect.bottom));
+    expect(testedRect.top, greaterThanOrEqualTo(workingRect.bottom));
+    expect(progressRect.top, greaterThanOrEqualTo(testedRect.bottom));
+    final l10n = AppLocalizations.of(tester.element(header));
+    final check = find.byTooltip(l10n.urlTestTitle);
+    final sort = find.byTooltip(l10n.sort);
+    for (final action in [check, sort]) {
+      final actionRect = tester.getRect(action);
+      // Use local RenderBox size: subtracting fractional global coordinates
+      // can turn an exact 48dp width into 47.999999999999986.
+      final actionSize = tester.getSize(action);
+      expect(actionSize.width, greaterThanOrEqualTo(48));
+      expect(actionSize.height, greaterThanOrEqualTo(48));
+      expect(actionRect.top, greaterThanOrEqualTo(progressRect.bottom));
+      expect(actionRect.bottom, lessThanOrEqualTo(headerRect.bottom - 10));
+      expect(headerRect.contains(actionRect.topLeft), isTrue);
+      expect(headerRect.contains(actionRect.bottomRight), isTrue);
+    }
+    expect(tester.getRect(check).overlaps(tester.getRect(sort)), isFalse);
     expect(tester.takeException(), isNull);
   });
 

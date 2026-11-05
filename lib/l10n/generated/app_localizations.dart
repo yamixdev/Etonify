@@ -6678,299 +6678,41 @@ abstract class AppLocalizations {
   /// **'Last known IP · refresh failed'**
   String get trafficDashboardPublicIpCached;
 
-  /// No description provided for @rootModeTitle.
+  /// No description provided for @legacyCleanupTitle.
   ///
   /// In en, this message translates to:
-  /// **'Legacy module cleanup'**
-  String get rootModeTitle;
+  /// **'Root Mode is no longer supported'**
+  String get legacyCleanupTitle;
 
-  /// No description provided for @rootModeExperimental.
+  /// No description provided for @legacyCleanupMessage.
   ///
   /// In en, this message translates to:
-  /// **'Experimental'**
-  String get rootModeExperimental;
+  /// **'Root Mode has been removed from Etonify. Data from a previously installed module remains. Remove its files and network rules? This requires root permission. VPN profiles and settings will be kept.'**
+  String get legacyCleanupMessage;
 
-  /// No description provided for @rootModeDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Root Mode has been removed. You can remove a previously installed module and its copies here. Root permission is requested only after you confirm removal.'**
-  String get rootModeDescription;
-
-  /// No description provided for @rootModeRootStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'Superuser access'**
-  String get rootModeRootStatus;
-
-  /// No description provided for @rootModeModuleStatus.
-  ///
-  /// In en, this message translates to:
-  /// **'Root module'**
-  String get rootModeModuleStatus;
-
-  /// No description provided for @rootModeChecking.
-  ///
-  /// In en, this message translates to:
-  /// **'Checking…'**
-  String get rootModeChecking;
-
-  /// No description provided for @rootModeRootUnknown.
-  ///
-  /// In en, this message translates to:
-  /// **'Not checked — no permission requested'**
-  String get rootModeRootUnknown;
-
-  /// No description provided for @rootModeRootUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Superuser access is unavailable'**
-  String get rootModeRootUnavailable;
-
-  /// No description provided for @rootModeRootGranted.
-  ///
-  /// In en, this message translates to:
-  /// **'Permission granted'**
-  String get rootModeRootGranted;
-
-  /// No description provided for @rootModeRootDenied.
-  ///
-  /// In en, this message translates to:
-  /// **'Superuser permission denied'**
-  String get rootModeRootDenied;
-
-  /// No description provided for @rootModeNotInstalled.
-  ///
-  /// In en, this message translates to:
-  /// **'No verified legacy module metadata'**
-  String get rootModeNotInstalled;
-
-  /// No description provided for @rootModeDownloading.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloading module…'**
-  String get rootModeDownloading;
-
-  /// No description provided for @rootModeVerifying.
-  ///
-  /// In en, this message translates to:
-  /// **'Verifying signature and integrity…'**
-  String get rootModeVerifying;
-
-  /// No description provided for @rootModeInstalling.
-  ///
-  /// In en, this message translates to:
-  /// **'Installing module…'**
-  String get rootModeInstalling;
-
-  /// No description provided for @rootModeReady.
-  ///
-  /// In en, this message translates to:
-  /// **'Verified and ready'**
-  String get rootModeReady;
-
-  /// No description provided for @rootModeIncompatible.
-  ///
-  /// In en, this message translates to:
-  /// **'Incompatible module'**
-  String get rootModeIncompatible;
-
-  /// No description provided for @rootModeFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Module unavailable'**
-  String get rootModeFailed;
-
-  /// No description provided for @rootModeVersion.
-  ///
-  /// In en, this message translates to:
-  /// **'Version {version}'**
-  String rootModeVersion(String version);
-
-  /// No description provided for @rootModeUseRoot.
-  ///
-  /// In en, this message translates to:
-  /// **'Use root instead of VPN'**
-  String get rootModeUseRoot;
-
-  /// No description provided for @rootModeUseRootSummary.
-  ///
-  /// In en, this message translates to:
-  /// **'Applies to the next connection.'**
-  String get rootModeUseRootSummary;
-
-  /// No description provided for @rootModeCheckRoot.
-  ///
-  /// In en, this message translates to:
-  /// **'Check root'**
-  String get rootModeCheckRoot;
-
-  /// No description provided for @rootModeDownload.
-  ///
-  /// In en, this message translates to:
-  /// **'Download / update module'**
-  String get rootModeDownload;
-
-  /// No description provided for @rootModeCheckUpdate.
-  ///
-  /// In en, this message translates to:
-  /// **'Check for updates'**
-  String get rootModeCheckUpdate;
-
-  /// No description provided for @rootModeUpdateAvailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Module version {version} is available'**
-  String rootModeUpdateAvailable(String version);
-
-  /// No description provided for @rootModeUpToDate.
-  ///
-  /// In en, this message translates to:
-  /// **'The module is up to date'**
-  String get rootModeUpToDate;
-
-  /// No description provided for @rootModeRemove.
+  /// No description provided for @legacyCleanupRemove.
   ///
   /// In en, this message translates to:
   /// **'Remove module'**
-  String get rootModeRemove;
+  String get legacyCleanupRemove;
 
-  /// No description provided for @rootModeRemoveTitle.
+  /// No description provided for @legacyCleanupLater.
   ///
   /// In en, this message translates to:
-  /// **'Remove the root module?'**
-  String get rootModeRemoveTitle;
+  /// **'Not now'**
+  String get legacyCleanupLater;
 
-  /// No description provided for @rootModeRemoveMessage.
+  /// No description provided for @legacyCleanupSuccess.
   ///
   /// In en, this message translates to:
-  /// **'Root permission will be requested. The verified legacy module will remove its network rules before its files and copies are deleted. Files are kept if cleanup fails. Your profiles and VPN settings will not change.'**
-  String get rootModeRemoveMessage;
+  /// **'The old module, its network rules and copies have been removed.'**
+  String get legacyCleanupSuccess;
 
-  /// No description provided for @rootModeMetadataMissing.
+  /// No description provided for @legacyCleanupFailed.
   ///
   /// In en, this message translates to:
-  /// **'The saved module signature data is missing. Without it, network cleanup and root-file removal cannot run safely. Automatic removal has been stopped.'**
-  String get rootModeMetadataMissing;
-
-  /// No description provided for @rootModeSafety.
-  ///
-  /// In en, this message translates to:
-  /// **'Install the module here in Etonify, not in your root manager: it is not a Magisk ZIP. Etonify downloads it separately and checks its signature, integrity and compatibility. Grant Etonify superuser permission when asked. A verified module and fresh root authorization are required to connect. This mode is experimental; keep VPN mode available if it does not work on your device.'**
-  String get rootModeSafety;
-
-  /// Expandable root mode installation and safety information
-  ///
-  /// In en, this message translates to:
-  /// **'About installation and safety'**
-  String get rootModeAbout;
-
-  /// Primary action when no root module is installed
-  ///
-  /// In en, this message translates to:
-  /// **'Install module'**
-  String get rootModeInstallModule;
-
-  /// Primary action for an installed root module
-  ///
-  /// In en, this message translates to:
-  /// **'Update module'**
-  String get rootModeUpdateModule;
-
-  /// A root command timed out during authorization or module management
-  ///
-  /// In en, this message translates to:
-  /// **'The root command timed out. Check your superuser manager and try again.'**
-  String get rootModePermissionTimeout;
-
-  /// Published release discovery or availability failed, not a root access failure
-  ///
-  /// In en, this message translates to:
-  /// **'The published module release is unavailable. Try again later.'**
-  String get rootModeReleaseUnavailable;
-
-  /// Module activation, health check or rollback failed
-  ///
-  /// In en, this message translates to:
-  /// **'The module could not start correctly. Reinstall it or keep using VPN mode.'**
-  String get rootModeActivationFailed;
-
-  /// Root module safe cleanup cannot access its private directory.
-  ///
-  /// In en, this message translates to:
-  /// **'The module cannot access its private working directory. Keep using VPN mode and share the diagnostic code with the developer.'**
-  String get rootModeWorkDirDenied;
-
-  /// Root module runtime lock access failed, not evidence of a running instance.
-  ///
-  /// In en, this message translates to:
-  /// **'The module could not access its runtime lock. Root Mode was not activated.'**
-  String get rootModeLockDenied;
-
-  /// Root module ownership journal failed verification.
-  ///
-  /// In en, this message translates to:
-  /// **'Previous session data could not be verified. Cleanup was stopped to avoid changing unrelated network settings.'**
-  String get rootModeJournalDenied;
-
-  /// Safe cleanup failed; activation remains blocked.
-  ///
-  /// In en, this message translates to:
-  /// **'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.'**
-  String get rootModeCleanupFailed;
-
-  /// No description provided for @rootModeTrustUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'A trusted module release is not configured. Download and activation remain unavailable.'**
-  String get rootModeTrustUnavailable;
-
-  /// No description provided for @rootModeDownloadFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'The module could not be downloaded. Check your connection and try again.'**
-  String get rootModeDownloadFailed;
-
-  /// No description provided for @rootModeVerificationFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Module verification failed. It will not be installed or started.'**
-  String get rootModeVerificationFailed;
-
-  /// No description provided for @rootModeCancelled.
-  ///
-  /// In en, this message translates to:
-  /// **'Operation cancelled.'**
-  String get rootModeCancelled;
-
-  /// No description provided for @rootModeInvalidResponse.
-  ///
-  /// In en, this message translates to:
-  /// **'The system returned an unsupported module status. Root Mode remains unavailable.'**
-  String get rootModeInvalidResponse;
-
-  /// No description provided for @rootModeStopFirst.
-  ///
-  /// In en, this message translates to:
-  /// **'Stop the current connection before changing Root Mode.'**
-  String get rootModeStopFirst;
-
-  /// No description provided for @rootModeOperationFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'The operation could not be completed. Try again or use VPN mode.'**
-  String get rootModeOperationFailed;
-
-  /// No description provided for @rootModeDnsUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Root Mode cannot safely apply this DNS configuration. Keep using VPN mode.'**
-  String get rootModeDnsUnavailable;
-
-  /// No description provided for @rootModeConfigUnsupported.
-  ///
-  /// In en, this message translates to:
-  /// **'This configuration is not supported in Root Mode. App-based split routing and mixed inbound are not bypassed silently; use VPN mode.'**
-  String get rootModeConfigUnsupported;
+  /// **'Removal of the old module could not be confirmed. Root permission will not be requested again. VPN profiles and settings are unchanged.'**
+  String get legacyCleanupFailed;
 }
 
 class _AppLocalizationsDelegate

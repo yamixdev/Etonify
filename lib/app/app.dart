@@ -86,7 +86,7 @@ import 'package:meow_client/features/settings/settings_backup_actions.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/features/settings/settings_core_page.dart';
-import 'package:meow_client/features/settings/settings_root_mode_page.dart';
+import 'package:meow_client/widgets/legacy_module_cleanup_notice.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/features/settings/settings_logs_page.dart';
@@ -6708,17 +6708,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
         resetSettings: () => unawaited(_resetSettingsToDefaults()),
         openExperimental: _showExperimentalSettingsPage,
         openCore: _showCoreSettingsPage,
-        openRoot: Platform.isAndroid ? _showRootModePage : null,
         openLogs: _showLogsPage,
         openAbout: _showAboutSettingsPage,
       ),
     ).build();
-  }
-
-  Future<void> _showRootModePage() async {
-    await _navigatorKey.currentState?.push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SettingsRootModePage()),
-    );
   }
 
   Future<List<Map<String, dynamic>>> _warmInstalledApps() {
@@ -10565,7 +10558,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
       hapticEnabled: _hapticEnabled,
       home: _storageBootstrapFailed
           ? WindowsStorageErrorScreen(onRetry: _retryWindowsStorage)
-          : _buildAppHome(),
+          : LegacyModuleCleanupNotice(
+              enabled:
+                  Platform.isAndroid &&
+                  _ready &&
+                  _legalAccepted &&
+                  _foregroundLifecycleActive &&
+                  !_connected &&
+                  !_runtimeTransitionInProgress,
+              child: _buildAppHome(),
+            ),
       onDynamicColorSchemesChanged: _updateDynamicColorSchemes,
     );
   }

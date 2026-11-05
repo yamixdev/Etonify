@@ -173,7 +173,9 @@ class _ProxySheetHeader extends StatelessWidget {
     final activeProxyOpacity = Curves.easeOutCubic.transform(activeProxyFade);
     final showHandle = handleOpacity >= .08;
     final toolbarTop = lerpDouble(18, 8, collapse)!;
-    final toolbarBottom = lerpDouble(0, 4, collapse)!;
+    const actionsBottom = 16.0;
+    const actionsHeight = 48.0;
+    final titleHeight = height - toolbarTop - actionsBottom - actionsHeight;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -196,7 +198,9 @@ class _ProxySheetHeader extends StatelessWidget {
                 left: 16,
                 right: 16,
                 top: 24,
-                bottom: 4,
+                // The collapsed panel remains 108dp tall. Its active-proxy
+                // summary must not move down with the expanded toolbar.
+                height: _kProxySheetHeaderHeight - 28,
                 child: IgnorePointer(
                   ignoring: activeProxyOpacity < .85,
                   child: Opacity(
@@ -232,10 +236,10 @@ class _ProxySheetHeader extends StatelessWidget {
                 ),
               ),
             Positioned(
-              left: onAddProxy == null ? 96 : 64,
-              right: onAddProxy == null ? 96 : 160,
+              left: 64,
+              right: 16,
               top: toolbarTop,
-              bottom: toolbarBottom,
+              height: titleHeight,
               child: Opacity(
                 opacity: headerOpacity,
                 child: Center(
@@ -355,7 +359,7 @@ class _ProxySheetHeader extends StatelessWidget {
               left: 16,
               right: 16,
               top: toolbarTop,
-              bottom: toolbarBottom,
+              height: titleHeight,
               child: IgnorePointer(
                 ignoring: headerOpacity < .85,
                 child: Opacity(
@@ -363,6 +367,10 @@ class _ProxySheetHeader extends StatelessWidget {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                       onPressed: onTap,
                       tooltip: MaterialLocalizations.of(
                         context,
@@ -376,16 +384,21 @@ class _ProxySheetHeader extends StatelessWidget {
             Positioned(
               left: 16,
               right: 16,
-              top: toolbarTop,
-              bottom: toolbarBottom,
+              height: actionsHeight,
+              bottom: actionsBottom,
               child: IgnorePointer(
                 ignoring: headerOpacity < .85,
                 child: Opacity(
                   opacity: headerOpacity,
-                  child: Align(
-                    alignment: Alignment.centerRight,
+                  child: IconButtonTheme(
+                    data: const IconButtonThemeData(
+                      style: ButtonStyle(
+                        minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+                        tapTargetSize: MaterialTapTargetSize.padded,
+                      ),
+                    ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         if (onEditExclusions != null)
                           IconButton(

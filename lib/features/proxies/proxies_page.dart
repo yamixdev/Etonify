@@ -37,10 +37,11 @@ part 'proxies_page_share.dart';
 part 'proxy_tile.dart';
 
 const _kProxySheetHeaderHeight = 116.0;
+const _kProxySheetExpandedToolbarHeight = 152.0;
 
 // The progress column must finish above the backdrop's translucent edge,
 // including when the header is collapsed and both status lines are visible.
-const _kProxySheetCompactHeaderHeight = 100.0;
+const _kProxySheetCompactHeaderHeight = 136.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
 const _kProxySheetRowExtent = proxyPanelRowExtent;
 // Prepare upcoming rows before a fast swipe reaches them. The buffer scales
@@ -1464,7 +1465,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     // Keep the sliver geometry stable while the pinned header collapses.
     // Mutating padding during a drag forces the list to relayout and makes the
     // first rows visibly jump under the finger.
-    const listTopPadding = _kProxySheetHeaderHeight + 6;
+    final listTopPadding = _proxySheetHeaderHeightForCollapse(0) + 6;
     final bottomInset = appSystemNavigationBarInset(context);
     final entries = listMounted ? _visibleEntries() : const <_ProxyListEntry>[];
     return Padding(
@@ -1537,14 +1538,21 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }
 
   double _proxySheetHeaderHeightForCollapse(double collapse) {
+    // Reserve room for the title and both status lines without shrinking text.
+    final scaler = MediaQuery.textScalerOf(context);
+    final textGrowth = max(
+      0.0,
+      (scaler.scale(16) - 16 + 2 * (scaler.scale(11) - 11)) * 1.6,
+    );
     final t = Curves.easeOutCubic.transform(
       collapse.clamp(0.0, 1.0).toDouble(),
     );
     return lerpDouble(
-      _kProxySheetHeaderHeight,
-      _kProxySheetCompactHeaderHeight,
-      t,
-    )!;
+          _kProxySheetExpandedToolbarHeight,
+          _kProxySheetCompactHeaderHeight,
+          t,
+        )! +
+        textGrowth;
   }
 
   Widget _buildProxyList({

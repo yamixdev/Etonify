@@ -19,6 +19,7 @@ class RootModuleManager(
 ) {
     private val context = context.applicationContext
     private val prefs = this.context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val migrationPrefs = this.context.getSharedPreferences("etonify_legacy_module_cleanup", Context.MODE_PRIVATE)
     private val verifier = verifier ?: RootModuleVerifier(
         trustedPublicKeyBase64,
         if (Build.SUPPORTED_ABIS.contains("arm64-v8a")) "arm64-v8a" else "unsupported",
@@ -45,6 +46,11 @@ class RootModuleManager(
             } catch (error: RootModuleException) { reason = error.code
             } catch (_: Exception) { reason = "manifest_invalid" }
         }
+        // App-private download leftovers are safe to clean without any root
+        // authorization or surviving signed installation metadata.
+        try { cleanStaging() }
+        catch (error: RootModuleException) { if (reason == null) reason = error.code }
+        catch (_: Exception) { if (reason == null) reason = "module_cache_cleanup_failed" }
     }
 
     fun snapshot(): Map<String, Any?> = mapOf(
@@ -52,7 +58,19 @@ class RootModuleManager(
         "moduleState" to if (reason != null) "failed" else if (cached != null) "ready" else "notInstalled",
         "moduleVersion" to cached?.moduleVersion,
         "enabled" to false, "busy" to busy.get(), "reason" to reason,
+        "legacyModuleCandidate" to hasLegacyMetadata(),
+        "promptPending" to (hasLegacyMetadata() && !migrationPrefs.getBoolean("prompt_handled_v1", false)),
     )
+
+    /** Records presentation/decline separately from the signed module metadata. */
+    fun acknowledgePrompt(): Map<String, Any?> {
+        if (!migrationPrefs.edit().putBoolean("prompt_handled_v1", true).commit()) {
+            return snapshot() + ("reason" to "module_metadata_failed")
+        }
+        return snapshot()
+    }
+
+    private fun hasLegacyMetadata() = prefs.contains("manifest") || prefs.contains("signature")
 
     /** Only invoked after a UI confirmation. Any failure preserves module files and metadata. */
     fun remove(): Map<String, Any?> {

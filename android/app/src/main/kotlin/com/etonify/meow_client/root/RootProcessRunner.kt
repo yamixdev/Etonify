@@ -18,13 +18,13 @@ class RootCapabilityProbe(private val command: () -> RootCommandResult = { RootP
     } catch (_: Exception) { "denied" }
 }
 
-open class RootProcessRunner {
+open class RootProcessRunner(private val startProcess: (ProcessBuilder) -> Process = { it.start() }) {
     open fun execute(command: String, input: ByteArray? = null, timeoutMs: Long = 30_000): RootCommandResult {
         return executeStreaming(command, input?.inputStream(), timeoutMs)
     }
 
     open fun executeStreaming(command: String, input: java.io.InputStream?, timeoutMs: Long = 30_000): RootCommandResult {
-        val process = ProcessBuilder("su", "-c", command).start()
+        val process = startTrustedProcess(command)
         val workers = Executors.newFixedThreadPool(3) { runnable -> Thread(runnable, "etonify-root-io").apply { isDaemon = true } }
         val out = workers.submit<String> { boundedText(process.inputStream) }
         val err = workers.submit<String> { boundedText(process.errorStream) }
@@ -47,8 +47,27 @@ open class RootProcessRunner {
         }
     }
 
+    private fun startTrustedProcess(command: String): Process {
+        var failure: IOException? = null
+        for (executable in SU_EXECUTABLES) {
+            // Fixed privileged locations only: never search the inherited PATH.
+            // Execute the spelling itself; KernelSU may provide virtual sucompat
+            // and Magisk may expose su as a symlink to its multi-call binary.
+            val builder = ProcessBuilder(executable, "-c", "PATH=$TRUSTED_PATH; export PATH; $command")
+            builder.environment()["PATH"] = TRUSTED_PATH
+            try { return startProcess(builder) }
+            catch (error: IOException) { failure = error }
+        }
+        throw failure ?: IOException("su_not_found")
+    }
+
     companion object {
         const val ROOT = "/data/adb/etonify"
+        private const val TRUSTED_PATH = "/system/bin:/system/xbin"
+        private val SU_EXECUTABLES = listOf(
+            "/system/bin/su", "/system/xbin/su", "/sbin/su", "/debug_ramdisk/su",
+            "/su/bin/su", "/data/adb/ksu/bin/su", "/data/adb/ap/bin/su",
+        )
         internal fun quote(value: String): String {
             require(!value.contains('\u0000'))
             return "'" + value.replace("'", "'\"'\"'") + "'"

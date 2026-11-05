@@ -15,7 +15,35 @@ import java.util.Base64
 @Config(sdk = [28])
 class RootLegacyCleanupTest {
     private val context get() = RuntimeEnvironment.getApplication()
-    @Before fun reset() { context.getSharedPreferences("etonify_root_module", 0).edit().clear().commit() }
+    @Before fun reset() {
+        context.getSharedPreferences("etonify_root_module", 0).edit().clear().commit()
+        context.getSharedPreferences("etonify_legacy_module_cleanup", 0).edit().clear().commit()
+    }
+
+    @Test fun `invalid legacy metadata is a local candidate for one cleanup prompt`() {
+        context.getSharedPreferences("etonify_root_module", 0).edit().putString("manifest", "invalid").commit()
+        val manager = RootModuleManager(context, "", runner = forbiddenRoot())
+        assertEquals(true, manager.snapshot()["legacyModuleCandidate"])
+        assertEquals(true, manager.snapshot()["promptPending"])
+        assertEquals("failed", manager.snapshot()["moduleState"])
+    }
+
+    @Test fun `fresh install has no cleanup prompt or root request`() {
+        val snapshot = RootModuleManager(context, "", runner = forbiddenRoot()).snapshot()
+        assertEquals(false, snapshot["legacyModuleCandidate"])
+        assertEquals(false, snapshot["promptPending"])
+    }
+
+    @Test fun `acknowledged cleanup prompt remains handled after process recreation without root`() {
+        context.getSharedPreferences("etonify_root_module", 0).edit().putString("signature", "invalid").commit()
+        val first = RootModuleManager(context, "", runner = forbiddenRoot())
+        assertEquals(true, first.snapshot()["promptPending"])
+        assertEquals(false, first.acknowledgePrompt()["promptPending"])
+        val recreated = RootModuleManager(context, "", runner = forbiddenRoot()).snapshot()
+        assertEquals(false, recreated["promptPending"])
+        assertEquals(true, recreated["legacyModuleCandidate"])
+        assertNotNull(context.getSharedPreferences("etonify_root_module", 0).getString("signature", null))
+    }
 
     @Test fun `opening cleanup resets legacy enabled preference without requesting root`() {
         val prefs = context.getSharedPreferences("etonify_root_module", 0)
@@ -49,8 +77,8 @@ class RootLegacyCleanupTest {
         val originalUid = android.os.Process.myUid()
         org.robolectric.shadows.ShadowProcess.setUid(android.system.Os.lstat(copy.absolutePath).st_uid)
         try {
-            val result = RootModuleManager(context, "", runner = forbiddenRoot()).remove()
-            assertEquals("module_metadata_missing", result["reason"])
+            val result = RootModuleManager(context, "", runner = forbiddenRoot()).snapshot()
+            assertNull(result["reason"])
             assertFalse("orphan download must not be stranded behind a root check", copy.exists())
             assertTrue(unrelated.exists())
         } finally {
@@ -67,7 +95,7 @@ class RootLegacyCleanupTest {
         val originalUid = android.os.Process.myUid()
         org.robolectric.shadows.ShadowProcess.setUid(android.system.Os.lstat(copy.absolutePath).st_uid)
         try {
-            val result = RootModuleManager(context, "", runner = forbiddenRoot()).remove()
+            val result = RootModuleManager(context, "", runner = forbiddenRoot()).snapshot()
             assertEquals("module_cache_cleanup_failed", result["reason"])
             assertTrue(java.io.File(nested, "keep").exists())
         } finally {
@@ -96,7 +124,9 @@ class RootLegacyCleanupTest {
                 return if (command == "id -u") RootCommandResult(0, "0\n", "") else RootCommandResult(1, "", "")
             }
         }
-        val result = installed(runner).remove()
+        val manager = installed(runner)
+        manager.acknowledgePrompt()
+        val result = manager.remove()
         assertEquals("module_integrity_failed", result["reason"])
         assertEquals(2, calls.size)
         assertTrue(calls.none { it.startsWith("exec timeout") || it.contains("rm -rf") })
@@ -129,7 +159,9 @@ class RootLegacyCleanupTest {
                 return RootCommandResult(0, if (command == "id -u") "0\n" else "", "")
             }
         }
-        val result = installed(runner).remove()
+        val manager = installed(runner)
+        manager.acknowledgePrompt()
+        val result = manager.remove()
         assertNull(result["reason"])
         assertEquals("notInstalled", result["moduleState"])
         assertEquals(4, calls.size)
@@ -137,5 +169,6 @@ class RootLegacyCleanupTest {
         assertTrue(calls[3].endsWith("rm -rf -- /data/adb/etonify"))
         assertNull(context.getSharedPreferences("etonify_root_module", 0).getString("manifest", null))
         assertFalse(context.getSharedPreferences("etonify_root_module", 0).getBoolean("enabled", true))
+        assertTrue(context.getSharedPreferences("etonify_legacy_module_cleanup", 0).getBoolean("prompt_handled_v1", false))
     }
 }

@@ -9,7 +9,6 @@ class SettingsPage extends StatelessWidget {
     super.key,
     required this.onOpenGeneral,
     this.onOpenCore,
-    this.onOpenRoot,
     required this.onOpenDns,
     required this.onOpenSubscriptions,
     required this.onOpenInbound,
@@ -27,7 +26,6 @@ class SettingsPage extends StatelessWidget {
 
   final VoidCallback onOpenGeneral;
   final VoidCallback? onOpenCore;
-  final VoidCallback? onOpenRoot;
   final VoidCallback onOpenDns;
   final VoidCallback onOpenSubscriptions;
   final VoidCallback onOpenInbound;
@@ -195,12 +193,6 @@ class SettingsPage extends StatelessWidget {
                   icon: Icons.memory_rounded,
                   title: l10n.coreSettingsTitle,
                   onTap: onOpenCore!,
-                ),
-              if (onOpenRoot != null)
-                _SettingsEntryTile(
-                  icon: Icons.admin_panel_settings_outlined,
-                  title: l10n.rootModeTitle,
-                  onTap: onOpenRoot!,
                 ),
               _SettingsEntryTile(
                 icon: Icons.speed_rounded,

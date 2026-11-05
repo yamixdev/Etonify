@@ -3764,172 +3764,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trafficDashboardPublicIpCached => 'Last known IP · refresh failed';
 
   @override
-  String get rootModeTitle => 'Legacy module cleanup';
+  String get legacyCleanupTitle => 'Root Mode is no longer supported';
 
   @override
-  String get rootModeExperimental => 'Experimental';
+  String get legacyCleanupMessage =>
+      'Root Mode has been removed from Etonify. Data from a previously installed module remains. Remove its files and network rules? This requires root permission. VPN profiles and settings will be kept.';
 
   @override
-  String get rootModeDescription =>
-      'Root Mode has been removed. You can remove a previously installed module and its copies here. Root permission is requested only after you confirm removal.';
+  String get legacyCleanupRemove => 'Remove module';
 
   @override
-  String get rootModeRootStatus => 'Superuser access';
+  String get legacyCleanupLater => 'Not now';
 
   @override
-  String get rootModeModuleStatus => 'Root module';
+  String get legacyCleanupSuccess =>
+      'The old module, its network rules and copies have been removed.';
 
   @override
-  String get rootModeChecking => 'Checking…';
-
-  @override
-  String get rootModeRootUnknown => 'Not checked — no permission requested';
-
-  @override
-  String get rootModeRootUnavailable => 'Superuser access is unavailable';
-
-  @override
-  String get rootModeRootGranted => 'Permission granted';
-
-  @override
-  String get rootModeRootDenied => 'Superuser permission denied';
-
-  @override
-  String get rootModeNotInstalled => 'No verified legacy module metadata';
-
-  @override
-  String get rootModeDownloading => 'Downloading module…';
-
-  @override
-  String get rootModeVerifying => 'Verifying signature and integrity…';
-
-  @override
-  String get rootModeInstalling => 'Installing module…';
-
-  @override
-  String get rootModeReady => 'Verified and ready';
-
-  @override
-  String get rootModeIncompatible => 'Incompatible module';
-
-  @override
-  String get rootModeFailed => 'Module unavailable';
-
-  @override
-  String rootModeVersion(String version) {
-    return 'Version $version';
-  }
-
-  @override
-  String get rootModeUseRoot => 'Use root instead of VPN';
-
-  @override
-  String get rootModeUseRootSummary => 'Applies to the next connection.';
-
-  @override
-  String get rootModeCheckRoot => 'Check root';
-
-  @override
-  String get rootModeDownload => 'Download / update module';
-
-  @override
-  String get rootModeCheckUpdate => 'Check for updates';
-
-  @override
-  String rootModeUpdateAvailable(String version) {
-    return 'Module version $version is available';
-  }
-
-  @override
-  String get rootModeUpToDate => 'The module is up to date';
-
-  @override
-  String get rootModeRemove => 'Remove module';
-
-  @override
-  String get rootModeRemoveTitle => 'Remove the root module?';
-
-  @override
-  String get rootModeRemoveMessage =>
-      'Root permission will be requested. The verified legacy module will remove its network rules before its files and copies are deleted. Files are kept if cleanup fails. Your profiles and VPN settings will not change.';
-
-  @override
-  String get rootModeMetadataMissing =>
-      'The saved module signature data is missing. Without it, network cleanup and root-file removal cannot run safely. Automatic removal has been stopped.';
-
-  @override
-  String get rootModeSafety =>
-      'Install the module here in Etonify, not in your root manager: it is not a Magisk ZIP. Etonify downloads it separately and checks its signature, integrity and compatibility. Grant Etonify superuser permission when asked. A verified module and fresh root authorization are required to connect. This mode is experimental; keep VPN mode available if it does not work on your device.';
-
-  @override
-  String get rootModeAbout => 'About installation and safety';
-
-  @override
-  String get rootModeInstallModule => 'Install module';
-
-  @override
-  String get rootModeUpdateModule => 'Update module';
-
-  @override
-  String get rootModePermissionTimeout =>
-      'The root command timed out. Check your superuser manager and try again.';
-
-  @override
-  String get rootModeReleaseUnavailable =>
-      'The published module release is unavailable. Try again later.';
-
-  @override
-  String get rootModeActivationFailed =>
-      'The module could not start correctly. Reinstall it or keep using VPN mode.';
-
-  @override
-  String get rootModeWorkDirDenied =>
-      'The module cannot access its private working directory. Keep using VPN mode and share the diagnostic code with the developer.';
-
-  @override
-  String get rootModeLockDenied =>
-      'The module could not access its runtime lock. Root Mode was not activated.';
-
-  @override
-  String get rootModeJournalDenied =>
-      'Previous session data could not be verified. Cleanup was stopped to avoid changing unrelated network settings.';
-
-  @override
-  String get rootModeCleanupFailed =>
-      'Safe cleanup could not finish. Root Mode was not activated. Keep using VPN mode and share the diagnostic code with the developer.';
-
-  @override
-  String get rootModeTrustUnavailable =>
-      'A trusted module release is not configured. Download and activation remain unavailable.';
-
-  @override
-  String get rootModeDownloadFailed =>
-      'The module could not be downloaded. Check your connection and try again.';
-
-  @override
-  String get rootModeVerificationFailed =>
-      'Module verification failed. It will not be installed or started.';
-
-  @override
-  String get rootModeCancelled => 'Operation cancelled.';
-
-  @override
-  String get rootModeInvalidResponse =>
-      'The system returned an unsupported module status. Root Mode remains unavailable.';
-
-  @override
-  String get rootModeStopFirst =>
-      'Stop the current connection before changing Root Mode.';
-
-  @override
-  String get rootModeOperationFailed =>
-      'The operation could not be completed. Try again or use VPN mode.';
-
-  @override
-  String get rootModeDnsUnavailable =>
-      'Root Mode cannot safely apply this DNS configuration. Keep using VPN mode.';
-
-  @override
-  String get rootModeConfigUnsupported =>
-      'This configuration is not supported in Root Mode. App-based split routing and mixed inbound are not bypassed silently; use VPN mode.';
+  String get legacyCleanupFailed =>
+      'Removal of the old module could not be confirmed. Root permission will not be requested again. VPN profiles and settings are unchanged.';
 }

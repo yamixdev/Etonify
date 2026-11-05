@@ -6,7 +6,6 @@ class SettingsPresentationCallbacks {
   const SettingsPresentationCallbacks({
     required this.openGeneral,
     this.openCore,
-    this.openRoot,
     required this.openDns,
     required this.openSubscriptions,
     required this.openInbound,
@@ -24,7 +23,6 @@ class SettingsPresentationCallbacks {
 
   final VoidCallback openGeneral;
   final VoidCallback? openCore;
-  final VoidCallback? openRoot;
   final VoidCallback openDns;
   final VoidCallback openSubscriptions;
   final VoidCallback openInbound;
@@ -49,7 +47,6 @@ class SettingsPresentationBuilder {
     return SettingsPage(
       onOpenGeneral: callbacks.openGeneral,
       onOpenCore: callbacks.openCore,
-      onOpenRoot: callbacks.openRoot,
       onOpenDns: callbacks.openDns,
       onOpenSubscriptions: callbacks.openSubscriptions,
       onOpenInbound: callbacks.openInbound,

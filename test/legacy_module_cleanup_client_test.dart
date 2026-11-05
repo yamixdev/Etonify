@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/platform/android/root_mode_client.dart';
+import 'package:meow_client/platform/android/legacy_module_cleanup_client.dart';
 
 Map<String, Object?> statusMap({
   String root = 'granted',
@@ -16,14 +16,13 @@ Map<String, Object?> statusMap({
   'busy': busy,
 };
 
-class RootTransportFake implements RootModeTransport {
+class RootTransportFake implements LegacyCleanupTransport {
   final calls = <(String, Map<String, Object?>?)>[];
   final controller = StreamController<Object?>.broadcast();
   Object? response = statusMap();
   Object? error;
   Future<Object?> Function(String)? handler;
   Future<void> close() => controller.close();
-  @override
   Stream<Object?> get events => controller.stream;
   @override
   Future<Object?> invoke(
@@ -40,12 +39,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test('legacy enabled payload is rejected and cannot resurrect routing', () {
     expect(
-      RootModeStatus.fromMap(statusMap(enabled: true)).reason,
+      LegacyCleanupStatus.fromMap(statusMap(enabled: true)).reason,
       'invalid_response',
     );
     expect(
-      RootModeStatus.fromMap(statusMap()).moduleState,
-      RootModuleState.ready,
+      LegacyCleanupStatus.fromMap(statusMap()).moduleState,
+      LegacyModuleState.ready,
     );
   });
   test('malformed status and unsafe diagnostic codes fail closed', () {
@@ -55,11 +54,11 @@ void main() {
       {...statusMap(), 'moduleState': 'downloading'},
       {...statusMap(), 'busy': 'yes'},
     ]) {
-      expect(RootModeStatus.fromMap(value).reason, 'invalid_response');
+      expect(LegacyCleanupStatus.fromMap(value).reason, 'invalid_response');
     }
   });
   test('snapshot and explicit removal use migration channel only', () async {
-    const channel = MethodChannel('meow_client/root_mode');
+    const channel = MethodChannel('meow_client/legacy_module_cleanup');
     final calls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
@@ -70,7 +69,7 @@ void main() {
       () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null),
     );
-    final client = RootModeClient();
+    final client = LegacyModuleCleanupClient();
     expect(calls, isEmpty);
     await client.snapshot();
     await client.remove();

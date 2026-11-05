@@ -4,8 +4,96 @@ import 'package:meow_client/features/proxies/proxy_exclusions_page.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 void main() {
+  for (final markRussia in [false, true]) {
+    testWidgets('exclusion rows show honest countries, Russia=$markRussia', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: ProxyExclusionsPage(
+            subscription: Subscription(
+              id: 'flags',
+              name: 'flags',
+              url: '',
+              markAllServersRussia: markRussia,
+              outbounds: const [
+                Outbound(
+                  tag: 'known',
+                  name: 'Known',
+                  config: {'type': 'vless'},
+                  info: OutboundInfo(country: 'DE'),
+                ),
+                Outbound(
+                  tag: 'unknown',
+                  name: 'Unknown',
+                  config: {'type': 'trojan'},
+                ),
+              ],
+            ),
+            rules: ProxyExclusionRules(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final tag in ['known', 'unknown']) {
+        final row = find.byKey(ValueKey('proxy-exclusion-$tag'));
+        await tester.scrollUntilVisible(
+          row,
+          180,
+          scrollable: find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        final flag = find.descendant(
+          of: row,
+          matching: find.byType(CountryFlagBadge),
+        );
+        expect(flag, findsOneWidget);
+        expect(
+          tester.widget<CountryFlagBadge>(flag).countryCode,
+          markRussia
+              ? 'RU'
+              : tag == 'known'
+              ? 'DE'
+              : '',
+        );
+        final title = find.text(tag == 'known' ? 'Known' : 'Unknown');
+        expect(
+          tester.getRect(flag).right,
+          lessThanOrEqualTo(tester.getRect(title).left),
+        );
+        if (!markRussia && tag == 'unknown') {
+          expect(
+            find.descendant(
+              of: flag,
+              matching: find.byIcon(Icons.public_rounded),
+            ),
+            findsOneWidget,
+          );
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('search, toggle and apply preserve absent stored tags', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 /// Edits a local draft only. The caller owns persistence and runtime policy.
 class ProxyExclusionsPage extends StatefulWidget {
@@ -281,6 +282,10 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                 );
                 return CheckboxListTile(
                   key: ValueKey('proxy-exclusion-${node.tag}'),
+                  secondary: CountryFlagBadge(
+                    countryCode: _country(node),
+                    size: 34,
+                  ),
                   title: Text(node.name),
                   subtitle: Text(
                     [
