@@ -13,14 +13,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.8%2B38-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="Клієнт: 0.3.8+38"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="Вбудоване ядро: 1.15.0-alpha.10-etonify.1"></a>
-  <br>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=for-the-badge" alt="GPL-3.0-or-later"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
 </p>
 
-**[Завантажити APK](https://github.com/yamixdev/Etonify/releases)** · [Історія змін](CHANGELOG.md) · [Повідомити про проблему](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
+**[Завантажити APK](https://github.com/yamixdev/Etonify/releases/latest)** · [Історія змін](CHANGELOG.md) · [Повідомити про проблему](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
 
 [Можливості](#features) · [Швидкий старт](#quick-start) · [Сумісність](#compatibility) · [Розробка](#development)
 
@@ -67,10 +64,10 @@ Etonify поєднує підписки, вибір проксі, маршрут
 
 | Компонент | Поточний вихідний код |
 | :--- | :--- |
-| Клієнт | `0.3.8+38` |
-| Вбудоване ядро | `v1.15.0-alpha.10-etonify.1` |
+| Клієнт | `0.3.13+45` |
+| Вбудоване ядро | `v1.15.0-alpha.10-etonify.7` |
 | Базова версія sing-box | `v1.15.0-alpha.10` |
-| Flutter SDK | `3.47.5` · Dart `3.13` |
+| Flutter SDK | `3.47.5` |
 | Android | 8.0 і новіший · API 26+ |
 | Архітектури APK | `arm64-v8a` · `armeabi-v7a` |
 | Мови інтерфейсу застосунку | Англійська та російська |

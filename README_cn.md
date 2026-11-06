@@ -13,14 +13,11 @@
 </p>
 
 <p dir="ltr">
-  <a href="https://github.com/yamixdev/Etonify/releases"><img src="https://img.shields.io/badge/Client-0.3.8%2B38-blue?style=for-the-badge&amp;logo=flutter&amp;logoColor=white" alt="客户端: 0.3.8+38"></a>
-  <a href="android/app/libs/libbox.provenance.json"><img src="https://img.shields.io/badge/Core-1.15.0--alpha.10--etonify.1-blue?style=for-the-badge" alt="内置核心: 1.15.0-alpha.10-etonify.1"></a>
-  <br>
-  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-brightgreen?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=for-the-badge" alt="GPL-3.0-or-later"></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
 </p>
 
-**[下载 APK](https://github.com/yamixdev/Etonify/releases)** · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
+**[下载 APK](https://github.com/yamixdev/Etonify/releases/latest)** · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
 
 [功能](#features) · [快速开始](#quick-start) · [兼容性](#compatibility) · [开发](#development)
 
@@ -67,10 +64,10 @@ Etonify 将订阅、代理选择、路由和连接诊断整合到一个 Android 
 
 | 组件 | 当前源码 |
 | :--- | :--- |
-| 客户端 | `0.3.8+38` |
-| 内置核心 | `v1.15.0-alpha.10-etonify.1` |
+| 客户端 | `0.3.13+45` |
+| 内置核心 | `v1.15.0-alpha.10-etonify.7` |
 | sing-box 基线 | `v1.15.0-alpha.10` |
-| Flutter SDK | `3.47.5` · Dart `3.13` |
+| Flutter SDK | `3.47.5` |
 | Android | 8.0 及以上 · API 26+ |
 | APK 架构 | `arm64-v8a` · `armeabi-v7a` |
 | 应用界面语言 | 英语和俄语 |
