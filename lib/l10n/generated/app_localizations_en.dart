@@ -593,10 +593,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get proxyChainExitLabel => 'Exit proxy';
 
   @override
+  String get proxyChainExitSourceLabel => 'Exit subscription';
+
+  @override
+  String get proxyChainRouteHint =>
+      'Your connection goes through the first proxy, then through the exit. Sites see the exit proxy’s IP address.';
+
+  @override
+  String get proxyChainCheckHint =>
+      'Tap the latency or ‘No result’ to check a server in the active subscription.';
+
+  @override
+  String get proxyChainSavedLatencyHint =>
+      'Exit servers from other subscriptions show their last saved result. Open that subscription to test them again.';
+
+  @override
   String get proxyChainNothingFound => 'Nothing found';
 
   @override
+  String get proxyChainNoAvailableTargets => 'No available exit proxies';
+
+  @override
   String get proxyChainSaveAction => 'Save';
+
+  @override
+  String get hideProxyChainsTitle => 'Hide proxy chains';
+
+  @override
+  String get hideProxyChainsDescription =>
+      'Hide chains and the add button from the Proxies list.';
 
   @override
   String get shareProxyTitle => 'Share';
@@ -3737,7 +3762,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get proxyExclusionsAddCondition => 'Add condition';
 
   @override
-  String get proxyExclusionsConditionHint => 'All selected fields must match.';
+  String get proxyExclusionsEditCondition => 'Edit condition';
+
+  @override
+  String get proxyExclusionsConditionHint =>
+      'All selected fields must match. If you select several countries, any of them can match.';
 
   @override
   String get proxyExclusionsProtocol => 'Protocol';
@@ -3749,7 +3778,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get proxyExclusionsTransport => 'Transport';
 
   @override
-  String get proxyExclusionsCountry => 'Country';
+  String get proxyExclusionsCountry => 'Countries';
 
   @override
   String get proxyExclusionsAny => 'Any';

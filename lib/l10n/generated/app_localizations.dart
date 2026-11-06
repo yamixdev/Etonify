@@ -1148,17 +1148,59 @@ abstract class AppLocalizations {
   /// **'Exit proxy'**
   String get proxyChainExitLabel;
 
+  /// No description provided for @proxyChainExitSourceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit subscription'**
+  String get proxyChainExitSourceLabel;
+
+  /// No description provided for @proxyChainRouteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your connection goes through the first proxy, then through the exit. Sites see the exit proxy’s IP address.'**
+  String get proxyChainRouteHint;
+
+  /// No description provided for @proxyChainCheckHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the latency or ‘No result’ to check a server in the active subscription.'**
+  String get proxyChainCheckHint;
+
+  /// No description provided for @proxyChainSavedLatencyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit servers from other subscriptions show their last saved result. Open that subscription to test them again.'**
+  String get proxyChainSavedLatencyHint;
+
   /// No description provided for @proxyChainNothingFound.
   ///
   /// In en, this message translates to:
   /// **'Nothing found'**
   String get proxyChainNothingFound;
 
+  /// No description provided for @proxyChainNoAvailableTargets.
+  ///
+  /// In en, this message translates to:
+  /// **'No available exit proxies'**
+  String get proxyChainNoAvailableTargets;
+
   /// No description provided for @proxyChainSaveAction.
   ///
   /// In en, this message translates to:
   /// **'Save'**
   String get proxyChainSaveAction;
+
+  /// No description provided for @hideProxyChainsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide proxy chains'**
+  String get hideProxyChainsTitle;
+
+  /// No description provided for @hideProxyChainsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide chains and the add button from the Proxies list.'**
+  String get hideProxyChainsDescription;
 
   /// No description provided for @shareProxyTitle.
   ///
@@ -6624,10 +6666,16 @@ abstract class AppLocalizations {
   /// **'Add condition'**
   String get proxyExclusionsAddCondition;
 
+  /// No description provided for @proxyExclusionsEditCondition.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit condition'**
+  String get proxyExclusionsEditCondition;
+
   /// No description provided for @proxyExclusionsConditionHint.
   ///
   /// In en, this message translates to:
-  /// **'All selected fields must match.'**
+  /// **'All selected fields must match. If you select several countries, any of them can match.'**
   String get proxyExclusionsConditionHint;
 
   /// No description provided for @proxyExclusionsProtocol.
@@ -6651,7 +6699,7 @@ abstract class AppLocalizations {
   /// No description provided for @proxyExclusionsCountry.
   ///
   /// In en, this message translates to:
-  /// **'Country'**
+  /// **'Countries'**
   String get proxyExclusionsCountry;
 
   /// No description provided for @proxyExclusionsAny.

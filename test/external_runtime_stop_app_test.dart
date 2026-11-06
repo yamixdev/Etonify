@@ -401,6 +401,7 @@ void main() {
               rejected && connected ? isEmpty : {'test'},
             );
             final page = tester.widget<ProxiesPage>(find.byType(ProxiesPage));
+            expect(page.hasProxyExclusions, !(rejected && connected));
             expect(page.selectedTag, 'test');
             expect(page.activeProxy?.tag, 'test');
             expect(page.connected, connected);

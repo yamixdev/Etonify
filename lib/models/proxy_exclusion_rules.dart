@@ -16,19 +16,25 @@ class ProxyExclusionCondition {
     String? security,
     String? transport,
     String? country,
+    Iterable<String> countries = const [],
   }) : protocol = _normalized(protocol),
        security = _normalized(security),
        transport = _normalized(transport),
-       country = _normalized(country)?.toUpperCase();
+       countries = List.unmodifiable(
+         {
+           for (final value in {...countries, ?country})
+             if (_normalized(value) case final code?) code.toUpperCase(),
+         }.toList()..sort(),
+       );
   final String? protocol;
   final String? security;
   final String? transport;
-  final String? country;
+  final List<String> countries;
   bool get isEmpty =>
       protocol == null &&
       security == null &&
       transport == null &&
-      country == null;
+      countries.isEmpty;
   static String protocolOf(Outbound node) =>
       _normalized(node.config['type']) ?? 'unknown';
   static String securityOf(Outbound node) {
@@ -57,20 +63,20 @@ class ProxyExclusionCondition {
       (protocol == null || protocol == protocolOf(node)) &&
       (security == null || security == securityOf(node)) &&
       (transport == null || transport == transportOf(node)) &&
-      (country == null ||
-          country ==
-              normalizeOutboundCountryCode(
-                countryCode ??
-                    outboundDisplayCountryCode(
-                      node,
-                      markAllServersRussia: false,
-                    ),
-              ));
+      (countries.isEmpty ||
+          countries.contains(
+            normalizeOutboundCountryCode(
+              countryCode ??
+                  outboundDisplayCountryCode(node, markAllServersRussia: false),
+            ),
+          ));
   Map<String, dynamic> toMap() => {
     if (protocol != null) 'protocol': protocol,
     if (security != null) 'security': security,
     if (transport != null) 'transport': transport,
-    if (country != null) 'country': country,
+    // Older clients can still apply one country without broadening the rule.
+    if (countries.isNotEmpty) 'country': countries.first,
+    if (countries.length > 1) 'countries': countries,
   };
   factory ProxyExclusionCondition.fromMap(Map<dynamic, dynamic> map) =>
       ProxyExclusionCondition(
@@ -80,6 +86,9 @@ class ProxyExclusionCondition {
             ? map['transport'] as String
             : null,
         country: map['country'] is String ? map['country'] as String : null,
+        countries: map['countries'] is List<dynamic>
+            ? (map['countries'] as List<dynamic>).whereType<String>()
+            : const [],
       );
 }
 

@@ -144,6 +144,7 @@ class AppSettingsController {
   bool sendHwidToProviders = true;
   String proxySort = 'source';
   bool proxyHideUnavailable = false;
+  bool hideProxyChains = false;
   Map<String, ProxyExclusionRules> proxyExclusionsByProfile = const {};
   bool progressiveBlurEnabled = false;
   bool vpnInboundEnabled = true;
@@ -228,6 +229,7 @@ class AppSettingsController {
       selectedProxyTag: selectedProxyTag,
       proxySort: proxySort,
       proxyHideUnavailable: proxyHideUnavailable,
+      hideProxyChains: hideProxyChains,
       proxyExclusionsByProfile: proxyExclusionsByProfile,
       localeCode: localeCode,
       themePreference: themePreference,
@@ -334,6 +336,7 @@ class AppSettingsController {
         : 'source';
     proxyHideUnavailable =
         state.proxyHideUnavailable || state.proxySort == 'working';
+    hideProxyChains = state.hideProxyChains;
     progressiveBlurEnabled = progressiveBlurEnabledOverride;
     memoryLimitEnabled = state.memoryLimitEnabled;
     memoryLimitWarningDismissed = state.memoryLimitWarningDismissed;
@@ -519,6 +522,12 @@ class AppSettingsController {
   AppSettingsChange setProxyHideUnavailable(bool value) {
     if (proxyHideUnavailable == value) return const AppSettingsChange.none();
     proxyHideUnavailable = value;
+    return const AppSettingsChange(changed: true);
+  }
+
+  AppSettingsChange setHideProxyChains(bool value) {
+    if (hideProxyChains == value) return const AppSettingsChange.none();
+    hideProxyChains = value;
     return const AppSettingsChange(changed: true);
   }
 

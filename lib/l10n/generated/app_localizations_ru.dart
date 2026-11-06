@@ -590,10 +590,35 @@ class AppLocalizationsRu extends AppLocalizations {
   String get proxyChainExitLabel => 'Выходной прокси';
 
   @override
+  String get proxyChainExitSourceLabel => 'Подписка выхода';
+
+  @override
+  String get proxyChainRouteHint =>
+      'Соединение идёт через первый прокси, затем через выходной. Сайты видят IP выходного прокси.';
+
+  @override
+  String get proxyChainCheckHint =>
+      'Нажмите на задержку или «Нет данных», чтобы проверить сервер текущей подписки.';
+
+  @override
+  String get proxyChainSavedLatencyHint =>
+      'Для выхода из другой подписки показан последний сохранённый замер. Обновить его можно в той подписке.';
+
+  @override
   String get proxyChainNothingFound => 'Ничего не найдено';
 
   @override
+  String get proxyChainNoAvailableTargets => 'Нет доступных выходных прокси';
+
+  @override
   String get proxyChainSaveAction => 'Сохранить';
+
+  @override
+  String get hideProxyChainsTitle => 'Скрывать цепочки прокси';
+
+  @override
+  String get hideProxyChainsDescription =>
+      'Убирает цепочки и кнопку добавления из списка «Прокси».';
 
   @override
   String get shareProxyTitle => 'Поделиться';
@@ -3739,8 +3764,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get proxyExclusionsAddCondition => 'Добавить условие';
 
   @override
+  String get proxyExclusionsEditCondition => 'Изменить условие';
+
+  @override
   String get proxyExclusionsConditionHint =>
-      'Все выбранные параметры должны совпасть.';
+      'Все выбранные параметры должны совпасть. Если выбрано несколько стран, подходит любая из них.';
 
   @override
   String get proxyExclusionsProtocol => 'Протокол';
@@ -3752,7 +3780,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get proxyExclusionsTransport => 'Транспорт';
 
   @override
-  String get proxyExclusionsCountry => 'Страна';
+  String get proxyExclusionsCountry => 'Страны';
 
   @override
   String get proxyExclusionsAny => 'Любой';

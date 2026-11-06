@@ -387,6 +387,26 @@ void main() {
     },
   );
 
+  test('country alternatives roundtrip and still require other fields', () {
+    final old = ProxyExclusionCondition.fromMap({'country': 'de'});
+    expect(old.matches(node('de', country: 'DE')), isTrue);
+    expect(old.matches(node('fi', country: 'FI')), isFalse);
+    final rule = ProxyExclusionCondition.fromMap({
+      'protocol': 'vless',
+      'countries': [' fi ', 'DE', 'de'],
+    });
+    final restored = ProxyExclusionCondition.fromMap(rule.toMap());
+    expect(restored.toMap()['countries'], ['DE', 'FI']);
+    expect(restored.matches(node('de', country: 'DE')), isTrue);
+    expect(restored.matches(node('fi', country: 'FI')), isTrue);
+    expect(restored.matches(node('ru', country: 'RU')), isFalse);
+    expect(restored.matches(node('unknown')), isFalse);
+    expect(
+      restored.matches(node('other', country: 'FI', type: 'trojan')),
+      isFalse,
+    );
+  });
+
   test('empty or malformed condition never matches everything', () {
     expect(ProxyExclusionCondition().matches(node('a')), isFalse);
     final rules = ProxyExclusionRules.fromMap({

@@ -1445,10 +1445,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (normalizedId.isEmpty) {
       return const [];
     }
+    List<AppProxySummary> availableTargets(List<AppProxySummary> targets) {
+      if (!mounted) return const [];
+      final used = _activeSubscription?.proxyChainTargetTagsFor(normalizedId);
+      if (used == null || used.isEmpty) return targets;
+      final usedRefs = {
+        for (final tag in used) proxyChainTargetRef(normalizedId, tag),
+      };
+      return targets
+          .where((target) => !usedRefs.contains(target.tag))
+          .toList(growable: false);
+    }
+
     final cached = _proxyChainTargetSourceCache.remove(normalizedId);
     if (cached != null) {
       _proxyChainTargetSourceCache[normalizedId] = cached;
-      return cached;
+      return availableTargets(cached);
     }
     Subscription? subscription;
     for (final metadata in _subscriptions) {
@@ -1474,7 +1486,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         )
         .toList(growable: false);
     _cacheProxyChainTargetSource(normalizedId, targets);
-    return targets;
+    return availableTargets(targets);
   }
 
   void _cacheProxyChainTargetSource(
@@ -1502,7 +1514,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         : outbound.name.trim();
     final subscriptionName = subscription.name.trim();
     return AppProxySummary(
-      tag: _proxyChainTargetRef(subscription.id, outbound.tag),
+      tag: proxyChainTargetRef(subscription.id, outbound.tag),
       displayName: subscriptionName.isEmpty
           ? outboundName
           : '$subscriptionName · $outboundName',
@@ -1524,9 +1536,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       endpointLabel: endpointLabel,
     );
   }
-
-  String _proxyChainTargetRef(String subscriptionId, String outboundTag) =>
-      '$subscriptionId\n$outboundTag';
 
   Future<({Subscription subscription, Outbound outbound})?>
   _resolveProxyChainTarget(String targetRef) async {
@@ -5656,7 +5665,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _ensureActiveLookupCaches();
     final resolvedTarget = await _resolveProxyChainTarget(targetRef);
-    if (resolvedTarget == null) {
+    if (resolvedTarget == null ||
+        !mounted ||
+        _activeProfileId != subscription.id) {
       return;
     }
     final target = resolvedTarget.outbound;
@@ -5825,9 +5836,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
           !(catalog.hasLowest && isLowestProxyTag(nextChain.detourTag))) {
         return current;
       }
-      final externalTarget =
-          nextChain.targetSubscriptionId.isNotEmpty &&
-          nextChain.targetSubscriptionId != current.id;
+      final targetSourceId = nextChain.targetSourceId(current.id);
+      final externalTarget = targetSourceId != current.id;
+      if ((!editing &&
+              current
+                  .proxyChainTargetTagsFor(targetSourceId)
+                  .contains(nextChain.targetTag)) ||
+          (!externalTarget && nextChain.targetTag == nextChain.detourTag)) {
+        return current;
+      }
       final target = externalTarget
           ? _snapshotOutboundForProxyChain(nextChain)
           : current.outbounds
@@ -6791,6 +6808,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
           currentNotificationTrafficRefreshSeconds:
               _notificationTrafficRefreshSeconds,
           currentHideServerIp: _hideServerIp,
+          currentHideProxyChains: _settings.hideProxyChains,
+          onHideProxyChainsChanged: (value) =>
+              _applySettingsChange(() => _settings.setHideProxyChains(value)),
           currentSendHwidToProviders: _settings.sendHwidToProviders,
           currentAutoConnectOnLaunch: _settings.autoConnectOnLaunch,
           currentHomeNavigationMode: _settings.homeNavigationMode,
@@ -8835,6 +8855,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       byProfile.putIfAbsent(entry.profileId, () => []).add(entry);
     }
     for (final batch in byProfile.entries) {
+      _proxyChainTargetSourceCache.remove(batch.key);
       ref
           .read(subscriptionCatalogProvider.notifier)
           .updateLatestPings(
@@ -8860,6 +8881,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           for (final entry in entries) entry.tag: entry.outboundKey,
         },
       );
+      _proxyChainTargetSourceCache.remove(profileId);
     } catch (error, stackTrace) {
       AppLogStore.warning(
         'latency',
@@ -10342,6 +10364,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         trafficListenable: _appTrafficMonitor.trafficUiSnapshotNotifier,
         initialSort: _proxySort,
         hideUnavailable: _settings.proxyHideUnavailable,
+        hideProxyChains: _settings.hideProxyChains,
+        hasProxyExclusions: !_exclusionsFor(_activeSubscription).isEmpty,
         progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
         runtimeStates: _proxyRuntimeVisualStates,
         proxyListLoading:
@@ -10377,6 +10401,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         renameProxyChain: _renameProxyChain,
         removeProxyChain: _removeProxyChain,
         isProxyChainTag: _isProxyChainTag,
+        proxyChainForTag: _proxyChainForTag,
         changeHideActiveProxyIp: _setHideServerIp,
       ),
     ).build(

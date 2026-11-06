@@ -104,6 +104,7 @@ class _ProxySheetProgressiveBlur extends StatelessWidget {
 class _ProxySheetHeader extends StatelessWidget {
   const _ProxySheetHeader({
     required this.height,
+    required this.inlineActionsWidth,
     required this.progress,
     required this.scrollCollapse,
     required this.canFillScreen,
@@ -126,13 +127,16 @@ class _ProxySheetHeader extends StatelessWidget {
     required this.onUrlTest,
     this.onAddProxy,
     this.onEditExclusions,
+    required this.hasProxyExclusions,
     required this.onRefreshIp,
     required this.onTap,
   });
 
   final double height;
+  final double? inlineActionsWidth;
   final VoidCallback? onAddProxy;
   final VoidCallback? onEditExclusions;
+  final bool hasProxyExclusions;
   final double progress;
   final double scrollCollapse;
   final bool canFillScreen;
@@ -173,9 +177,14 @@ class _ProxySheetHeader extends StatelessWidget {
     final activeProxyOpacity = Curves.easeOutCubic.transform(activeProxyFade);
     final showHandle = handleOpacity >= .08;
     final toolbarTop = lerpDouble(18, 8, collapse)!;
-    const actionsBottom = 16.0;
-    const actionsHeight = 48.0;
-    final titleHeight = height - toolbarTop - actionsBottom - actionsHeight;
+    const actionsBottom = 10.0;
+    final actionsWidth = inlineActionsWidth;
+    final stacked = actionsWidth == null;
+    final titleHeight =
+        height -
+        toolbarTop -
+        actionsBottom -
+        (stacked ? _kProxyToolbarActionHeight : 0);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -236,8 +245,12 @@ class _ProxySheetHeader extends StatelessWidget {
                 ),
               ),
             Positioned(
-              left: 64,
-              right: 16,
+              left: _kProxyToolbarTitleStart,
+              right: actionsWidth == null
+                  ? _kProxyToolbarTitleStart
+                  : _kProxyToolbarActionsInset +
+                        actionsWidth +
+                        _kProxyToolbarTitleGap,
               top: toolbarTop,
               height: titleHeight,
               child: Opacity(
@@ -356,8 +369,8 @@ class _ProxySheetHeader extends StatelessWidget {
               ),
             ),
             Positioned(
-              left: 16,
-              right: 16,
+              left: _kProxyToolbarActionsInset,
+              right: _kProxyToolbarActionsInset,
               top: toolbarTop,
               height: titleHeight,
               child: IgnorePointer(
@@ -382,10 +395,10 @@ class _ProxySheetHeader extends StatelessWidget {
               ),
             ),
             Positioned(
-              left: 16,
-              right: 16,
-              height: actionsHeight,
-              bottom: actionsBottom,
+              right: _kProxyToolbarActionsInset,
+              top: stacked ? null : toolbarTop,
+              height: stacked ? _kProxyToolbarActionHeight : titleHeight,
+              bottom: stacked ? actionsBottom : null,
               child: IgnorePointer(
                 ignoring: headerOpacity < .85,
                 child: Opacity(
@@ -393,18 +406,24 @@ class _ProxySheetHeader extends StatelessWidget {
                   child: IconButtonTheme(
                     data: const IconButtonThemeData(
                       style: ButtonStyle(
-                        minimumSize: WidgetStatePropertyAll(Size(48, 48)),
-                        tapTargetSize: MaterialTapTargetSize.padded,
+                        fixedSize: WidgetStatePropertyAll(
+                          Size(
+                            _kProxyToolbarActionWidth,
+                            _kProxyToolbarActionHeight,
+                          ),
+                        ),
+                        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+                        iconSize: WidgetStatePropertyAll(20),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         if (onEditExclusions != null)
-                          IconButton(
-                            tooltip: l10n.proxyExclusionsTitle,
-                            onPressed: onEditExclusions,
-                            icon: const Icon(Icons.filter_alt_off_outlined),
+                          _ProxyExclusionsButton(
+                            hasExclusions: hasProxyExclusions,
+                            onPressed: onEditExclusions!,
                           ),
                         if (onAddProxy != null)
                           IconButton(
@@ -463,6 +482,30 @@ class _ProxySheetHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ProxyExclusionsButton extends StatelessWidget {
+  const _ProxyExclusionsButton({
+    required this.hasExclusions,
+    required this.onPressed,
+  });
+
+  final bool hasExclusions;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    selected: hasExclusions,
+    child: IconButton(
+      key: const ValueKey('proxy-exclusions-open'),
+      tooltip: AppLocalizations.of(context).proxyExclusionsTitle,
+      onPressed: onPressed,
+      icon: Icon(
+        hasExclusions ? Icons.filter_alt : Icons.filter_alt_off_outlined,
+        color: hasExclusions ? Theme.of(context).colorScheme.onSurface : null,
+      ),
+    ),
+  );
 }
 
 class _ActiveProxyLabel extends StatelessWidget {

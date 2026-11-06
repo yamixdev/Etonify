@@ -29,6 +29,8 @@ class ProxiesPresentationData {
     required this.trafficListenable,
     required this.initialSort,
     this.hideUnavailable = false,
+    this.hideProxyChains = false,
+    this.hasProxyExclusions = false,
     required this.progressiveBlurEnabled,
     required this.runtimeStates,
     this.proxyListLoading = false,
@@ -54,6 +56,8 @@ class ProxiesPresentationData {
   final ValueListenable<TrafficUiSnapshot> trafficListenable;
   final ProxySort initialSort;
   final bool hideUnavailable;
+  final bool hideProxyChains;
+  final bool hasProxyExclusions;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore runtimeStates;
   final bool proxyListLoading;
@@ -87,6 +91,7 @@ class ProxiesPresentationCallbacks {
     required this.renameProxyChain,
     required this.removeProxyChain,
     required this.isProxyChainTag,
+    this.proxyChainForTag,
     required this.changeHideActiveProxyIp,
   });
 
@@ -110,6 +115,7 @@ class ProxiesPresentationCallbacks {
   final Future<void> Function(String chainTag, String name) renameProxyChain;
   final Future<void> Function(String chainTag) removeProxyChain;
   final bool Function(String tag) isProxyChainTag;
+  final SubscriptionProxyChain? Function(String tag)? proxyChainForTag;
   final ValueChanged<bool> changeHideActiveProxyIp;
 }
 
@@ -138,6 +144,7 @@ class ProxiesPresentationBuilder {
       groupChildrenByTag: data.groupChildrenByTag,
       selectedTag: data.selectedTag,
       activeProxy: data.activeProxy,
+      hideProxyChains: data.hideProxyChains,
       activeProxyHideIp: data.hideActiveProxyIp,
       connected: data.connected,
       serverCount: data.serverCount,
@@ -158,6 +165,7 @@ class ProxiesPresentationBuilder {
       onProxyUrlTest: callbacks.runProxyUrlTest,
       onAddProxy: callbacks.addProxy,
       onEditExclusions: callbacks.editExclusions,
+      hasProxyExclusions: data.hasProxyExclusions,
       onVisibleProxyNeedsLocation: callbacks.resolveVisibleProxyLocation,
       onActiveProxyIpRefresh: callbacks.refreshActiveProxyIp,
       outboundForTag: callbacks.outboundForTag,
@@ -168,6 +176,7 @@ class ProxiesPresentationBuilder {
       onRenameProxyChain: callbacks.renameProxyChain,
       onRemoveProxyChain: callbacks.removeProxyChain,
       isProxyChainTag: callbacks.isProxyChainTag,
+      proxyChainForTag: callbacks.proxyChainForTag,
       onActiveProxyHideIpChanged: callbacks.changeHideActiveProxyIp,
       runtimeStates: data.runtimeStates,
       loading: data.proxyListLoading,

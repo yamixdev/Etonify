@@ -54,6 +54,19 @@ class _CountingSettingsFile extends Fake implements RandomAccessFile {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('proxy chain visibility persists and defaults to visible', () {
+    final store = MemoryAppSettingsStore();
+    final initial = store.mapState({});
+    expect(initial.hideProxyChains, isFalse);
+    final hidden = initial.copyWith(hideProxyChains: true);
+    expect(store.mapState(store.stateToMap(hidden)).hideProxyChains, isTrue);
+    final restored = store.mergeSafeImportMap(
+      initial,
+      store.stateToSafeExportMap(hidden),
+    );
+    expect(restored.hideProxyChains, isTrue);
+  });
+
   test('legacy System TUN storage and imports normalize to native', () {
     final store = MemoryAppSettingsStore();
     final restored = store.mapState({'vpn_tun_implementation': 'system'});

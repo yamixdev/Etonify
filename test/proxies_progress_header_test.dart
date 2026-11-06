@@ -458,7 +458,7 @@ void main() {
     expect(translucentBand, lessThanOrEqualTo(20));
   });
 
-  testWidgets('collapsed header fits progress above its separate action row', (
+  testWidgets('collapsed header fits progress beside its compact actions', (
     tester,
   ) async {
     final progressNotifier = ValueNotifier<UrlTestProgressState>(
@@ -502,12 +502,12 @@ void main() {
     final sort = find.byTooltip(l10n.sort);
     for (final action in [check, sort]) {
       final actionRect = tester.getRect(action);
-      // Use local RenderBox size: subtracting fractional global coordinates
-      // can turn an exact 48dp width into 47.999999999999986.
       final actionSize = tester.getSize(action);
-      expect(actionSize.width, greaterThanOrEqualTo(48));
+      expect(actionSize.width, 44);
       expect(actionSize.height, greaterThanOrEqualTo(48));
-      expect(actionRect.top, greaterThanOrEqualTo(progressRect.bottom));
+      expect(actionRect.left, greaterThanOrEqualTo(progressRect.right));
+      expect(actionRect.top, lessThan(progressRect.bottom));
+      expect(actionRect.bottom, greaterThan(titleRect.top));
       expect(actionRect.bottom, lessThanOrEqualTo(headerRect.bottom - 10));
       expect(headerRect.contains(actionRect.topLeft), isTrue);
       expect(headerRect.contains(actionRect.bottomRight), isTrue);

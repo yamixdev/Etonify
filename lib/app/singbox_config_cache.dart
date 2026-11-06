@@ -2,7 +2,7 @@ part of 'app_background_tasks.dart';
 
 // Bump when config generation/validation semantics change, even if the native
 // contract stays the same. Only one entry is retained, in private app storage.
-const _configCacheSchema = 3;
+const _configCacheSchema = 4;
 
 Map<String, Object?> _subscriptionConfigIdentity(Subscription subscription) => {
   'id': subscription.id,
@@ -218,22 +218,11 @@ Future<SingboxConfigBuildResult> buildOrReuseSingboxConfigInBackground(
   final json = built.configJson.isNotEmpty
       ? built.configJson
       : File(built.configPath!).readAsStringSync();
+  final fallbackTag = _startupSelectionFallbackTag(input, built, json);
   final fresh = <String, dynamic>{
     'fingerprint': fingerprint,
-    // Startup validation deliberately switches an invalid selection to lowest.
-    // Accept that one transition only if the generated selector already does so.
-    'fallbackFingerprint':
-        built.selectedProxyInvalid &&
-            ((jsonDecode(json) as Map)['outbounds'] as List).any(
-              (outbound) =>
-                  outbound['tag'] == 'select' &&
-                  (outbound['default'] == lowestProxyTag ||
-                      (outbound['outbounds'] as List).length == 1),
-            )
-        ? await _configFingerprint(
-            input,
-            selectedProxyTagOverride: lowestProxyTag,
-          )
+    'fallbackFingerprint': fallbackTag != null
+        ? await _configFingerprint(input, selectedProxyTagOverride: fallbackTag)
         : null,
     'configJson': json,
     'proxyOutboundTagsByIndex': built.plan.proxyOutboundTagsByIndex.map(
@@ -278,6 +267,37 @@ Future<SingboxConfigBuildResult> buildOrReuseSingboxConfigInBackground(
     writeCandidate: false,
   );
 }, debugName: 'meow-singbox-config-cache');
+
+String? _startupSelectionFallbackTag(
+  SingboxConfigBuildInput input,
+  SingboxConfigBuildResult built,
+  String json,
+) {
+  final selectedTag = input.selectedProxyTag.trim();
+  if (selectedTag.isEmpty) return null;
+  final config = built.hasReturnedConfig
+      ? built.plan.config
+      : jsonDecode(json) as Map<String, dynamic>;
+  final experimental = config['experimental'] as Map<String, dynamic>?;
+  final excludedTags =
+      experimental?['url_test_excluded_tags'] as List<dynamic>?;
+  if (!built.selectedProxyInvalid &&
+      excludedTags?.contains(selectedTag) != true) {
+    return null;
+  }
+  final outbounds = config['outbounds'] as List<dynamic>;
+  for (final outbound in outbounds.cast<Map<String, dynamic>>()) {
+    if (outbound['tag'] != 'select') continue;
+    final defaultTag = outbound['default'] as String?;
+    if (!built.selectedProxyInvalid) return defaultTag;
+    // Startup validation handles invalid selections before applying exclusions.
+    return defaultTag == lowestProxyTag ||
+            (outbound['outbounds'] as List<dynamic>).length == 1
+        ? lowestProxyTag
+        : null;
+  }
+  return null;
+}
 
 SingboxConfigBuildResult _restoreConfigEntry(
   Map<String, dynamic> entry,

@@ -7,6 +7,8 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/app/singbox_config_coordinator.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
+import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_config_builder.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
@@ -670,6 +672,76 @@ void main() {
     },
   );
 
+  test(
+    'only the generated fallback can replace an excluded selection',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('excluded-config-start-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final target = File('${dir.path}/config.json')
+        ..writeAsStringSync('previous');
+      final subscription = ProxyExclusionRules(excludedTags: ['excluded'])
+          .runtimeSubscription(
+            Subscription(
+              id: 'profile',
+              name: 'Profile',
+              url: '',
+              outbounds: [
+                for (final tag in ['excluded', 'replacement', 'other'])
+                  Outbound(
+                    tag: tag,
+                    name: tag,
+                    config: {
+                      'type': 'socks',
+                      'server': '$tag.example.test',
+                      'server_port': 1080,
+                    },
+                  ),
+              ],
+            ),
+          );
+      final runtime = _BlockingRuntime();
+      final lifecycle = RuntimeLifecycleController(runtime: runtime);
+      addTearDown(lifecycle.dispose);
+      var selectedTag = 'excluded';
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        readConfigPath: () async => target.path,
+        snapshot: () =>
+            _snapshot(subscription: subscription, selectedTag: selectedTag),
+      );
+      addTearDown(coordinator.dispose);
+      final build = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      final selector = (build.plan.config['outbounds'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .singleWhere((outbound) => outbound['tag'] == 'select');
+      final fallback = selector['default'] as String;
+      const eligible = ['replacement', 'other'];
+      expect(eligible, contains(fallback));
+      selectedTag = eligible.singleWhere((tag) => tag != fallback);
+      await expectLater(
+        coordinator.startRuntimeWithBuild(build, useVpn: true),
+        throwsStateError,
+      );
+      expect(runtime.startCalls, 0);
+      expect(target.readAsStringSync(), 'previous');
+
+      selectedTag = 'excluded';
+      final cached = (await coordinator.buildCurrentSingboxConfigInBackground(
+        validateConfig: false,
+      ))!;
+      expect(cached.reusedConfig, isTrue);
+      selectedTag = fallback;
+      expect(
+        (await coordinator.startRuntimeWithBuild(cached, useVpn: true)).success,
+        isTrue,
+      );
+      expect(runtime.startCalls, 1);
+      expect(target.readAsStringSync(), cached.configJson);
+    },
+  );
+
   test('cancelling prepared build preserves the active config', () async {
     final dir = Directory.systemTemp.createTempSync('config-cancel-test-');
     addTearDown(() => dir.deleteSync(recursive: true));
@@ -802,13 +874,15 @@ SingboxConfigCoordinatorSnapshot _snapshot({
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
   String? adBlockPath,
   String? adBlockAllowPath,
+  Subscription? subscription,
+  String selectedTag = '',
 }) {
   return SingboxConfigCoordinatorSnapshot(
     connected: connected,
     capabilities: capabilities,
     runtimeTransitionInProgress: false,
-    activeSubscription: null,
-    selectedProxyTag: '',
+    activeSubscription: subscription,
+    selectedProxyTag: selectedTag,
     excludedOutboundTags: <String>{},
     vpnInboundEnabled: true,
     vpnMtu: mtu,

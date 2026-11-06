@@ -25,6 +25,7 @@ Widget _generalSettingsApp({
   BottomNavigationStyle bottomNavigationStyle = BottomNavigationStyle.floating,
   ValueChanged<bool>? onHapticChanged,
   ValueChanged<bool>? onHideIpChanged,
+  ValueChanged<bool>? onHideProxyChainsChanged,
   ValueChanged<AppThemePreference>? onThemeChanged,
   ValueChanged<String>? onAccentChanged,
   ValueChanged<String>? onLocaleChanged,
@@ -44,6 +45,7 @@ Widget _generalSettingsApp({
       currentNotificationTrafficDisplayMode: trafficDisplayMode,
       currentNotificationTrafficRefreshSeconds: 2,
       currentHideServerIp: false,
+      onHideProxyChainsChanged: onHideProxyChainsChanged,
       currentSendHwidToProviders: currentSendHwidToProviders,
       onSendHwidToProvidersChanged: onHwidChanged,
       currentAutoConnectOnLaunch: autoConnectOnLaunch,
@@ -85,6 +87,31 @@ Future<void> _openNotificationSettings(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('appearance can hide and restore proxy chains', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 780);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final changes = <bool>[];
+    await tester.pumpWidget(
+      _generalSettingsApp(
+        statusNotificationEnabled: true,
+        locale: const Locale('ru'),
+        onHideProxyChainsChanged: changes.add,
+      ),
+    );
+    await _openGeneralSection(tester, 'appearance');
+    final toggle = find.byKey(const ValueKey('hide-proxy-chains'));
+    expect(find.text('Скрывать цепочки прокси'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(changes, [true, false]);
+  });
+
   testWidgets('open appearance follows externally restored navigation mode', (
     tester,
   ) async {

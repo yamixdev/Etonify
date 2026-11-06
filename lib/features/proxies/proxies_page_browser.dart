@@ -190,11 +190,9 @@ extension _ProxyBrowser on _ProxiesPageState {
           ),
           actions: [
             if (widget.onEditExclusions != null)
-              IconButton(
-                key: const ValueKey('proxy-exclusions-open'),
-                tooltip: l10n.proxyExclusionsTitle,
-                onPressed: widget.onEditExclusions,
-                icon: const Icon(Icons.filter_alt_off_outlined),
+              _ProxyExclusionsButton(
+                hasExclusions: widget.hasProxyExclusions,
+                onPressed: widget.onEditExclusions!,
               ),
             if (widget.onAddProxy != null)
               IconButton(

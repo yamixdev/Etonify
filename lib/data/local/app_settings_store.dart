@@ -165,6 +165,7 @@ class AppSettingsState {
     required this.selectedProxyTag,
     this.proxySort = 'source',
     this.proxyHideUnavailable = false,
+    this.hideProxyChains = false,
     this.proxyExclusionsByProfile = const {},
     required this.localeCode,
     required this.themePreference,
@@ -249,6 +250,7 @@ class AppSettingsState {
   final String selectedProxyTag;
   final String proxySort;
   final bool proxyHideUnavailable;
+  final bool hideProxyChains;
   final Map<String, ProxyExclusionRules> proxyExclusionsByProfile;
   final String localeCode;
   final AppThemePreference themePreference;
@@ -333,6 +335,7 @@ class AppSettingsState {
     String? selectedProxyTag,
     String? proxySort,
     bool? proxyHideUnavailable,
+    bool? hideProxyChains,
     Map<String, ProxyExclusionRules>? proxyExclusionsByProfile,
     String? localeCode,
     AppThemePreference? themePreference,
@@ -421,6 +424,7 @@ class AppSettingsState {
       selectedProxyTag: selectedProxyTag ?? this.selectedProxyTag,
       proxySort: proxySort ?? this.proxySort,
       proxyHideUnavailable: proxyHideUnavailable ?? this.proxyHideUnavailable,
+      hideProxyChains: hideProxyChains ?? this.hideProxyChains,
       proxyExclusionsByProfile: proxyExclusionsByProfile == null
           ? this.proxyExclusionsByProfile
           : Map.unmodifiable(proxyExclusionsByProfile),
@@ -572,6 +576,7 @@ abstract class AppSettingsStore {
   static const _selectedProxyTagKey = 'selected_proxy_tag';
   static const _proxySortKey = 'proxy_sort';
   static const _proxyHideUnavailableKey = 'proxy_hide_unavailable';
+  static const _hideProxyChainsKey = 'hide_proxy_chains';
   static const _proxyExclusionsByProfileKey = 'proxy_exclusions_by_profile';
   static const _localeCodeKey = 'locale_code';
   static const _themePreferenceKey = 'theme_preference';
@@ -683,6 +688,7 @@ abstract class AppSettingsStore {
     _bottomNavigationStyleKey,
     _proxySortKey,
     _proxyHideUnavailableKey,
+    _hideProxyChainsKey,
     _memoryLimitEnabledKey,
     _memoryLimitWarningDismissedKey,
     _updateInstallModeKey,
@@ -909,6 +915,7 @@ abstract class AppSettingsStore {
       proxyHideUnavailable: map[_proxyHideUnavailableKey] == null
           ? map[_proxySortKey]?.toString() == 'working'
           : map[_proxyHideUnavailableKey]?.toString() == '1',
+      hideProxyChains: boolValue(_hideProxyChainsKey, defaultValue: false),
       themePreference: switch (map[_themePreferenceKey]) {
         'system' => AppThemePreference.system,
         'dark' => AppThemePreference.dark,
@@ -1164,6 +1171,7 @@ abstract class AppSettingsStore {
       _selectedProxyTagKey: state.selectedProxyTag,
       _proxySortKey: state.proxySort,
       _proxyHideUnavailableKey: state.proxyHideUnavailable ? '1' : '0',
+      _hideProxyChainsKey: state.hideProxyChains ? '1' : '0',
       _proxyExclusionsByProfileKey: jsonEncode({
         for (final entry in state.proxyExclusionsByProfile.entries)
           entry.key: entry.value.toMap(),

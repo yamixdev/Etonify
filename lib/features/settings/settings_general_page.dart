@@ -69,6 +69,8 @@ class SettingsGeneralPage extends StatefulWidget {
     required this.currentNotificationTrafficDisplayMode,
     required this.currentNotificationTrafficRefreshSeconds,
     required this.currentHideServerIp,
+    this.currentHideProxyChains = false,
+    this.onHideProxyChainsChanged,
     this.currentSendHwidToProviders = true,
     this.onSendHwidToProvidersChanged,
     this.currentAutoConnectOnLaunch = false,
@@ -99,6 +101,8 @@ class SettingsGeneralPage extends StatefulWidget {
   final NotificationTrafficDisplayMode currentNotificationTrafficDisplayMode;
   final int currentNotificationTrafficRefreshSeconds;
   final bool currentHideServerIp;
+  final bool currentHideProxyChains;
+  final ValueChanged<bool>? onHideProxyChainsChanged;
   final bool currentSendHwidToProviders;
   final ValueChanged<bool>? onSendHwidToProvidersChanged;
   final bool currentAutoConnectOnLaunch;
@@ -136,6 +140,7 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
   late var _trafficRefreshSeconds =
       widget.currentNotificationTrafficRefreshSeconds;
   late var _hideServerIp = widget.currentHideServerIp;
+  late var _hideProxyChains = widget.currentHideProxyChains;
   late var _sendHwid = widget.currentSendHwidToProviders;
   late var _autoConnect = widget.currentAutoConnectOnLaunch;
   late var _homeNavigationMode = widget.currentHomeNavigationMode;
@@ -170,6 +175,9 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
     }
     if (oldWidget.currentHideServerIp != widget.currentHideServerIp) {
       _hideServerIp = widget.currentHideServerIp;
+    }
+    if (oldWidget.currentHideProxyChains != widget.currentHideProxyChains) {
+      _hideProxyChains = widget.currentHideProxyChains;
     }
     if (oldWidget.currentSendHwidToProviders !=
         widget.currentSendHwidToProviders) {
@@ -451,6 +459,28 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
                   widget.onBottomNavigationStyleChanged!(value);
                 },
         ),
+        if (widget.onHideProxyChainsChanged != null)
+          const Gap(settingsSectionGap),
+      ],
+      if (widget.onHideProxyChainsChanged case final onChanged?) ...[
+        _SectionLabel(label: l10n.proxiesTitle),
+        const Gap(settingsSectionLabelGap),
+        _group([
+          SwitchListTile(
+            key: const ValueKey('hide-proxy-chains'),
+            secondary: SettingsLeadingIcon(
+              icon: Icons.link_off_rounded,
+              color: cs.primary,
+            ),
+            title: Text(l10n.hideProxyChainsTitle),
+            subtitle: Text(l10n.hideProxyChainsDescription),
+            value: _hideProxyChains,
+            onChanged: (value) {
+              _update(() => _hideProxyChains = value);
+              onChanged(value);
+            },
+          ),
+        ]),
       ],
     ]);
   }

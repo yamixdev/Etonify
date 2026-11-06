@@ -104,6 +104,87 @@ void main() {
     }
   });
 
+  testWidgets(
+    'used chain exits stay excluded per source, including a cached list',
+    (tester) async {
+      final container = ProviderContainer();
+      final store = MemoryAppSettingsStore();
+      await store.saveState(
+        (await store.loadState()).copyWith(
+          onboardingCompleted: true,
+          acceptedLegalVersion: '0.2.1',
+          autoCheckNoticeAcknowledged: true,
+        ),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MeowClient(store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final catalog = container.read(subscriptionCatalogProvider.notifier);
+      final other = _original.copyWith(id: 'another-source', proxyChains: []);
+      void showProfile(Subscription profile) => catalog.replace(
+        subscriptions: [profile, other],
+        activeProfileId: profile.id,
+        selectedProxyTag: 'chain',
+      );
+
+      showProfile(_original);
+      await tester.pump();
+      final panelFinder = find.byType(ProxyPanelShell);
+      final notifier = ValueNotifier(_metrics);
+      final scroll = ScrollController();
+      final page =
+          tester
+                  .widget<ProxyPanelShell>(panelFinder)
+                  .sheetBuilder(
+                    tester.element(panelFinder),
+                    _metrics,
+                    notifier,
+                    scroll,
+                    ProxyPanelGestures(onHeaderTap: () {}),
+                  )
+              as ProxiesPage;
+      final load = page.loadProxyChainTargetsForSource!;
+      final usedExit = proxyChainTargetRef(_original.id, _chain.targetTag);
+      await tester.runAsync(() async {
+        expect(
+          (await load(_original.id)).map((proxy) => proxy.tag),
+          isNot(contains(usedExit)),
+        );
+        expect(
+          (await load(other.id)).map((proxy) => proxy.tag),
+          contains(proxyChainTargetRef(other.id, _chain.targetTag)),
+        );
+      });
+
+      // Simulate a stale UI after loading candidates. The stored chain still wins.
+      showProfile(_original.copyWith(proxyChains: []));
+      await tester.runAsync(() async {
+        expect(
+          (await load(_original.id)).map((proxy) => proxy.tag),
+          contains(usedExit),
+        );
+        await page.onAddProxyChain!('entry-next', usedExit);
+        await page.onAddProxyChain!(
+          'entry',
+          proxyChainTargetRef(_original.id, 'entry'),
+        );
+        expect(
+          SubscriptionStore.getMetadata(_original.id)!.proxyChains.single.tag,
+          _chain.tag,
+        );
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      container.dispose();
+      scroll.dispose();
+      notifier.dispose();
+    },
+  );
+
   for (final operation in ['rename', 'remove', 'detour']) {
     for (final removed in [false, true]) {
       testWidgets(

@@ -37,11 +37,15 @@ part 'proxies_page_share.dart';
 part 'proxy_tile.dart';
 
 const _kProxySheetHeaderHeight = 116.0;
-const _kProxySheetExpandedToolbarHeight = 152.0;
 
 // The progress column must finish above the backdrop's translucent edge,
 // including when the header is collapsed and both status lines are visible.
-const _kProxySheetCompactHeaderHeight = 136.0;
+const _kProxySheetCompactHeaderHeight = 100.0;
+const _kProxyToolbarActionWidth = 44.0;
+const _kProxyToolbarActionHeight = 48.0;
+const _kProxyToolbarTitleStart = 64.0;
+const _kProxyToolbarActionsInset = 12.0;
+const _kProxyToolbarTitleGap = 8.0;
 const _kProxyGroupSheetListTopReserve = 144.0;
 const _kProxySheetRowExtent = proxyPanelRowExtent;
 // Prepare upcoming rows before a fast swipe reaches them. The buffer scales
@@ -440,6 +444,7 @@ class ProxiesPage extends StatefulWidget {
     required this.proxies,
     required this.selectedTag,
     this.activeProxy,
+    this.hideProxyChains = false,
     this.activeProxyHideIp = false,
     required this.connected,
     this.serverCount = 0,
@@ -460,6 +465,7 @@ class ProxiesPage extends StatefulWidget {
     this.onProxyUrlTest,
     this.onAddProxy,
     this.onEditExclusions,
+    this.hasProxyExclusions = false,
     this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
     this.loadProxyChainTargetSources,
@@ -469,6 +475,7 @@ class ProxiesPage extends StatefulWidget {
     this.onRenameProxyChain,
     this.onRemoveProxyChain,
     this.isProxyChainTag,
+    this.proxyChainForTag,
     this.onActiveProxyHideIpChanged,
     this.onActiveProxyIpRefresh,
     this.embedded = false,
@@ -493,10 +500,12 @@ class ProxiesPage extends StatefulWidget {
 
   final VoidCallback? onAddProxy;
   final VoidCallback? onEditExclusions;
+  final bool hasProxyExclusions;
   final String profileId;
   final List<AppProxySummary> proxies;
   final String selectedTag;
   final AppProxySummary? activeProxy;
+  final bool hideProxyChains;
   final bool activeProxyHideIp;
   final bool connected;
   final int serverCount;
@@ -528,6 +537,7 @@ class ProxiesPage extends StatefulWidget {
   final Future<void> Function(String chainTag, String name)? onRenameProxyChain;
   final Future<void> Function(String chainTag)? onRemoveProxyChain;
   final bool Function(String tag)? isProxyChainTag;
+  final SubscriptionProxyChain? Function(String tag)? proxyChainForTag;
   final ValueChanged<bool>? onActiveProxyHideIpChanged;
   final VoidCallback? onActiveProxyIpRefresh;
   final bool embedded;
@@ -610,17 +620,32 @@ class _ProxiesPageState extends State<ProxiesPage> {
   AppProxySummary? _browserBaseGroup;
   final _browserAncestors = <String, AppProxySummary>{};
 
-  List<AppProxySummary> get _presentationProxies =>
-      widget.browserMode && _browserPath.isNotEmpty
-      ? widget.groupChildrenByTag[_browserPath.last] ?? const []
-      : widget.proxies;
+  List<AppProxySummary> get _presentationProxies {
+    final proxies = widget.browserMode && _browserPath.isNotEmpty
+        ? widget.groupChildrenByTag[_browserPath.last] ??
+              const <AppProxySummary>[]
+        : widget.proxies;
+    return widget.hideProxyChains
+        ? proxies
+              .where((proxy) => !_isProxyChain(proxy))
+              .toList(growable: false)
+        : proxies;
+  }
 
   String get _presentationSelectedTag =>
       widget.browserMode && _browserPath.isNotEmpty
       ? _browserGroup?.selectedChildTag ?? widget.selectedTag
       : widget.selectedTag;
 
+  AppProxySummary? get _presentationActiveProxy {
+    final proxy = widget.activeProxy;
+    return widget.hideProxyChains && proxy != null && _isProxyChain(proxy)
+        ? null
+        : proxy;
+  }
+
   bool get _canAddChain =>
+      !widget.hideProxyChains &&
       widget.onAddProxyChain != null &&
       (!widget.browserMode ||
           (_browserPath.isEmpty &&
@@ -693,7 +718,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
     } else {
       _activateEmbeddedListIfNeeded();
     }
-    if (oldWidget.profileId != widget.profileId ||
+    final chainVisibilityChanged =
+        oldWidget.hideProxyChains != widget.hideProxyChains;
+    if (chainVisibilityChanged) {
+      _visibleItems = const [];
+      _invalidateVisibleEntries();
+    }
+    if (chainVisibilityChanged ||
+        oldWidget.profileId != widget.profileId ||
         oldWidget.selectedTag != widget.selectedTag ||
         oldWidget.activeProxy?.tag != widget.activeProxy?.tag ||
         oldWidget.isProxyChainTag != widget.isProxyChainTag ||
@@ -954,13 +986,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
           sort: _sort,
           hideUnavailable: _hideUnavailable,
           selectedTag: _presentationSelectedTag,
-          activeProxy: widget.activeProxy,
+          activeProxy: _presentationActiveProxy,
           canAddChain: _canAddChain,
           searchQuery: widget.browserMode ? _browserQuery : '',
           groupMembers: widget.browserMode && _browserPath.isNotEmpty,
           chainTags: {
-            for (final proxy in proxies)
-              if (_isProxyChain(proxy)) proxy.tag,
+            if (!widget.hideProxyChains)
+              for (final proxy in proxies)
+                if (_isProxyChain(proxy)) proxy.tag,
           },
           runtimeStates: {
             for (final proxy in proxies)
@@ -983,11 +1016,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
         final sort = _sort;
         final hideUnavailable = _hideUnavailable;
         final selectedTag = _presentationSelectedTag;
-        final activeProxy = widget.activeProxy;
+        final activeProxy = _presentationActiveProxy;
         final canAddChain = _canAddChain;
         final query = widget.browserMode ? _browserQuery : '';
         final groupMembers = widget.browserMode && _browserPath.isNotEmpty;
-        final chainPredicate = widget.isProxyChainTag;
+        final chainPredicate = widget.hideProxyChains
+            ? null
+            : widget.isProxyChainTag;
         final runtimeStates = widget.runtimeStates;
         final states = <String, ProxyRuntimeVisualState>{};
         final chains = <String>{};
@@ -1235,32 +1270,56 @@ class _ProxiesPageState extends State<ProxiesPage> {
     final theme = Theme.of(context);
     if (widget.browserMode) return _buildBrowser(context, l10n);
     if (widget.embedded) {
-      final sheetMetricsListenable = widget.sheetMetricsListenable;
-      final list = _buildEmbeddedProxyList(context: context, l10n: l10n);
-      if (sheetMetricsListenable != null) {
-        return ValueListenableBuilder<ProxyPanelMetrics>(
-          valueListenable: sheetMetricsListenable,
-          child: list,
-          builder: (context, metrics, list) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final actionsWidth =
+              _kProxyToolbarActionWidth *
+              (1 +
+                  (widget.onAddProxy == null ? 0 : 1) +
+                  (widget.onEditExclusions == null ? 0 : 1) +
+                  (widget.serverCount > 0 ? 1 : 0));
+          final titleWidth = MediaQuery.textScalerOf(context).scale(90);
+          final inlineActionsWidth =
+              constraints.maxWidth >=
+                  _kProxyToolbarTitleStart +
+                      _kProxyToolbarTitleGap +
+                      _kProxyToolbarActionsInset +
+                      titleWidth +
+                      actionsWidth
+              ? actionsWidth
+              : null;
+          final list = _buildEmbeddedProxyList(
+            context: context,
+            l10n: l10n,
+            stackedActions: inlineActionsWidth == null,
+          );
+          final metrics = widget.sheetMetricsListenable;
+          if (metrics == null) {
             return _buildEmbeddedSheet(
               context: context,
               l10n: l10n,
               theme: theme,
+              list: list,
+              inlineActionsWidth: inlineActionsWidth,
+            );
+          }
+          return ValueListenableBuilder<ProxyPanelMetrics>(
+            valueListenable: metrics,
+            child: list,
+            builder: (context, metrics, list) => _buildEmbeddedSheet(
+              context: context,
+              l10n: l10n,
+              theme: theme,
               list: list!,
+              inlineActionsWidth: inlineActionsWidth,
               sheetAtMaxExtent: metrics.atMaxExtent,
               sheetCanFillScreen: metrics.canFillScreen,
               sheetExtent: metrics.progress,
               progressiveBlurEnabled:
                   widget.progressiveBlurEnabled && !metrics.dragging,
-            );
-          },
-        );
-      }
-      return _buildEmbeddedSheet(
-        context: context,
-        l10n: l10n,
-        theme: theme,
-        list: list,
+            ),
+          );
+        },
       );
     }
 
@@ -1284,11 +1343,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
         shadowColor: Colors.transparent,
         actions: [
           if (widget.onEditExclusions != null)
-            IconButton(
-              key: const ValueKey('proxy-exclusions-open'),
-              tooltip: l10n.proxyExclusionsTitle,
-              onPressed: widget.onEditExclusions,
-              icon: const Icon(Icons.filter_alt_off_outlined),
+            _ProxyExclusionsButton(
+              hasExclusions: widget.hasProxyExclusions,
+              onPressed: widget.onEditExclusions!,
             ),
           if (widget.onAddProxy != null)
             IconButton(
@@ -1365,6 +1422,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required AppLocalizations l10n,
     required ThemeData theme,
     required Widget list,
+    required double? inlineActionsWidth,
     bool? sheetAtMaxExtent,
     bool? sheetCanFillScreen,
     double? sheetExtent,
@@ -1406,6 +1464,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     : 0.0;
                 final headerHeight = _proxySheetHeaderHeightForCollapse(
                   effectiveScrollCollapse,
+                  stackedActions: inlineActionsWidth == null,
                 );
                 return _ProxySheetHeaderBackdrop(
                   enabled:
@@ -1416,6 +1475,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                   height: headerHeight,
                   child: _ProxySheetHeader(
                     height: headerHeight,
+                    inlineActionsWidth: inlineActionsWidth,
                     progress: headerProgress,
                     scrollCollapse: effectiveScrollCollapse,
                     canFillScreen: effectiveSheetCanFillScreen,
@@ -1438,6 +1498,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
                     onUrlTest: widget.onUrlTest,
                     onAddProxy: widget.onAddProxy,
                     onEditExclusions: widget.onEditExclusions,
+                    hasProxyExclusions: widget.hasProxyExclusions,
                     onRefreshIp: widget.onActiveProxyIpRefresh,
                     onTap: widget.onHeaderTap,
                   ),
@@ -1460,14 +1521,18 @@ class _ProxiesPageState extends State<ProxiesPage> {
   Widget _buildEmbeddedProxyList({
     required BuildContext context,
     required AppLocalizations l10n,
+    required bool stackedActions,
   }) {
     final listMounted = _embeddedListActivated;
     // Keep the sliver geometry stable while the pinned header collapses.
     // Mutating padding during a drag forces the list to relayout and makes the
     // first rows visibly jump under the finger.
-    final listTopPadding = _proxySheetHeaderHeightForCollapse(0) + 6;
+    final listTopPadding =
+        _proxySheetHeaderHeightForCollapse(0, stackedActions: stackedActions) +
+        6;
     final bottomInset = appSystemNavigationBarInset(context);
     final entries = listMounted ? _visibleEntries() : const <_ProxyListEntry>[];
+    final showPlaceholder = _showProxyListPlaceholder(entries);
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: ListView.builder(
@@ -1487,13 +1552,11 @@ class _ProxiesPageState extends State<ProxiesPage> {
             : EdgeInsets.zero,
         itemCount: !listMounted
             ? 0
-            : widget.proxies.isEmpty ||
-                  (_presentationLoading && entries.isEmpty)
+            : showPlaceholder
             ? 1
             : entries.length,
         itemBuilder: (context, index) {
-          if (widget.proxies.isEmpty ||
-              (_presentationLoading && entries.isEmpty)) {
+          if (showPlaceholder) {
             return _buildEmptyOrLoadingState(context: context, l10n: l10n);
           }
           return KeyedSubtree(
@@ -1537,7 +1600,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     _proxySheetHeaderScrollCollapse.value = nextCollapse;
   }
 
-  double _proxySheetHeaderHeightForCollapse(double collapse) {
+  double _proxySheetHeaderHeightForCollapse(
+    double collapse, {
+    required bool stackedActions,
+  }) {
     // Reserve room for the title and both status lines without shrinking text.
     final scaler = MediaQuery.textScalerOf(context);
     final textGrowth = max(
@@ -1548,11 +1614,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
       collapse.clamp(0.0, 1.0).toDouble(),
     );
     return lerpDouble(
-          _kProxySheetExpandedToolbarHeight,
+          _kProxySheetHeaderHeight,
           _kProxySheetCompactHeaderHeight,
           t,
         )! +
-        textGrowth;
+        textGrowth +
+        (stackedActions ? 28 : 0);
   }
 
   Widget _buildProxyList({
@@ -1562,7 +1629,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     required double listBottomPadding,
   }) {
     final entries = _visibleEntries();
-    if (widget.proxies.isEmpty || (_presentationLoading && entries.isEmpty)) {
+    if (_showProxyListPlaceholder(entries)) {
       return _buildEmptyOrLoadingState(context: context, l10n: l10n);
     }
     return ListView.builder(
@@ -1586,6 +1653,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     );
   }
 
+  bool _showProxyListPlaceholder(List<_ProxyListEntry> entries) =>
+      widget.proxies.isEmpty ||
+      (entries.isEmpty && (_presentationLoading || widget.hideProxyChains));
+
   Widget _buildEmptyOrLoadingState({
     required BuildContext context,
     required AppLocalizations l10n,
@@ -1608,7 +1679,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
   }) {
     switch (entry.type) {
       case _ProxyListEntryType.currentChoice:
-        final proxy = widget.activeProxy ?? entry.proxy!;
+        final proxy = _presentationActiveProxy ?? entry.proxy!;
         Widget buildChoice(ProxyRuntimeVisualState? state) {
           final current = state?.presentation ?? proxy;
           return SizedBox(
@@ -1630,7 +1701,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
               ),
               child: Row(
                 children: [
-                  CountryFlagBadge(countryCode: current.countryCode, size: 34),
+                  _ProxyListCountryBadge(countryCode: current.countryCode),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1743,9 +1814,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
 
   Future<void> _openAddProxyChainSheet() async {
     final callback = widget.onAddProxyChain;
-    if (callback == null) {
+    if (callback == null || widget.hideProxyChains) {
       return;
     }
+    final profileId = widget.profileId;
+    final runtimeStates = widget.runtimeStates;
+    final checkLatency = _chainLatencyCheck(profileId);
     final localTargets = widget.proxies
         .where(
           (proxy) =>
@@ -1755,12 +1829,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
         )
         .toList(growable: false);
     final sources = await widget.loadProxyChainTargetSources?.call();
-    if (!mounted) {
+    if (!mounted || widget.profileId != profileId) {
       return;
     }
     final detours = widget.proxies
         .where((proxy) => !_isProxyChain(proxy))
         .toList(growable: false);
+    if (detours.isEmpty) return;
     if (sources == null ||
         sources.isEmpty ||
         widget.loadProxyChainTargetsForSource == null) {
@@ -1773,11 +1848,14 @@ class _ProxiesPageState extends State<ProxiesPage> {
         isScrollControlled: true,
         showDragHandle: true,
         builder: (context) => _AddProxyChainSheet.staticTargets(
+          profileId: profileId,
           detours: detours,
           targets: localTargets,
+          runtimeStates: runtimeStates,
+          checkLatency: checkLatency,
         ),
       );
-      if (selection != null) {
+      if (selection != null && mounted && widget.profileId == profileId) {
         await callback(selection.detourTag, selection.targetTag);
       }
       return;
@@ -1788,15 +1866,26 @@ class _ProxiesPageState extends State<ProxiesPage> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _AddProxyChainSheet(
+        profileId: profileId,
         detours: detours,
         sources: sources,
         loadTargetsForSource: widget.loadProxyChainTargetsForSource!,
+        runtimeStates: runtimeStates,
+        checkLatency: checkLatency,
       ),
     );
-    if (selection == null) {
+    if (selection == null || !mounted || widget.profileId != profileId) {
       return;
     }
     await callback(selection.detourTag, selection.targetTag);
+  }
+
+  Future<void> Function(String)? _chainLatencyCheck(String profileId) {
+    final check = widget.onProxyUrlTest;
+    if (check == null) return null;
+    return (tag) async {
+      if (mounted && widget.profileId == profileId) await check(tag);
+    };
   }
 
   Future<void> _openProxyChainActionSheet(AppProxySummary proxy) async {
@@ -1906,8 +1995,18 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (callback == null) {
       return;
     }
+    final profileId = widget.profileId;
+    final chain = widget.proxyChainForTag?.call(proxy.tag);
+    final localExitTag = chain?.targetSourceId(profileId) == profileId
+        ? chain?.targetTag
+        : null;
     final detours = widget.proxies
-        .where((candidate) => !_isProxyChain(candidate))
+        .where(
+          (candidate) =>
+              !_isProxyChain(candidate) &&
+              candidate.tag != chain?.detourTag &&
+              candidate.tag != localExitTag,
+        )
         .toList(growable: false);
     if (detours.isEmpty) {
       return;
@@ -1916,9 +2015,16 @@ class _ProxiesPageState extends State<ProxiesPage> {
       context: context,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => _ChangeProxyChainDetourSheet(detours: detours),
+      builder: (context) => _ChangeProxyChainDetourSheet(
+        detours: detours,
+        runtimeStates: widget.runtimeStates,
+        checkLatency: _chainLatencyCheck(profileId),
+      ),
     );
-    if (detourTag == null || detourTag.trim().isEmpty) {
+    if (detourTag == null ||
+        detourTag.trim().isEmpty ||
+        !mounted ||
+        widget.profileId != profileId) {
       return;
     }
     await callback(proxy.tag, detourTag);

@@ -563,6 +563,9 @@ class SubscriptionGroup {
   }
 }
 
+String proxyChainTargetRef(String subscriptionId, String outboundTag) =>
+    '$subscriptionId\n$outboundTag';
+
 /// A user-defined outbound clone that dials through another outbound first.
 class SubscriptionProxyChain {
   const SubscriptionProxyChain({
@@ -584,6 +587,11 @@ class SubscriptionProxyChain {
   final String targetName;
   final String targetCountry;
   final Map<String, dynamic> targetConfig;
+
+  String targetSourceId(String ownerId) {
+    final sourceId = targetSubscriptionId.trim();
+    return sourceId.isEmpty ? ownerId : sourceId;
+  }
 
   Map<String, dynamic> toMap() => {
     'tag': tag,
@@ -747,6 +755,11 @@ class Subscription {
       concreteSubscriptionServerTags(outbounds, groups);
 
   int get concreteServerCount => concreteServerTags.length;
+
+  Set<String> proxyChainTargetTagsFor(String sourceId) => {
+    for (final chain in proxyChains)
+      if (chain.targetSourceId(id) == sourceId) chain.targetTag.trim(),
+  };
 
   bool get needsRefresh {
     if (disableAutoUpdate || autoRefreshMinutes <= 0) return false;

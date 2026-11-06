@@ -55,28 +55,34 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
     condition.protocol?.toUpperCase(),
     condition.security?.toUpperCase(),
     condition.transport?.toUpperCase(),
-    condition.country,
+    if (condition.countries.isNotEmpty) condition.countries.join(', '),
   ].whereType<String>().join(' + ');
 
-  Future<void> _addCondition() async {
+  Future<void> _editCondition([int? index]) async {
     final l = AppLocalizations.of(context);
-    final protocols =
-        _servers.map(ProxyExclusionCondition.protocolOf).toSet().toList()
-          ..sort();
-    final securities =
-        _servers.map(ProxyExclusionCondition.securityOf).toSet().toList()
-          ..sort();
-    final transports =
-        _servers.map(ProxyExclusionCondition.transportOf).toSet().toList()
-          ..sort();
-    final countries =
-        _servers
-            .map(_country)
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    String? protocol, security, transport, country;
+    final initial = index == null ? null : _conditions[index];
+    var protocol = initial?.protocol;
+    var security = initial?.security;
+    var transport = initial?.transport;
+    final selectedCountries = {...?initial?.countries};
+    List<String> options(Iterable<String> values, String? selected) =>
+        ({...values, ?selected}.toList()..sort());
+    final protocols = options(
+      _servers.map(ProxyExclusionCondition.protocolOf),
+      protocol,
+    );
+    final securities = options(
+      _servers.map(ProxyExclusionCondition.securityOf),
+      security,
+    );
+    final transports = options(
+      _servers.map(ProxyExclusionCondition.transportOf),
+      transport,
+    );
+    final countries = {
+      ..._servers.map(_country).where((value) => value.isNotEmpty),
+      ...selectedCountries,
+    }.toList()..sort();
     final result = await showDialog<ProxyExclusionCondition>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -108,10 +114,14 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
             protocol: protocol,
             security: security,
             transport: transport,
-            country: country,
+            countries: selectedCountries,
           );
           return AlertDialog(
-            title: Text(l.proxyExclusionsAddCondition),
+            title: Text(
+              index == null
+                  ? l.proxyExclusionsAddCondition
+                  : l.proxyExclusionsEditCondition,
+            ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -136,11 +146,35 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                     transport,
                     (v) => transport = v,
                   ),
-                  field(
+                  const SizedBox(height: 16),
+                  Text(
                     l.proxyExclusionsCountry,
-                    countries,
-                    country,
-                    (v) => country = v,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      FilterChip(
+                        label: Text(l.proxyExclusionsAny),
+                        selected: selectedCountries.isEmpty,
+                        onSelected: (_) => update(selectedCountries.clear),
+                      ),
+                      for (final code in countries)
+                        FilterChip(
+                          avatar: CountryFlagBadge(countryCode: code, size: 22),
+                          label: Text(code),
+                          selected: selectedCountries.contains(code),
+                          onSelected: (selected) => update(() {
+                            if (selected) {
+                              selectedCountries.add(code);
+                            } else {
+                              selectedCountries.remove(code);
+                            }
+                          }),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -154,14 +188,21 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                 onPressed: condition.isEmpty
                     ? null
                     : () => Navigator.pop(context, condition),
-                child: Text(l.add),
+                child: Text(index == null ? l.add : l.saveAction),
               ),
             ],
           );
         },
       ),
     );
-    if (result != null && mounted) setState(() => _conditions.add(result));
+    if (result == null || !mounted) return;
+    setState(() {
+      if (index == null) {
+        _conditions.add(result);
+      } else {
+        _conditions[index] = result;
+      }
+    });
   }
 
   @override
@@ -224,17 +265,30 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(_summary(_conditions[i])),
-                        trailing: IconButton(
-                          tooltip: l.delete,
-                          icon: const Icon(Icons.close),
-                          onPressed: () =>
-                              setState(() => _conditions.removeAt(i)),
+                        onTap: () => _editCondition(i),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: l.proxyExclusionsEditCondition,
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () => _editCondition(i),
+                            ),
+                            IconButton(
+                              tooltip: l.delete,
+                              icon: const Icon(Icons.close),
+                              onPressed: () =>
+                                  setState(() => _conditions.removeAt(i)),
+                            ),
+                          ],
                         ),
                       ),
                     Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: TextButton.icon(
-                        onPressed: _servers.isEmpty ? null : _addCondition,
+                        onPressed: _servers.isEmpty
+                            ? null
+                            : () => _editCondition(),
                         icon: const Icon(Icons.add),
                         label: Text(l.proxyExclusionsAddCondition),
                       ),

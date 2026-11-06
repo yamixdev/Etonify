@@ -175,6 +175,12 @@ class _ProxyTileActions extends InheritedWidget {
       (onOpenGroup == null) != (oldWidget.onOpenGroup == null);
 }
 
+String _proxyLatencyText(AppLocalizations l10n, int? latency) {
+  if (latency == null) return l10n.proxyLatencyNoResult;
+  if (latency >= 1000) return '${(latency / 1000).toStringAsFixed(1)} s';
+  return '$latency ms';
+}
+
 class _ProxyLatencyAction extends StatelessWidget {
   const _ProxyLatencyAction({
     super.key,
@@ -208,11 +214,7 @@ class _ProxyLatencyAction extends StatelessWidget {
         ? l10n.proxySelectionUnconfirmed
         : checking
         ? '... ms'
-        : latency == null
-        ? l10n.proxyLatencyNoResult
-        : latency >= 1000
-        ? '${(latency / 1000).toStringAsFixed(1)} s'
-        : '$latency ms';
+        : _proxyLatencyText(l10n, latency);
     final color = selecting || (checking && !unconfirmed)
         ? theme.colorScheme.primary
         : unconfirmed || unavailable
@@ -294,9 +296,9 @@ class _ProxyTileIdentity extends StatelessWidget {
         identityPart(
           SizedBox(
             width: 36,
-            height: 48,
             child: Center(
-              child: CountryFlagBadge(countryCode: proxy.countryCode, size: 34),
+              heightFactor: 1,
+              child: _ProxyListCountryBadge(countryCode: proxy.countryCode),
             ),
           ),
           height: 48,
@@ -360,6 +362,35 @@ class _ProxyTileIdentity extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _ProxyListCountryBadge extends StatelessWidget {
+  const _ProxyListCountryBadge({required this.countryCode});
+
+  final String countryCode;
+
+  @override
+  Widget build(BuildContext context) {
+    final code = countryCode.trim().toUpperCase();
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CountryFlagBadge(countryCode: code, size: 32),
+        if (CountryFlagBadge.circleFlagCodeFor(code) != null)
+          Text(
+            code,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 10,
+              height: 1,
+            ),
+          ),
       ],
     );
   }

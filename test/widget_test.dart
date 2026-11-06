@@ -667,6 +667,238 @@ void main() {
     },
   );
 
+  testWidgets('chain picker shows live latency and requires an eligible exit', (
+    tester,
+  ) async {
+    (String, String)? added;
+    final checks = <String>[];
+    final states = ProxyRuntimeVisualStore();
+    addTearDown(states.dispose);
+    states.replaceAll({'exit': const ProxyRuntimeVisualState(latency: 85)});
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: ProxiesPage(
+          proxies: [
+            _proxy('entry', 'Entry', latency: 110),
+            _proxy('exit', 'Exit'),
+          ],
+          selectedTag: 'entry',
+          connected: false,
+          progressiveBlurEnabled: false,
+          onSelected: (_) {},
+          onUrlTest: () async {},
+          runtimeStates: states,
+          onProxyUrlTest: (tag) async {
+            checks.add(tag);
+            states.replaceAll({
+              tag: const ProxyRuntimeVisualState(latency: 56),
+            });
+          },
+          onAddProxyChain: (entry, exit) async => added = (entry, exit),
+        ),
+      ),
+    );
+    await tester.tap(find.text('+ Add proxy chain'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, 'Entry'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('110 ms'),
+      ),
+      findsOneWidget,
+    );
+    final exit = find.widgetWithText(ListTile, 'Exit');
+    expect(exit, findsOneWidget);
+    final delay = find.descendant(of: exit, matching: find.text('85 ms'));
+    expect(delay, findsOneWidget);
+    final add = find.widgetWithText(FilledButton, 'Add');
+    await tester.tap(delay);
+    await tester.pumpAndSettle();
+    expect(checks, ['exit']);
+    expect(
+      find.descendant(of: exit, matching: find.text('56 ms')),
+      findsOneWidget,
+    );
+    expect(tester.widget<FilledButton>(add).onPressed, isNull);
+    await tester.tap(find.descendant(of: exit, matching: find.text('Exit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exit').last);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ListTile, 'Exit'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Entry'), findsOneWidget);
+    expect(tester.widget<FilledButton>(add).onPressed, isNull);
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Entry'),
+        matching: find.text('Entry'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    expect(added, ('exit', 'entry'));
+  });
+
+  testWidgets('chain exits from another subscription use its saved latency', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 860);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final states = ProxyRuntimeVisualStore();
+    addTearDown(states.dispose);
+    states.replaceAll({'node': const ProxyRuntimeVisualState(latency: 30)});
+    final checks = <String>[];
+    AppProfileSummary source(String id) => AppProfileSummary(
+      id: id,
+      name: id,
+      consumed: 0,
+      total: 0,
+      remainingDays: null,
+      outboundsCount: 1,
+      sourceLabel: '',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ProxiesPage(
+          profileId: 'Current source',
+          proxies: [_proxy('entry', 'Entry')],
+          selectedTag: 'entry',
+          connected: false,
+          progressiveBlurEnabled: false,
+          onSelected: (_) {},
+          onUrlTest: () async {},
+          runtimeStates: states,
+          onProxyUrlTest: (tag) async => checks.add(tag),
+          onAddProxyChain: (_, _) async {},
+          loadProxyChainTargetSources: () async => [
+            source('Current source'),
+            source('Other source'),
+          ],
+          loadProxyChainTargetsForSource: (id) async => [
+            _proxy(proxyChainTargetRef(id, 'node'), '$id exit', latency: 240),
+          ],
+        ),
+      ),
+    );
+    await tester.tap(find.text('+ Add proxy chain'));
+    await tester.pumpAndSettle();
+    expect(find.text('30 ms'), findsOneWidget);
+    await tester.tap(find.text('30 ms'));
+    await tester.pumpAndSettle();
+    expect(checks, ['node']);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other source').last);
+    await tester.pumpAndSettle();
+    expect(find.text('30 ms'), findsNothing);
+    expect(find.text('240 ms'), findsOneWidget);
+    await tester.tap(find.text('240 ms'));
+    await tester.pumpAndSettle();
+    expect(checks, ['node']);
+    expect(find.text('Entry → Other source exit'), findsOneWidget);
+
+    addTearDown(tester.view.resetViewInsets);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 360);
+    await tester.enterText(find.byType(TextField).last, 'exit');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.widgetWithText(FilledButton, 'Add').hitTestable(),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('hiding chains removes the active chain row and add action', (
+    tester,
+  ) async {
+    final chain = _proxy('chain', 'Stored chain');
+    final proxies = [chain, _proxy('server', 'Plain server')];
+    Widget app({required bool hidden}) => MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      home: ProxiesPage(
+        proxies: proxies,
+        selectedTag: chain.tag,
+        activeProxy: chain,
+        hideProxyChains: hidden,
+        connected: true,
+        progressiveBlurEnabled: false,
+        onSelected: (_) => fail('Changing visibility must not select a proxy'),
+        onUrlTest: () async {},
+        onAddProxyChain: (_, _) async {},
+        isProxyChainTag: (tag) => tag == chain.tag,
+        browserMode: true,
+      ),
+    );
+
+    await tester.pumpWidget(app(hidden: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Stored chain'), findsWidgets);
+    expect(find.text('+ Add proxy chain'), findsOneWidget);
+
+    await tester.pumpWidget(app(hidden: true));
+    await tester.pumpAndSettle();
+    expect(find.text('Stored chain'), findsNothing);
+    expect(find.text('+ Add proxy chain'), findsNothing);
+    expect(find.byKey(const ValueKey('proxy-list-divider')), findsNothing);
+    expect(find.text('Plain server'), findsOneWidget);
+
+    await tester.pumpWidget(app(hidden: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Stored chain'), findsWidgets);
+    expect(find.text('+ Add proxy chain'), findsOneWidget);
+  });
+
+  testWidgets('proxy rows show the two-letter code under a known flag', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Column(
+            children: [
+              ProxyTile(
+                proxy: _proxy('known', 'Known').copyWith(countryCode: ' fi '),
+                selected: false,
+                onTap: () {},
+              ),
+              ProxyTile(
+                proxy: _proxy('unknown', 'Unknown').copyWith(countryCode: ''),
+                selected: false,
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final known = find.byKey(const ValueKey('proxy-flag-known'));
+    final unknown = find.byKey(const ValueKey('proxy-flag-unknown'));
+    expect(
+      find.descendant(of: known, matching: find.text('FI')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: unknown, matching: find.byType(Text)),
+      findsNothing,
+    );
+  });
+
   testWidgets('Russian proxy labels describe the fastest automatic selection', (
     tester,
   ) async {

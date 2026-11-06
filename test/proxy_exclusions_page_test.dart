@@ -7,6 +7,68 @@ import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
 void main() {
+  testWidgets('edit a saved condition and select several countries', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        home: ProxyExclusionsPage(
+          subscription: const Subscription(
+            id: 'countries',
+            name: 'Countries',
+            url: '',
+            outbounds: [
+              Outbound(
+                tag: 'de',
+                name: 'Germany',
+                config: {'type': 'vless'},
+                info: OutboundInfo(country: 'DE'),
+              ),
+              Outbound(
+                tag: 'fi',
+                name: 'Finland',
+                config: {'type': 'vless'},
+                info: OutboundInfo(country: 'FI'),
+              ),
+            ],
+          ),
+          rules: ProxyExclusionRules(
+            conditions: [
+              ProxyExclusionCondition.fromMap({
+                'protocol': 'vless',
+                'country': 'DE',
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
+    final edit = find.byTooltip('Edit condition');
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    final germany = find.widgetWithText(FilterChip, 'DE');
+    final finland = find.widgetWithText(FilterChip, 'FI');
+    expect(tester.widget<FilterChip>(germany).selected, isTrue);
+    await tester.tap(finland);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('VLESS + DE'), findsOneWidget);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilterChip>(finland).selected, isFalse);
+    await tester.tap(finland);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('VLESS + DE, FI'), findsOneWidget);
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(edit, findsOneWidget);
+  });
+
   for (final markRussia in [false, true]) {
     testWidgets('exclusion rows show honest countries, Russia=$markRussia', (
       tester,
