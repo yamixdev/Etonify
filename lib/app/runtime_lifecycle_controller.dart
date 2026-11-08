@@ -7,9 +7,8 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 enum RuntimeApplyPolicy { logOnly, safeCoreRestart, fullServiceRestart }
 
-/// Root is a confirmed system tunnel, not a local proxy or an offline probe.
 bool runtimeModeMatches(String? mode, {required bool useVpn}) =>
-    useVpn ? mode == 'vpn' || mode == 'root' : mode == 'proxy';
+    mode == (useVpn ? 'vpn' : 'proxy');
 
 class RuntimeLifecycleResult {
   const RuntimeLifecycleResult({

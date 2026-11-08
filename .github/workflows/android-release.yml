@@ -25,7 +25,6 @@ env:
   KEYSTORE_PATH: "android/app/etonify-release.jks"
   BUILD_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.build_name || '' }}
   BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
-  ROOT_MODULE_PUBLIC_KEY: ${{ vars.ROOT_MODULE_PUBLIC_KEY || secrets.ROOT_MODULE_PUBLIC_KEY }}
 
 jobs:
   build-release-apk:

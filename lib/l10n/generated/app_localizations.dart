@@ -6725,42 +6725,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last known IP · refresh failed'**
   String get trafficDashboardPublicIpCached;
-
-  /// No description provided for @legacyCleanupTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Root Mode is no longer supported'**
-  String get legacyCleanupTitle;
-
-  /// No description provided for @legacyCleanupMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'Root Mode has been removed from Etonify. Data from a previously installed module remains. Remove its files and network rules? This requires root permission. VPN profiles and settings will be kept.'**
-  String get legacyCleanupMessage;
-
-  /// No description provided for @legacyCleanupRemove.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove module'**
-  String get legacyCleanupRemove;
-
-  /// No description provided for @legacyCleanupLater.
-  ///
-  /// In en, this message translates to:
-  /// **'Not now'**
-  String get legacyCleanupLater;
-
-  /// No description provided for @legacyCleanupSuccess.
-  ///
-  /// In en, this message translates to:
-  /// **'The old module, its network rules and copies have been removed.'**
-  String get legacyCleanupSuccess;
-
-  /// No description provided for @legacyCleanupFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Removal of the old module could not be confirmed. Root permission will not be requested again. VPN profiles and settings are unchanged.'**
-  String get legacyCleanupFailed;
 }
 
 class _AppLocalizationsDelegate

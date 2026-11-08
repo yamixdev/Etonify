@@ -1485,11 +1485,5 @@
   "proxyExclusionsAny": "Любой",
   "proxyExclusionsEmpty": "Серверы не найдены",
   "proxyExclusionsManual": "Отдельные серверы",
-  "trafficDashboardPublicIpCached": "Последний известный IP · не удалось обновить",
-  "legacyCleanupTitle": "Root Mode больше не поддерживается",
-  "legacyCleanupMessage": "Root Mode удалён из Etonify. Остались данные ранее установленного модуля. Удалить его файлы и сетевые правила? Для этого потребуется разрешение root. Профили и настройки VPN сохранятся.",
-  "legacyCleanupRemove": "Удалить модуль",
-  "legacyCleanupLater": "Не сейчас",
-  "legacyCleanupSuccess": "Старый модуль, его сетевые правила и копии удалены.",
-  "legacyCleanupFailed": "Удаление старого модуля не удалось подтвердить. Повторных запросов root не будет. Профили и настройки VPN не изменены."
+  "trafficDashboardPublicIpCached": "Последний известный IP · не удалось обновить"
 }

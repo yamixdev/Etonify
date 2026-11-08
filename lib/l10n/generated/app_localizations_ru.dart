@@ -3794,25 +3794,4 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get trafficDashboardPublicIpCached =>
       'Последний известный IP · не удалось обновить';
-
-  @override
-  String get legacyCleanupTitle => 'Root Mode больше не поддерживается';
-
-  @override
-  String get legacyCleanupMessage =>
-      'Root Mode удалён из Etonify. Остались данные ранее установленного модуля. Удалить его файлы и сетевые правила? Для этого потребуется разрешение root. Профили и настройки VPN сохранятся.';
-
-  @override
-  String get legacyCleanupRemove => 'Удалить модуль';
-
-  @override
-  String get legacyCleanupLater => 'Не сейчас';
-
-  @override
-  String get legacyCleanupSuccess =>
-      'Старый модуль, его сетевые правила и копии удалены.';
-
-  @override
-  String get legacyCleanupFailed =>
-      'Удаление старого модуля не удалось подтвердить. Повторных запросов root не будет. Профили и настройки VPN не изменены.';
 }

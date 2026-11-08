@@ -8,7 +8,7 @@ import 'package:meow_client/singbox/singbox_runtime.dart';
 
 void main() {
   test(
-    'confirmed root tunnel satisfies VPN startup without a second VPN',
+    'confirmed VPN status satisfies startup without restarting the service',
     () async {
       final runtime = _FakeRuntime(
         running: false,
@@ -16,7 +16,7 @@ void main() {
       );
       runtime.statusResponse = () async => <String, dynamic>{
         'running': true,
-        'mode': 'root',
+        'mode': 'vpn',
         'runtimeGeneration': 2,
         'recordedServiceAlive': true,
         'activeRuntimeOwner': true,

@@ -1485,11 +1485,5 @@
   "proxyExclusionsAny": "Any",
   "proxyExclusionsEmpty": "No servers found",
   "proxyExclusionsManual": "Individual servers",
-  "trafficDashboardPublicIpCached": "Last known IP · refresh failed",
-  "legacyCleanupTitle": "Root Mode is no longer supported",
-  "legacyCleanupMessage": "Root Mode has been removed from Etonify. Data from a previously installed module remains. Remove its files and network rules? This requires root permission. VPN profiles and settings will be kept.",
-  "legacyCleanupRemove": "Remove module",
-  "legacyCleanupLater": "Not now",
-  "legacyCleanupSuccess": "The old module, its network rules and copies have been removed.",
-  "legacyCleanupFailed": "Removal of the old module could not be confirmed. Root permission will not be requested again. VPN profiles and settings are unchanged."
+  "trafficDashboardPublicIpCached": "Last known IP · refresh failed"
 }

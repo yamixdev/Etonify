@@ -86,7 +86,6 @@ import 'package:meow_client/features/settings/settings_backup_actions.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
 import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/features/settings/settings_core_page.dart';
-import 'package:meow_client/widgets/legacy_module_cleanup_notice.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/features/settings/settings_logs_page.dart';
@@ -10583,16 +10582,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       hapticEnabled: _hapticEnabled,
       home: _storageBootstrapFailed
           ? WindowsStorageErrorScreen(onRetry: _retryWindowsStorage)
-          : LegacyModuleCleanupNotice(
-              enabled:
-                  Platform.isAndroid &&
-                  _ready &&
-                  _legalAccepted &&
-                  _foregroundLifecycleActive &&
-                  !_connected &&
-                  !_runtimeTransitionInProgress,
-              child: _buildAppHome(),
-            ),
+          : _buildAppHome(),
       onDynamicColorSchemesChanged: _updateDynamicColorSchemes,
     );
   }

@@ -5,16 +5,16 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RuntimeServiceModeResolverTest {
-    @Test fun legacyRootPreferenceUsesSupportedInboundWithoutRootRuntime() {
-        assertEquals("vpn", RuntimeServiceModeResolver.requestedMode("root", listOf("tun")))
+    @Test fun unknownPreferenceUsesSupportedInbound() {
+        assertEquals("vpn", RuntimeServiceModeResolver.requestedMode("unknown", listOf("tun")))
         assertEquals("vpn", RuntimeServiceModeResolver.requestedMode(null, listOf("tun")))
-        assertEquals("proxy", RuntimeServiceModeResolver.requestedMode("root", listOf("mixed")))
-        assertNull(RuntimeServiceModeResolver.requestedMode("root", emptyList()))
+        assertEquals("proxy", RuntimeServiceModeResolver.requestedMode("unknown", listOf("mixed")))
+        assertNull(RuntimeServiceModeResolver.requestedMode("unknown", emptyList()))
     }
 
-    @Test fun removedRootRuntimeIsNotReportedAsAnActiveService() {
-        assertNull(RuntimeServiceModeResolver.activeMode("root", false, false))
-        assertEquals("vpn", RuntimeServiceModeResolver.activeMode("root", true, false))
+    @Test fun unknownRuntimeFallsBackToRecordedService() {
+        assertNull(RuntimeServiceModeResolver.activeMode("unknown", false, false))
+        assertEquals("vpn", RuntimeServiceModeResolver.activeMode("unknown", true, false))
     }
 
     @Test

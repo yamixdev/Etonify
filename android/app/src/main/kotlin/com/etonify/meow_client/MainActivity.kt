@@ -1,7 +1,5 @@
 package com.etonify.meow_client
 
-import com.etonify.meow_client.root.LegacyModuleCleanupChannels
-
 import android.app.ActivityManager
 import android.app.StatusBarManager
 import android.Manifest
@@ -76,7 +74,6 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterFragmentActivity() {
-    private var legacyModuleCleanupChannels: LegacyModuleCleanupChannels? = null
     companion object {
         private const val TAG = "MeowMainActivity"
         private const val QUICK_TILE_LABEL_FILE = "quick_tile_label.txt"
@@ -2281,8 +2278,6 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        legacyModuleCleanupChannels?.close()
-        legacyModuleCleanupChannels = LegacyModuleCleanupChannels(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         startupTasks?.close()
         val startup = StartupTaskRunner { command -> mainHandler.post(command) }
         startupTasks = startup
@@ -2414,8 +2409,6 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
-        legacyModuleCleanupChannels?.close()
-        legacyModuleCleanupChannels = null
         SubscriptionRefreshJobs.unregister()
         startupTasks?.close()
         startupTasks = null
