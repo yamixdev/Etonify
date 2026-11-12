@@ -217,7 +217,12 @@ class MeowVpnService : VpnService() {
         val action = VpnServiceLifecyclePolicy.taskRemovalAction(
             runtimeRunning = SingboxController.running,
             activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner("vpn"),
+            startRequested = boxService.hasPendingStart(),
         )
+        if (action == VpnTaskRemovalAction.KEEP_STARTING_RUNTIME) {
+            MeowDiagnostics.log(TAG, "onTaskRemoved while VPN is starting")
+            return
+        }
         if (action == VpnTaskRemovalAction.STOP_LINGERING_SERVICE) {
             Log.i(TAG, "onTaskRemoved – runtime is stopped; stopping lingering VPN service")
             MeowDiagnostics.log(TAG, "onTaskRemoved – runtime is stopped; stopping lingering VPN service")

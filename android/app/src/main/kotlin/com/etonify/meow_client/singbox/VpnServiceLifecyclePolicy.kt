@@ -2,6 +2,7 @@ package com.etonify.meow_client.singbox
 
 internal enum class VpnTaskRemovalAction {
     STOP_LINGERING_SERVICE,
+    KEEP_STARTING_RUNTIME,
     RECOVER_RUNTIME_AND_ARM_RESTART,
 }
 
@@ -10,6 +11,9 @@ internal enum class VpnTaskRemovalAction {
  * process-recovery behavior can be covered by local JVM tests.
  */
 internal object VpnServiceLifecyclePolicy {
+    fun isCurrentInstallationState(recordedAtMillis: Long, installedAtMillis: Long): Boolean =
+        recordedAtMillis > 0L && recordedAtMillis >= installedAtMillis
+
     fun runtimeFullyStopped(
         runtimeRunning: Boolean,
         activeRuntimeOwner: Boolean,
@@ -20,11 +24,12 @@ internal object VpnServiceLifecyclePolicy {
     fun taskRemovalAction(
         runtimeRunning: Boolean,
         activeRuntimeOwner: Boolean,
+        startRequested: Boolean = false,
     ): VpnTaskRemovalAction {
-        return if (runtimeRunning && activeRuntimeOwner) {
-            VpnTaskRemovalAction.RECOVER_RUNTIME_AND_ARM_RESTART
-        } else {
-            VpnTaskRemovalAction.STOP_LINGERING_SERVICE
+        return when {
+            runtimeRunning && activeRuntimeOwner -> VpnTaskRemovalAction.RECOVER_RUNTIME_AND_ARM_RESTART
+            startRequested -> VpnTaskRemovalAction.KEEP_STARTING_RUNTIME
+            else -> VpnTaskRemovalAction.STOP_LINGERING_SERVICE
         }
     }
 

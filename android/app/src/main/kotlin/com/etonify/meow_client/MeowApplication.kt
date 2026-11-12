@@ -4,10 +4,12 @@ import android.app.Application
 import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.os.Build
 import com.etonify.meow_client.singbox.LibboxMemoryPolicy
 import com.etonify.meow_client.singbox.MeowDiagnostics
+import com.etonify.meow_client.singbox.VpnServiceLifecyclePolicy
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.SetupOptions
 import java.io.File
@@ -79,6 +81,16 @@ class MeowApplication : Application() {
             get() = File(application.filesDir, "singbox-service-state.txt")
         val runtimeIntentFile: File
             get() = File(application.filesDir, "singbox-runtime-intent.txt")
+        private val installedPackageInfo by lazy {
+            val app = application
+            val manager = app.packageManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                manager.getPackageInfo(app.packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                manager.getPackageInfo(app.packageName, 0)
+            }
+        }
 
         private val runtimeFlagsPrefs
             get() = application.getSharedPreferences(
@@ -176,15 +188,7 @@ class MeowApplication : Application() {
                 val workingDir = singboxWorkingDirectory
                 val tempDir = File(app.cacheDir, "singbox-tmp").apply { mkdirs() }
                 val memoryPolicy = currentMemoryPolicy()
-                val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    app.packageManager.getPackageInfo(
-                        app.packageName,
-                        android.content.pm.PackageManager.PackageInfoFlags.of(0),
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    app.packageManager.getPackageInfo(app.packageName, 0)
-                }
+                val packageInfo = installedPackageInfo
                 val appVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     packageInfo.longVersionCode
                 } else {
@@ -328,7 +332,7 @@ class MeowApplication : Application() {
                         "updatedAtMillis" -> updatedAtMillis = value.toLongOrNull() ?: 0L
                     }
                 }
-                if (pid <= 0 || mode.isBlank()) {
+                if (pid <= 0 || mode.isBlank() || !isCurrentInstallationState(updatedAtMillis)) {
                     null
                 } else {
                     ServiceState(pid = pid, mode = mode, updatedAtMillis = updatedAtMillis)
@@ -357,7 +361,7 @@ class MeowApplication : Application() {
                         "updatedAtMillis" -> updatedAtMillis = value.toLongOrNull() ?: 0L
                     }
                 }
-                if (pid <= 0 || mode.isBlank()) {
+                if (pid <= 0 || mode.isBlank() || !isCurrentInstallationState(updatedAtMillis)) {
                     null
                 } else {
                     RuntimeIntentState(
@@ -369,6 +373,12 @@ class MeowApplication : Application() {
                 }
             }.getOrNull()
         }
+
+        private fun isCurrentInstallationState(updatedAtMillis: Long): Boolean =
+            VpnServiceLifecyclePolicy.isCurrentInstallationState(
+                recordedAtMillis = updatedAtMillis,
+                installedAtMillis = installedPackageInfo.lastUpdateTime,
+            )
 
         fun describeRecordedServiceState(): String {
             val state = readServiceState()
@@ -440,9 +450,8 @@ class MeowApplication : Application() {
                 return false
             }
             // The file represents the user's desired runtime state, not a
-            // short retry token. It remains valid until an explicit stop
-            // clears it, allowing START_STICKY to recover after an overnight
-            // low-memory or OEM process kill.
+            // short retry token. It remains valid across process restarts
+            // within the same APK installation until an explicit stop.
             return System.currentTimeMillis() >= state.updatedAtMillis
         }
     }

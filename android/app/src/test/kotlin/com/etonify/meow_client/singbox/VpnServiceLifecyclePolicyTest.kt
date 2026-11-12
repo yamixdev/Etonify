@@ -7,6 +7,13 @@ import org.junit.Test
 
 class VpnServiceLifecyclePolicyTest {
     @Test
+    fun `APK replacement invalidates runtime state written before installation`() {
+        assertFalse(VpnServiceLifecyclePolicy.isCurrentInstallationState(999L, 1_000L))
+        assertTrue(VpnServiceLifecyclePolicy.isCurrentInstallationState(1_000L, 1_000L))
+        assertTrue(VpnServiceLifecyclePolicy.isCurrentInstallationState(1_001L, 1_000L))
+    }
+
+    @Test
     fun `runtime is stopped only after native state and service owner are released`() {
         assertTrue(
             VpnServiceLifecyclePolicy.runtimeFullyStopped(
@@ -35,6 +42,18 @@ class VpnServiceLifecyclePolicyTest {
             VpnServiceLifecyclePolicy.taskRemovalAction(
                 runtimeRunning = true,
                 activeRuntimeOwner = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `removing previous app task does not stop a pending VPN start`() {
+        assertEquals(
+            VpnTaskRemovalAction.KEEP_STARTING_RUNTIME,
+            VpnServiceLifecyclePolicy.taskRemovalAction(
+                runtimeRunning = false,
+                activeRuntimeOwner = false,
+                startRequested = true,
             ),
         )
     }

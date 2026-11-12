@@ -93,7 +93,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingExportResult: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
     private var pendingInstallSettingsResult: MethodChannel.Result? = null
-    private var pendingApkInstallResult: MethodChannel.Result? = null
+    private var launchingApkInstaller = false
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var deepLinkEventSink: EventChannel.EventSink? = null
     private var pendingDeepLinkPayload: Map<String, Any?>? = null
@@ -125,13 +125,6 @@ class MainActivity : FlutterFragmentActivity() {
             val result = pendingInstallSettingsResult
             pendingInstallSettingsResult = null
             result?.success(canRequestApkInstalls())
-        }
-
-    private val apkInstallLauncher: ActivityResultLauncher<Intent> =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            val result = pendingApkInstallResult
-            pendingApkInstallResult = null
-            result?.success(true)
         }
 
     private val notificationPermissionLauncher: ActivityResultLauncher<String> =
@@ -392,7 +385,7 @@ class MainActivity : FlutterFragmentActivity() {
         if (!canRequestApkInstalls()) {
             throw IllegalStateException("APK install permission is not granted.")
         }
-        check(pendingApkInstallResult == null) { "An APK installation is already active." }
+        check(!launchingApkInstaller) { "The APK installer is already opening." }
         val uri = FileProvider.getUriForFile(
             this,
             "$packageName.fileprovider",
@@ -400,15 +393,39 @@ class MainActivity : FlutterFragmentActivity() {
         )
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         }
-        pendingApkInstallResult = result
-        runCatching { apkInstallLauncher.launch(intent) }
-            .onFailure { error ->
-                pendingApkInstallResult = null
-                throw error
+        launchingApkInstaller = true
+        val launchInstaller: (Boolean) -> Unit = launch@{ stopped ->
+            launchingApkInstaller = false
+            if (!stopped || isFinishing || isDestroyed) {
+                if (!stopped) {
+                    result.error("stop_timeout", "VPN did not stop before installing the update.", null)
+                }
+                return@launch
             }
+            runCatching { startActivity(intent) }
+                .onSuccess { result.success(null) }
+                .onFailure { error ->
+                    result.error("install_apk_failed", error.message, null)
+                }
+        }
+        runCatching {
+            val reason = "app_update"
+            SingboxController.recordExternalStop(reason)
+            MeowVpnService.cancelScheduledRestart(this, reason)
+            if (SingboxController.running || MeowBoxService.hasActiveRuntimeOwner() ||
+                MeowApplication.isRecordedServiceAlive()
+            ) {
+                dispatchStopRuntime(reason, launchInstaller)
+            } else {
+                launchInstaller(true)
+            }
+        }.onFailure { error ->
+            launchingApkInstaller = false
+            throw error
+        }
     }
 
     private fun requireTrustedUpdateIdentity(file: File) {
@@ -2272,6 +2289,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        UpdateRecentsReceiver.noteOpenedTask(taskId)
         SubscriptionRefreshJobs.foreground = true
     }
 

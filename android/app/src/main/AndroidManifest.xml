@@ -136,6 +136,14 @@
             android:name=".singbox.MeowNotificationActionReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".UpdateRecentsReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".MeowQuickSettingsTileService"
             android:exported="true"

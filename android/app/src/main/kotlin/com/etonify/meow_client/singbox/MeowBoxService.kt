@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -401,6 +402,20 @@ class MeowBoxService(
         }
         var sticky = false
         when (action) {
+            VpnService.SERVICE_INTERFACE -> {
+                if (service !is MeowVpnService ||
+                    VpnService.prepare(service) != null ||
+                    MeowApplication.configFile.length() == 0L
+                ) {
+                    MeowDiagnostics.log(TAG, "ignoring system VPN start without permission or saved config")
+                    if (!ownsActiveRuntime()) service.stopSelfResult(startId)
+                    return Service.START_NOT_STICKY
+                }
+                showForeground("Starting")
+                val token = nextStartToken("always_on_vpn")
+                submitServiceTask("always_on_vpn") { startInternal("always_on_vpn", token) }
+                sticky = true
+            }
             ACTION_START -> {
                 val scheduledRestart = intent.getBooleanExtra(EXTRA_SCHEDULED_RESTART, false)
                 if (scheduledRestart && !shouldRestoreStickyStart(currentMode())) {
@@ -485,6 +500,11 @@ class MeowBoxService(
         cancelPendingNetworkHandoverProbe("request_stop:$source")
         if (ownsActiveRuntime()) cancelStartRequests("request_stop:$source")
         submitServiceTask("requestStop:$source") { stopInternal(source) }
+    }
+
+    internal fun hasPendingStart(): Boolean {
+        val request = startRequest.get()
+        return request.startsRuntime && startTokenCurrent(request.token)
     }
 
     fun requestRuntimeRecovery(source: String) {
@@ -1032,6 +1052,10 @@ class MeowBoxService(
             MeowDiagnostics.log(TAG, "start cancelled before command server token=$token")
             return
         }
+        if (mode == RuntimeServiceModeResolver.VPN && !preparedRuntimeConfig.hasTunInbound) {
+            fail("VPN configuration has no TUN inbound")
+            return
+        }
         try {
             if (commandServer == null && !clearPendingDnsCache(runtimeActive = false, source = "before_start")) {
                 fail("Failed to clear persistent DNS cache")
@@ -1565,6 +1589,7 @@ class MeowBoxService(
         val config: String,
         val overrideOptions: OverrideOptions,
         val networkServerProfile: NetworkServerProfile? = null,
+        val hasTunInbound: Boolean = false,
     )
 
     private class ListStringIterator(
@@ -1588,6 +1613,7 @@ class MeowBoxService(
             val splitExcludePackages = mutableListOf<String>()
             val inbounds = root.optJSONArray("inbounds")
             val outbounds = root.optJSONArray("outbounds")
+            var hasTunInbound = false
             var changed = root.has(NetworkServerProfile.CONFIG_KEY)
             val networkServerProfile = NetworkServerProfile.removeFrom(root)
             for (index in 0 until (inbounds?.length() ?: 0)) {
@@ -1595,6 +1621,7 @@ class MeowBoxService(
                 if (inbound.optString("type") != "tun") {
                     continue
                 }
+                hasTunInbound = true
                 if (migrateNativeTunStack(inbound)) changed = true
                 splitIncludePackages += readPackageList(inbound.optJSONArray("include_package"))
                 splitExcludePackages += readPackageList(inbound.optJSONArray("exclude_package"))
@@ -1658,7 +1685,7 @@ class MeowBoxService(
             } else {
                 config
             }
-            PreparedRuntimeConfig(preparedConfig, overrideOptions, networkServerProfile)
+            PreparedRuntimeConfig(preparedConfig, overrideOptions, networkServerProfile, hasTunInbound)
         }.getOrElse { error ->
             if (error is SplitTunnelConfigurationException) {
                 throw error
