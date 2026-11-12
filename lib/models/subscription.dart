@@ -766,8 +766,9 @@ class Subscription {
   };
 
   bool get needsRefresh {
-    if (isLocalList || disableAutoUpdate || autoRefreshMinutes <= 0)
+    if (isLocalList || disableAutoUpdate || autoRefreshMinutes <= 0) {
       return false;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (sources.isNotEmpty) {
       return sources.any(
