@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
+import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/features/subscriptions/subscriptions_page.dart';
@@ -384,6 +385,102 @@ void main() {
     expect(tester.getSize(copy), tester.getSize(qr));
     expect(tester.takeException(), isNull);
   });
+
+  for (final (protocol, extraTransport) in [
+    ('vless', <String, dynamic>{}),
+    ('vmess', <String, dynamic>{}),
+    ('trojan', <String, dynamic>{}),
+    ('vless', <String, dynamic>{'method': 'POST'}),
+    (
+      'vless',
+      <String, dynamic>{
+        'headers': {'X-Client': 'test'},
+      },
+    ),
+  ]) {
+    final sharesLink = extraTransport.isEmpty;
+    _testSubscriptionWidgets(
+      sharesLink
+          ? 'shares $protocol RAW HTTP and round-trips the transport'
+          : 'shares RAW HTTP options as JSON when the link drops ${extraTransport.keys.single}',
+      (tester) async {
+        String? clipboardText;
+        final messenger = tester.binding.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(SystemChannels.platform, (
+          call,
+        ) async {
+          if (call.method == 'Clipboard.setData') {
+            clipboardText = (call.arguments as Map)['text'] as String;
+          }
+          return null;
+        });
+        addTearDown(
+          () =>
+              messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+        );
+        final transport = <String, dynamic>{
+          'type': 'http',
+          'raw_tcp': true,
+          'host': ['cdn.example', 'www.example'],
+          'path': '/news',
+          ...extraTransport,
+        };
+        final profile = _largeProfile();
+        final server = profile.outbounds[1];
+        await tester.runAsync(
+          () => SubscriptionStore.save(
+            profile.copyWith(
+              groups: const [],
+              outbounds: [
+                server.copyWith(
+                  config: {
+                    ...server.config,
+                    'type': protocol,
+                    if (protocol == 'trojan')
+                      'password': 'password'
+                    else
+                      'tls': {
+                        'enabled': true,
+                        'alpn': ['http/1.1'],
+                      },
+                    'transport': transport,
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+        await _openDetails(tester, 'large-profile', 'Large profile');
+        await _showServerPreview(tester);
+        await tester.tap(find.text('Server 1'));
+        await _pumpUi(tester);
+
+        final shareLink = find.widgetWithText(ListTile, 'Share link');
+        expect(tester.widget<ListTile>(shareLink).enabled, sharesLink);
+        await tester.tap(
+          sharesLink ? shareLink : find.text('sing-box outbound'),
+        );
+        await _pumpUi(tester);
+
+        expect(clipboardText, isNotNull);
+        if (sharesLink) {
+          final parsed = SubscriptionParser.parse(
+            clipboardText!,
+          ).outbounds.single;
+          expect(parsed['type'], protocol);
+          expect(parsed['transport'], transport);
+          if (protocol == 'trojan') {
+            expect(parsed['tls'], isNull);
+          } else {
+            expect(parsed['tls']['alpn'], ['http/1.1']);
+          }
+        } else {
+          final exported = jsonDecode(clipboardText!) as Map<String, dynamic>;
+          expect(exported['transport'], transport);
+        }
+      },
+    );
+  }
 
   _testSubscriptionWidgets(
     'custom refresh interval validates input and persists two days',

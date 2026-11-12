@@ -755,7 +755,7 @@ class LinkParser {
     final path = p['path'] ?? '';
     final serviceName =
         p['serviceName'] ?? p['service_name'] ?? p['service-name'] ?? '';
-    final headerType = p['headerType'] ?? '';
+    final headerType = (p['headerType'] ?? '').trim().toLowerCase();
 
     switch (type) {
       case 'ws':
@@ -798,14 +798,14 @@ class LinkParser {
         return t;
 
       case 'tcp':
-        // tcp with headerType=http → sing-box "http" transport
         if (headerType == 'http') {
-          final t = <String, dynamic>{'type': 'http'};
+          final t = <String, dynamic>{'type': 'http', 'raw_tcp': true};
           if (host.isNotEmpty) t['host'] = host.split(',');
           if (path.isNotEmpty) t['path'] = path;
           return t;
         }
-        return null; // raw tcp, no transport needed
+        if (headerType.isEmpty || headerType == 'none') return null;
+        throw UnsupportedLinkTransportException('tcp header $headerType');
 
       case 'quic':
         return <String, dynamic>{'type': 'quic'};

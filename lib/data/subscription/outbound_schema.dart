@@ -201,6 +201,7 @@ class ParsedOutboundSchema {
 
   static const Set<String> _transportKeysHttp = {
     'type',
+    'raw_tcp',
     'host',
     'path',
     'method',
@@ -688,6 +689,11 @@ class ParsedOutboundSchema {
     String type,
     Map<dynamic, dynamic> transport,
   ) {
+    if (type == 'http' &&
+        transport.containsKey('raw_tcp') &&
+        transport['raw_tcp'] is! bool) {
+      return 'invalid http raw_tcp: expected a boolean';
+    }
     if (const {
       'http',
       'ws',

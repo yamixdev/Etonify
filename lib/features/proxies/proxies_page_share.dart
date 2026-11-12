@@ -36,6 +36,18 @@ String? _outboundShareLink(Outbound outbound) {
   // A protocol URI cannot represent the dependent chain. Offer complete JSON
   // instead of silently changing the route when the recipient imports it.
   if (config['detour'] is String) return null;
+  final transport = config['transport'];
+  if (transport is Map && _isRawTcpHttp(transport)) {
+    final method = _stringValue(transport['method']);
+    final headers = transport['headers'];
+    if (method.isNotEmpty && method != 'GET') return null;
+    if (headers is Map && headers.keys.any((key) => !_isHostHeader(key))) {
+      return null;
+    }
+    final host = _rawTcpHttpHost(transport);
+    final hosts = host is List ? host : [host];
+    if (hosts.any((value) => _stringValue(value).contains(','))) return null;
+  }
   final type = (config['type'] as String? ?? '').toLowerCase();
   return switch (type) {
     'vless' => _vlessShareLink(outbound),
@@ -64,7 +76,7 @@ String? _vlessShareLink(Outbound outbound) {
   _putQuery(query, 'encryption', _stringValue(c['encryption']));
   _putQuery(query, 'flow', _stringValue(c['flow']));
   _putQuery(query, 'packetEncoding', _stringValue(c['packet_encoding']));
-  _appendTlsQuery(query, c['tls']);
+  _appendTlsQuery(query, c['tls'], includeAlpn: _isRawTcpHttp(c['transport']));
   _appendTransportQuery(query, c['transport']);
   return _uriWithQuery(
     scheme: 'vless',
@@ -83,7 +95,13 @@ String? _trojanShareLink(Outbound outbound) {
   final port = _intValue(c['server_port']);
   if (password.isEmpty || server.isEmpty || port == null) return null;
   final query = <String, String>{};
-  _appendTlsQuery(query, c['tls'], defaultSecurity: 'tls');
+  final rawTcpHttp = _isRawTcpHttp(c['transport']);
+  _appendTlsQuery(
+    query,
+    c['tls'],
+    defaultSecurity: rawTcpHttp ? 'none' : 'tls',
+    includeAlpn: rawTcpHttp,
+  );
   _appendTransportQuery(query, c['transport']);
   return _uriWithQuery(
     scheme: 'trojan',
@@ -129,6 +147,7 @@ String? _vmessShareLink(Outbound outbound) {
   final transport = c['transport'] is Map
       ? Map<String, dynamic>.from(c['transport'] as Map)
       : null;
+  final rawTcpHttp = _isRawTcpHttp(transport);
   final payload = <String, dynamic>{
     'v': '2',
     'ps': outbound.name,
@@ -137,17 +156,23 @@ String? _vmessShareLink(Outbound outbound) {
     'id': uuid,
     'aid': '${_intValue(c['alter_id']) ?? 0}',
     'scy': _stringValue(c['security'], fallback: 'auto'),
-    'net': _stringValue(transport?['type'], fallback: 'tcp'),
-    'type': _stringValue(
-      transport?['headers'] is Map
-          ? (transport!['headers'] as Map)['type']
-          : null,
-      fallback: 'none',
-    ),
+    'net': rawTcpHttp
+        ? 'tcp'
+        : _stringValue(transport?['type'], fallback: 'tcp'),
+    'type': rawTcpHttp
+        ? 'http'
+        : _stringValue(
+            transport?['headers'] is Map
+                ? (transport!['headers'] as Map)['type']
+                : null,
+            fallback: 'none',
+          ),
     'host': _transportHost(transport),
     'path': _stringValue(transport?['path']),
     'tls': tls?['enabled'] == true ? 'tls' : '',
     'sni': _stringValue(tls?['server_name']),
+    if (rawTcpHttp && tls?['alpn'] is List)
+      'alpn': (tls!['alpn'] as List).join(','),
     'fp': _stringValue(
       tls?['utls'] is Map ? (tls!['utls'] as Map)['fingerprint'] : null,
     ),
@@ -352,6 +377,7 @@ void _appendTlsQuery(
   Map<String, String> query,
   Object? rawTls, {
   String defaultSecurity = '',
+  bool includeAlpn = false,
 }) {
   if (rawTls is! Map || rawTls['enabled'] != true) {
     if (defaultSecurity.isNotEmpty) {
@@ -365,6 +391,9 @@ void _appendTlsQuery(
       : null;
   _putQuery(query, 'security', reality?['enabled'] == true ? 'reality' : 'tls');
   _putQuery(query, 'sni', _stringValue(tls['server_name']));
+  if (includeAlpn && reality?['enabled'] != true && tls['alpn'] is List) {
+    _putQuery(query, 'alpn', (tls['alpn'] as List).join(','));
+  }
   _putQuery(
     query,
     'fp',
@@ -407,7 +436,12 @@ void _appendHyTlsQuery(
 void _appendTransportQuery(Map<String, String> query, Object? rawTransport) {
   if (rawTransport is! Map) return;
   final transport = Map<String, dynamic>.from(rawTransport);
-  _putQuery(query, 'type', _stringValue(transport['type']));
+  if (_isRawTcpHttp(transport)) {
+    query['type'] = 'tcp';
+    query['headerType'] = 'http';
+  } else {
+    _putQuery(query, 'type', _stringValue(transport['type']));
+  }
   _putQuery(query, 'path', _stringValue(transport['path']));
   _putQuery(query, 'host', _transportHost(transport));
   _putQuery(query, 'mode', _stringValue(transport['mode']));
@@ -419,11 +453,33 @@ void _appendTransportQuery(Map<String, String> query, Object? rawTransport) {
 
 String _transportHost(Map<String, dynamic>? transport) {
   if (transport == null) return '';
+  if (_isRawTcpHttp(transport)) {
+    final host = _rawTcpHttpHost(transport);
+    return host is List ? host.map(_stringValue).join(',') : _stringValue(host);
+  }
   final headers = transport['headers'];
   if (headers is Map) {
     return _stringValue(headers['Host'] ?? headers['host']);
   }
   return _stringValue(transport['host']);
+}
+
+bool _isRawTcpHttp(Object? transport) =>
+    transport is Map &&
+    transport['type'] == 'http' &&
+    transport['raw_tcp'] == true;
+
+bool _isHostHeader(Object? name) =>
+    name is String && name.toLowerCase() == 'host';
+
+Object? _rawTcpHttpHost(Map<dynamic, dynamic> transport) {
+  final headers = transport['headers'];
+  if (headers is Map) {
+    for (final entry in headers.entries) {
+      if (_isHostHeader(entry.key)) return entry.value;
+    }
+  }
+  return transport['host'];
 }
 
 String _uriWithQuery({

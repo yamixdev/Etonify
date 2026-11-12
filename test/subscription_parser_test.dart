@@ -290,6 +290,43 @@ void main() {
       });
     });
 
+    test('imports TCP and RAW HTTP headers independently of HTTP/2', () {
+      const server =
+          'vless://00000000-0000-0000-0000-000000000001@server.example:443';
+      final result = SubscriptionParser.parse(
+        '$server?type=tcp&headerType=http&security=tls&alpn=http%2F1.1'
+        '&host=cdn.example%2Cwww.example&path=%2Fnews#TCP\n'
+        '$server?type=raw&headerType=http#RAW\n'
+        '$server?type=h2&security=tls#HTTP2',
+      );
+
+      expect(result.outbounds, hasLength(3));
+      expect(result.outbounds[0]['transport'], {
+        'type': 'http',
+        'raw_tcp': true,
+        'host': ['cdn.example', 'www.example'],
+        'path': '/news',
+      });
+      expect(result.outbounds[0]['tls']['alpn'], ['http/1.1']);
+      expect(result.outbounds[1]['transport'], {
+        'type': 'http',
+        'raw_tcp': true,
+      });
+      expect(result.outbounds[2]['transport'], {'type': 'http'});
+    });
+
+    test('rejects unknown TCP header types and keeps plain TCP links', () {
+      const server =
+          'vless://00000000-0000-0000-0000-000000000001@server.example:443';
+      final result = SubscriptionParser.parse(
+        '$server?type=tcp&headerType=unknown#Unknown\n'
+        '$server?type=raw&headerType=none#Plain',
+      );
+
+      expect(result.outbounds.single['_name'], 'Plain');
+      expect(result.outbounds.single['transport'], isNull);
+    });
+
     test('drops a link whose transport the core cannot express', () {
       const mkcp =
           'vless://uuid@server.com:443'
@@ -1065,6 +1102,133 @@ void main() {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   group('XrayConfigParser', () {
+    Map<String, dynamic> outbound(
+      String tag,
+      Map<String, dynamic> streamSettings,
+    ) => {
+      'protocol': 'vless',
+      'tag': tag,
+      'settings': {
+        'address': '$tag.example',
+        'port': 443,
+        'id': '00000000-0000-0000-0000-000000000001',
+      },
+      'streamSettings': streamSettings,
+    };
+
+    test('uses the nonempty REALITY password in preference to publicKey', () {
+      const newKey = 'thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8';
+      const oldKey = 'z0S7qx_G_rb8nATkZmCJpPC-hiQPNmqkXGkSmKM5fXY';
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            for (final (tag, settings) in [
+              ('password', {'password': newKey}),
+              ('both', {'password': newKey, 'publicKey': oldKey}),
+              ('fallback', {'password': '', 'publicKey': oldKey}),
+              ('legacy', {'publicKey': oldKey}),
+            ])
+              outbound(tag, {
+                'security': 'reality',
+                'realitySettings': {'fingerprint': 'chrome', ...settings},
+              }),
+          ],
+        }),
+      );
+
+      expect(
+        result.outbounds.map(
+          (outbound) => outbound['tls']['reality']['public_key'],
+        ),
+        [newKey, newKey, oldKey, oldKey],
+      );
+    });
+
+    test(
+      'honors Xray RAW alias precedence and imports HTTP request options',
+      () {
+        final result = SubscriptionParser.parse(
+          jsonEncode({
+            'outbounds': [
+              outbound('raw', {
+                'method': 'raw',
+                'network': 'ws',
+                'rawSettings': {
+                  'header': {
+                    'type': 'http',
+                    'request': {
+                      'method': 'POST',
+                      'path': ['/news', '/updates'],
+                      'headers': {
+                        'host': 'cdn.example,www.example',
+                        'X-Client': ['test'],
+                      },
+                    },
+                  },
+                },
+                'tcpSettings': {
+                  'header': {'type': 'none'},
+                },
+              }),
+              outbound('legacy', {
+                'network': 'tcp',
+                'tcpSettings': {
+                  'header': {
+                    'type': 'http',
+                    'request': {'path': '/legacy'},
+                  },
+                },
+              }),
+              outbound('plain', {
+                'network': 'raw',
+                'rawSettings': <String, dynamic>{},
+                'tcpSettings': {
+                  'header': {'type': 'http'},
+                },
+              }),
+            ],
+          }),
+        );
+
+        expect(result.outbounds, hasLength(3));
+        expect(result.outbounds[0]['transport'], {
+          'type': 'http',
+          'raw_tcp': true,
+          'method': 'POST',
+          'path': '/news',
+          'host': ['cdn.example', 'www.example'],
+          'headers': {
+            'X-Client': ['test'],
+          },
+        });
+        expect(result.outbounds[1]['transport'], {
+          'type': 'http',
+          'raw_tcp': true,
+          'path': '/legacy',
+        });
+        expect(result.outbounds[2]['transport'], isNull);
+      },
+    );
+
+    test('rejects unknown Xray RAW headers without dropping valid nodes', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            outbound('unknown', {
+              'network': 'raw',
+              'rawSettings': {
+                'header': {'type': 'unknown'},
+              },
+            }),
+            outbound('plain', {'network': 'raw'}),
+          ],
+        }),
+      );
+
+      expect(result.outbounds.single['_name'], 'plain');
+      expect(result.outbounds.single['transport'], isNull);
+    });
+
     test('converts Xray VLESS outbound to sing-box format', () {
       final content = jsonEncode({
         'outbounds': [

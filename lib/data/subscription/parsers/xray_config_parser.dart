@@ -364,7 +364,7 @@ class XrayConfigParser {
     };
 
     _addTls(r, stream);
-    _addTransport(r, stream);
+    if (!_addTransport(r, stream)) return null;
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -407,7 +407,7 @@ class XrayConfigParser {
     if (encryption.isNotEmpty) r['encryption'] = encryption;
 
     _addTls(r, stream);
-    _addTransport(r, stream);
+    if (!_addTransport(r, stream)) return null;
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -433,7 +433,7 @@ class XrayConfigParser {
     };
 
     _addTls(r, stream);
-    _addTransport(r, stream);
+    if (!_addTransport(r, stream)) return null;
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -578,7 +578,8 @@ class XrayConfigParser {
         tls['utls'] = {'enabled': true, 'fingerprint': fp};
       }
       final reality = <String, dynamic>{'enabled': true};
-      final pbk = _s(rs['publicKey']);
+      final password = _s(rs['password']);
+      final pbk = password.isNotEmpty ? password : _s(rs['publicKey']);
       if (pbk.isNotEmpty) reality['public_key'] = pbk;
       final sid = _s(rs['shortId']);
       if (sid.isNotEmpty) reality['short_id'] = sid;
@@ -618,11 +619,14 @@ class XrayConfigParser {
 
   // ━━━━━━━━━━━━━━━━━━ Transport ━━━━━━━━━━━━━━━━━━
 
-  static void _addTransport(
+  static bool _addTransport(
     Map<String, dynamic> r,
     Map<String, dynamic> stream,
   ) {
-    final network = _s(stream['network'], 'tcp').toLowerCase();
+    final network = _s(
+      stream['method'] ?? stream['network'],
+      'tcp',
+    ).toLowerCase();
 
     switch (network) {
       case 'ws':
@@ -702,24 +706,34 @@ class XrayConfigParser {
         r['transport'] = <String, dynamic>{'type': 'quic'};
 
       case 'tcp':
-        // tcp with header type "http" → sing-box http transport
-        final tcp = _map(stream['tcpSettings']);
+      case 'raw':
+        final tcp = _map(stream['rawSettings'] ?? stream['tcpSettings']);
         final header = _map(tcp['header']);
-        if (_s(header['type']) == 'http') {
-          final t = <String, dynamic>{'type': 'http'};
-          final req = _map(header['request']);
-          final path = req['path'];
-          if (path is List && path.isNotEmpty) {
-            t['path'] = path.first.toString();
+        final headerType = _s(header['type']);
+        if (headerType.isEmpty || headerType == 'none') break;
+        if (headerType != 'http') return false;
+
+        final t = <String, dynamic>{'type': 'http', 'raw_tcp': true};
+        final request = _map(header['request']);
+        final method = _s(request['method']);
+        if (method.isNotEmpty) t['method'] = method;
+        final paths = _stringList(request['path']);
+        if (paths.isNotEmpty) t['path'] = paths.first;
+
+        final headers = <String, dynamic>{};
+        for (final entry in _map(request['headers']).entries) {
+          final values = _stringList(entry.value);
+          if (values.isEmpty) continue;
+          if (entry.key.toLowerCase() == 'host') {
+            t['host'] = values;
+          } else {
+            headers[entry.key] = values;
           }
-          final headers = _map(req['headers']);
-          final host = headers['Host'];
-          if (host is List) {
-            t['host'] = host.map((e) => e.toString()).toList();
-          }
-          r['transport'] = t;
         }
+        if (headers.isNotEmpty) t['headers'] = headers;
+        r['transport'] = t;
     }
+    return true;
   }
 
   // ━━━━━━━━━━━━━━━━━━ Utility ━━━━━━━━━━━━━━━━━━
@@ -728,6 +742,12 @@ class XrayConfigParser {
     if (v == null) return fallback;
     return v.toString();
   }
+
+  static List<String> _stringList(dynamic value) => switch (value) {
+    String text => text.split(','),
+    List<dynamic> items => items.whereType<String>().toList(growable: false),
+    _ => const [],
+  };
 
   static int _i(dynamic v, [int fallback = 0]) {
     if (v is int) return v;
