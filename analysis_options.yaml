@@ -11,6 +11,9 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
+    # Flutter gen-l10n still emits the SDK design delegates. The app uses
+    # the standalone delegates from lib/l10n/app_localizations.dart.
+    - lib/l10n/generated/app_localizations.dart
     - third_party/flutter_circle_flags/**
     - build/**
     - android/**
