@@ -11,11 +11,33 @@ internal data class NetworkRecoveryContext(
     fun matches(current: NetworkRecoveryContext): Boolean = runtime > 0L && network > 0L && this == current
 }
 
+internal enum class NetworkHandoverProbeOutcome {
+    HEALTHY,
+    UNHEALTHY,
+    INCONCLUSIVE,
+}
+
 internal class NetworkHandoverRecovery(private val restartCooldownMillis: Long) {
     private var resetRuntime = 0L
     private var resetNetwork = 0L
     private var restartedContext: NetworkRecoveryContext? = null
     private var lastRestartAt: Long? = null
+    private var probeContext: NetworkRecoveryContext? = null
+    private var probeRetryTaken = false
+
+    @Synchronized
+    fun takeProbe(expected: NetworkRecoveryContext, current: NetworkRecoveryContext, retry: Boolean): Boolean {
+        if (!expected.matches(current)) return false
+        if (retry) {
+            if (probeContext != expected || probeRetryTaken) return false
+            probeRetryTaken = true
+        } else {
+            if (probeContext == expected) return false
+            probeContext = expected
+            probeRetryTaken = false
+        }
+        return true
+    }
 
     @Synchronized
     fun resetIfChanged(expected: NetworkRecoveryContext, current: NetworkRecoveryContext, reset: () -> Unit): Boolean {

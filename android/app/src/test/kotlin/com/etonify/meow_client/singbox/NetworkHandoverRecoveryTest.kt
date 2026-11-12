@@ -8,6 +8,30 @@ import org.junit.Test
 class NetworkHandoverRecoveryTest {
     private val wifi = NetworkRecoveryContext(1L, 4L, 0L, 2L, 10L, 0L)
 
+    @Test fun `handover owns one probe and at most one inconclusive retry`() {
+        val recovery = NetworkHandoverRecovery(60_000L)
+        assertFalse(recovery.takeProbe(wifi, wifi, retry = true))
+        assertTrue(recovery.takeProbe(wifi, wifi, retry = false))
+        assertFalse(recovery.takeProbe(wifi, wifi, retry = false))
+        assertTrue(recovery.takeProbe(wifi, wifi, retry = true))
+        assertFalse(recovery.takeProbe(wifi, wifi, retry = true))
+        assertFalse(recovery.takeProbe(wifi, wifi, retry = false))
+    }
+
+    @Test fun `stale handover cannot retry and the replacement has its own probe budget`() {
+        val recovery = NetworkHandoverRecovery(60_000L)
+        assertTrue(recovery.takeProbe(wifi, wifi, retry = false))
+        for (newContext in listOf(
+            wifi.copy(runtime = 2L), wifi.copy(network = 5L), wifi.copy(externalStop = 1L),
+            wifi.copy(selection = 3L), wifi.copy(startToken = 11L), wifi.copy(cancellation = 1L),
+        )) {
+            assertFalse(recovery.takeProbe(wifi, newContext, retry = true))
+        }
+        val mobile = wifi.copy(network = 5L)
+        assertTrue(recovery.takeProbe(mobile, mobile, retry = false))
+        assertTrue(recovery.takeProbe(mobile, mobile, retry = true))
+    }
+
     @Test fun `physical generation resets transports once even if interface remains unchanged`() {
         val recovery = NetworkHandoverRecovery(60_000L)
         var resets = 0

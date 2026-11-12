@@ -5,6 +5,26 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal data class NativeRestartRequest(
+    val source: String,
+    val startToken: Long,
+    val externalStopRevision: Long,
+    val runtimeGeneration: Long,
+    val requireRuntimeIntent: Boolean,
+) {
+    fun canResume(
+        startTokenCurrent: Boolean,
+        currentExternalStopRevision: Long,
+        currentServiceGeneration: Long,
+        activeRuntimeGeneration: Long,
+        hasRuntimeIntent: Boolean,
+    ): Boolean = startTokenCurrent &&
+        externalStopRevision == currentExternalStopRevision &&
+        runtimeGeneration == currentServiceGeneration &&
+        runtimeGeneration == activeRuntimeGeneration &&
+        (!requireRuntimeIntent || hasRuntimeIntent)
+}
+
 /**
  * One close operation per native service lifetime. A timeout only bounds the
  * caller's wait: interrupting JNI does not cancel Go cleanup. Retain the
@@ -18,6 +38,25 @@ internal class NativeServiceCloseTask(
     private val started = AtomicBoolean(false)
     private val timeoutReported = AtomicBoolean(false)
     private val result = FutureTask { runCatching(close) }
+    // Owned by the service executor, including the posted completion handler.
+    private var pendingRestart: NativeRestartRequest? = null
+
+    val hasDeferredRestart: Boolean get() = pendingRestart != null
+
+    fun deferRestart(request: NativeRestartRequest): Boolean {
+        if (result.isDone && result.get().isFailure) return false
+        pendingRestart = request
+        return true
+    }
+
+    fun takeRestart(): NativeRestartRequest? {
+        if (!result.isDone || result.get().isFailure) return null
+        return pendingRestart.also { pendingRestart = null }
+    }
+
+    fun cancelRestart() {
+        pendingRestart = null
+    }
 
     fun start(onComplete: (Result<Unit>) -> Unit) {
         if (!started.compareAndSet(false, true)) return

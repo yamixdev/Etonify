@@ -235,7 +235,7 @@ internal class MeowForegroundNotification(
         val startedAtMillis: Long, val minimumRevision: Long, val requestId: String,
     )
     private var latencyActionContext: LatencyActionContext? = null
-    private val latencyCompletionObservers = mutableListOf<(Boolean) -> Unit>()
+    private val latencyCompletionObservers = mutableListOf<(NetworkHandoverProbeOutcome) -> Unit>()
     private data class Outbound(
         val type: String,
         val members: List<String>,
@@ -436,8 +436,11 @@ internal class MeowForegroundNotification(
             val terminalRecovery = ownsRecovery &&
                 (status == "unavailable" || status == "cancelled" || (status == "available" && delayMillis > 0L))
             if (terminalRecovery) {
-                if (status == "cancelled") latencyCompletionObservers.clear()
-                else dispatchLatencyCompletionLocked(status == "available" && delayMillis > 0L)
+                when (status) {
+                    "cancelled" -> dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.INCONCLUSIVE)
+                    "unavailable" -> dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.UNHEALTHY)
+                    else -> dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.HEALTHY)
+                }
             }
             if ((!recoveryPending && (nativeStartupToken == null || attributed)) || terminalRecovery) {
                 latencyActionInFlight = false
@@ -464,7 +467,10 @@ internal class MeowForegroundNotification(
         }
     }
 
-    fun requestLatencyRefresh(startup: Boolean = false, onComplete: ((Boolean) -> Unit)? = null): Boolean {
+    fun requestLatencyRefresh(
+        startup: Boolean = false,
+        onComplete: ((NetworkHandoverProbeOutcome) -> Unit)? = null,
+    ): Boolean {
         val request: UrlTestRequest
         val actionGeneration: Long
         val timeoutCallback: Runnable
@@ -499,7 +505,7 @@ internal class MeowForegroundNotification(
             latencyCompletionObservers.clear()
             onComplete?.let(latencyCompletionObservers::add)
             latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
-            timeoutCallback = Runnable { completeLatencyAction(actionGeneration, null) }
+            timeoutCallback = Runnable { completeLatencyAction(actionGeneration) }
             latencyTimeoutRunnable = timeoutCallback
             refreshLocked()
         }
@@ -508,7 +514,7 @@ internal class MeowForegroundNotification(
             max(request.deadlineMillis.toLong(), DEFAULT_LATENCY_TIMEOUT_MS) + 1_000L,
         )
         val callback: (Result<Unit>) -> Unit = { result ->
-            if (result.isFailure) completeLatencyAction(actionGeneration, null)
+            if (result.isFailure) completeLatencyAction(actionGeneration)
         }
         val runner = latencyTestRunner
         try {
@@ -530,7 +536,7 @@ internal class MeowForegroundNotification(
                 callback = callback,
             )
         } catch (_: Exception) {
-            completeLatencyAction(actionGeneration, null)
+            completeLatencyAction(actionGeneration)
         }
         return true
     }
@@ -545,7 +551,7 @@ internal class MeowForegroundNotification(
         latencyActionContext = null
     }
 
-    private fun dispatchLatencyCompletionLocked(success: Boolean) {
+    private fun dispatchLatencyCompletionLocked(outcome: NetworkHandoverProbeOutcome) {
         val context = latencyActionContext ?: return
         val generation = latencyActionGeneration
         val observers = latencyCompletionObservers.toList()
@@ -556,21 +562,18 @@ internal class MeowForegroundNotification(
                 generation == latencyActionGeneration && latencyActionContext === context &&
                     latencyContextCurrentLocked(context)
             }
-            if (valid) observers.forEach { it(success) }
+            if (valid) observers.forEach { it(outcome) }
         }
     }
 
-    private fun completeLatencyAction(
-        actionGeneration: Long,
-        latencyMillis: Long?,
-    ) {
+    private fun completeLatencyAction(actionGeneration: Long) {
         synchronized(this) {
             if (!latencyActionInFlight || latencyActionGeneration != actionGeneration) {
                 return
             }
             latencyActionInFlight = false
             latencyChecking = false
-            cancelLatencyObserversLocked()
+            dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.INCONCLUSIVE)
             nativeStartupToken?.let { token ->
                 // Dispatch failure and no-result deadline both release the
                 // lease without inventing a core measurement. Later client
@@ -581,10 +584,6 @@ internal class MeowForegroundNotification(
             nativeStartupToken = null
             latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
             latencyTimeoutRunnable = null
-            if (latencyMillis != null) {
-                presentation = presentation.copy(latencyMillis = latencyMillis)
-                persistPresentation(presentation)
-            }
             refreshLocked()
         }
     }

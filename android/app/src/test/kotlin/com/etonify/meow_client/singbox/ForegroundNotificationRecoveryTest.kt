@@ -25,7 +25,7 @@ class ForegroundNotificationRecoveryTest {
     private lateinit var notification: MeowForegroundNotification
     private val requests = mutableListOf<MeowForegroundNotification.UrlTestRequest>()
     private val dispatches = mutableListOf<(Result<Unit>) -> Unit>()
-    private val completions = mutableListOf<Boolean>()
+    private val completions = mutableListOf<NetworkHandoverProbeOutcome>()
 
     @Before fun setUp() {
         val service = Robolectric.buildService(HostService::class.java).create().get()
@@ -62,7 +62,7 @@ class ForegroundNotificationRecoveryTest {
         result()
         assertTrue(completions.isEmpty())
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(true), completions)
+        assertEquals(listOf(NetworkHandoverProbeOutcome.HEALTHY), completions)
     }
 
     @Test fun `legacy snapshot cannot consume recovery observer or watchdog`() {
@@ -71,7 +71,7 @@ class ForegroundNotificationRecoveryTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(completions.isEmpty())
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(21))
-        assertTrue(completions.isEmpty())
+        assertEquals(listOf(NetworkHandoverProbeOutcome.INCONCLUSIVE), completions)
     }
 
     @Test fun `old same second cache and unrelated request do not complete recovery`() {
@@ -86,7 +86,7 @@ class ForegroundNotificationRecoveryTest {
         assertTrue(completions.isEmpty())
         result(revision = 2L)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(true), completions)
+        assertEquals(listOf(NetworkHandoverProbeOutcome.HEALTHY), completions)
     }
 
     @Test fun `attributed failure completes once despite late dispatch failure`() {
@@ -94,14 +94,14 @@ class ForegroundNotificationRecoveryTest {
         result(delay = 0L, status = "unavailable")
         dispatches.single()(Result.failure(IllegalStateException("late dispatch")))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(22))
-        assertEquals(listOf(false), completions)
+        assertEquals(listOf(NetworkHandoverProbeOutcome.UNHEALTHY), completions)
     }
 
-    @Test fun `dispatch failure is unknown and cannot request fallback`() {
+    @Test fun `dispatch failure reports one inconclusive result`() {
         assertTrue(request())
         dispatches.single()(Result.failure(IllegalStateException("dispatch failed")))
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(22))
-        assertTrue(completions.isEmpty())
+        assertEquals(listOf(NetworkHandoverProbeOutcome.INCONCLUSIVE), completions)
     }
 
     @Test fun `same context busy action is joined without a duplicate probe`() {
@@ -110,7 +110,7 @@ class ForegroundNotificationRecoveryTest {
         assertEquals(1, requests.size)
         result()
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf(true), completions)
+        assertEquals(listOf(NetworkHandoverProbeOutcome.HEALTHY), completions)
     }
 
     @Test fun `stop cancels queued completion and watchdog`() {
@@ -147,11 +147,11 @@ class ForegroundNotificationRecoveryTest {
         assertTrue(completions.isEmpty())
     }
 
-    @Test fun `cancelled own probe does not request fallback even after deadline`() {
+    @Test fun `cancelled own probe reports one inconclusive result`() {
         assertTrue(request())
         result(delay = 0L, status = "cancelled")
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(22))
-        assertTrue(completions.isEmpty())
+        assertEquals(listOf(NetworkHandoverProbeOutcome.INCONCLUSIVE), completions)
     }
 
     @Test fun `missing result is unknown and a late result cannot revive its observer`() {
@@ -159,7 +159,7 @@ class ForegroundNotificationRecoveryTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(21))
         result()
         shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(completions.isEmpty())
+        assertEquals(listOf(NetworkHandoverProbeOutcome.INCONCLUSIVE), completions)
     }
 
     @Test fun `covering client startup is declined without duplicate probe or failure`() {

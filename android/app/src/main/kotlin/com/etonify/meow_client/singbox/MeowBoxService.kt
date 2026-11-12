@@ -28,6 +28,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 class MeowBoxService(
     private val service: Service,
@@ -54,6 +55,7 @@ class MeowBoxService(
         private const val POST_START_INTERFACE_REASSERT_DELAY_MS = 500L
         private const val RUNTIME_RECOVERY_MIN_INTERVAL_MS = 1_000L
         private const val NETWORK_HANDOVER_PROBE_DELAY_MS = 2_500L
+        private const val NETWORK_HANDOVER_PROBE_RETRY_DELAY_MS = 5_000L
         private const val NETWORK_RECOVERY_RESTART_COOLDOWN_MS = 60_000L
         private val activeServices = CopyOnWriteArraySet<MeowBoxService>()
 
@@ -101,7 +103,9 @@ class MeowBoxService(
 
         fun onDefaultNetworkChanged(available: Boolean) {
             for (boxService in activeServices) {
-                if (SingboxController.running && boxService.ownsActiveRuntime() && !boxService.runtimeStarting) {
+                if (SingboxController.running && boxService.ownsActiveRuntime() &&
+                    !boxService.runtimeStarting && boxService.nativeCloseTask == null
+                ) {
                     boxService.showForeground(if (available) "Connected" else "Waiting for network")
                     boxService.foregroundNotification.onRuntimeReady(
                         boxService.serviceGeneration, SingboxController.currentNetworkGeneration,
@@ -276,7 +280,9 @@ class MeowBoxService(
     @Volatile
     private var serviceGeneration = 0L
 
-    private val startRequestGeneration = AtomicLong(0L)
+    private data class StartRequest(val token: Long, val startsRuntime: Boolean)
+
+    private val startRequest = AtomicReference(StartRequest(0L, startsRuntime = false))
     private val terminalForceStopScheduled = AtomicBoolean(false)
     @Volatile
     private var terminalForceStopRunnable: Runnable? = null
@@ -421,7 +427,7 @@ class MeowBoxService(
         destroyed = true
         MeowDiagnostics.log(TAG, "onDestroy")
         // Keep native ownership visible until closeService really finishes.
-        startRequestGeneration.set(Long.MIN_VALUE)
+        startRequest.set(StartRequest(Long.MIN_VALUE, startsRuntime = false))
         cancelPendingStartRetry("service_onDestroy")
         cancelPendingNetworkHandoverProbe("service_onDestroy")
         cancelPendingTerminalForceStop("service_onDestroy")
@@ -441,7 +447,7 @@ class MeowBoxService(
     fun requestRuntimeRecovery(source: String) {
         val server = commandServer
         val ownsRuntime = ownsActiveRuntime()
-        if (destroyed || !SingboxController.running || !ownsRuntime || server == null) {
+        if (destroyed || !SingboxController.running || !ownsRuntime || server == null || nativeCloseTask != null) {
             MeowDiagnostics.log(
                 TAG,
                 "runtime recovery skipped source=$source destroyed=$destroyed " +
@@ -489,11 +495,11 @@ class MeowBoxService(
 
     private fun networkRecoveryContext() = NetworkRecoveryContext(
         serviceGeneration, SingboxController.currentNetworkGeneration, SingboxController.externalStopRevision,
-        foregroundNotification.currentSelectionEpoch, startRequestGeneration.get(), recoveryCancellationGeneration.get(),
+        foregroundNotification.currentSelectionEpoch, startRequest.get().token, recoveryCancellationGeneration.get(),
     )
 
     private fun networkRecoveryCurrent(context: NetworkRecoveryContext, server: CommandServer): Boolean =
-        !destroyed && commandServer === server && SingboxController.running && ownsActiveRuntime() &&
+        !destroyed && nativeCloseTask == null && commandServer === server && SingboxController.running && ownsActiveRuntime() &&
             startTokenCurrent(context.startToken) && context.matches(networkRecoveryContext()) &&
             MeowDefaultNetworkMonitor.currentInterfaceState().available
 
@@ -565,21 +571,26 @@ class MeowBoxService(
             return Long.MIN_VALUE
         }
         val token = SingboxController.nextStartToken("${service.javaClass.simpleName}:$reason")
-        startRequestGeneration.set(token)
+        startRequest.set(StartRequest(token, startsRuntime = true))
         return token
     }
 
     private fun cancelStartRequests(reason: String): Long {
         val token = SingboxController.cancelStartTokens("${service.javaClass.simpleName}:$reason")
-        startRequestGeneration.set(token)
+        startRequest.set(StartRequest(token, startsRuntime = false))
         cancelPendingStartRetry(reason)
         return token
     }
 
     private fun startTokenCurrent(token: Long): Boolean =
         !destroyed &&
-            startRequestGeneration.get() == token &&
+            startRequest.get().token == token &&
             SingboxController.isStartTokenCurrent(token)
+
+    private fun hasNewerStartRequest(token: Long): Boolean {
+        val current = startRequest.get()
+        return current.startsRuntime && current.token > token && startTokenCurrent(current.token)
+    }
 
     private fun cancelPendingStartRetry(reason: String) {
         val pending = pendingStartRetry ?: return
@@ -593,60 +604,68 @@ class MeowBoxService(
     }
 
     @Synchronized
-    private fun scheduleNetworkHandoverProbe(source: String, context: NetworkRecoveryContext, server: CommandServer) {
-        if (!isNetworkHandoverRecoverySource(source)) {
-            return
-        }
+    private fun scheduleNetworkHandoverProbe(
+        source: String,
+        context: NetworkRecoveryContext,
+        server: CommandServer,
+        retry: Boolean = false,
+    ) {
+        if (!isNetworkHandoverRecoverySource(source) || !networkRecoveryCurrent(context, server) ||
+            !networkHandoverRecovery.takeProbe(context, networkRecoveryContext(), retry)
+        ) return
         val token = networkHandoverProbeGate.replace()
         pendingNetworkHandoverProbe?.cancel(false)
-        pendingNetworkHandoverProbe = null
-        try {
-            pendingNetworkHandoverProbe = retryExecutor.schedule(
-                Runnable {
-                    val accepted = synchronized(this@MeowBoxService) {
-                        if (!networkHandoverProbeGate.isCurrent(token)) {
-                            return@synchronized null
-                        }
-                        pendingNetworkHandoverProbe = null
-                        if (!networkRecoveryCurrent(context, server)) {
-                            return@synchronized null
-                        }
-                        foregroundNotification.requestLatencyRefresh(onComplete = completion@{ healthy ->
-                            if (!networkHandoverProbeGate.tryConsume(token)) return@completion
-                            if (healthy) {
-                                MeowDiagnostics.log(TAG, "network handover probe healthy source=$source context=$context")
-                                return@completion
-                            }
-                            submitServiceTask("network_handover_unhealthy") {
-                                if (!networkRecoveryCurrent(context, server) || MeowApplication.readRuntimeIntent() == null) {
-                                    return@submitServiceTask
-                                }
-                                if (!networkHandoverRecovery.takeRestart(context, networkRecoveryContext(), SystemClock.elapsedRealtime())) {
-                                    MeowDiagnostics.log(TAG, "network handover restart limited source=$source context=$context")
-                                    return@submitServiceTask
-                                }
-                                MeowDiagnostics.log(TAG, "network handover probe failed; restarting core source=$source context=$context")
-                                // Reuse the existing intent token. A recovery must
-                                // never mint a newer token over a concurrent Stop.
-                                restartCoreInternal("network_handover_unhealthy", context.startToken)
-                            }
-                        })
-                    } ?: return@Runnable
-                    MeowDiagnostics.log(
-                        TAG,
-                        "network handover active-outbound probe " +
-                            "source=$source accepted=$accepted",
-                    )
-                },
-                NETWORK_HANDOVER_PROBE_DELAY_MS,
-                TimeUnit.MILLISECONDS,
-            )
-        } catch (_: RejectedExecutionException) {
-            networkHandoverProbeGate.invalidate()
-            MeowDiagnostics.log(
-                TAG,
-                "network handover probe rejected source=$source destroyed=$destroyed",
-            )
+        val onComplete: (NetworkHandoverProbeOutcome) -> Unit = { outcome ->
+            onNetworkHandoverProbeResult(source, context, server, token, outcome)
+        }
+        pendingNetworkHandoverProbe = scheduleRetry(
+            "network_handover_probe:$source",
+            task = probe@{
+                val accepted = synchronized(this) {
+                    if (!networkHandoverProbeGate.isCurrent(token)) return@probe
+                    pendingNetworkHandoverProbe = null
+                    if (!networkRecoveryCurrent(context, server)) return@probe
+                    foregroundNotification.requestLatencyRefresh(onComplete = onComplete)
+                }
+                MeowDiagnostics.log(
+                    TAG, "network handover active-outbound probe source=$source retry=$retry accepted=$accepted",
+                )
+                if (!accepted) onComplete(NetworkHandoverProbeOutcome.INCONCLUSIVE)
+            },
+            delayMillis = if (retry) NETWORK_HANDOVER_PROBE_RETRY_DELAY_MS else NETWORK_HANDOVER_PROBE_DELAY_MS,
+        )
+        if (pendingNetworkHandoverProbe == null) networkHandoverProbeGate.invalidate()
+    }
+
+    @Synchronized
+    private fun onNetworkHandoverProbeResult(
+        source: String,
+        context: NetworkRecoveryContext,
+        server: CommandServer,
+        token: Long,
+        outcome: NetworkHandoverProbeOutcome,
+    ) {
+        if (!networkHandoverProbeGate.tryConsume(token) || !networkRecoveryCurrent(context, server)) return
+        MeowDiagnostics.log(TAG, "network handover probe result=$outcome source=$source context=$context")
+        when (outcome) {
+            NetworkHandoverProbeOutcome.HEALTHY -> Unit
+            NetworkHandoverProbeOutcome.INCONCLUSIVE -> scheduleNetworkHandoverProbe(source, context, server, retry = true)
+            NetworkHandoverProbeOutcome.UNHEALTHY -> submitServiceTask("network_handover_unhealthy") {
+                if (!networkRecoveryCurrent(context, server) || !MeowApplication.isRuntimeIntentFresh(currentMode())) {
+                    return@submitServiceTask
+                }
+                if (!networkHandoverRecovery.takeRestart(context, networkRecoveryContext(), SystemClock.elapsedRealtime())) {
+                    MeowDiagnostics.log(TAG, "network handover restart limited source=$source context=$context")
+                    return@submitServiceTask
+                }
+                MeowDiagnostics.log(TAG, "network handover probe failed; restarting core source=$source context=$context")
+                restartCoreInternal(
+                    "network_handover_unhealthy",
+                    context.startToken,
+                    requireRuntimeIntent = true,
+                    externalStopRevision = context.externalStop,
+                )
+            }
         }
     }
 
@@ -708,10 +727,6 @@ class MeowBoxService(
     }
 
     private fun startInternal(source: String, token: Long, requireRuntimeIntent: Boolean = false) {
-        if (hasClosingRuntime()) {
-            MeowDiagnostics.log(TAG, "start blocked by unconfirmed native stop source=$source")
-            return
-        }
         if (!startTokenCurrent(token)) {
             MeowDiagnostics.log(TAG, "start ignored for stale token=$token source=$source")
             return
@@ -720,6 +735,14 @@ class MeowBoxService(
         if (requireRuntimeIntent && !shouldRestoreStickyStart(mode)) {
             MeowDiagnostics.log(TAG, "scheduled restart ignored after runtime intent cleared source=$source")
             if (!ownsActiveRuntime()) service.stopSelf()
+            return
+        }
+        if (hasClosingRuntime()) {
+            if (nativeCloseTask?.hasDeferredRestart == true) {
+                restartCoreInternal(source, token, requireRuntimeIntent = requireRuntimeIntent)
+            } else {
+                MeowDiagnostics.log(TAG, "start blocked by unconfirmed native stop source=$source")
+            }
             return
         }
         if (!SingboxController.writeIntentForStartToken(token, mode, source)) return
@@ -780,13 +803,17 @@ class MeowBoxService(
     }
 
     private fun startOrReloadPrepared(token: Long, networkWaitAttempt: Int) {
-        if (hasClosingRuntime()) {
-            MeowDiagnostics.log(TAG, "reload blocked by unconfirmed native stop")
-            return
-        }
         if (!startTokenCurrent(token)) {
             Log.i(TAG, "startOrReloadInternal ignored stale token=$token")
             MeowDiagnostics.log(TAG, "startOrReloadInternal ignored stale token=$token")
+            return
+        }
+        if (hasClosingRuntime()) {
+            if (nativeCloseTask?.hasDeferredRestart == true) {
+                restartCoreInternal("start_or_reload", token)
+            } else {
+                MeowDiagnostics.log(TAG, "reload blocked by unconfirmed native stop")
+            }
             return
         }
         Log.i(TAG, "startOrReloadInternal begin service=${service.javaClass.simpleName}")
@@ -929,7 +956,9 @@ class MeowBoxService(
         stopSelf: Boolean = true,
         startId: Int? = null,
         cancelStarts: Boolean = true,
+        completedRestartToken: Long? = null,
     ) {
+        nativeCloseTask?.cancelRestart()
         cancelPendingNetworkHandoverProbe("stop:$source")
         val generation = serviceGeneration
         val activeGeneration = SingboxController.activeRuntimeGeneration
@@ -1017,7 +1046,7 @@ class MeowBoxService(
 
         // Затем закрываем native runtime и CommandServer.
         if (server != null) {
-            nativeServiceClosed = awaitNativeServiceClose(server, source)
+            nativeServiceClosed = beginNativeServiceClose(server, source).awaitClosed(NATIVE_SERVICE_CLOSE_TIMEOUT_MS)
 
             // CommandServer is only the local RPC/status endpoint. Once
             // closeService() has acknowledged the native VPN shutdown, a slow
@@ -1073,7 +1102,9 @@ class MeowBoxService(
 
         if (shouldStopRuntimeState) {
             MeowApplication.clearServiceState()
-            MeowApplication.clearRuntimeIntent()
+            if (completedRestartToken == null || !hasNewerStartRequest(completedRestartToken)) {
+                MeowApplication.clearRuntimeIntent()
+            }
             SingboxController.markServiceStopped(generation, source)
             // Make notification shutdown terminal before stopForeground(). A
             // traffic/latency refresh already queued on the main looper must
@@ -1099,7 +1130,7 @@ class MeowBoxService(
         }
         cancelPendingTerminalForceStop("stopInternal_complete:$source")
 
-        if (stopSelf) {
+        if (stopSelf && (completedRestartToken == null || !hasNewerStartRequest(completedRestartToken))) {
             if (startId != null) {
                 val stopped = service.stopSelfResult(startId)
                 MeowDiagnostics.log(
@@ -1121,8 +1152,8 @@ class MeowBoxService(
         }
     }
 
-    private fun awaitNativeServiceClose(server: CommandServer, source: String): Boolean {
-        val task = nativeCloseTask ?: NativeServiceCloseTask(onTimeout = {
+    private fun beginNativeServiceClose(server: CommandServer, source: String): NativeServiceCloseTask =
+        nativeCloseTask ?: NativeServiceCloseTask(onTimeout = {
             if (commandServer === server) {
                 runCatching {
                     val dump = Libbox.goroutineDump()
@@ -1149,26 +1180,41 @@ class MeowBoxService(
                 result.exceptionOrNull()?.let { error ->
                     MeowDiagnostics.log(TAG, "native service close failed source=$source", error)
                 }
-                if (result.isSuccess) {
-                    // This also finishes a close that outlived the caller's
-                    // timeout. Identity checks exclude completed stops/restarts.
-                    submitServiceTask("native_close_completed", allowAfterDestroy = true) {
-                        if (nativeCloseTask === task && commandServer === server) {
-                            stopInternal("native_close_completed", stopSelf = !destroyed)
+                // Stop and restart requests may have changed during the wait.
+                // Only the service executor can consume the continuation.
+                submitServiceTask("native_close_completed", allowAfterDestroy = true) {
+                    if (nativeCloseTask !== task || commandServer !== server) return@submitServiceTask
+                    if (result.isFailure) {
+                        val failedRestart = task.hasDeferredRestart
+                        task.cancelRestart()
+                        if (failedRestart) {
+                            SingboxController.log("error", "Core restart cannot continue after failed native shutdown source=$source")
+                            if (!destroyed) showForeground("Stopping")
                         }
+                        return@submitServiceTask
+                    }
+                    val restart = task.takeRestart()
+                    if (restart == null) {
+                        stopInternal("native_close_completed", stopSelf = !destroyed)
+                    } else {
+                        finishCoreRestart(restart)
                     }
                 }
             }
         }
-        return task.awaitClosed(NATIVE_SERVICE_CLOSE_TIMEOUT_MS)
-    }
 
-    private fun restartCoreInternal(source: String, token: Long = nextStartToken("restartCoreInternal:$source")) {
+    private fun restartCoreInternal(
+        source: String,
+        token: Long,
+        requireRuntimeIntent: Boolean = false,
+        externalStopRevision: Long = SingboxController.externalStopRevision,
+    ) {
         if (hasClosingRuntime(except = this)) {
             MeowDiagnostics.log(TAG, "restart blocked by another closing service source=$source")
             return
         }
-        if (!startTokenCurrent(token)) {
+        val restart = NativeRestartRequest(source, token, externalStopRevision, serviceGeneration, requireRuntimeIntent)
+        if (!canResumeRestart(restart)) {
             MeowDiagnostics.log(TAG, "core restart ignored for stale token=$token source=$source")
             return
         }
@@ -1180,25 +1226,59 @@ class MeowBoxService(
                 "hasCommandServer=${commandServer != null}",
         )
         val server = commandServer
-        if (server != null) {
-            val closed = awaitNativeServiceClose(server, "restart:$source")
-            if (!closed) {
-                SingboxController.log(
-                    "error",
-                    "Core restart aborted because native shutdown was not acknowledged source=$source",
-                )
-                MeowDiagnostics.log(TAG, "restartCoreInternal native close unconfirmed source=$source")
-                showForeground("Stopping")
-                return
-            }
+        if (server == null) {
+            finishCoreRestart(restart)
+            return
         }
-        if (!clearPendingDnsCache(runtimeActive = false, source = "core_restart:$source")) {
+        val pending = nativeCloseTask
+        if (pending != null) {
+            if (pending.hasDeferredRestart) pending.deferRestart(restart)
+            return
+        }
+        val task = beginNativeServiceClose(server, "restart:$source")
+        task.deferRestart(restart)
+        if (!destroyed && startTokenCurrent(token)) showForeground("Restarting")
+        if (!task.awaitClosed(NATIVE_SERVICE_CLOSE_TIMEOUT_MS)) {
+            MeowDiagnostics.log(TAG, "core restart waiting for native close completion source=$source")
+        }
+    }
+
+    private fun canResumeRestart(restart: NativeRestartRequest): Boolean =
+        restart.canResume(
+            startTokenCurrent(restart.startToken),
+            SingboxController.externalStopRevision,
+            serviceGeneration,
+            SingboxController.activeRuntimeGeneration,
+            !restart.requireRuntimeIntent || MeowApplication.isRuntimeIntentFresh(currentMode()),
+        )
+
+    private fun finishCoreRestart(restart: NativeRestartRequest) {
+        if (!canResumeRestart(restart)) {
+            stopSupersededRestart(restart)
+            return
+        }
+        val dnsReady = clearPendingDnsCache(runtimeActive = false, source = "core_restart:${restart.source}")
+        if (!canResumeRestart(restart)) {
+            stopSupersededRestart(restart)
+            return
+        }
+        if (!dnsReady) {
             fail("Failed to clear persistent DNS cache")
             return
         }
+        MeowDiagnostics.log(TAG, "native close complete; resuming core restart source=${restart.source}")
         nativeCloseTask = null
         runningConfigHash = null
-        startOrReloadInternal(token)
+        startOrReloadInternal(restart.startToken)
+    }
+
+    private fun stopSupersededRestart(restart: NativeRestartRequest) {
+        stopInternal(
+            "native_close_completed_restart_superseded",
+            stopSelf = !destroyed,
+            cancelStarts = false,
+            completedRestartToken = restart.startToken,
+        )
     }
 
     private fun createCommandServer(): CommandServer {

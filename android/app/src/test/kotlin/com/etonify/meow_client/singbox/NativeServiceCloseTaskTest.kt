@@ -5,10 +5,80 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NativeServiceCloseTaskTest {
+    private val restart = NativeRestartRequest("network_handover_unhealthy", 10L, 2L, 5L, requireRuntimeIntent = true)
+
+    @Test
+    fun `late success consumes the newest deferred restart exactly once`() {
+        val release = CountDownLatch(1)
+        val task = NativeServiceCloseTask { check(release.await(5, TimeUnit.SECONDS)) }
+        val newer = restart.copy(startToken = 11L)
+        task.start {}
+        try {
+            assertTrue(task.deferRestart(restart))
+            assertFalse(task.awaitClosed(5))
+            assertNull(task.takeRestart())
+            assertTrue(task.deferRestart(newer))
+            release.countDown()
+            assertTrue(task.awaitClosed(1_000))
+            assertEquals(newer, task.takeRestart())
+            assertNull(task.takeRestart())
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun `stop can discard a deferred restart before the original close succeeds`() {
+        val release = CountDownLatch(1)
+        val task = NativeServiceCloseTask { check(release.await(5, TimeUnit.SECONDS)) }
+        task.start {}
+        try {
+            assertTrue(task.deferRestart(restart))
+            task.cancelRestart()
+            release.countDown()
+            assertTrue(task.awaitClosed(1_000))
+            assertNull(task.takeRestart())
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun `failed close never releases a restart or accepts another one`() {
+        val release = CountDownLatch(1)
+        val completed = CountDownLatch(1)
+        val task = NativeServiceCloseTask {
+            check(release.await(5, TimeUnit.SECONDS))
+            error("native close failed")
+        }
+        task.start { completed.countDown() }
+        try {
+            assertTrue(task.deferRestart(restart))
+            release.countDown()
+            assertTrue(completed.await(1, TimeUnit.SECONDS))
+            assertNull(task.takeRestart())
+            assertFalse(task.deferRestart(restart.copy(startToken = 11L)))
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun `completed restart requires the same owner and a still valid start request`() {
+        assertTrue(restart.canResume(true, 2L, 5L, 5L, true))
+        assertFalse(restart.canResume(false, 2L, 5L, 5L, true))
+        assertFalse(restart.canResume(true, 3L, 5L, 5L, true))
+        assertFalse(restart.canResume(true, 2L, 6L, 6L, true))
+        assertFalse(restart.canResume(true, 2L, 5L, 6L, true))
+        assertFalse(restart.canResume(true, 2L, 5L, 5L, false))
+        assertTrue(restart.copy(requireRuntimeIntent = false).canResume(true, 2L, 5L, 5L, false))
+    }
+
     @Test
     fun `stalled close reports diagnostics once without blocking waiters or cancelling cleanup`() {
         val closeRelease = CountDownLatch(1)
