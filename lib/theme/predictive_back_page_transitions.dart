@@ -7,8 +7,8 @@
 
 import 'dart:ui' show clampDouble;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Used by [PageTransitionsTheme] to define a [MaterialPageRoute] page
 /// transition animation that looks like the default page transition used on

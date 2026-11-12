@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
 
@@ -110,7 +110,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: Scaffold(
               body: ProxyTile(
                 proxy: proxy,

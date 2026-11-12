@@ -1,8 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:meow_client/app/dynamic_color_scheme_adapter.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/widgets/app_scroll_effects.dart';
 import 'package:meow_client/widgets/app_visual_effects.dart';
 
@@ -41,10 +40,7 @@ class AppRootShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
-        onDynamicColorSchemesChanged(
-          lightDynamic == null ? null : toFlutterColorScheme(lightDynamic),
-          darkDynamic == null ? null : toFlutterColorScheme(darkDynamic),
-        );
+        onDynamicColorSchemesChanged(lightDynamic, darkDynamic);
         return MaterialApp(
           navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
@@ -54,7 +50,7 @@ class AppRootShell extends StatelessWidget {
           themeMode: themeMode,
           locale: locale,
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           localeResolutionCallback: (locale, supportedLocales) {
             if (this.locale != null) {
               return this.locale;

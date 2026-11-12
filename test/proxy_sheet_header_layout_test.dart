@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
@@ -29,7 +29,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
@@ -86,7 +86,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             locale: const Locale('ru'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(

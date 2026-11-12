@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/home/server_ip_metadata.dart';

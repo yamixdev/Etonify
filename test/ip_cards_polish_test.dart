@@ -1,10 +1,10 @@
 import 'package:circle_flags/circle_flags.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/home/server_network_card.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
@@ -12,7 +12,7 @@ import 'package:meow_client/widgets/country_flag_badge.dart';
 Widget app(Widget child) => MaterialApp(
   locale: const Locale('en'),
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   home: Scaffold(body: child),
 );
 

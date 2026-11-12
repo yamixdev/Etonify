@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/home/public_ip_controller.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/country_flag_badge.dart';
@@ -79,7 +79,7 @@ Widget app(
 }) => MaterialApp(
   locale: const Locale('ru'),
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   theme: buildAppTheme(
     Brightness.light,
     dynamicLightScheme: ColorScheme.fromSeed(seedColor: seed),
@@ -439,7 +439,7 @@ void main() {
         MaterialApp(
           locale: const Locale('ru'),
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: ValueListenableBuilder<bool>(
             valueListenable: reducedMotion,
             builder: (context, reduced, _) => MediaQuery(

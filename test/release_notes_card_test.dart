@@ -1,12 +1,11 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
-import 'package:meow_client/widgets/release_notes_card.dart';
-import 'package:meow_client/widgets/release_image_loader.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
+import 'package:meow_client/widgets/release_image_loader.dart';
+import 'package:meow_client/widgets/release_notes_card.dart';
 import 'release_image_loader_test.dart' show pixel, imageUri;
 
 void main() {
@@ -20,7 +19,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SingleChildScrollView(
             child: ReleaseNotesCard(
@@ -54,7 +53,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SingleChildScrollView(
               child: ReleaseNotesCard(
@@ -103,12 +102,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SingleChildScrollView(
             child: ReleaseNotesCard(
@@ -177,12 +171,7 @@ closeAll()
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SingleChildScrollView(
             child: StatefulBuilder(

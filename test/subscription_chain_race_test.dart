@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app.dart';
 import 'package:meow_client/app/providers/subscription_catalog_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';

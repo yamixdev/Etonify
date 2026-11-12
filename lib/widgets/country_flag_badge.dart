@@ -1,5 +1,5 @@
 import 'package:circle_flags/circle_flags.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 class CountryFlagBadge extends StatelessWidget {
   static final RegExp _countryCodePattern = RegExp(r'^[A-Z]{2}$');

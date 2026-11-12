@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/subscription/subscription_background_updates.dart';
 import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';

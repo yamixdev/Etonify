@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
-import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/features/home/home_page.dart';
 import 'package:meow_client/features/home/home_presentation.dart';
+import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';

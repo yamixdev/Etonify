@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
 import 'package:meow_client/features/settings/settings_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/l10n/generated/app_localizations_en.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
 
@@ -181,7 +181,7 @@ void main() {
         MaterialApp(
           theme: theme,
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: TabbedHomeShell(
             bottomNavigationStyle: style,
             homeBuilder: (_, open) => const Text('Home body'),
@@ -392,7 +392,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: TabbedHomeShell(
           homeBuilder: (_, callback) {
             open = callback;
@@ -430,7 +430,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: TabbedHomeShell(
             homeBuilder: (_, callback) {
               open = callback;
@@ -790,7 +790,7 @@ void main() {
           await tester.pumpWidget(
             MaterialApp(
               supportedLocales: AppLocalizations.supportedLocales,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: appLocalizationsDelegates,
               home: MediaQuery(
                 data: const MediaQueryData(
                   padding: EdgeInsets.only(top: 32, bottom: 24),
@@ -851,7 +851,7 @@ void main() {
           MaterialApp(
             locale: const Locale('ru'),
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: MediaQuery(
               data: const MediaQueryData(textScaler: TextScaler.linear(2)),
               child: TabbedHomeShell(
@@ -893,7 +893,7 @@ void main() {
           await tester.pumpWidget(
             MaterialApp(
               supportedLocales: AppLocalizations.supportedLocales,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: appLocalizationsDelegates,
               home: TabbedHomeShell(
                 bottomNavigationStyle: style,
                 homeBuilder: (_, open) => const Text('Home content'),
@@ -933,7 +933,7 @@ void main() {
           await tester.pumpWidget(
             MaterialApp(
               supportedLocales: AppLocalizations.supportedLocales,
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: appLocalizationsDelegates,
               home: MediaQuery(
                 data: MediaQueryData(
                   size: const Size(800, 600),
@@ -993,7 +993,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: TabbedHomeShell(
               bottomNavigationStyle: style,
               homeBuilder: (context, open) => TextButton(
@@ -1044,7 +1044,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: TabbedHomeShell(
               bottomNavigationStyle: style,
               homeBuilder: (context, open) => TextButton(
@@ -1092,7 +1092,7 @@ Widget _scrubApp({
   bool reduced = false,
 }) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: [?labels, ...AppLocalizations.localizationsDelegates],
+  localizationsDelegates: [?labels, ...appLocalizationsDelegates],
   builder: (context, child) => Directionality(
     textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
     child: child!,

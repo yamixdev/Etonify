@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'release_image_loader.dart';
@@ -156,27 +156,30 @@ class _ReleaseNotesCardState extends State<ReleaseNotesCard> {
             Text(l10n.updatesNoReleaseNotes, style: _bodyStyle)
           else
             RepaintBoundary(
-              child: MarkdownBody(
-                data: _releaseNotes,
-                // Long-press selection intercepts drag gestures in the
-                // updater and changelog sheet, making the surrounding list
-                // feel stuck. Links remain tappable through onTapLink.
-                selectable: false,
-                fitContent: true,
-                shrinkWrap: true,
-                onTapLink: (_, href, _) => _openLink(href),
-                imageBuilder: widget.allowImages
-                    ? (uri, title, alt) => isTrustedReleaseImageUri(uri)
-                          ? ReleaseNotesImage(
-                              uri: uri,
-                              alt: alt,
-                              loader:
-                                  widget.imageLoader ??
-                                  ReleaseImageLoader.shared,
-                            )
-                          : _blockedImageBuilder(uri, title, alt)
-                    : _blockedImageBuilder,
-                styleSheet: _markdownStyleSheet,
+              // flutter_markdown_plus still reads the SDK Material theme.
+              // ignore: deprecated_member_use
+              child: MaterialUiCompatibilityBridge(
+                child: MarkdownBody(
+                  data: _releaseNotes,
+                  // Long-press selection intercepts drag gestures in the
+                  // updater and changelog sheet. Links remain tappable.
+                  selectable: false,
+                  fitContent: true,
+                  shrinkWrap: true,
+                  onTapLink: (_, href, _) => _openLink(href),
+                  imageBuilder: widget.allowImages
+                      ? (uri, title, alt) => isTrustedReleaseImageUri(uri)
+                            ? ReleaseNotesImage(
+                                uri: uri,
+                                alt: alt,
+                                loader:
+                                    widget.imageLoader ??
+                                    ReleaseImageLoader.shared,
+                              )
+                            : _blockedImageBuilder(uri, title, alt)
+                      : _blockedImageBuilder,
+                  styleSheet: _markdownStyleSheet,
+                ),
               ),
             ),
         ],

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/deep_link_import.dart';
 import 'package:meow_client/app/widgets/deep_link_import_sheet.dart';
 import 'package:meow_client/data/subscription/happ_crypto_link.dart';

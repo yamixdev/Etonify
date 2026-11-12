@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
+import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 import 'package:meow_client/features/subscriptions/subscription_refresh_report_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 void main() {
   late Directory directory;
@@ -69,7 +69,7 @@ void main() {
       MaterialApp(
         locale: Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SubscriptionRefreshReportPage(
           entries: const [
             SubscriptionRefreshEntry(id: 'a', name: 'Profile A', time: 1000),

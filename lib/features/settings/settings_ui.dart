@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 const settingsScreenPadding = EdgeInsets.fromLTRB(16, 12, 16, 24);
 const double settingsIslandGap = 12;

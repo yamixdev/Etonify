@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
-import 'package:meow_client/core/widgets/input_formatters.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';

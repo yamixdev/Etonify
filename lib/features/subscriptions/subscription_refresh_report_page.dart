@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
+import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
-import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 
 class SubscriptionRefreshReportPage extends StatefulWidget {
   const SubscriptionRefreshReportPage({super.key, this.entries});

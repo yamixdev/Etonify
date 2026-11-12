@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 void main() {
   testWidgets('connection mode is concise and MTU accepts manual input', (
@@ -20,12 +19,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsInboundPage(
           currentVpnInboundEnabled: true,
           currentVpnMtu: 1500,

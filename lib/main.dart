@@ -2,17 +2,17 @@ import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app.dart';
-import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/core/platform/app_data_paths.dart';
-import 'package:meow_client/platform/windows/desktop_contract.dart';
-import 'package:meow_client/platform/windows/windows_storage_key.dart';
-import 'package:meow_client/platform/windows/windows_storage_bootstrap.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/platform/windows/desktop_contract.dart';
+import 'package:meow_client/platform/windows/windows_storage_bootstrap.dart';
 import 'package:meow_client/platform/windows/windows_storage_error.dart';
+import 'package:meow_client/platform/windows/windows_storage_key.dart';
 
 void _recordFatalError(String source, Object error, StackTrace stackTrace) {
   final message = '$error\n$stackTrace';

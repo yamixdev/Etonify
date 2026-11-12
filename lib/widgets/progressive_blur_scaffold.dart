@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 const appNavigationBarVisualHeight = 80.0;
 const appHeaderBlurHeight = 2.0;

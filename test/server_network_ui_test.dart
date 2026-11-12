@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/home/home_current_proxy_card.dart';
 import 'package:meow_client/features/home/home_server_preview.dart';
 import 'package:meow_client/features/home/server_ip_metadata.dart';
 import 'package:meow_client/features/home/server_network_card.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/theme/app_theme.dart';
@@ -49,7 +49,7 @@ const proxy = AppProxySummary(
 Widget app(Widget child, {double scale = 1}) => MaterialApp(
   locale: const Locale('en'),
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   builder: (context, child) => MediaQuery(
     data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
     child: child!,
@@ -121,7 +121,7 @@ void main() {
                 ),
                 locale: const Locale('en'),
                 supportedLocales: AppLocalizations.supportedLocales,
-                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                localizationsDelegates: appLocalizationsDelegates,
                 home: MediaQuery(
                   data: MediaQueryData(textScaler: TextScaler.linear(scale)),
                   child: Scaffold(

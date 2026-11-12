@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A separate gesture target: scrolling cancels the tap recognizer, and taps
 /// never fall through to the surrounding server-selection row.

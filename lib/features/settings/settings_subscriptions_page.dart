@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/happ_crypt5_local.dart';

@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:url_launcher/url_launcher.dart';

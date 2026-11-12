@@ -1,17 +1,17 @@
 import 'dart:ui' show Tristate;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/features/proxies/proxies_page.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/home/home_page.dart';
 import 'package:meow_client/features/home/home_presentation.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/features/proxies/proxies_page.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
-import 'package:meow_client/widgets/country_flag_badge.dart';
-import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/theme/app_theme.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 class _CountingRuntimeStore extends ProxyRuntimeVisualStore {
   int reads = 0;
@@ -54,7 +54,7 @@ Widget _app(
   theme: ThemeData(brightness: brightness),
   locale: locale,
   supportedLocales: AppLocalizations.supportedLocales,
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  localizationsDelegates: appLocalizationsDelegates,
   builder: scaler == null
       ? null
       : (context, child) => MediaQuery(
@@ -297,7 +297,7 @@ void main() {
       MaterialApp(
         theme: theme,
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: _page(
           proxies: [_proxy('Selected')],
           groups: {},

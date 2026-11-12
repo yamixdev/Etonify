@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';

@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:meow_client/models/proxy_exclusion_rules.dart';
-import 'package:meow_client/models/core_settings.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
-import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
+import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
+import 'package:meow_client/models/core_settings.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/platform/windows/desktop_preferences.dart';
 
 const int appSettingsDefaultUrlTestTimeoutSeconds =

@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
-import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/changelog_page.dart';
+import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';

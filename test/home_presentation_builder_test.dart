@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/home_presentation_builder.dart';
 import 'package:meow_client/features/home/tabbed_home_shell.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/widgets/floating_navigation_insets.dart';
@@ -33,7 +33,7 @@ void main() {
               MaterialApp(
                 locale: Locale(language),
                 supportedLocales: AppLocalizations.supportedLocales,
-                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                localizationsDelegates: appLocalizationsDelegates,
                 home: MediaQuery(
                   data: MediaQueryData(
                     size: const Size(393, 850),

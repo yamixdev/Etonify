@@ -1,8 +1,8 @@
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/material.dart';
-import 'package:meow_client/theme/predictive_back_page_transitions.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/theme/predictive_back_page_transitions.dart';
 
 // ---------------------------------------------------------------------------
 // Theme extensions

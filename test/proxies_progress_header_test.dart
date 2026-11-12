@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/offline_url_test_session.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 
@@ -19,7 +19,7 @@ Widget _buildHeaderTestApp({
   return MaterialApp(
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     home: Scaffold(
       body: ProxiesPage(
         proxies: List.generate(

@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
-import 'package:meow_client/core/widgets/input_formatters.dart';
-import 'package:meow_client/core/widgets/app_notice.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/security/sensitive_clipboard.dart';
+import 'package:meow_client/core/widgets/app_notice.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';

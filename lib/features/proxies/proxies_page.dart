@@ -6,9 +6,8 @@ import 'dart:ui';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
@@ -25,8 +24,8 @@ import 'package:meow_client/widgets/floating_navigation_insets.dart';
 import 'package:meow_client/widgets/ip_refresh_dots.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
-import 'package:meow_client/features/proxies/proxy_list_ordering.dart';
 import 'package:meow_client/features/proxies/proxy_latency_button.dart';
+import 'package:meow_client/features/proxies/proxy_list_ordering.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 
 part 'proxies_page_chains.dart';

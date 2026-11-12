@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
-import 'package:meow_client/widgets/release_notes_card.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
+import 'package:meow_client/widgets/release_notes_card.dart';
 
 class ChangelogPage extends StatefulWidget {
   const ChangelogPage({

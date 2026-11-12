@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';

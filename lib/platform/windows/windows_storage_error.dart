@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/platform/app_data_paths.dart';
 
 /// A recoverable error surface, never a substitute database or ready home.

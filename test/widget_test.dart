@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app.dart';
-import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/home/home_page.dart';
@@ -13,14 +13,14 @@ import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
 import 'package:meow_client/features/proxies/proxy_panel_shell.dart';
 import 'package:meow_client/features/settings/settings_about_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/app_view_models.dart';
 import 'package:meow_client/models/core_integration_diagnostics.dart';
 import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
-import 'package:meow_client/widgets/country_flag_badge.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
+import 'package:meow_client/widgets/country_flag_badge.dart';
 
 void main() {
   testWidgets(
@@ -443,7 +443,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: ProxyPanelShell(
           ready: true,
           onboardingCompleted: true,
@@ -574,7 +574,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -617,7 +617,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -680,7 +680,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: ProxiesPage(
           proxies: [
             _proxy('entry', 'Entry', latency: 110),
@@ -795,7 +795,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: ProxiesPage(
           profileId: 'Current source',
@@ -854,7 +854,7 @@ void main() {
     final proxies = [chain, _proxy('server', 'Plain server')];
     Widget app({required bool hidden}) => MaterialApp(
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       home: ProxiesPage(
         proxies: proxies,
         selectedTag: chain.tag,
@@ -893,7 +893,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Column(
@@ -938,7 +938,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Column(
             children: [ProxyTile(proxy: lowest, selected: false, onTap: () {})],
@@ -962,7 +962,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: ProxyTile(proxy: group, selected: false, onTap: () {}),
         ),
@@ -981,7 +981,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1026,7 +1026,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1072,7 +1072,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1120,7 +1120,7 @@ void main() {
         return tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: Scaffold(
               body: SizedBox(
                 height: 720,
@@ -1202,7 +1202,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1248,7 +1248,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1295,7 +1295,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1359,7 +1359,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1396,7 +1396,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1460,7 +1460,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1517,7 +1517,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1566,7 +1566,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1625,7 +1625,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1686,7 +1686,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1750,7 +1750,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1819,7 +1819,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: SizedBox(
             height: 720,
@@ -1861,7 +1861,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: ProxiesPage(
             proxies: [_proxy('proxy-1', 'proxy 1', latency: 42)],
@@ -1912,7 +1912,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: SizedBox(
               height: 720,
@@ -1988,7 +1988,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: ProxiesPage(
             proxies: const [],
@@ -2015,7 +2015,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyDelayIndicator(
@@ -2043,7 +2043,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyDelayIndicator(
@@ -2071,7 +2071,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: HomePage(
           state: HomeViewState(
             connected: true,
@@ -2134,7 +2134,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyFooter(
@@ -2169,7 +2169,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyFooter(
@@ -2205,7 +2205,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyFooter(
@@ -2234,7 +2234,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: Scaffold(
           body: Center(
             child: ActiveProxyDelayIndicator(
@@ -2284,7 +2284,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: HomePage(
           state: const HomeViewState(
             connected: false,
@@ -2337,7 +2337,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: HomePage(
           state: const HomeViewState(
             connected: false,
@@ -2396,7 +2396,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: HomePage(
           state: const HomeViewState(
             connected: false,
@@ -2500,7 +2500,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: TrafficDashboardPage(snapshotListenable: notifier),
       ),
     );
@@ -2520,7 +2520,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(
           versionLabel: '0.1.1',
           onShowOnboarding: () {},
@@ -2572,7 +2572,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(
           versionLabel: '0.1.1',
           onShowOnboarding: () {},
@@ -2626,7 +2626,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(
           versionLabel: '0.3.1',
           onShowOnboarding: () {},
@@ -2670,7 +2670,7 @@ void main() {
       MaterialApp(
         locale: const Locale('fr'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         localeResolutionCallback: (locale, supportedLocales) {
           if (locale?.languageCode.toLowerCase() == 'ru') {
             return const Locale('ru');

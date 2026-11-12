@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
-import 'package:meow_client/features/settings/settings_notification_page.dart';
-import 'package:meow_client/features/settings/navigation_preview_gallery.dart';
 import 'package:meow_client/features/settings/battery_optimization_tile.dart';
+import 'package:meow_client/features/settings/navigation_preview_gallery.dart';
+import 'package:meow_client/features/settings/settings_notification_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/features/settings/subscription_background_tile.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';

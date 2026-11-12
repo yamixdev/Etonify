@@ -1,9 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
@@ -14,7 +13,7 @@ import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
 import 'package:meow_client/features/settings/traffic_rules_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
@@ -26,7 +25,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('ru'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: TrafficRulesPage(
             currentPreset: TrafficRulePreset.none,
@@ -608,12 +607,7 @@ Future<AppSettingsController> _pumpPage(
         ),
         locale: Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsRoutingPage(),
       ),
     ),

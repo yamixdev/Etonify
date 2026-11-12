@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/theme/app_theme.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
 
@@ -32,7 +32,7 @@ class LoadingPreviewGallery extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       theme: amoled
           ? buildAmoledTheme(seedColor: const Color(0xff8b4c14))
           : buildAppTheme(brightness, seedColor: const Color(0xff8b4c14)),

@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
@@ -17,8 +17,8 @@ import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/features/home/home_page.dart';
 import 'package:meow_client/features/home/traffic_dashboard_page.dart';
 import 'package:meow_client/features/proxies/proxies_page.dart';
-import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 

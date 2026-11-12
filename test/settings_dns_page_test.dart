@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_commands_provider.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_dns_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 class _DnsSettingsHarness extends StatefulWidget {
   const _DnsSettingsHarness({super.key});
@@ -39,7 +39,7 @@ Widget _dnsSettingsApp({
     child: MaterialApp(
       locale: const Locale('en'),
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       home: _DnsSettingsHarness(key: harnessKey),
     ),
   );

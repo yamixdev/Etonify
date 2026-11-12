@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'support/windows_storage_fixture.dart';
 import 'dart:io';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 void main() {
   setUpAll(() async {
@@ -24,7 +24,7 @@ void main() {
       const MaterialApp(
         locale: Locale('en'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsUpdatePage(currentVersion: '0.3.7-beta.4'),
       ),
     );
@@ -54,7 +54,7 @@ void main() {
         const MaterialApp(
           locale: Locale('ru'),
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: SettingsUpdatePage(currentVersion: '0.3.7-beta.4'),
         ),
       );

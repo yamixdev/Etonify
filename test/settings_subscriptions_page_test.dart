@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/subscription/happ_crypt5_local.dart';
 import 'package:meow_client/features/settings/settings_subscriptions_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/subscription.dart';
 
 Widget _subscriptionsSettingsApp({
@@ -17,7 +17,7 @@ Widget _subscriptionsSettingsApp({
   return MaterialApp(
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     home: SettingsSubscriptionsPage(
       currentConfig: const UrlTestConfig(
         url: defaultUrlTestUrl,

@@ -1,17 +1,17 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/app.dart';
 import 'package:meow_client/app/app_bootstrap_controller.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/app/providers/app_dependency_providers.dart';
 import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/platform/windows/desktop_runtime_client.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
-import 'package:meow_client/platform/windows/desktop_runtime_client.dart';
 
 void main() {
   testWidgets(

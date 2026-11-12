@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 
 class AppLoadingIndicator extends StatelessWidget {

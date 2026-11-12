@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 const appBottomSheetCornerRadius = 28.0;
 const appBottomSheetDragThreshold = 96.0;

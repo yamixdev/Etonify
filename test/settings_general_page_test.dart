@@ -1,11 +1,11 @@
 import 'dart:ui' show Tristate;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 Widget _generalSettingsApp({
   required bool statusNotificationEnabled,
@@ -35,7 +35,7 @@ Widget _generalSettingsApp({
   return MaterialApp(
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     home: SettingsGeneralPage(
       currentLocaleCode: locale.languageCode,
       currentThemePreference: AppThemePreference.system,

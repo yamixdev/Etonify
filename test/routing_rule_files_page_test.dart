@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'dart:io';
 import 'support/windows_storage_fixture.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/features/settings/routing_rule_files_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
@@ -29,12 +28,7 @@ void main() {
     Widget build(RussiaRouteDataStatus currentStatus) => MaterialApp(
       locale: const Locale('ru'),
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
       home: RoutingRuleFilesPage(
         currentStatus: currentStatus,
         onRefresh: () async => status,
@@ -95,12 +89,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         home: RoutingRuleFilesPage(
           currentStatus: status,
           onRefresh: () async => status,

@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/app/coordinators/deep_link_import_coordinator.dart';
 import 'package:meow_client/app/deep_link_import.dart';
 import 'package:meow_client/app/widgets/deep_link_import_sheet.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
@@ -120,7 +120,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: Scaffold(
               body: Builder(
                 builder: (context) {
@@ -183,7 +183,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             supportedLocales: AppLocalizations.supportedLocales,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             home: Scaffold(
               body: Builder(
                 builder: (context) {
@@ -258,7 +258,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           home: Scaffold(
             body: Builder(
               builder: (context) {

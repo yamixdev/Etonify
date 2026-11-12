@@ -1,16 +1,16 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/legal/legal_consent_page.dart';
 import 'package:meow_client/features/settings/settings_about_page.dart';
 import 'package:meow_client/features/settings/settings_documentation_page.dart';
-import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/l10n/app_localizations.dart';
 
 Widget _documentationApp(Locale locale) {
   return MaterialApp(
     key: ValueKey(locale.languageCode),
     locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localizationsDelegates: appLocalizationsDelegates,
     home: const SettingsDocumentationPage(),
   );
 }
@@ -64,7 +64,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(versionLabel: '0.3.0', onShowOnboarding: () {}),
       ),
     );
@@ -116,7 +116,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(
           versionLabel: '0.3.1-rc.1',
           onShowOnboarding: () {},
@@ -148,7 +148,7 @@ void main() {
       MaterialApp(
         locale: const Locale('ru'),
         supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         home: SettingsAboutPage(versionLabel: '0.3.1', onShowOnboarding: () {}),
       ),
     );
