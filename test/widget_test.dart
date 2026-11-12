@@ -674,7 +674,9 @@ void main() {
     final checks = <String>[];
     final states = ProxyRuntimeVisualStore();
     addTearDown(states.dispose);
-    states.replaceAll({'exit': const ProxyRuntimeVisualState(latency: 85)});
+    states.replaceAll({
+      'exit': const ProxyRuntimeVisualState(latency: 85, latencyFresh: true),
+    });
     await tester.pumpWidget(
       MaterialApp(
         supportedLocales: AppLocalizations.supportedLocales,
@@ -686,6 +688,7 @@ void main() {
           ],
           selectedTag: 'entry',
           connected: false,
+          initialSort: ProxySort.latency,
           progressiveBlurEnabled: false,
           onSelected: (_) {},
           onUrlTest: () async {},
@@ -693,7 +696,10 @@ void main() {
           onProxyUrlTest: (tag) async {
             checks.add(tag);
             states.replaceAll({
-              tag: const ProxyRuntimeVisualState(latency: 56),
+              tag: const ProxyRuntimeVisualState(
+                latency: 56,
+                latencyFresh: true,
+              ),
             });
           },
           onAddProxyChain: (entry, exit) async => added = (entry, exit),
@@ -726,9 +732,29 @@ void main() {
     expect(tester.widget<FilledButton>(add).onPressed, isNull);
     await tester.tap(find.descendant(of: exit, matching: find.text('Exit')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byKey(const ValueKey('proxy-chain-pick-detour')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Exit').last);
+    final picker = find.byKey(const ValueKey('proxy-chain-detour-list'));
+    final entries = find.descendant(
+      of: picker,
+      matching: find.byType(ProxyTile),
+    );
+    final tiles = tester.widgetList<ProxyTile>(entries).toList();
+    expect(tiles.map((tile) => tile.proxy.tag), ['exit', 'entry']);
+    expect(tiles.last.selected, isTrue);
+    final exitRow = find.descendant(
+      of: picker,
+      matching: find.byKey(const ValueKey('proxy-select-exit')),
+    );
+    expect(
+      find.descendant(of: exitRow, matching: find.text('DE')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: exitRow, matching: find.text('56 ms')),
+      findsOneWidget,
+    );
+    await tester.tap(exitRow);
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(ListTile, 'Exit'), findsNothing);

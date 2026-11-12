@@ -62,14 +62,44 @@ class _ProxyChainSelection {
   final String targetTag;
 }
 
-class _ChangeProxyChainDetourSheet extends StatelessWidget {
-  const _ChangeProxyChainDetourSheet({
+Future<String?> _showProxyChainDetourPicker({
+  required BuildContext context,
+  required List<AppProxySummary> detours,
+  required ProxySort sort,
+  required ProxyRuntimeVisualStore? runtimeStates,
+  required Future<void> Function(String)? checkLatency,
+  String? selectedTag,
+}) {
+  final orderedDetours = detours.toList(growable: false);
+  sortProxySummaries(
+    orderedDetours,
+    sort,
+    runtimeStateFor: runtimeStates?.valueFor,
+  );
+  return showModalBottomSheet<String>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => _ProxyChainDetourSheet(
+      detours: orderedDetours,
+      selectedTag: selectedTag,
+      runtimeStates: runtimeStates,
+      checkLatency: checkLatency,
+    ),
+  );
+}
+
+class _ProxyChainDetourSheet extends StatelessWidget {
+  const _ProxyChainDetourSheet({
     required this.detours,
+    required this.selectedTag,
     required this.runtimeStates,
     required this.checkLatency,
   });
 
   final List<AppProxySummary> detours;
+  final String? selectedTag;
   final ProxyRuntimeVisualStore? runtimeStates;
   final Future<void> Function(String)? checkLatency;
 
@@ -78,40 +108,57 @@ class _ChangeProxyChainDetourSheet extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return SafeArea(
       top: false,
-      child: ListView.builder(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-        itemCount: detours.length + 1,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .82,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
               child: Text(
-                l10n.proxyChainChangeFirstHop,
+                selectedTag == null
+                    ? l10n.proxyChainChangeFirstHop
+                    : l10n.proxyChainFirstHopLabel,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-            );
-          }
-          final proxy = detours[index - 1];
-          return ListTile(
-            leading: CountryFlagBadge(countryCode: proxy.countryCode),
-            title: Text(
-              _localizedProxyTitle(l10n, proxy),
-              overflow: TextOverflow.ellipsis,
             ),
-            subtitle: Text(
-              _localizedProxyDetail(l10n, proxy),
-              overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: ListView.builder(
+                key: const ValueKey('proxy-chain-detour-list'),
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 16),
+                itemCount: detours.length,
+                itemBuilder: (context, index) {
+                  final proxy = detours[index];
+                  final check = checkLatency;
+                  Widget tile(ProxyRuntimeVisualState? state) => ProxyTile(
+                    proxy: proxy,
+                    runtimeState: state,
+                    selected: proxy.tag == selectedTag,
+                    animate: false,
+                    onTap: () => Navigator.of(context).pop(proxy.tag),
+                    onTestLatency:
+                        check != null &&
+                            !proxy.isGroup &&
+                            !isSyntheticProxyTag(proxy.tag)
+                        ? () => unawaited(check(proxy.tag))
+                        : null,
+                  );
+                  final states = runtimeStates;
+                  return states == null
+                      ? tile(null)
+                      : ValueListenableBuilder<ProxyRuntimeVisualState?>(
+                          valueListenable: states.listenableFor(proxy.tag),
+                          builder: (context, state, _) => tile(state),
+                        );
+                },
+              ),
             ),
-            trailing: _ProxyChainLatency(
-              proxy: proxy,
-              runtimeTag: proxy.tag,
-              runtimeStates: runtimeStates,
-              checkLatency: checkLatency,
-            ),
-            onTap: () => Navigator.of(context).pop(proxy.tag),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -121,6 +168,7 @@ class _AddProxyChainSheet extends StatefulWidget {
   const _AddProxyChainSheet({
     required this.profileId,
     required this.detours,
+    required this.sort,
     required this.sources,
     required this.loadTargetsForSource,
     required this.runtimeStates,
@@ -130,6 +178,7 @@ class _AddProxyChainSheet extends StatefulWidget {
   const _AddProxyChainSheet.staticTargets({
     required this.profileId,
     required this.detours,
+    required this.sort,
     required List<AppProxySummary> targets,
     required this.runtimeStates,
     required this.checkLatency,
@@ -139,6 +188,7 @@ class _AddProxyChainSheet extends StatefulWidget {
 
   final String profileId;
   final List<AppProxySummary> detours;
+  final ProxySort sort;
   final List<AppProfileSummary> sources;
   final List<AppProxySummary> staticTargets;
   final Future<List<AppProxySummary>> Function(String subscriptionId)?
@@ -206,6 +256,25 @@ class _AddProxyChainSheetState extends State<_AddProxyChainSheet> {
     return proxy.tag != firstHop;
   }
 
+  Future<void> _pickDetour() async {
+    final tag = await _showProxyChainDetourPicker(
+      context: context,
+      detours: widget.detours,
+      sort: widget.sort,
+      runtimeStates: widget.runtimeStates,
+      checkLatency: widget.checkLatency,
+      selectedTag: _detourTag,
+    );
+    if (!mounted || tag == null || tag == _detourTag) return;
+    setState(() {
+      _detourTag = tag;
+      final exit = _targets
+          .where((proxy) => proxy.tag == _targetTag)
+          .firstOrNull;
+      if (exit != null && !_isAvailableTarget(exit)) _targetTag = null;
+    });
+  }
+
   String? _targetRuntimeTag(AppProxySummary proxy) {
     if (widget.loadTargetsForSource == null) return proxy.tag;
     final prefix = proxyChainTargetRef(widget.profileId, '');
@@ -233,11 +302,7 @@ class _AddProxyChainSheetState extends State<_AddProxyChainSheet> {
     return result;
   }
 
-  Widget _buildControls(
-    BuildContext context,
-    AppProxySummary first,
-    AppProxySummary? exit,
-  ) {
+  Widget _buildControls(BuildContext context, AppProxySummary first) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
     return Column(
@@ -250,56 +315,20 @@ class _AddProxyChainSheetState extends State<_AddProxyChainSheet> {
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _detourTag,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: l10n.proxyChainFirstHopLabel,
+              child: InkWell(
+                key: const ValueKey('proxy-chain-pick-detour'),
+                borderRadius: BorderRadius.circular(14),
+                onTap: _pickDetour,
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: l10n.proxyChainFirstHopLabel,
+                    suffixIcon: const Icon(Icons.arrow_drop_down),
+                  ),
+                  child: Text(
+                    _localizedProxyTitle(l10n, first),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                items: widget.detours
-                    .map(
-                      (proxy) => DropdownMenuItem(
-                        value: proxy.tag,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _localizedProxyTitle(l10n, proxy),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _ProxyChainLatency(
-                              proxy: proxy,
-                              runtimeTag: proxy.tag,
-                              runtimeStates: widget.runtimeStates,
-                              checkLatency: null,
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(growable: false),
-                selectedItemBuilder: (context) => [
-                  for (final proxy in widget.detours)
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(
-                        _localizedProxyTitle(l10n, proxy),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _detourTag = value;
-                      if (exit != null && !_isAvailableTarget(exit)) {
-                        _targetTag = null;
-                      }
-                    });
-                  }
-                },
               ),
             ),
             const SizedBox(width: 8),
@@ -385,9 +414,7 @@ class _AddProxyChainSheetState extends State<_AddProxyChainSheet> {
                 child: CustomScrollView(
                   shrinkWrap: true,
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: _buildControls(context, first, exit),
-                    ),
+                    SliverToBoxAdapter(child: _buildControls(context, first)),
                     if (_loading)
                       const SliverToBoxAdapter(
                         child: Padding(

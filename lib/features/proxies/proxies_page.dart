@@ -1850,6 +1850,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
         builder: (context) => _AddProxyChainSheet.staticTargets(
           profileId: profileId,
           detours: detours,
+          sort: _sort,
           targets: localTargets,
           runtimeStates: runtimeStates,
           checkLatency: checkLatency,
@@ -1868,6 +1869,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
       builder: (context) => _AddProxyChainSheet(
         profileId: profileId,
         detours: detours,
+        sort: _sort,
         sources: sources,
         loadTargetsForSource: widget.loadProxyChainTargetsForSource!,
         runtimeStates: runtimeStates,
@@ -2011,15 +2013,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (detours.isEmpty) {
       return;
     }
-    final detourTag = await showModalBottomSheet<String>(
+    final detourTag = await _showProxyChainDetourPicker(
       context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => _ChangeProxyChainDetourSheet(
-        detours: detours,
-        runtimeStates: widget.runtimeStates,
-        checkLatency: _chainLatencyCheck(profileId),
-      ),
+      detours: detours,
+      sort: _sort,
+      runtimeStates: widget.runtimeStates,
+      checkLatency: _chainLatencyCheck(profileId),
     );
     if (detourTag == null ||
         detourTag.trim().isEmpty ||
