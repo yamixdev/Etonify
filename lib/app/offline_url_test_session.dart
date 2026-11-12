@@ -134,6 +134,8 @@ class OfflineUrlTestSession {
     return true;
   }
 
+  void addTags(Set<String> tags) => _tags.addAll(tags);
+
   void runOffline() {
     if (!isTerminal) phase = OfflineUrlTestPhase.runningOffline;
   }

@@ -17,6 +17,49 @@ const _testPolicy = LatencyUiPolicy(
 
 void main() {
   test(
+    'manual row checks run up to the configured limit and reuse taps',
+    () async {
+      final requests = <LatencyTestRequest>[];
+      final coordinator = _coordinator(
+        runTest: (request) async => requests.add(request),
+        concurrency: () => 2,
+        capabilities: _v3Capabilities,
+      );
+      addTearDown(coordinator.dispose);
+
+      Future<bool> tap(String tag) =>
+          coordinator.runTarget(targetOutboundTag: tag, reason: 'manual_row');
+      final a = tap('a');
+      final b = tap('b');
+      final c = tap('c');
+      final repeat = tap('c');
+      final d = tap('d');
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.map((request) => request.targetOutboundTag), ['a', 'b']);
+      expect(coordinator.isChecking('c'), isTrue);
+
+      coordinator.handleCoreResult(
+        tag: 'a',
+        sessionId: 1,
+        revision: 1,
+        available: true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(requests.map((request) => request.targetOutboundTag), [
+        'a',
+        'b',
+        'c',
+      ]);
+      expect(await a, isTrue);
+      expect(coordinator.isChecking('b'), isTrue);
+
+      coordinator.cancel();
+      expect(await Future.wait([b, c, repeat, d]), everyElement(isFalse));
+      expect(coordinator.isChecking('c'), isFalse);
+      expect(coordinator.isChecking('d'), isFalse);
+    },
+  );
+  test(
     'exclusions filter full checks and prevent excluded targeted checks',
     () async {
       final requests = <LatencyTestRequest>[];

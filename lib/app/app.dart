@@ -279,6 +279,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _offlineProbeRunning = false;
   bool _automaticSubscriptionApplyInFlight = false;
   bool _manualUrlTestPreparing = false;
+  Future<bool>? _manualRowUrlTestPreparation;
   int _offlineProbeRuntimeGeneration = 0;
   int _physicalNetworkEpoch = 0;
   String _physicalInterfaceKey = '';
@@ -2744,7 +2745,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _derivedCacheBuildTimer?.cancel();
     _proxyListCacheReleaseTimer?.cancel();
     _vpnNotificationSyncTimer?.cancel();
-    _flushPendingLatestPings();
+    _flushPendingLatestPings(updateCatalog: false);
     _persistLatestPingsDebounceTimer?.cancel();
     _persistLatestPingsDebounceTimer = null;
     final pendingStateSave = _saveStateDebounceTimer?.isActive ?? false;
@@ -4262,6 +4263,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool get _automaticSubscriptionUpdatesBlocked =>
       _urlTestInFlight ||
       _latencyCoordinator.isRunning ||
+      _latencyCoordinator.hasManualTargetChecks ||
       _offlineProbeRunning ||
       _manualUrlTestPreparing ||
       _automaticSubscriptionApplyInFlight ||
@@ -7469,7 +7471,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _manualUrlTestPreparing = true;
     try {
       _groupUrlTestScheduler.cancel();
-      if (_latencyCoordinator.kind == LatencySessionKind.targeted ||
+      if ((reason != 'manual_row' &&
+              _latencyCoordinator.kind == LatencySessionKind.targeted) ||
           (!_latencyCoordinator.isRunning &&
               !_latencyCoordinator.canStartSession)) {
         await _latencyCoordinator.cancelAndWait();
@@ -7505,7 +7508,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  Future<void> _startOfflineUrlTest({Set<String>? requestedTags}) {
+  Future<void> _startOfflineUrlTest({
+    Set<String>? requestedTags,
+    bool extendRows = false,
+  }) {
+    final rows = extendRows && requestedTags != null
+        ? OfflineUrlTestRowBatch(requestedTags)
+        : null;
     final subscriptionId = _activeSubscription?.id;
     final revision = _activeSubscription?.payloadRevision;
     final epoch = _physicalNetworkEpoch;
@@ -7524,9 +7533,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return _offlineUrlTestRequests.run(
       tags: requestedTags,
       isCurrent: current,
+      extend: rows?.add,
       execute: () => _executeOfflineUrlTest(
-        requestedTags: requestedTags,
+        requestedTags: rows?.tags ?? requestedTags,
         isCurrent: current,
+        rows: rows,
       ),
     );
   }
@@ -7534,6 +7545,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<void> _executeOfflineUrlTest({
     Set<String>? requestedTags,
     required bool Function() isCurrent,
+    OfflineUrlTestRowBatch? rows,
   }) async {
     final generation = ++_offlineStartGeneration;
     _urlTestInFlightNotifier.value = true;
@@ -7557,15 +7569,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
         throw StateError('Subscription changed during probe build');
       }
       final visible = _userVisibleServerTags();
-      final tags = probe.build.plan.urlTestOutboundTags
-          .where(
-            (tag) =>
-                visible.contains(tag) ||
-                (requestedTags?.contains(tag) == true &&
-                    _proxyChainForTag(tag) != null),
-          )
-          .where((tag) => requestedTags == null || requestedTags.contains(tag))
+      final allowedChains = rows == null
+          ? requestedTags?.where(_isProxyChainTag).toSet() ?? const <String>{}
+          : _activeSubscription?.proxyChains
+                    .map((chain) => chain.tag)
+                    .toSet() ??
+                const <String>{};
+      final eligibleTags = probe.build.plan.urlTestOutboundTags
+          .where((tag) => visible.contains(tag) || allowedChains.contains(tag))
           .toSet();
+      final tags = requestedTags == null
+          ? eligibleTags.intersection(visible)
+          : eligibleTags.intersection(requestedTags);
       if (tags.isEmpty) {
         throw StateError('No checkable servers in this profile');
       }
@@ -7592,6 +7607,34 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       _offlineUrlTestSession = session;
       _offlineProbeConfig = probe;
+      final rowChecks = <Future<bool>>[];
+      void checkRows(Set<String> tags) {
+        for (final tag in tags) {
+          rowChecks.add(
+            _latencyCoordinator.runTarget(
+              targetOutboundTag: tag,
+              reason: 'manual_row',
+              logicalSessionId: session.id,
+              physicalNetworkEpoch: session.physicalNetworkEpoch,
+            ),
+          );
+        }
+      }
+
+      if (rows != null && capabilities.supportsTargetedUrlTest) {
+        rows.onAdditionalTags = (tags) {
+          if (session.isTerminal || !eligibleTags.containsAll(tags)) {
+            return false;
+          }
+          session.addTags(tags);
+          if (session.phase == OfflineUrlTestPhase.runningOffline) {
+            checkRows(tags);
+          }
+          return true;
+        };
+      } else {
+        rows?.close();
+      }
       _publishOfflineUrlTestProgress();
       await _singboxRuntime.startProbe(probe.build.configJson);
       // The start RPC only acknowledges dispatch. From this point onward the
@@ -7606,7 +7649,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       session.runOffline();
       _publishOfflineUrlTestProgress();
-      await _runLogicalUrlTest(session, tags);
+      if (rows != null && capabilities.supportsTargetedUrlTest) {
+        checkRows(session.pendingTags);
+        var joined = 0;
+        while (joined < rowChecks.length) {
+          final pending = rowChecks.sublist(joined);
+          joined = rowChecks.length;
+          await Future.wait(pending);
+        }
+        rows.close();
+        if (generation == _offlineStartGeneration) {
+          await _finishLogicalUrlTest(session, completed: session.isTerminal);
+        }
+      } else {
+        await _runLogicalUrlTest(session, tags);
+      }
     } catch (error, stackTrace) {
       AppLogStore.error(
         'latency',
@@ -7624,6 +7681,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       if (_offlineProbeRunning) await _stopOfflineProbe();
     } finally {
+      rows?.close();
       if (generation == _offlineStartGeneration &&
           !_latencyCoordinator.isRunning) {
         _urlTestInFlightNotifier.value =
@@ -7672,6 +7730,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
       logicalSessionId: session.id,
       physicalNetworkEpoch: session.physicalNetworkEpoch,
     );
+    await _finishLogicalUrlTest(session, completed: completed);
+  }
+
+  Future<void> _finishLogicalUrlTest(
+    OfflineUrlTestSession session, {
+    required bool completed,
+  }) async {
     if (!mounted ||
         _offlineUrlTestSession != session ||
         session.phase == OfflineUrlTestPhase.pausingForVpn ||
@@ -7799,6 +7864,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       _ensureActiveLookupCaches();
       final members = _concreteTagsForProxyGroup(tag).toSet();
+      final isGroup = members.isNotEmpty;
       if (members.isEmpty &&
           (_activeOutboundByTagLookup.containsKey(tag) ||
               _proxyChainForTag(tag) != null)) {
@@ -7807,7 +7873,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       if (members.isEmpty) return;
       _haptic();
       _groupUrlTestScheduler.cancel();
-      await _startOfflineUrlTest(requestedTags: members);
+      await _startOfflineUrlTest(requestedTags: members, extendRows: !isGroup);
       return;
     }
     final pendingTarget = latencyTargetTag(tag, _runtimeGroupSelections);
@@ -7818,7 +7884,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
                 _latencyCoordinator.isChecking(pendingTarget)))) {
       return;
     }
-    if (!await _prepareManualUrlTest('manual_row')) return;
+    final preparation = _manualRowUrlTestPreparation ??=
+        _prepareManualUrlTest('manual_row').whenComplete(() {
+          _manualRowUrlTestPreparation = null;
+        });
+    if (!await preparation) return;
     _ensureActiveLookupCaches();
     if (!_activeOutboundByTagLookup.containsKey(tag) &&
         !_activeGroupByTagLookup.containsKey(tag) &&
@@ -7858,6 +7928,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _urlTestProgressResultForTag(target) != null,
     );
     await test;
+    if (mounted &&
+        _autoCheckServers &&
+        _connected &&
+        _foregroundLifecycleActive &&
+        !_runtimeIntent.explicitStopInProgress &&
+        !_runtimeTransitionInProgress &&
+        !_latencyCoordinator.isRunning &&
+        !_latencyCoordinator.hasManualTargetChecks &&
+        !_groupUrlTestScheduler.hasPendingWork) {
+      _schedulePeriodicGroupUrlTest();
+    }
   }
 
   List<String> _concreteTagsForProxyGroup(
@@ -8843,7 +8924,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     });
   }
 
-  void _flushPendingLatestPings() {
+  void _flushPendingLatestPings({bool updateCatalog = true}) {
     _persistLatestPingsDebounceTimer?.cancel();
     _persistLatestPingsDebounceTimer = null;
     if (_dirtyLatestPings.isEmpty) return;
@@ -8855,15 +8936,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     for (final batch in byProfile.entries) {
       _proxyChainTargetSourceCache.remove(batch.key);
-      ref
-          .read(subscriptionCatalogProvider.notifier)
-          .updateLatestPings(
-            batch.key,
-            {for (final entry in batch.value) entry.tag: entry.ping},
-            expectedOutboundKeys: {
-              for (final entry in batch.value) entry.tag: entry.outboundKey,
-            },
-          );
+      if (updateCatalog) {
+        ref
+            .read(subscriptionCatalogProvider.notifier)
+            .updateLatestPings(
+              batch.key,
+              {for (final entry in batch.value) entry.tag: entry.ping},
+              expectedOutboundKeys: {
+                for (final entry in batch.value) entry.tag: entry.outboundKey,
+              },
+            );
+      }
       unawaited(_persistLatestPingBatch(batch.key, batch.value));
     }
   }

@@ -31,11 +31,13 @@ const _subscription = Subscription(
       tag: 'selected',
       name: 'Selected server',
       config: {'type': 'socks', 'server': '192.0.2.1', 'server_port': 1080},
+      info: OutboundInfo(latestPing: 101),
     ),
     Outbound(
       tag: 'single',
       name: 'Single server',
       config: {'type': 'socks', 'server': '192.0.2.2', 'server_port': 1080},
+      info: OutboundInfo(latestPing: 102),
     ),
   ],
   groups: [
@@ -56,6 +58,7 @@ class _ProbeRuntime extends Fake implements SingboxRuntime {
   final controller = StreamController<Map<String, dynamic>>.broadcast();
   final startedConfigs = <String>[];
   final requests = <List<String>>[];
+  final targetScopes = <String, (String, int)>{};
   final probeReady = Completer<void>();
   var vpnStarts = 0;
   var running = false;
@@ -76,6 +79,7 @@ class _ProbeRuntime extends Fake implements SingboxRuntime {
       LibboxCapabilities.parseOrLegacy('''{
         "api_version":4,"core_version":"1.15.0","tun_stacks":["native","system"],
         "supports_url_test_handoff":true,
+        "supports_targeted_url_test":true,
         "supports_group_url_test_sessions":true,
         "supports_url_test_concurrency":true,
         "supports_url_test_timeout":true,
@@ -138,7 +142,35 @@ class _ProbeRuntime extends Fake implements SingboxRuntime {
     int physicalNetworkEpoch = 0,
     int startupLeaseToken = 0,
   }) async {
-    requests.add(List.of(includeOutboundTags));
+    requests.add([
+      if (targetOutboundTag.isNotEmpty) targetOutboundTag,
+      ...includeOutboundTags,
+    ]);
+    if (targetOutboundTag.isNotEmpty) {
+      targetScopes[targetOutboundTag] = (
+        logicalSessionId,
+        physicalNetworkEpoch,
+      );
+    }
+  }
+
+  void finishTarget(String tag, int revision) {
+    final (id, epoch) = targetScopes[tag]!;
+    controller.add({
+      'type': 'urlTest',
+      'runtimeGeneration': 1,
+      'result': {
+        'tag': tag,
+        'measuredAtMillis': DateTime.now().millisecondsSinceEpoch,
+        'delay': 100 + revision,
+        'status': 'available',
+        'revision': revision,
+        'networkGeneration': 1,
+        'sessionId': revision,
+        'logicalSessionId': id,
+        'physicalNetworkEpoch': epoch,
+      },
+    });
   }
 
   @override
@@ -196,9 +228,9 @@ void main() {
     }
   });
 
-  for (final (tag, expected) in [
-    ('single', ['single']),
-    ('group', ['single', 'selected']),
+  for (final (tag, expected, additionalTag) in [
+    ('single', ['single'], 'selected'),
+    ('group', ['single', 'selected'], null),
   ]) {
     testWidgets(
       'disconnected $tag ping uses one scoped probe without selecting',
@@ -296,15 +328,50 @@ void main() {
               .join('\n'),
         );
         expect(runtime.requests.single, unorderedEquals(expected));
+        final additional = additionalTag == null
+            ? Future<void>.value()
+            : page.onProxyUrlTest!(additionalTag);
+        if (additionalTag != null) {
+          for (var i = 0; i < 20 && runtime.requests.length < 2; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          expect(runtime.requests, [
+            expected,
+            [additionalTag],
+          ]);
+          expect(runtime.startedConfigs, hasLength(1));
+        }
         expect(runtime.vpnStarts, 0);
         expect(
           container.read(subscriptionCatalogProvider).selectedProxyTag,
           'selected',
         );
-        unawaited(page.onUrlTest());
+        if (additionalTag != null) {
+          expect(
+            page.runtimeStates?.valueFor(additionalTag)?.latencyChecking,
+            isTrue,
+          );
+          runtime.finishTarget(additionalTag, 1);
+          await tester.pump();
+          expect(runtime.running, isTrue);
+          expect(page.runtimeStates?.valueFor(additionalTag)?.latency, 101);
+          expect(
+            page.runtimeStates?.valueFor(additionalTag)?.latencyFresh,
+            isTrue,
+          );
+          runtime.finishTarget(tag, 2);
+        } else {
+          unawaited(page.onUrlTest());
+        }
         await tester.pump();
         var finished = false;
-        unawaited(Future.wait([first, repeated]).then((_) => finished = true));
+        unawaited(
+          Future.wait([
+            first,
+            repeated,
+            additional,
+          ]).then((_) => finished = true),
+        );
         for (var i = 0; i < 30 && !finished; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 20)),
@@ -312,6 +379,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 100));
         }
         expect(finished, isTrue);
+        expect(runtime.running, isFalse);
         await tester.pump();
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();

@@ -80,7 +80,16 @@ class _ActiveTargetCheck {
   final int startedAtSeconds;
   final int baselineTimeSeconds;
   Timer? timeoutTimer;
+  int nativeSessionId = 0;
   final Completer<void> finished = Completer<void>();
+}
+
+class _ManualTargetRequest {
+  _ManualTargetRequest(this.request, this.operationGeneration);
+
+  final LatencyTestRequest request;
+  final int operationGeneration;
+  final result = Completer<bool>();
 }
 
 class LatencyCoordinator {
@@ -173,6 +182,7 @@ class LatencyCoordinator {
   final Set<String> _rejectedProvisionalTags = <String>{};
   final Map<String, _ActiveTargetCheck> _activeTargetChecks =
       <String, _ActiveTargetCheck>{};
+  final _manualTargets = <String, _ManualTargetRequest>{};
   Completer<bool>? _sessionResult;
   Completer<void>? _nativeSessionFinished;
   int _nativeSessionId = 0;
@@ -199,6 +209,7 @@ class LatencyCoordinator {
       _usesSessionEvents && isRunning && _nativeSessionId == 0;
   bool hasActiveTargetCheck(String tag) =>
       _activeTargetChecks.containsKey(tag.trim());
+  bool get hasManualTargetChecks => _manualTargets.isNotEmpty;
   bool get canStartSession =>
       !_disposed && !isRunning && _nativeSessionFinished == null;
   bool get isCurrentSessionManual =>
@@ -240,7 +251,8 @@ class LatencyCoordinator {
   bool isChecking(String rawTag) {
     final tag = rawTag.trim();
     if (tag.isEmpty) return false;
-    if (_activeTargetChecks.containsKey(tag)) {
+    if (_activeTargetChecks.containsKey(tag) ||
+        _manualTargets.containsKey(tag)) {
       return true;
     }
     if (!isRunning) return false;
@@ -333,7 +345,11 @@ class LatencyCoordinator {
     while (current() &&
         (isRunning ||
             _nativeSessionFinished != null ||
-            requested.any(_activeTargetChecks.containsKey))) {
+            requested.any(
+              (tag) =>
+                  _activeTargetChecks.containsKey(tag) ||
+                  _manualTargets.containsKey(tag),
+            ))) {
       await waitForCurrentSession();
       if (!current()) return false;
       final native = _nativeSessionFinished;
@@ -347,7 +363,10 @@ class LatencyCoordinator {
       if (!current()) return false;
       final targets = [
         for (final tag in requested)
-          if (_activeTargetChecks[tag] case final check?) check.finished.future,
+          if (_manualTargets[tag] case final manual?)
+            manual.result.future
+          else if (_activeTargetChecks[tag] case final check?)
+            check.finished.future,
       ];
       if (targets.isNotEmpty) await Future.wait(targets);
     }
@@ -379,6 +398,8 @@ class LatencyCoordinator {
     required String reason,
     bool force = true,
     int startupLeaseToken = 0,
+    String logicalSessionId = '',
+    int physicalNetworkEpoch = 0,
   }) {
     final targetTag = targetOutboundTag.trim();
     if (_excludedTags().contains(targetTag)) return Future.value(false);
@@ -390,7 +411,35 @@ class LatencyCoordinator {
       );
       return Future<bool>.value(false);
     }
-    if (_activeTargetChecks.containsKey(targetTag)) {
+    final request = LatencyTestRequest(
+      targetOutboundTag: targetTag,
+      priorityOutboundTag: targetTag,
+      url: _testUrl(),
+      timeoutMillis: _configuredTimeoutMillis,
+      concurrency: 1,
+      deadlineMillis: _targetDeadlineMillis,
+      force: force,
+      mode: 'targeted',
+      logicalSessionId: logicalSessionId,
+      physicalNetworkEpoch: physicalNetworkEpoch,
+      startupLeaseToken: startupLeaseToken,
+    );
+    if (reason == 'manual_row') {
+      final existing = _manualTargets[targetTag];
+      if (existing != null) return existing.result.future;
+      if (!_canDispatchTargets) return Future<bool>.value(false);
+      if (_activeTargetChecks.containsKey(targetTag) ||
+          (isRunning && _targetTag == targetTag)) {
+        return Future<bool>.value(true);
+      }
+      final pending = _ManualTargetRequest(request, _operationGeneration());
+      _manualTargets[targetTag] = pending;
+      _notifyParallelTargetChanged(targetTag);
+      _dispatchManualTargets();
+      return pending.result.future;
+    }
+    if (_activeTargetChecks.containsKey(targetTag) ||
+        _manualTargets.containsKey(targetTag)) {
       return Future<bool>.value(true);
     }
     if (isRunning) {
@@ -400,41 +449,50 @@ class LatencyCoordinator {
           !_canRunDiagnostics()) {
         return Future<bool>.value(false);
       }
-      return _runParallelTarget(
-        targetTag: targetTag,
-        reason: reason,
-        force: force,
-        startupLeaseToken: startupLeaseToken,
-      );
+      return _runParallelTarget(request: request, reason: reason);
     }
     return _runSession(
       kind: LatencySessionKind.targeted,
       reason: reason,
       targetTag: targetTag,
-      request: LatencyTestRequest(
-        // Resolve targets under the root selector, including a node outside
-        // the currently selected provider group. The core refreshes nested
-        // URLTest selections without changing the user's root selection.
-        groupTag: 'select',
-        targetOutboundTag: targetTag,
-        priorityOutboundTag: targetTag,
-        url: _testUrl(),
-        timeoutMillis: _configuredTimeoutMillis,
-        concurrency: 1,
-        deadlineMillis: _targetDeadlineMillis,
-        force: force,
-        mode: 'targeted',
-        startupLeaseToken: startupLeaseToken,
-      ),
+      request: request,
     );
   }
 
+  bool get _canDispatchTargets =>
+      !_disposed && _isConnected() && _isForeground() && _canRunDiagnostics();
+
+  void _dispatchManualTargets() {
+    for (final entry in _manualTargets.entries.toList()) {
+      final tag = entry.key;
+      if (_activeTargetChecks.containsKey(tag)) continue;
+      if (!_canDispatchTargets ||
+          _operationGeneration() != entry.value.operationGeneration ||
+          _excludedTags().contains(tag)) {
+        _finishManualTarget(tag, false);
+        _notifyParallelTargetChanged(tag);
+        continue;
+      }
+      final legacyTargetCount = isRunning && _targetTag.isNotEmpty ? 1 : 0;
+      if (_activeTargetChecks.length + legacyTargetCount >=
+          _configuredConcurrency) {
+        break;
+      }
+      unawaited(
+        _runParallelTarget(request: entry.value.request, reason: 'manual_row'),
+      );
+    }
+  }
+
+  void _finishManualTarget(String tag, bool available) {
+    _manualTargets.remove(tag)?.result.complete(available);
+  }
+
   Future<bool> _runParallelTarget({
-    required String targetTag,
+    required LatencyTestRequest request,
     required String reason,
-    required bool force,
-    int startupLeaseToken = 0,
   }) async {
+    final targetTag = request.targetOutboundTag;
     if (_activeTargetChecks.containsKey(targetTag)) {
       return true;
     }
@@ -445,7 +503,7 @@ class LatencyCoordinator {
       baselineTimeSeconds: _eventBaselineTimes()[targetTag] ?? 0,
     );
     check.timeoutTimer = Timer(
-      Duration(milliseconds: _targetDeadlineMillis),
+      Duration(milliseconds: request.deadlineMillis),
       () {
         if (_activeTargetChecks[targetTag] == check) {
           _finishParallelTarget(targetTag, check);
@@ -456,30 +514,17 @@ class LatencyCoordinator {
     _notifyParallelTargetChanged(targetTag);
 
     try {
-      await _runTest(
-        LatencyTestRequest(
-          groupTag: 'select',
-          targetOutboundTag: targetTag,
-          startupLeaseToken: startupLeaseToken,
-          priorityOutboundTag: targetTag,
-          url: _testUrl(),
-          timeoutMillis: _configuredTimeoutMillis,
-          concurrency: 1,
-          deadlineMillis: _targetDeadlineMillis,
-          force: force,
-          mode: 'targeted',
-        ),
-      ).timeout(uiPolicy.rpcAckTimeout);
+      await _runTest(request).timeout(uiPolicy.rpcAckTimeout);
       return _isActiveGeneration(generation);
     } catch (error) {
       AppLogStore.warning(
         'latency',
-        'parallel targeted URLTest failed: $error',
+        'parallel targeted URLTest failed reason=$reason target=$targetTag: $error',
       );
       if (_activeTargetChecks[targetTag] == check) {
         _finishParallelTarget(targetTag, check);
       }
-      if (startupLeaseToken > 0 &&
+      if (request.startupLeaseToken > 0 &&
           error is PlatformException &&
           error.code == 'startup_lease_expired') {
         throw const StartupUrlTestLeaseExpired();
@@ -492,9 +537,11 @@ class LatencyCoordinator {
     String tag,
     _ActiveTargetCheck check, {
     bool measured = false,
+    bool available = false,
   }) {
     check.timeoutTimer?.cancel();
     _activeTargetChecks.remove(tag);
+    _finishManualTarget(tag, available);
     // Main-session measurements are counted on settlement. A target finishing
     // after that settlement (or outside its set) still satisfies a group join.
     if (measured && !(isRunning && _sessionExpectedTags.contains(tag))) {
@@ -502,6 +549,7 @@ class LatencyCoordinator {
     }
     if (!check.finished.isCompleted) check.finished.complete();
     _notifyParallelTargetChanged(tag);
+    if (_manualTargets.isNotEmpty) scheduleMicrotask(_dispatchManualTargets);
   }
 
   void _notifyParallelTargetChanged(String tag) {
@@ -542,7 +590,12 @@ class LatencyCoordinator {
       return false;
     }
     if (activeCheck != null) {
-      _finishParallelTarget(normalizedTag, activeCheck, measured: true);
+      _finishParallelTarget(
+        normalizedTag,
+        activeCheck,
+        measured: true,
+        available: available,
+      );
     }
     if (!isRunning) {
       return activeCheck != null;
@@ -643,7 +696,12 @@ class LatencyCoordinator {
       }
     }
     if (activeCheck != null) {
-      _finishParallelTarget(normalizedTag, activeCheck, measured: true);
+      _finishParallelTarget(
+        normalizedTag,
+        activeCheck,
+        measured: true,
+        available: available,
+      );
     }
     if (belongsToMainSession || (activeCheck != null && isRunning)) {
       _acceptedEventTimes[normalizedTag] = revision;
@@ -673,9 +731,20 @@ class LatencyCoordinator {
     required String terminalReason,
     required int available,
   }) {
-    if (!_usesSessionEvents || !isRunning || groupTag != 'select') {
+    if (!_usesSessionEvents || groupTag != 'select') {
       return false;
     }
+    final tag = targetTag.trim();
+    final check = _activeTargetChecks[tag];
+    if (check != null && _manualTargets.containsKey(tag) && sessionId > 0) {
+      if (state == 'running') {
+        check.nativeSessionId = sessionId;
+      } else if (sessionId == check.nativeSessionId &&
+          (state == 'completed' || state == 'cancelled')) {
+        _finishParallelTarget(tag, check);
+      }
+    }
+    if (!isRunning) return false;
     if (_kind == LatencySessionKind.targeted &&
         targetTag.trim() != _targetTag) {
       return false;
@@ -723,6 +792,13 @@ class LatencyCoordinator {
     _generation++;
     _cancellationGeneration++;
     _measurementVersions.clear();
+    final manualTags = _manualTargets.keys.toList();
+    final manualActiveTags = manualTags
+        .where(_activeTargetChecks.containsKey)
+        .toList();
+    for (final tag in manualTags) {
+      _finishManualTarget(tag, false);
+    }
     for (final check in _activeTargetChecks.values) {
       check.timeoutTimer?.cancel();
       if (!check.finished.isCompleted) check.finished.complete();
@@ -762,12 +838,17 @@ class LatencyCoordinator {
             'received=$receivedCount successful=$successfulCount '
             'expected=$expectedCount',
       );
-      _onSessionChanged(false, previousKind, previousTarget);
-      if (_usesSessionEvents && _capabilities.supportsUrlTestCancel) {
-        final cancelTest = _cancelTest;
-        if (cancelTest != null) {
-          unawaited(cancelTest('select', previousTarget));
-        }
+      if (!_disposed) _onSessionChanged(false, previousKind, previousTarget);
+      unawaited(_cancelNativeTest(previousTarget));
+    }
+    if (!_disposed) {
+      for (final tag in manualTags) {
+        _notifyParallelTargetChanged(tag);
+      }
+    }
+    if (!wasRunning || previousTarget.isNotEmpty) {
+      for (final tag in manualActiveTags) {
+        unawaited(_cancelNativeTest(tag));
       }
     }
   }
@@ -1074,17 +1155,21 @@ class LatencyCoordinator {
     });
   }
 
-  Future<void> _expireWatchdog(int generation) async {
+  Future<void> _cancelNativeTest(String targetTag) async {
     final cancelTest = _cancelTest;
     if (_usesSessionEvents &&
         _capabilities.supportsUrlTestCancel &&
         cancelTest != null) {
       try {
-        await cancelTest('select', _targetTag).timeout(uiPolicy.rpcAckTimeout);
+        await cancelTest('select', targetTag).timeout(uiPolicy.rpcAckTimeout);
       } catch (error) {
         AppLogStore.warning('latency', 'native URLTest cancel failed: $error');
       }
     }
+  }
+
+  Future<void> _expireWatchdog(int generation) async {
+    await _cancelNativeTest(_targetTag);
     if (!_isActiveGeneration(generation)) return;
     _settleCurrent(
       success: _successfulTags.isNotEmpty,
@@ -1149,6 +1234,7 @@ class LatencyCoordinator {
     _sessionReason = '';
     _sessionResult = null;
     _onSessionChanged(false, previousKind, previousTarget);
+    if (_manualTargets.isNotEmpty) scheduleMicrotask(_dispatchManualTargets);
     if (result != null && !result.isCompleted) {
       if (error == null) {
         result.complete(success);
