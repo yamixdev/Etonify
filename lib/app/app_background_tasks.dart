@@ -328,9 +328,12 @@ Future<ProxyMetadataReplacement> replaceProxyMetadataInBackground(
   );
 }, debugName: 'etonify-proxy-metadata');
 
+const androidVpnProfileConfigKey = 'etonify_profile_id';
+
 class SingboxConfigBuildInput {
   const SingboxConfigBuildInput({
     required this.activeSubscription,
+    this.includeAndroidProfileId = false,
     this.coreSettings = const CoreSettings(),
     required this.selectedProxyTag,
     required this.excludedOutboundTags,
@@ -387,6 +390,7 @@ class SingboxConfigBuildInput {
   });
 
   final Subscription? activeSubscription;
+  final bool includeAndroidProfileId;
   final CoreSettings coreSettings;
   final String selectedProxyTag;
   final Set<String> excludedOutboundTags;
@@ -1093,7 +1097,12 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     capabilities: input.capabilities,
   ).buildPlan();
   final config = plan.config;
-  final configJson = jsonEncode(config);
+  final profileId = input.activeSubscription?.id;
+  final configJson = jsonEncode({
+    if (input.includeAndroidProfileId && profileId != null)
+      androidVpnProfileConfigKey: profileId,
+    ...config,
+  });
   final outputConfigPath = input.outputConfigPath?.trim();
   final writtenConfigPath = outputConfigPath == null || outputConfigPath.isEmpty
       ? null

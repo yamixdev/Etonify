@@ -75,6 +75,7 @@ class SettingsGeneralPage extends StatefulWidget {
     this.onSendHwidToProvidersChanged,
     this.currentAutoConnectOnLaunch = false,
     this.onAutoConnectOnLaunchChanged,
+    this.networkServerSettingsPage,
     this.currentHomeNavigationMode = HomeNavigationMode.panel,
     this.onHomeNavigationModeChanged,
     this.currentBottomNavigationStyle = BottomNavigationStyle.floating,
@@ -107,6 +108,7 @@ class SettingsGeneralPage extends StatefulWidget {
   final ValueChanged<bool>? onSendHwidToProvidersChanged;
   final bool currentAutoConnectOnLaunch;
   final ValueChanged<bool>? onAutoConnectOnLaunchChanged;
+  final WidgetBuilder? networkServerSettingsPage;
   final HomeNavigationMode currentHomeNavigationMode;
   final ValueChanged<HomeNavigationMode>? onHomeNavigationModeChanged;
   final BottomNavigationStyle currentBottomNavigationStyle;
@@ -319,6 +321,14 @@ class _SettingsGeneralPageState extends State<SettingsGeneralPage> {
           summary: l10n.generalStartupSummary,
           builder: _startup,
         ),
+        if (widget.networkServerSettingsPage case final buildNetworkSettings?)
+          _entry(
+            context,
+            key: 'network-server-settings-entry',
+            icon: Icons.wifi_rounded,
+            title: l10n.networkServersTitle,
+            builder: buildNetworkSettings,
+          ),
         _entry(
           context,
           key: 'notification-settings-entry',

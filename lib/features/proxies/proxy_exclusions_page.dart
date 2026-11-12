@@ -111,6 +111,7 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
             ),
           );
           final condition = ProxyExclusionCondition(
+            enabled: initial?.enabled ?? true,
             protocol: protocol,
             security: security,
             transport: transport,
@@ -261,24 +262,41 @@ class _ProxyExclusionsPageState extends State<ProxyExclusionsPage> {
                       l.proxyExclusionsConditions,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    for (var i = 0; i < _conditions.length; i++)
+                    for (final (index, condition) in _conditions.indexed)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: Text(_summary(_conditions[i])),
-                        onTap: () => _editCondition(i),
+                        title: Text(
+                          _summary(condition),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _editCondition(index),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Tooltip(
+                              message: condition.enabled
+                                  ? l.proxyExclusionsDisableCondition
+                                  : l.proxyExclusionsEnableCondition,
+                              child: Switch(
+                                value: condition.enabled,
+                                onChanged: (enabled) => setState(() {
+                                  _conditions[index] = condition.withEnabled(
+                                    enabled,
+                                  );
+                                }),
+                              ),
+                            ),
                             IconButton(
                               tooltip: l.proxyExclusionsEditCondition,
                               icon: const Icon(Icons.edit_outlined),
-                              onPressed: () => _editCondition(i),
+                              onPressed: () => _editCondition(index),
                             ),
                             IconButton(
                               tooltip: l.delete,
                               icon: const Icon(Icons.close),
                               onPressed: () =>
-                                  setState(() => _conditions.removeAt(i)),
+                                  setState(() => _conditions.removeAt(index)),
                             ),
                           ],
                         ),

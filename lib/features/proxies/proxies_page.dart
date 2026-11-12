@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
+import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/app_view_models.dart';
@@ -467,6 +468,7 @@ class ProxiesPage extends StatefulWidget {
     this.hasProxyExclusions = false,
     this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
+    this.onLocalListChanged,
     this.loadProxyChainTargetSources,
     this.loadProxyChainTargetsForSource,
     this.onAddProxyChain,
@@ -526,6 +528,7 @@ class ProxiesPage extends StatefulWidget {
   final void Function(String tag, ValueGetter<bool> isVisible)?
   onVisibleProxyNeedsLocation;
   final Outbound? Function(String tag)? outboundForTag;
+  final ValueChanged<String>? onLocalListChanged;
   final Future<List<AppProfileSummary>> Function()? loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)?
   loadProxyChainTargetsForSource;
@@ -1203,6 +1206,8 @@ class _ProxiesPageState extends State<ProxiesPage> {
                       ? widget.onVisibleProxyNeedsLocation
                       : null,
                   outboundForTag: widget.outboundForTag,
+                  sourceProfileId: widget.profileId,
+                  onLocalListChanged: widget.onLocalListChanged,
                   initialSort: _sort,
                   hideUnavailable: _hideUnavailable,
                   onHideUnavailableChanged: _setHideUnavailable,
@@ -1250,7 +1255,13 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (widget.hapticEnabled) {
       unawaited(HapticFeedback.selectionClick());
     }
-    await showProxyShareSheet(context, proxy: proxy, outbound: outbound);
+    await showProxyShareSheet(
+      context,
+      proxy: proxy,
+      outbound: outbound,
+      sourceProfileId: widget.profileId,
+      onLocalListChanged: widget.onLocalListChanged,
+    );
   }
 
   void _sortItems(List<AppProxySummary> items, {bool keepLowestFirst = true}) {

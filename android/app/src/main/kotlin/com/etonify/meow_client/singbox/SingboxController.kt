@@ -70,6 +70,8 @@ object SingboxController {
     private val runtimeStartGeneration = AtomicLong(0)
     private val externalStopGeneration = AtomicLong(0)
     private val stateRevision = AtomicLong(0)
+    private data class NetworkSelection(val runtime: Long, val profileId: String, val tag: String)
+    private var networkSelection: NetworkSelection? = null
     val externalStopRevision: Long get() = externalStopGeneration.get()
     val runtimeStateRevision: Long get() = stateRevision.get()
 
@@ -81,7 +83,31 @@ object SingboxController {
         "externalStopRevision" to externalStopRevision,
         "runtimeStateRevision" to runtimeStateRevision,
         "runtimeIntentFresh" to MeowApplication.isRuntimeIntentFresh(),
+        "networkServerSelection" to networkSelection
+            ?.takeIf { running && it.runtime == activeRuntimeGeneration }
+            ?.let { mapOf("profileId" to it.profileId, "tag" to it.tag) },
     )
+
+    @Synchronized
+    internal fun commitVpnSelection(runtime: Long, action: () -> Unit): Boolean {
+        if (!running || runtime != activeRuntimeGeneration ||
+            !MeowApplication.isRuntimeIntentFresh(RuntimeServiceModeResolver.VPN)
+        ) return false
+        action()
+        return true
+    }
+
+    @Synchronized
+    internal fun publishNetworkServerSelection(runtime: Long, profileId: String?, tag: String?) {
+        if (!running || runtime != activeRuntimeGeneration ||
+            !MeowApplication.isRuntimeIntentFresh(RuntimeServiceModeResolver.VPN)
+        ) return
+        val selection = if (profileId != null && tag != null) NetworkSelection(runtime, profileId, tag) else null
+        if (networkSelection == selection) return
+        networkSelection = selection
+        stateRevision.incrementAndGet()
+        emitCurrentState()
+    }
 
     @Synchronized
     fun recordExternalStop(reason: String): Long {
@@ -969,6 +995,16 @@ object SingboxController {
     }
 
     private val liveExclusionGate = LiveUrlTestExclusionGate()
+    @Volatile private var networkServerExclusions: Pair<Long, Set<String>>? = null
+
+    internal fun networkServerExcludedTags(runtime: Long): Set<String> =
+        networkServerExclusions?.takeIf { it.first == runtime }?.second.orEmpty()
+
+    internal fun selectOutboundOnServiceLane(groupTag: String, outboundTag: String) {
+        // This client's owner is the service's lifecycle executor, separate
+        // from the standalone client used by URLTest and Dart queries.
+        withLookupCommandClient { it.selectOutbound(groupTag, outboundTag) }
+    }
 
     fun setUrlTestExcludedOutbounds(tags: List<String>, runtimeGeneration: Long, callback: (Result<Unit>) -> Unit) {
         commandExecutor.execute {
@@ -989,7 +1025,9 @@ object SingboxController {
                             .invoke(client, request.toString())
                     }
                 }
-            }.map { Unit }
+            }.map {
+                networkServerExclusions = runtimeGeneration to tags.toSet()
+            }
             mainHandler.post { callback(result) }
         }
     }

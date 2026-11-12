@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:meow_client/data/backup/etonify_backup_service.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
@@ -37,6 +38,221 @@ void main() {
       await tempDir.delete(recursive: true);
     }
   });
+
+  test('local list flags and payload survive backup and storage', () async {
+    final empty = (await SubscriptionStore.addFromContent(
+      '',
+      customName: ' Favorites ',
+      createLocalList: true,
+      quickAdd: true,
+    )).subscription;
+    const link =
+        'vless://11111111-1111-4111-8111-111111111111@a.test:443'
+        '?security=tls&type=tcp#Server';
+    final populated = (await SubscriptionStore.addFromContent(
+      link,
+      customName: 'Favorites',
+      createLocalList: true,
+    )).subscription;
+    final legacy = (await SubscriptionStore.addFromContent(link)).subscription;
+    expect(empty.name, 'Favorites');
+    expect(empty.url, isNot(populated.url));
+    expect(populated.concreteServerCount, 1);
+    expect(legacy.isLocalList, isFalse);
+    expect(SubscriptionStore.getMetadata(empty.id)?.cachedVisibleProxyCount, 0);
+    expect(
+      (await SubscriptionStore.getQuickAddLocalLists()).map((list) => list.id),
+      [empty.id],
+    );
+
+    const service = EtonifyBackupService();
+    final exported = service.buildProfileExport(
+      subscriptions: [(await SubscriptionStore.get(empty.id))!],
+      clientVersion: '0.3.15',
+      encryption: EtonifyProfileEncryption.plain,
+    );
+    final restored = service
+        .parseProfileExport(
+          bytes: utf8.encode(exported),
+          currentClientVersion: '0.3.15',
+        )
+        .subscriptions
+        .single;
+    expect(restored.isLocalList, isTrue);
+    expect(restored.quickAdd, isTrue);
+    expect(restored.outbounds, isEmpty);
+
+    final proxy = populated.outbounds.single;
+    await SubscriptionStore.addProxyToLocalList(empty.id, proxy);
+    await SubscriptionStore.save(SubscriptionStore.getMetadata(empty.id)!);
+    expect((await SubscriptionStore.get(empty.id))?.outbounds, hasLength(1));
+    await SubscriptionStore.saveImportedProfile(restored);
+    expect((await SubscriptionStore.get(empty.id))?.outbounds, isEmpty);
+  });
+
+  test(
+    'concurrent local-list copies deduplicate and allocate unique tags',
+    () async {
+      final list = (await SubscriptionStore.addFromContent(
+        '',
+        customName: 'Favorites',
+        createLocalList: true,
+        quickAdd: true,
+      )).subscription;
+      const outbound = Outbound(
+        tag: 'source',
+        name: 'Same name',
+        config: {'type': 'socks', 'server': 'a.test', 'server_port': 1080},
+        info: OutboundInfo(country: 'US', latestPing: 12),
+      );
+      final results = await Future.wait([
+        SubscriptionStore.addProxyToLocalList(list.id, outbound),
+        SubscriptionStore.addProxyToLocalList(
+          list.id,
+          outbound.copyWith(tag: 'other-source', name: 'Different name'),
+        ),
+        SubscriptionStore.addProxyToLocalList(
+          list.id,
+          outbound.copyWith(config: {...outbound.config, 'server': 'b.test'}),
+        ),
+      ]);
+      expect(results, [
+        LocalListAddResult.added,
+        LocalListAddResult.alreadyAdded,
+        LocalListAddResult.added,
+      ]);
+      final saved = (await SubscriptionStore.get(list.id))!;
+      expect(saved.sources, isEmpty);
+      expect(saved.concreteServerCount, 2);
+      expect(saved.outbounds.map((item) => item.tag).toSet(), hasLength(2));
+      expect(saved.outbounds.first.info.country, 'US');
+      expect(saved.outbounds.first.info.latestPing, isNull);
+      await SubscriptionStore.updateMetadata(
+        list.id,
+        (profile) => profile.copyWith(quickAdd: false),
+      );
+      expect(
+        await SubscriptionStore.addProxyToLocalList(list.id, outbound),
+        LocalListAddResult.unavailable,
+      );
+    },
+  );
+
+  test(
+    'local-list copy remaps detours with a matching destination tag',
+    () async {
+      const existing = Outbound(
+        tag: 'relay',
+        name: 'relay',
+        config: {'type': 'socks', 'server': 'other.test', 'server_port': 1080},
+      );
+      const relay = Outbound(
+        tag: 'relay',
+        name: 'relay',
+        config: {'type': 'socks', 'server': 'relay.test', 'server_port': 1080},
+      );
+      const proxy = Outbound(
+        tag: 'entry',
+        name: 'entry',
+        config: {
+          'type': 'socks',
+          'server': 'entry.test',
+          'server_port': 1080,
+          'detour': 'relay',
+        },
+      );
+      await SubscriptionStore.save(
+        const Subscription(
+          id: 'source',
+          name: 'Source',
+          url: '',
+          outbounds: [relay, proxy],
+        ),
+      );
+      final target = (await SubscriptionStore.addFromContent(
+        '',
+        customName: 'Target',
+        createLocalList: true,
+        quickAdd: true,
+      )).subscription;
+      expect(
+        await SubscriptionStore.addProxyToLocalList(target.id, existing),
+        LocalListAddResult.added,
+      );
+      expect(
+        await SubscriptionStore.addProxyToLocalList(target.id, proxy),
+        LocalListAddResult.unavailable,
+      );
+      expect(
+        await SubscriptionStore.addProxyToLocalList(
+          target.id,
+          proxy,
+          sourceProfileId: 'source',
+        ),
+        LocalListAddResult.added,
+      );
+      final saved = (await SubscriptionStore.get(target.id))!;
+      final detour = saved.outbounds.last.config['detour'];
+      expect(detour, isNot('relay'));
+      expect(
+        saved.outbounds.singleWhere((item) => item.tag == detour).server,
+        'relay.test',
+      );
+      expect(saved.concreteServerCount, 2);
+      expect(
+        await SubscriptionStore.addProxyToLocalList(
+          target.id,
+          proxy,
+          sourceProfileId: 'source',
+        ),
+        LocalListAddResult.alreadyAdded,
+      );
+    },
+  );
+
+  test(
+    'pasting into a local list appends servers without adding a source',
+    () async {
+      const firstLink =
+          'vless://11111111-1111-4111-8111-111111111111@a.test:443'
+          '?security=tls&type=tcp#First';
+      const secondLink =
+          'vless://11111111-1111-4111-8111-111111111111@b.test:443'
+          '?security=tls&type=tcp#Second';
+      final created = (await SubscriptionStore.addFromContent(
+        firstLink,
+        customName: 'Favorites',
+        createLocalList: true,
+      )).subscription;
+      final added = await SubscriptionStore.addFromContent(
+        '$firstLink\n$secondLink',
+        targetProfileId: created.id,
+      );
+      expect(added.alreadyAdded, isFalse);
+      expect(added.subscription.sources, isEmpty);
+      expect(added.subscription.outbounds.map((item) => item.server), [
+        'a.test',
+        'b.test',
+      ]);
+      expect(
+        added.subscription.outbounds.first.tag,
+        created.outbounds.first.tag,
+      );
+      expect(added.subscription.selectedProxyTag, created.selectedProxyTag);
+      final revision = SubscriptionStore.getMetadata(
+        created.id,
+      )?.payloadRevision;
+      final duplicate = await SubscriptionStore.addFromContent(
+        secondLink,
+        targetProfileId: created.id,
+      );
+      expect(duplicate.alreadyAdded, isTrue);
+      expect(
+        SubscriptionStore.getMetadata(created.id)?.payloadRevision,
+        revision,
+      );
+    },
+  );
 
   test(
     'addFromUrl saves placeholder subscription when initial fetch fails',

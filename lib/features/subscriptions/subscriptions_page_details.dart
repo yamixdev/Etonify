@@ -148,6 +148,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
         proxy: summary,
         outbound: outbound,
         singboxConfig: groupConfig,
+        sourceProfileId: widget.subscriptionId,
       );
     } catch (error) {
       AppLogStore.warning(
@@ -431,6 +432,20 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _saveLocalListQuickAdd(bool enabled) async {
+    setState(() => _busy = true);
+    try {
+      await SubscriptionStore.updateMetadata(
+        widget.subscriptionId,
+        (current) =>
+            current.isLocalList ? current.copyWith(quickAdd: enabled) : current,
+      );
+      if (mounted) _reloadCurrentSubscription();
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -750,7 +765,9 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                 }
               },
               itemBuilder: (_) => [
-                if (!multiSource && subscription.hasRawPayload)
+                if (!subscription.isLocalList &&
+                    !multiSource &&
+                    subscription.hasRawPayload)
                   PopupMenuItem(
                     value: 'reparse',
                     child: Text(l10n.reparseProxies),
@@ -863,29 +880,41 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                   ),
                 ),
                 const Gap(12),
-                Card(
-                  child: ListTile(
-                    key: const ValueKey('profile-sources'),
-                    leading: const Icon(Icons.source_outlined),
-                    title: Text(l10n.profileSources),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: _busy
-                        ? null
-                        : () async {
-                            await Navigator.of(context).push<void>(
-                              MaterialPageRoute(
-                                builder: (_) => SubscriptionSourcesPage(
-                                  subscriptionId: subscription.id,
-                                  hapticEnabled: widget.hapticEnabled,
-                                  allowUntrustedSubscriptionCertificates: widget
-                                      .allowUntrustedSubscriptionCertificates,
+                if (subscription.isLocalList)
+                  Card(
+                    child: CheckboxListTile(
+                      title: Text(l10n.localListQuickAddLabel),
+                      subtitle: Text(l10n.localListQuickAddDescription),
+                      value: subscription.quickAdd,
+                      onChanged: _busy
+                          ? null
+                          : (value) => _saveLocalListQuickAdd(value ?? false),
+                    ),
+                  )
+                else
+                  Card(
+                    child: ListTile(
+                      key: const ValueKey('profile-sources'),
+                      leading: const Icon(Icons.source_outlined),
+                      title: Text(l10n.profileSources),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _busy
+                          ? null
+                          : () async {
+                              await Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) => SubscriptionSourcesPage(
+                                    subscriptionId: subscription.id,
+                                    hapticEnabled: widget.hapticEnabled,
+                                    allowUntrustedSubscriptionCertificates: widget
+                                        .allowUntrustedSubscriptionCertificates,
+                                  ),
                                 ),
-                              ),
-                            );
-                            if (mounted) setState(_reloadCurrentSubscription);
-                          },
+                              );
+                              if (mounted) setState(_reloadCurrentSubscription);
+                            },
+                    ),
                   ),
-                ),
                 const Gap(12),
                 _SubscriptionActionPair(
                   labels: [
@@ -910,7 +939,7 @@ class _SubscriptionDetailsPageState extends State<_SubscriptionDetailsPage> {
                   ],
                 ),
                 const Gap(20),
-                if (!multiSource)
+                if (!subscription.isLocalList && !multiSource)
                   _DetailsBlock(
                     title: local
                         ? l10n.subscriptionLocalFile

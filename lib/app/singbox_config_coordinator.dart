@@ -1191,6 +1191,7 @@ class SingboxConfigCoordinator {
     if (build.configJson.isNotEmpty) {
       final decoded = jsonDecode(build.configJson);
       if (decoded is Map<String, dynamic>) {
+        decoded.remove(androidVpnProfileConfigKey);
         AppLogStore.config(reason, decoded);
         return;
       }
@@ -1288,6 +1289,8 @@ class SingboxConfigCoordinator {
     final snapshot = _readSnapshot();
     return SingboxConfigBuildInput(
       activeSubscription: snapshot.activeSubscription,
+      includeAndroidProfileId:
+          Platform.isAndroid && !probeOnly && snapshot.vpnInboundEnabled,
       selectedProxyTag: snapshot.selectedProxyTag,
       excludedOutboundTags: Set<String>.from(snapshot.excludedOutboundTags),
       vpnInboundEnabled: !probeOnly && snapshot.vpnInboundEnabled,

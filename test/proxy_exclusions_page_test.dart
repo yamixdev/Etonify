@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/features/proxies/proxy_exclusions_page.dart';
@@ -57,6 +58,14 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('VLESS + DE'), findsOneWidget);
+    final toggle = find.byType(Switch);
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(find.text('1 / 2'), findsOneWidget);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(find.text('0 / 2'), findsOneWidget);
+
     await tester.tap(edit);
     await tester.pumpAndSettle();
     expect(tester.widget<FilterChip>(finland).selected, isFalse);
@@ -65,8 +74,53 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
     expect(find.text('VLESS + DE, FI'), findsOneWidget);
-    expect(find.text('2 / 2'), findsOneWidget);
     expect(edit, findsOneWidget);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(find.text('0 / 2'), findsOneWidget);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(find.text('2 / 2'), findsOneWidget);
+  });
+
+  testWidgets('long condition is ellipsized after two lines on a narrow page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final condition = ProxyExclusionCondition(
+      protocol: 'vless',
+      security: 'reality',
+      transport: 'grpc',
+      countries: ['DE', 'FI', 'FR', 'GB', 'JP', 'NL', 'PL', 'SE', 'US'],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('en'),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: ProxyExclusionsPage(
+          subscription: const Subscription(id: 'one', name: 'One', url: ''),
+          rules: ProxyExclusionRules(conditions: [condition]),
+        ),
+      ),
+    );
+    final summary = find.text(
+      'VLESS + REALITY + GRPC + DE, FI, FR, GB, JP, NL, PL, SE, US',
+    );
+    final paragraph = tester.renderObject<RenderParagraph>(summary);
+    expect(paragraph.maxLines, 2);
+    expect(paragraph.overflow, TextOverflow.ellipsis);
+    expect(paragraph.didExceedMaxLines, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   for (final markRussia in [false, true]) {

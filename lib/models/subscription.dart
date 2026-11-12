@@ -706,6 +706,8 @@ class Subscription {
     this.sortOrder,
     this.lastUpdated = 0,
     this.disableAutoUpdate = false,
+    this.isLocalList = false,
+    this.quickAdd = false,
     this.markAllServersRussia = false,
     this.autoRefreshMinutes = 360,
     this.autoRefreshOverridden = false,
@@ -728,6 +730,8 @@ class Subscription {
   final int? sortOrder;
   final int lastUpdated; // ms since epoch
   final bool disableAutoUpdate;
+  final bool isLocalList;
+  final bool quickAdd;
   final bool markAllServersRussia;
   final int autoRefreshMinutes; // 0 = disabled
   /// A user-selected interval takes precedence over provider response headers.
@@ -762,7 +766,8 @@ class Subscription {
   };
 
   bool get needsRefresh {
-    if (disableAutoUpdate || autoRefreshMinutes <= 0) return false;
+    if (isLocalList || disableAutoUpdate || autoRefreshMinutes <= 0)
+      return false;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (sources.isNotEmpty) {
       return sources.any(
@@ -791,6 +796,8 @@ class Subscription {
       if (sortOrder != null) 'sort_order': sortOrder,
       'last_updated': lastUpdated,
       'disable_auto_update': disableAutoUpdate,
+      if (isLocalList) 'is_local_list': true,
+      if (isLocalList && quickAdd) 'quick_add': true,
       if (markAllServersRussia) 'mark_all_servers_russia': true,
       'auto_refresh_minutes': autoRefreshMinutes,
       if (autoRefreshOverridden) 'auto_refresh_overridden': true,
@@ -857,6 +864,8 @@ class Subscription {
       sortOrder: map['sort_order'] as int?,
       lastUpdated: map['last_updated'] as int? ?? 0,
       disableAutoUpdate: map['disable_auto_update'] == true,
+      isLocalList: map['is_local_list'] == true,
+      quickAdd: map['is_local_list'] == true && map['quick_add'] == true,
       markAllServersRussia: map['mark_all_servers_russia'] == true,
       autoRefreshMinutes: map['auto_refresh_minutes'] as int? ?? 360,
       autoRefreshOverridden: map['auto_refresh_overridden'] == true,
@@ -951,6 +960,8 @@ class Subscription {
     int? sortOrder,
     int? lastUpdated,
     bool? disableAutoUpdate,
+    bool? isLocalList,
+    bool? quickAdd,
     bool? markAllServersRussia,
     int? autoRefreshMinutes,
     bool? autoRefreshOverridden,
@@ -974,6 +985,8 @@ class Subscription {
       sortOrder: sortOrder ?? this.sortOrder,
       lastUpdated: lastUpdated ?? this.lastUpdated,
       disableAutoUpdate: disableAutoUpdate ?? this.disableAutoUpdate,
+      isLocalList: isLocalList ?? this.isLocalList,
+      quickAdd: quickAdd ?? this.quickAdd,
       markAllServersRussia: markAllServersRussia ?? this.markAllServersRussia,
       autoRefreshMinutes: autoRefreshMinutes ?? this.autoRefreshMinutes,
       autoRefreshOverridden:

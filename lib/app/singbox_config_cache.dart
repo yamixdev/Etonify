@@ -64,6 +64,7 @@ Future<String> _configFingerprint(
     'schema': _configCacheSchema,
     'coreSettings': input.coreSettings.toMap(),
     'activeSubscription': sub == null ? null : _subscriptionConfigIdentity(sub),
+    if (input.includeAndroidProfileId) 'includeAndroidProfileId': true,
     'selectedProxyTag': selectedProxyTagOverride ?? input.selectedProxyTag,
     'excludedOutboundTags': (input.excludedOutboundTags.toList()..sort()),
     'vpnInboundEnabled': input.vpnInboundEnabled,
@@ -312,7 +313,8 @@ SingboxConfigBuildResult _restoreConfigEntry(
   final result = SingboxConfigBuildResult(
     plan: SingboxBuildPlan(
       config: returnConfig
-          ? jsonDecode(json) as Map<String, dynamic>
+          ? ((jsonDecode(json) as Map<String, dynamic>)
+              ..remove(androidVpnProfileConfigKey))
           : const <String, dynamic>{},
       proxyOutboundTagsByIndex:
           (entry['proxyOutboundTagsByIndex'] as Map<String, dynamic>).map(

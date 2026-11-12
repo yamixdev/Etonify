@@ -84,6 +84,7 @@ class ProxiesPresentationCallbacks {
     required this.resolveVisibleProxyLocation,
     required this.refreshActiveProxyIp,
     required this.outboundForTag,
+    this.onLocalListChanged,
     required this.loadProxyChainTargetSources,
     required this.loadProxyChainTargetsForSource,
     required this.addProxyChain,
@@ -106,6 +107,7 @@ class ProxiesPresentationCallbacks {
   resolveVisibleProxyLocation;
   final VoidCallback refreshActiveProxyIp;
   final Outbound? Function(String tag) outboundForTag;
+  final ValueChanged<String>? onLocalListChanged;
   final Future<List<AppProfileSummary>> Function() loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)
   loadProxyChainTargetsForSource;
@@ -169,6 +171,7 @@ class ProxiesPresentationBuilder {
       onVisibleProxyNeedsLocation: callbacks.resolveVisibleProxyLocation,
       onActiveProxyIpRefresh: callbacks.refreshActiveProxyIp,
       outboundForTag: callbacks.outboundForTag,
+      onLocalListChanged: callbacks.onLocalListChanged,
       loadProxyChainTargetSources: callbacks.loadProxyChainTargetSources,
       loadProxyChainTargetsForSource: callbacks.loadProxyChainTargetsForSource,
       onAddProxyChain: callbacks.addProxyChain,

@@ -9,9 +9,10 @@ String? _normalized(Object? value) {
   return value.trim().toLowerCase();
 }
 
-/// All fields in one condition must match. Empty conditions never match.
+/// All fields in one condition must match. Disabled and empty conditions never match.
 class ProxyExclusionCondition {
   ProxyExclusionCondition({
+    this.enabled = true,
     String? protocol,
     String? security,
     String? transport,
@@ -26,6 +27,7 @@ class ProxyExclusionCondition {
              if (_normalized(value) case final code?) code.toUpperCase(),
          }.toList()..sort(),
        );
+  final bool enabled;
   final String? protocol;
   final String? security;
   final String? transport;
@@ -35,6 +37,15 @@ class ProxyExclusionCondition {
       security == null &&
       transport == null &&
       countries.isEmpty;
+
+  ProxyExclusionCondition withEnabled(bool enabled) => ProxyExclusionCondition(
+    enabled: enabled,
+    protocol: protocol,
+    security: security,
+    transport: transport,
+    countries: countries,
+  );
+
   static String protocolOf(Outbound node) =>
       _normalized(node.config['type']) ?? 'unknown';
   static String securityOf(Outbound node) {
@@ -59,6 +70,7 @@ class ProxyExclusionCondition {
   }
 
   bool matches(Outbound node, {String? countryCode}) =>
+      enabled &&
       !isEmpty &&
       (protocol == null || protocol == protocolOf(node)) &&
       (security == null || security == securityOf(node)) &&
@@ -71,6 +83,7 @@ class ProxyExclusionCondition {
             ),
           ));
   Map<String, dynamic> toMap() => {
+    if (!enabled) 'enabled': false,
     if (protocol != null) 'protocol': protocol,
     if (security != null) 'security': security,
     if (transport != null) 'transport': transport,
@@ -80,6 +93,7 @@ class ProxyExclusionCondition {
   };
   factory ProxyExclusionCondition.fromMap(Map<dynamic, dynamic> map) =>
       ProxyExclusionCondition(
+        enabled: map['enabled'] != false,
         protocol: map['protocol'] is String ? map['protocol'] as String : null,
         security: map['security'] is String ? map['security'] as String : null,
         transport: map['transport'] is String
@@ -109,10 +123,14 @@ class ProxyExclusionRules {
   final Set<String> excludedServerIds;
   final bool legacyTagsBound;
   final List<ProxyExclusionCondition> conditions;
-  bool get isEmpty =>
-      excludedServerIds.isEmpty &&
-      (legacyTagsBound || excludedTags.isEmpty) &&
-      conditions.isEmpty;
+  bool get _hasManualExclusions =>
+      excludedServerIds.isNotEmpty ||
+      (!legacyTagsBound && excludedTags.isNotEmpty);
+  bool get isEmpty => !_hasManualExclusions && conditions.isEmpty;
+
+  /// Indicates configured active exclusions, independent of current servers.
+  bool get hasActiveExclusions =>
+      _hasManualExclusions || conditions.any((rule) => rule.enabled);
 
   /// Persist this result against the current payload BEFORE accepting updates.
   /// Missing legacy tags are deliberately retired rather than rebound later.
@@ -297,7 +315,7 @@ class ProxyExclusionRules {
           )) ||
       conditions.any((rule) => rule.matches(node, countryCode: countryCode));
   Set<String> excludedTagsFor(Subscription subscription) {
-    if (isEmpty) return const {};
+    if (!hasActiveExclusions) return const {};
     final servers = concreteServers(subscription);
     final identities = excludedServerIds.isEmpty
         ? null

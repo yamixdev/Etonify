@@ -156,6 +156,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   int _countHydrationGeneration = 0;
   Timer? _countHydrationTimer;
   late _SubscriptionsSheetMode _sheetMode;
+  late final bool _addingToLocalList;
   _AddSubscriptionSheetMode _addSheetMode = _AddSubscriptionSheetMode.quick;
   double _sheetHeaderDragDeltaY = 0;
   bool _loading = false;
@@ -195,6 +196,11 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
   @override
   void initState() {
     super.initState();
+    final targetProfileId = widget.targetProfileId;
+    _addingToLocalList =
+        targetProfileId != null &&
+        SubscriptionStore.getMetadata(targetProfileId)?.isLocalList == true;
+    if (_addingToLocalList) _addSheetMode = _AddSubscriptionSheetMode.manual;
     _sheetMode = _addOnly
         ? _SubscriptionsSheetMode.add
         : _SubscriptionsSheetMode.list;
@@ -430,7 +436,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     _countHydrationGeneration++;
     setState(() {
       _sheetMode = _SubscriptionsSheetMode.add;
-      _addSheetMode = _AddSubscriptionSheetMode.quick;
+      _addSheetMode = _addingToLocalList
+          ? _AddSubscriptionSheetMode.manual
+          : _AddSubscriptionSheetMode.quick;
     });
     _resetSheetScroll();
   }
@@ -492,6 +500,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
     try {
       final content = result.fileContent;
       if (content != null &&
+          !result.createLocalList &&
           content
               .substring(0, content.length.clamp(0, 4096))
               .contains(EtonifyBackupService.profileMagic)) {
@@ -513,7 +522,7 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
             }
             await SubscriptionProfileImportController(
               loadExisting: SubscriptionStore.getAllMetadataInBackground,
-              save: SubscriptionStore.save,
+              save: SubscriptionStore.saveImportedProfile,
               onApplied: () async {
                 if (mounted) _reload();
               },
@@ -533,6 +542,8 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
                 targetProfileId: widget.targetProfileId,
                 customName: result.name.isNotEmpty ? result.name : null,
                 sourceName: prepared.sourceName,
+                createLocalList: result.createLocalList,
+                quickAdd: result.quickAdd,
                 operationTimeout: _kSubscriptionOperationTimeout,
                 isCancelled: result.isCancelled,
               )
@@ -551,6 +562,14 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
       final created = createdResult.subscription;
       if (mounted) {
         final l10n = AppLocalizations.of(context);
+        if (createdResult.alreadyAdded) {
+          AppNotice.show(
+            context,
+            l10n.localListAlreadyAdded,
+            tone: AppNoticeTone.warning,
+          );
+          return false;
+        }
         if (createdResult.hasWarning) {
           AppNotice.show(
             context,
@@ -1222,7 +1241,9 @@ class _SubscriptionsPageState extends State<SubscriptionsPage> {
               ),
               child: _sheetMode == _SubscriptionsSheetMode.add
                   ? _AddSubscriptionSheet(
-                      addingSource: widget.targetProfileId != null,
+                      addingSource:
+                          widget.targetProfileId != null && !_addingToLocalList,
+                      addingToLocalList: _addingToLocalList,
                       onAdd: _importAddResult,
                       scrollController: _sheetScrollController,
                       onClose: (changed) =>

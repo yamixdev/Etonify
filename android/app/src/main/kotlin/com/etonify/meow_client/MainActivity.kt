@@ -36,6 +36,8 @@ import com.etonify.meow_client.singbox.MeowProxyService
 import com.etonify.meow_client.singbox.MeowProbeService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
+import com.etonify.meow_client.singbox.NetworkServerPreferences
+import com.etonify.meow_client.singbox.NetworkServerProfile
 import com.etonify.meow_client.singbox.OwnProcessMemory
 import com.etonify.meow_client.singbox.PersistentDnsCache
 import com.etonify.meow_client.singbox.RuntimeMeasurement
@@ -2190,7 +2192,7 @@ class MainActivity : FlutterFragmentActivity() {
 
                 override fun checkConfig(config: String, callback: (Result<Unit>) -> Unit) {
                     ioExecutor.execute {
-                        runCatching { Libbox.checkConfig(config) }
+                        runCatching { Libbox.checkConfig(NetworkServerProfile.coreConfig(config)) }
                             .onSuccess {
                                 mainHandler.post { callback(Result.success(Unit)) }
                             }
@@ -2286,6 +2288,7 @@ class MainActivity : FlutterFragmentActivity() {
         startupTasks = startup
         setupSingboxHostApi(messenger, startup)
         subscriptionRefreshChannel = SubscriptionRefreshJobs.register(applicationContext, messenger)
+        registerNetworkServerSettings(messenger)
 
         MethodChannel(
             messenger,
@@ -2409,6 +2412,64 @@ class MainActivity : FlutterFragmentActivity() {
 
     }
 
+    private fun registerNetworkServerSettings(messenger: BinaryMessenger) {
+        MethodChannel(messenger, NetworkServerPreferences.CHANNEL).setMethodCallHandler { call, result ->
+            val profileId = call.argument<String>("profileId").orEmpty()
+            when (call.method) {
+                "read" -> result.success(NetworkServerPreferences.wireValue(NetworkServerPreferences.read(profileId)))
+                "update" -> {
+                    val field = call.argument<String>("field").orEmpty()
+                    val value = call.argument<Any>("value")
+                    val valid = when (field) {
+                        "enabled", "remember" -> value is Boolean
+                        "wifi", "mobile" -> profileId.isNotBlank() && (value == null || value is String)
+                        else -> false
+                    }
+                    if (!valid) {
+                        result.error("invalid_policy", "Invalid network server setting", null)
+                    } else {
+                        MeowBoxService.updateNetworkServerPolicy(profileId, field, value) { update ->
+                            update.onSuccess { result.success(NetworkServerPreferences.wireValue(it)) }
+                                .onFailure { result.error("update_failed", it.message, null) }
+                        }
+                    }
+                }
+                "selectManual", "reassertAfterStart" -> {
+                    val manual = call.method == "selectManual"
+                    val tag = call.argument<String>("tag").orEmpty()
+                    if ((manual && profileId.isBlank()) || tag.isBlank()) {
+                        result.error("invalid_selection", "Missing subscription or outbound", null)
+                        return@setMethodCallHandler
+                    }
+                    val complete: (Result<Unit>) -> Unit = { selection ->
+                        selection.onSuccess { result.success(null) }
+                            .onFailure { result.error("select_failed", it.message, null) }
+                    }
+                    if (MeowBoxService.selectVpnOutbound(tag, profileId.takeIf { manual }, complete)) {
+                        return@setMethodCallHandler
+                    }
+                    if (SingboxController.serviceMode == "vpn") {
+                        result.error("select_failed", "VPN runtime is changing", null)
+                    } else {
+                        SingboxController.selectOutbound("select", tag, complete)
+                    }
+                }
+                "rememberOffline" -> {
+                    val tag = call.argument<String>("tag").orEmpty()
+                    if (profileId.isNotBlank() && tag.isNotBlank() &&
+                        NetworkServerPreferences.read(profileId).let { it.enabled && it.remember } &&
+                        SingboxController.serviceMode != "vpn" && !MeowBoxService.hasActiveRuntimeOwner("vpn")
+                    ) {
+                        val network = MeowDefaultNetworkMonitor.offlineServerNetworkSnapshot()
+                        NetworkServerPreferences.remember(profileId, tag, network, network)
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         subscriptionRefreshChannel?.let(SubscriptionRefreshJobs::unregister)
@@ -2418,6 +2479,7 @@ class MainActivity : FlutterFragmentActivity() {
             quickSettingsMethodChannelName,
             secureStorageMethodChannelName,
             deepLinkMethodChannelName,
+            NetworkServerPreferences.CHANNEL,
         ).forEach { MethodChannel(messenger, it).setMethodCallHandler(null) }
         EventChannel(messenger, eventChannelName).setStreamHandler(null)
         EventChannel(messenger, deepLinkEventChannelName).setStreamHandler(null)

@@ -22,13 +22,20 @@ import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_sources.dart';
 
 class SubscriptionImportResult {
-  const SubscriptionImportResult({required this.subscription, this.warning});
+  const SubscriptionImportResult({
+    required this.subscription,
+    this.warning,
+    this.alreadyAdded = false,
+  });
 
   final Subscription subscription;
   final Object? warning;
+  final bool alreadyAdded;
 
   bool get hasWarning => warning != null;
 }
+
+enum LocalListAddResult { added, alreadyAdded, unavailable }
 
 /// Hive-based persistent store for subscriptions.
 ///
@@ -742,12 +749,25 @@ class SubscriptionStore {
   }
 
   /// Saves (creates or updates) a subscription.
-  static Future<void> save(Subscription sub) async {
+  static Future<void> save(
+    Subscription sub, {
+    bool replaceEmptyPayload = false,
+  }) async {
     await ensurePayloadReady();
-    await _withSubscriptionWriteLock(sub.id, () => _saveUnlocked(sub));
+    await _withSubscriptionWriteLock(
+      sub.id,
+      () => _saveUnlocked(sub, replaceEmptyPayload: replaceEmptyPayload),
+    );
   }
 
-  static Future<void> _saveUnlocked(Subscription sub) async {
+  /// A backup's empty local list is a complete snapshot.
+  static Future<void> saveImportedProfile(Subscription sub) =>
+      save(sub, replaceEmptyPayload: sub.isLocalList);
+
+  static Future<void> _saveUnlocked(
+    Subscription sub, {
+    bool replaceEmptyPayload = false,
+  }) async {
     final totalStopwatch = Stopwatch()..start();
     final payloadReadStopwatch = Stopwatch()..start();
     final existingPayload = await _payloadStore.get(sub.id);
@@ -755,6 +775,7 @@ class SubscriptionStore {
     final isMetadataOnly =
         sub.outbounds.isEmpty &&
         sub.rawContent.isEmpty &&
+        !replaceEmptyPayload &&
         existingPayload != null;
     if (isMetadataOnly) {
       await _saveMetadataUnlocked(sub);
@@ -1248,60 +1269,105 @@ class SubscriptionStore {
     String? targetProfileId,
     String? customName,
     String? sourceName,
+    bool createLocalList = false,
+    bool quickAdd = false,
     Duration? operationTimeout,
     bool Function()? isCancelled,
   }) async {
     await ensurePayloadReady();
     final deadline = _operationDeadline(operationTimeout);
     _throwIfImportCancelled(isCancelled);
-    final parseResult = await _withDeadline(
-      SubscriptionParser.parseInBackground(content),
-      deadline,
-      'subscription file import',
-    );
+    final localTargetId =
+        targetProfileId != null &&
+            getMetadata(targetProfileId)?.isLocalList == true
+        ? targetProfileId
+        : null;
+    final localName = createLocalList ? customName?.trim() : null;
+    if (createLocalList &&
+        (targetProfileId != null || localName == null || localName.isEmpty)) {
+      throw ArgumentError('A local list requires a name and its own profile');
+    }
+    final emptyList = createLocalList && content.trim().isEmpty;
+    final parseResult = emptyList
+        ? null
+        : await _withDeadline(
+            SubscriptionParser.parseInBackground(content),
+            deadline,
+            'subscription file import',
+          );
     _throwIfImportCancelled(isCancelled);
-    final payload = await _withDeadline(
-      _buildSubscriptionPayloadAsync(
-        parseResult,
-        providerName: _providerNameHint(
-          customName: customName,
-          headerTitle: sourceName,
-        ),
-      ),
-      deadline,
-      'subscription file import',
-    );
+    final payload = parseResult == null
+        ? null
+        : await _withDeadline(
+            _buildSubscriptionPayloadAsync(
+              parseResult,
+              providerName: _providerNameHint(
+                customName: createLocalList ? null : customName,
+                headerTitle: sourceName,
+              ),
+            ),
+            deadline,
+            'subscription file import',
+          );
     _throwIfImportCancelled(isCancelled);
-    final outbounds = payload.outbounds;
-    if (!_hasUsableOutbounds(outbounds)) {
-      throw SubscriptionContentException(
-        parseResult.hasUnsupportedWireGuard
-            ? SubscriptionContentFailureKind.wireGuardUnsupported
-            : SubscriptionContentFailureKind.noUsableProxies,
+    final outbounds = payload?.outbounds ?? const <Outbound>[];
+    final groups = payload?.groups ?? const <SubscriptionGroup>[];
+    final warning = parseResult?.hasUnsupportedWireGuard == true
+        ? const SubscriptionContentException(
+            SubscriptionContentFailureKind.wireGuardUnsupported,
+          )
+        : null;
+    if (!emptyList &&
+        (createLocalList
+            ? concreteSubscriptionServerTags(outbounds, groups).isEmpty
+            : !_hasUsableOutbounds(outbounds))) {
+      throw warning ??
+          const SubscriptionContentException(
+            SubscriptionContentFailureKind.noUsableProxies,
+          );
+    }
+
+    if (localTargetId != null) {
+      return _appendImportedLocalList(
+        localTargetId,
+        outbounds,
+        groups,
+        deadline: deadline,
+        warning: warning,
+        isCancelled: isCancelled,
       );
     }
 
+    final id = SubscriptionFetcher.generateId();
     final normalizedSourceName = _normalizeName(sourceName) ?? 'subscription';
-    final localUrl = _localFileImportUrl(normalizedSourceName);
+    final localUrl = _localFileImportUrl(
+      createLocalList ? 'local-list/$id' : normalizedSourceName,
+    );
     final sub = Subscription(
-      id: SubscriptionFetcher.generateId(),
-      name: _pickSubscriptionName(
-        customName: customName,
-        headerTitle: null,
-        outbounds: outbounds,
-        url: localUrl,
-      ),
+      id: id,
+      name:
+          localName ??
+          _pickSubscriptionName(
+            customName: customName,
+            headerTitle: null,
+            outbounds: outbounds,
+            url: localUrl,
+          ),
       url: localUrl,
       selectedProxyTag: _selectedProxyTagForOutbounds(
         outbounds,
-        groups: payload.groups,
+        groups: groups,
       ),
       sortOrder: _nextSortOrder(),
       lastUpdated: DateTime.now().millisecondsSinceEpoch,
       disableAutoUpdate: true,
-      rawContent: content,
+      isLocalList: createLocalList,
+      quickAdd: createLocalList && quickAdd,
+      autoRefreshMinutes: createLocalList ? 0 : 360,
+      cachedVisibleProxyCount: emptyList ? 0 : -1,
+      rawContent: emptyList ? '' : content,
       outbounds: outbounds,
-      groups: payload.groups,
+      groups: groups,
       urlTestConfig: const UrlTestConfig(),
     );
 
@@ -1314,15 +1380,203 @@ class SubscriptionStore {
       if (targetProfileId == null) await delete(sub.id);
       throw const SubscriptionImportCancelledException();
     }
+    return SubscriptionImportResult(subscription: saved, warning: warning);
+  }
+
+  static Future<SubscriptionImportResult> _appendImportedLocalList(
+    String id,
+    List<Outbound> outbounds,
+    List<SubscriptionGroup> groups, {
+    required DateTime deadline,
+    required Object? warning,
+    required bool Function()? isCancelled,
+  }) => _withSubscriptionWriteLock(id, () async {
+    final current = await _getUnlocked(id);
+    if (current == null || !current.isLocalList) {
+      throw StateError('Local list no longer exists');
+    }
+    _throwIfImportCancelled(isCancelled);
+    final (result, updated) = await _withDeadline(
+      _prepareLocalListImport(current, outbounds, groups),
+      deadline,
+      'local list import',
+    );
+    _throwIfImportCancelled(isCancelled);
+    if (result == LocalListAddResult.unavailable) {
+      throw warning ??
+          const SubscriptionContentException(
+            SubscriptionContentFailureKind.noUsableProxies,
+          );
+    }
+    if (updated != null) {
+      await _saveUnlocked(updated);
+      if (isCancelled?.call() == true) {
+        await _saveUnlocked(current, replaceEmptyPayload: true);
+        throw const SubscriptionImportCancelledException();
+      }
+    }
     return SubscriptionImportResult(
-      subscription: saved,
-      warning: parseResult.hasUnsupportedWireGuard
-          ? const SubscriptionContentException(
-              SubscriptionContentFailureKind.wireGuardUnsupported,
-            )
-          : null,
+      subscription: updated ?? current,
+      warning: warning,
+      alreadyAdded: result == LocalListAddResult.alreadyAdded,
+    );
+  });
+
+  static Future<(LocalListAddResult, Subscription?)> _prepareLocalListImport(
+    Subscription current,
+    List<Outbound> outbounds,
+    List<SubscriptionGroup> groups,
+  ) => Isolate.run(() {
+    final serverTags = concreteSubscriptionServerTags(outbounds, groups);
+    return _appendLocalProxies(
+      current,
+      outbounds.where((item) => serverTags.contains(item.tag)),
+      outbounds,
+    );
+  }, debugName: 'meow-local-list-import');
+
+  static Future<List<Subscription>> getQuickAddLocalLists() async {
+    if (_metaBox?.isOpen != true) return const [];
+    return (await getAllMetadataInBackground())
+        .where((profile) => profile.isLocalList && profile.quickAdd)
+        .toList(growable: false);
+  }
+
+  static Future<LocalListAddResult> addProxyToLocalList(
+    String id,
+    Outbound outbound, {
+    String? sourceProfileId,
+  }) async {
+    if (!isConcreteSubscriptionServer(outbound)) {
+      return LocalListAddResult.unavailable;
+    }
+    await ensurePayloadReady();
+    final sourceId = sourceProfileId?.trim() ?? '';
+    final source = outbound.config['detour'] is String && sourceId.isNotEmpty
+        ? await get(sourceId)
+        : null;
+    return _withSubscriptionWriteLock(id, () async {
+      final profile = await _getUnlocked(id);
+      if (profile == null || !profile.isLocalList || !profile.quickAdd) {
+        return LocalListAddResult.unavailable;
+      }
+      final (result, updated) = await Isolate.run(
+        () => _appendLocalProxies(profile, [
+          outbound,
+        ], source?.outbounds ?? const []),
+        debugName: 'meow-local-list-add-proxy',
+      );
+      if (updated != null) await _saveUnlocked(updated);
+      return result;
+    });
+  }
+
+  static (LocalListAddResult, Subscription?) _appendLocalProxies(
+    Subscription profile,
+    Iterable<Outbound> incoming,
+    List<Outbound> sourceOutbounds,
+  ) {
+    if (incoming.isEmpty) return (LocalListAddResult.unavailable, null);
+    final sourceByTag = {
+      for (final candidate in sourceOutbounds) candidate.tag: candidate,
+    };
+    final existingByTag = {
+      for (final item in profile.outbounds) item.tag: item,
+    };
+    final existingIdentities = {
+      for (final tag in profile.concreteServerTags)
+        if (existingByTag[tag] case final item?)
+          _localProxyChainIdentity(_localProxyChain(item, existingByTag)),
+    };
+    final usedTags = <String>{
+      ...profile.groups.map((group) => group.tag),
+      ...providerDirectOutbounds(profile.groups).keys,
+      ...existingByTag.keys,
+    };
+    final outbounds = [...profile.outbounds];
+    final nextSuffixByBase = <String, int>{};
+    for (final outbound in incoming) {
+      final chain = _localProxyChain(outbound, sourceByTag);
+      if (chain.isEmpty) return (LocalListAddResult.unavailable, null);
+      if (!existingIdentities.add(_localProxyChainIdentity(chain))) continue;
+      String? detour;
+      for (final item in chain.reversed) {
+        final sanitized = _sanitizeTag(item.name);
+        final base = sanitized.isEmpty ? 'local-proxy' : sanitized;
+        var suffix = nextSuffixByBase[base] ?? 1;
+        var tag = suffix == 1 ? base : '$base-$suffix';
+        while (isReservedProxyTag(tag) || !usedTags.add(tag)) {
+          tag = '$base-${++suffix}';
+        }
+        nextSuffixByBase[base] = suffix + 1;
+        final config = Map<String, dynamic>.of(item.config)
+          ..removeWhere((key, _) => key.startsWith('_'))
+          ..['tag'] = tag;
+        if (detour != null) config['detour'] = detour;
+        if (item != outbound) config['_group_only'] = true;
+        outbounds.add(
+          item.copyWith(
+            tag: tag,
+            config: config,
+            info: OutboundInfo(country: item.info.country),
+          ),
+        );
+        detour = tag;
+      }
+    }
+    if (outbounds.length == profile.outbounds.length) {
+      return (LocalListAddResult.alreadyAdded, null);
+    }
+    return (
+      LocalListAddResult.added,
+      profile.copyWith(
+        lastUpdated: DateTime.now().millisecondsSinceEpoch,
+        selectedProxyTag: _selectedProxyTagForOutbounds(
+          outbounds,
+          preferredTag: profile.selectedProxyTag,
+          groups: profile.groups,
+        ),
+        outbounds: outbounds,
+      ),
     );
   }
+
+  static String _localProxyChainIdentity(List<Outbound> chain) =>
+      jsonEncode([for (final item in chain) _localProxyIdentity(item.config)]);
+
+  static List<Outbound> _localProxyChain(
+    Outbound root,
+    Map<String, Outbound> byTag,
+  ) {
+    final chain = <Outbound>[];
+    final seen = <String>{};
+    Outbound? item = root;
+    while (item != null) {
+      if (!seen.add(item.tag) ||
+          item.info.deleted ||
+          ParsedOutboundSchema.validate(item.config) != null) {
+        return const [];
+      }
+      chain.add(item);
+      final detour = item.config['detour'];
+      if (detour == null) return chain;
+      if (detour is! String) return const [];
+      item = byTag[detour];
+    }
+    return const [];
+  }
+
+  static String _localProxyIdentity(Map<String, dynamic> config) => jsonEncode([
+    outboundIdentityKey(config),
+    _stableOutboundIdentityValue({
+      for (final entry in config.entries)
+        if (entry.key != 'tag' &&
+            entry.key != 'detour' &&
+            !entry.key.startsWith('_') &&
+            !_identityKeys.contains(entry.key))
+          entry.key: entry.value,
+    }),
+  ]);
 
   static void _throwIfImportCancelled(bool Function()? isCancelled) {
     if (isCancelled?.call() ?? false) {
@@ -1337,6 +1591,9 @@ class SubscriptionStore {
   ) => _withSubscriptionWriteLock(id, () async {
     final current = await _getUnlocked(id);
     if (current == null) throw StateError('Profile no longer exists');
+    if (current.isLocalList) {
+      throw StateError('A local list cannot contain subscription sources');
+    }
     final sources = current.effectiveSources;
     if (!isLocalFileImportUrl(imported.url) &&
         sources.any((s) => s.url == imported.url)) {
@@ -1938,6 +2195,9 @@ class SubscriptionStore {
     final existingBeforeParse = await get(id);
     if (existingBeforeParse == null) {
       throw StateError('Subscription $id not found');
+    }
+    if (existingBeforeParse.isLocalList) {
+      throw StateError('A local list is maintained as parsed outbounds');
     }
     if (existingBeforeParse.sources.isNotEmpty) {
       final parsed =

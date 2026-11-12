@@ -389,6 +389,7 @@ void main() {
 
   test('country alternatives roundtrip and still require other fields', () {
     final old = ProxyExclusionCondition.fromMap({'country': 'de'});
+    expect(old.enabled, isTrue);
     expect(old.matches(node('de', country: 'DE')), isTrue);
     expect(old.matches(node('fi', country: 'FI')), isFalse);
     final rule = ProxyExclusionCondition.fromMap({
@@ -405,6 +406,38 @@ void main() {
       restored.matches(node('other', country: 'FI', type: 'trojan')),
       isFalse,
     );
+  });
+
+  test('disabled conditions stay saved and do not exclude servers', () {
+    final server = node('de', country: 'DE');
+    final subscription = Subscription(
+      id: 'profile',
+      name: 'Profile',
+      url: '',
+      outbounds: [server],
+    );
+    final rules = ProxyExclusionRules.fromMap({
+      'conditions': [
+        {'country': 'DE', 'enabled': false},
+      ],
+    });
+    final condition = rules.conditions.single;
+    expect(condition.enabled, isFalse);
+    expect(condition.matches(server), isFalse);
+    expect(rules.isEmpty, isFalse);
+    expect(rules.hasActiveExclusions, isFalse);
+    expect(rules.excludes(server), isFalse);
+    final projection = rules.prepare(subscription);
+    expect(projection.excludedTags, isEmpty);
+    expect(projection.runtimeSubscription, same(subscription));
+    expect(projection.eligibleSubscription, same(subscription));
+
+    final withManual = ProxyExclusionRules(
+      excludedTags: {server.tag},
+      conditions: rules.conditions,
+    );
+    expect(withManual.hasActiveExclusions, isTrue);
+    expect(withManual.excludedTagsFor(subscription), {server.tag});
   });
 
   test('empty or malformed condition never matches everything', () {
@@ -446,7 +479,10 @@ void main() {
         proxyExclusionsByProfile: {
           'one': ProxyExclusionRules(excludedTags: {'stale'}),
           'two': ProxyExclusionRules(
-            conditions: [ProxyExclusionCondition(country: 'RU')],
+            conditions: [
+              ProxyExclusionCondition(country: 'RU'),
+              ProxyExclusionCondition(country: 'DE', enabled: false),
+            ],
           ),
         },
       );
@@ -456,6 +492,10 @@ void main() {
       );
       expect(restored.proxyExclusionsByProfile['one']!.excludedTags, {'stale'});
       expect(restored.proxyExclusionsByProfile['two']!.excludedTags, isEmpty);
+      final conditions = restored.proxyExclusionsByProfile['two']!.conditions;
+      expect(conditions.first.enabled, isTrue);
+      expect(conditions.last.enabled, isFalse);
+      expect(conditions.last.countries, ['DE']);
       expect(store.mapState({}).proxyExclusionsByProfile, isEmpty);
       expect(
         store.mapState({

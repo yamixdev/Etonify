@@ -88,6 +88,7 @@ import 'package:meow_client/features/settings/settings_experimental_page.dart';
 import 'package:meow_client/features/settings/settings_general_page.dart';
 import 'package:meow_client/features/settings/settings_inbound_page.dart';
 import 'package:meow_client/features/settings/settings_logs_page.dart';
+import 'package:meow_client/features/settings/settings_network_servers_page.dart';
 import 'package:meow_client/features/settings/settings_page.dart';
 import 'package:meow_client/features/settings/settings_presentation_builder.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
@@ -107,6 +108,7 @@ import 'package:meow_client/models/proxy_runtime_visual_state.dart';
 import 'package:meow_client/models/server_connection_info.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/url_test_progress.dart';
+import 'package:meow_client/platform/network_server_settings.dart';
 import 'package:meow_client/platform/quick_settings_tile_installer.dart';
 import 'package:meow_client/platform/windows/windows_storage_error.dart';
 import 'package:meow_client/singbox/core_config_migration.dart';
@@ -370,7 +372,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     _exclusionCacheSource = subscription;
     _exclusionCacheRules = rules;
-    final projection = subscription == null || rules.isEmpty
+    final projection = subscription == null || !rules.hasActiveExclusions
         ? null
         : rules.prepare(subscription);
     _excludedTagsCache = projection?.excludedTags ?? const {};
@@ -3771,7 +3773,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   ) async {
     final controller = SubscriptionProfileImportController(
       loadExisting: SubscriptionStore.getAllMetadataInBackground,
-      save: SubscriptionStore.save,
+      save: SubscriptionStore.saveImportedProfile,
       onApplied: () => _reloadSubscriptions(
         preferredSubscriptionId: _activeProfileId,
         preferredProxyTag: _selectedProxyTag,
@@ -4974,7 +4976,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final activeSubscription = _activeSubscription;
     if (activeSubscription == null ||
         _proxySelection.pendingRuntimeSelectTag == tag ||
-        (_selectedProxyTag == tag &&
+        (!Platform.isAndroid &&
+            _selectedProxyTag == tag &&
             !_proxySelection.hasPendingRuntimeSelection &&
             !_proxySelection.runtimeSelectionUnconfirmed)) {
       return;
@@ -5006,6 +5009,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ? _beginRuntimeProxySelectionGuard(tag, previousTag)
         : _beginLocalProxySelection();
     final requireRuntimeConfirmation = selectInRuntime && Platform.isAndroid;
+    if (Platform.isAndroid &&
+        !_runtimeActiveOrRequested &&
+        !_runtimeIntent.explicitStopInProgress) {
+      unawaited(
+        NetworkServerSettings.rememberOffline(
+          activeSubscription.id,
+          tag,
+        ).catchError((Object error) {
+          AppLogStore.warning('proxy', 'Cannot remember server: $error');
+        }),
+      );
+    }
     setState(() {
       if (requireRuntimeConfirmation) return;
       _subscriptions = _replaceSubscription(updatedSubscription);
@@ -5066,7 +5081,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
             'selectOutbound',
             'reason=user proxy select group=select outbound=$tag',
           );
-          final result = await _runtimeCommands.selectOutbound(tag);
+          final result = await _runtimeCommands.selectOutbound(
+            tag,
+            command: Platform.isAndroid
+                ? (_, outboundTag) => NetworkServerSettings.selectManual(
+                    activeSubscription.id,
+                    outboundTag,
+                  )
+                : null,
+          );
           if (!mounted ||
               !_proxySelection.isCurrentGeneration(selectionGeneration)) {
             return;
@@ -6825,6 +6848,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
               ? _setHomeNavigationMode
               : null,
           onAutoConnectOnLaunchChanged: _setAutoConnectOnLaunch,
+          networkServerSettingsPage: Platform.isAndroid
+              ? (_) => SettingsNetworkServersPage(
+                  loadProfile: _loadNetworkServerProfile,
+                )
+              : null,
           showQuickSettingsTileAction: Platform.isAndroid,
           showBatteryOptimizationSettings: Platform.isAndroid,
           onAddQuickSettingsTile: () =>
@@ -6855,6 +6883,24 @@ class _MeowClientState extends ConsumerState<MeowClient>
           onHideServerIpChanged: _setHideServerIp,
         ),
       ),
+    );
+  }
+
+  Future<({String id, String name, List<Outbound> servers})?>
+  _loadNetworkServerProfile() async {
+    if (!await _ensureActiveSubscriptionHydratedForRuntime() || !mounted) {
+      return null;
+    }
+    final subscription = _activeSubscription;
+    if (subscription == null) return null;
+    final tags = subscription.concreteServerTags.difference(_userExcludedTags);
+    return (
+      id: subscription.id,
+      name: subscription.name,
+      servers: [
+        for (final server in subscription.outbounds)
+          if (tags.contains(server.tag)) server,
+      ],
     );
   }
 
@@ -8293,7 +8339,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
       'proxy',
       'reasserting selected outbound after runtime start tag=$tag',
     );
-    final result = await _runtimeCommands.selectOutbound(tag);
+    final result = await _runtimeCommands.selectOutbound(
+      tag,
+      command: Platform.isAndroid
+          ? (_, outboundTag) =>
+                NetworkServerSettings.reassertAfterStart(outboundTag)
+          : null,
+    );
     if (!mounted ||
         !_proxySelection.isCurrentGeneration(generation) ||
         _proxySelection.pendingRuntimeSelectTag != tag ||
@@ -8605,10 +8657,58 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (hasError) {
       unawaited(_handleRuntimeError(error ?? '', wasRetryScheduled));
     } else if (running) {
+      _applyNativeNetworkServerSelection(event.raw);
       unawaited(_requestNotificationPermissionIfNeeded());
       unawaited(_refreshRuntimeDiagnosticsNetworkState());
       _scheduleActiveOutboundIpRefresh();
     }
+  }
+
+  void _applyNativeNetworkServerSelection(Map<String, dynamic> snapshot) {
+    final selection = snapshot['networkServerSelection'];
+    final subscription = _activeSubscription;
+    if (!mounted ||
+        !_connected ||
+        _runtimeIntent.explicitStopInProgress ||
+        subscription == null ||
+        selection is! Map<Object?, Object?> ||
+        selection['profileId'] != subscription.id ||
+        (_proxySelection.hasPendingRuntimeSelection &&
+            !_proxySelection.pendingRuntimeSelectionIsStartGuard)) {
+      return;
+    }
+    final tag = selection['tag'];
+    if (tag is! String ||
+        tag == _selectedProxyTag ||
+        _userExcludedTags.contains(tag) ||
+        _validSelectedProxyTagForSubscription(subscription, tag) != tag) {
+      return;
+    }
+    final previousTag = _selectedProxyTag;
+    final generation = _beginLocalProxySelection();
+    final updated = _withSelectedOutbound(subscription, tag);
+    _runtimeOperations.synchronizeSelection(tag);
+    _resetActiveProxyIpState(rebuild: false);
+    setState(() {
+      _subscriptions = _replaceSubscription(updated);
+      _activeLookupSubscription = null;
+      _selectedProxyTag = tag;
+      _displayProxyCache =
+          _displayProxyForSelectedTag(tag) ?? _displayProxyCache;
+    });
+    _publishProxyRuntimeVisualStatesForTags({previousTag, tag});
+    _scheduleVpnNotificationSync();
+    unawaited(_syncQuickSettingsTileLabel());
+    unawaited(
+      _proxySelection.enqueuePersistence(
+        generation: generation,
+        action: () => _persistSelectedProxySelection(
+          updated,
+          generation: generation,
+          prepareConfigSnapshot: true,
+        ),
+      ),
+    );
   }
 
   void _handleRuntimeNetworkEvent(Map<String, dynamic> event) {
@@ -9078,6 +9178,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         }
       });
       _publishTrafficDashboardSnapshot();
+      if (running) _applyNativeNetworkServerSelection(status);
       if (running &&
           await _networkInterfaceUsable(reason: 'runtime_sync_running')) {
         _scheduleActiveOutboundIpRefresh();
@@ -10447,7 +10548,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         initialSort: _proxySort,
         hideUnavailable: _settings.proxyHideUnavailable,
         hideProxyChains: _settings.hideProxyChains,
-        hasProxyExclusions: !_exclusionsFor(_activeSubscription).isEmpty,
+        hasProxyExclusions: _exclusionsFor(
+          _activeSubscription,
+        ).hasActiveExclusions,
         progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
         runtimeStates: _proxyRuntimeVisualStates,
         proxyListLoading:
@@ -10476,6 +10579,27 @@ class _MeowClientState extends ConsumerState<MeowClient>
             unawaited(_resolveVisibleProxyLocation(tag, isVisible)),
         refreshActiveProxyIp: _refreshActiveProxyIp,
         outboundForTag: _outboundForProxyTag,
+        onLocalListChanged: (id) {
+          if (!mounted) return;
+          if (id == _activeProfileId) {
+            unawaited(
+              _reloadSubscriptions(
+                preferredProxyTag: _selectedProxyTag,
+                applyRuntime: _runtimeActiveOrRequested,
+              ).catchError((Object error) {
+                AppLogStore.warning(
+                  'subscription',
+                  'Local list reload failed: ${error.runtimeType}',
+                );
+              }),
+            );
+            return;
+          }
+          final updated = SubscriptionStore.getMetadata(id);
+          if (updated != null) {
+            _subscriptions = _replaceSubscription(updated);
+          }
+        },
         loadProxyChainTargetSources: _loadProxyChainTargetSources,
         loadProxyChainTargetsForSource: _loadProxyChainTargetsForSource,
         addProxyChain: _addProxyChain,

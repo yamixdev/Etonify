@@ -3794,4 +3794,77 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get trafficDashboardPublicIpCached =>
       'Последний известный IP · не удалось обновить';
+
+  @override
+  String get proxyExclusionsEnableCondition => 'Включить условие';
+
+  @override
+  String get proxyExclusionsDisableCondition => 'Выключить условие';
+
+  @override
+  String get localListLabel => 'Локальный список';
+
+  @override
+  String get localListNameLabel => 'Название';
+
+  @override
+  String get localListNameRequired => 'Укажите название списка';
+
+  @override
+  String get localListContentLabel =>
+      'Ссылки на прокси или конфигурация (необязательно)';
+
+  @override
+  String get localListQuickAddLabel => 'Быстрое добавление';
+
+  @override
+  String get localListQuickAddDescription => 'Показывать в меню «Поделиться»';
+
+  @override
+  String get localListAddProxyLabel => 'Добавить в локальный список';
+
+  @override
+  String get localListAlreadyAdded => 'Уже добавлено';
+
+  @override
+  String get localListProxyAdded => 'Прокси добавлен в список';
+
+  @override
+  String get localListAddProxyFailed => 'Не удалось добавить прокси в список';
+
+  @override
+  String get networkServersTitle => 'Серверы по типу сети';
+
+  @override
+  String get networkServersEnabled => 'Переключать по типу сети';
+
+  @override
+  String get networkServersWifi => 'Wi-Fi';
+
+  @override
+  String get networkServersMobile => 'Мобильная сеть';
+
+  @override
+  String get networkServersRemember => 'Запоминать ручной выбор';
+
+  @override
+  String get networkServersRememberDescription =>
+      'Сохранять ручной выбор отдельно для Wi-Fi и мобильной сети.';
+
+  @override
+  String get networkServersKeepCurrent => 'Оставлять текущий сервер';
+
+  @override
+  String get networkServersUnavailable => 'Сервер недоступен';
+
+  @override
+  String get networkServersSettingsError =>
+      'Не удалось сохранить настройки серверов по типу сети';
+
+  @override
+  String get localListPasteContentLabel => 'Ссылки на прокси или конфигурация';
+
+  @override
+  String get localListContentRequired =>
+      'Вставьте ссылки на прокси или конфигурацию';
 }

@@ -6725,6 +6725,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last known IP · refresh failed'**
   String get trafficDashboardPublicIpCached;
+
+  /// No description provided for @proxyExclusionsEnableCondition.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable condition'**
+  String get proxyExclusionsEnableCondition;
+
+  /// No description provided for @proxyExclusionsDisableCondition.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable condition'**
+  String get proxyExclusionsDisableCondition;
+
+  /// No description provided for @localListLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Local list'**
+  String get localListLabel;
+
+  /// No description provided for @localListNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get localListNameLabel;
+
+  /// No description provided for @localListNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a list name'**
+  String get localListNameRequired;
+
+  /// No description provided for @localListContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy links or config (optional)'**
+  String get localListContentLabel;
+
+  /// No description provided for @localListQuickAddLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick add'**
+  String get localListQuickAddLabel;
+
+  /// No description provided for @localListQuickAddDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in the Share menu'**
+  String get localListQuickAddDescription;
+
+  /// No description provided for @localListAddProxyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to local list'**
+  String get localListAddProxyLabel;
+
+  /// No description provided for @localListAlreadyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Already added'**
+  String get localListAlreadyAdded;
+
+  /// No description provided for @localListProxyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy added to list'**
+  String get localListProxyAdded;
+
+  /// No description provided for @localListAddProxyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add proxy to list'**
+  String get localListAddProxyFailed;
+
+  /// No description provided for @networkServersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Servers by network'**
+  String get networkServersTitle;
+
+  /// No description provided for @networkServersEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch by network type'**
+  String get networkServersEnabled;
+
+  /// No description provided for @networkServersWifi.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi'**
+  String get networkServersWifi;
+
+  /// No description provided for @networkServersMobile.
+  ///
+  /// In en, this message translates to:
+  /// **'Mobile data'**
+  String get networkServersMobile;
+
+  /// No description provided for @networkServersRemember.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember manual selection'**
+  String get networkServersRemember;
+
+  /// No description provided for @networkServersRememberDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Save manual selections separately for Wi-Fi and mobile data.'**
+  String get networkServersRememberDescription;
+
+  /// No description provided for @networkServersKeepCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep current server'**
+  String get networkServersKeepCurrent;
+
+  /// No description provided for @networkServersUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Server unavailable'**
+  String get networkServersUnavailable;
+
+  /// No description provided for @networkServersSettingsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save network server settings'**
+  String get networkServersSettingsError;
+
+  /// No description provided for @localListPasteContentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy links or config'**
+  String get localListPasteContentLabel;
+
+  /// No description provided for @localListContentRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter proxy links or config'**
+  String get localListContentRequired;
 }
 
 class _AppLocalizationsDelegate

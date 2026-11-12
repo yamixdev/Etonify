@@ -46,6 +46,7 @@ object MeowDefaultNetworkMonitor {
     private var listener: InterfaceUpdateListener? = null
     private var appliedInterfaceKey: String? = null
     private var committedPhysicalKey: String? = null
+    private var committedServerNetwork: Pair<Network, ServerNetworkSnapshot>? = null
     private var selectedNetworkLossSerial = 0L
     private var heartbeatFuture: ScheduledFuture<*>? = null
     private var pendingNotifyRunnable: Runnable? = null
@@ -135,6 +136,7 @@ object MeowDefaultNetworkMonitor {
             currentNetwork = null
             appliedInterfaceKey = null
             committedPhysicalKey = null
+            committedServerNetwork = null
             interfaceUpdateGate.reset()
             pendingNotifyRunnable?.let(networkHandler::removeCallbacks)
             pendingNotifyRunnable = null
@@ -261,6 +263,42 @@ object MeowDefaultNetworkMonitor {
     }
 
     fun currentNetworkSnapshot(): Network? = synchronized(lock) { currentNetwork }
+
+    internal fun serverNetworkSnapshot(): ServerNetworkSnapshot? {
+        val committed = synchronized(lock) {
+            committedServerNetwork?.takeIf {
+                appliedInterfaceKey != null && currentNetwork == it.first &&
+                    networkInterfaceGeneration.get() == it.second.generation
+            }
+        } ?: return null
+        return committed.second.takeIf { resolveBestNetwork() == committed.first }
+    }
+
+    internal fun whileServerNetworkCurrent(expected: ServerNetworkSnapshot, action: () -> Unit) {
+        if (serverNetworkSnapshot() != expected) return
+        synchronized(lock) {
+            val committed = committedServerNetwork ?: return
+            if (committed.second == expected && appliedInterfaceKey != null &&
+                currentNetwork == committed.first && networkInterfaceGeneration.get() == expected.generation
+            ) action()
+        }
+    }
+
+    internal fun offlineServerNetworkSnapshot(): ServerNetworkSnapshot? {
+        val network = resolveBestNetwork() ?: return null
+        val type = serverNetworkType(network) ?: return null
+        return ServerNetworkSnapshot(type, network.networkHandle)
+    }
+
+    private fun serverNetworkType(network: Network): ServerNetwork? {
+        val capabilities = MeowApplication.connectivity.getNetworkCapabilities(network) ?: return null
+        return when {
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> null
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> ServerNetwork.WIFI
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> ServerNetwork.MOBILE
+            else -> null
+        }
+    }
 
     fun awaitUsableDefaultInterface(timeoutMs: Long = 1_500L): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -568,6 +606,7 @@ object MeowDefaultNetworkMonitor {
                 if (listener === currentListener) {
                     appliedInterfaceKey = null
                     committedPhysicalKey = null
+                    committedServerNetwork = null
                 }
             }
             if (!gateDecision.duplicate) {
@@ -611,6 +650,7 @@ object MeowDefaultNetworkMonitor {
                         if (listener === currentListener) {
                             appliedInterfaceKey = null
                             committedPhysicalKey = null
+                            committedServerNetwork = null
                         }
                     }
                 }
@@ -688,12 +728,16 @@ object MeowDefaultNetworkMonitor {
         }
         val physicalChanged: Boolean
         val nextGen: Long
+        val serverNetwork = serverNetworkType(effectiveNetwork)
         synchronized(lock) {
             if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
             appliedInterfaceKey = notifyKey
             physicalChanged = committedPhysicalKey != notifyKey
             committedPhysicalKey = notifyKey
             nextGen = if (physicalChanged) networkInterfaceGeneration.incrementAndGet() else networkInterfaceGeneration.get()
+            committedServerNetwork = serverNetwork?.let {
+                effectiveNetwork to ServerNetworkSnapshot(it, nextGen)
+            }
         }
         SingboxController.noteNetworkGeneration(nextGen)
         if (physicalChanged) {

@@ -3791,4 +3791,75 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trafficDashboardPublicIpCached => 'Last known IP · refresh failed';
+
+  @override
+  String get proxyExclusionsEnableCondition => 'Enable condition';
+
+  @override
+  String get proxyExclusionsDisableCondition => 'Disable condition';
+
+  @override
+  String get localListLabel => 'Local list';
+
+  @override
+  String get localListNameLabel => 'Name';
+
+  @override
+  String get localListNameRequired => 'Enter a list name';
+
+  @override
+  String get localListContentLabel => 'Proxy links or config (optional)';
+
+  @override
+  String get localListQuickAddLabel => 'Quick add';
+
+  @override
+  String get localListQuickAddDescription => 'Show in the Share menu';
+
+  @override
+  String get localListAddProxyLabel => 'Add to local list';
+
+  @override
+  String get localListAlreadyAdded => 'Already added';
+
+  @override
+  String get localListProxyAdded => 'Proxy added to list';
+
+  @override
+  String get localListAddProxyFailed => 'Could not add proxy to list';
+
+  @override
+  String get networkServersTitle => 'Servers by network';
+
+  @override
+  String get networkServersEnabled => 'Switch by network type';
+
+  @override
+  String get networkServersWifi => 'Wi-Fi';
+
+  @override
+  String get networkServersMobile => 'Mobile data';
+
+  @override
+  String get networkServersRemember => 'Remember manual selection';
+
+  @override
+  String get networkServersRememberDescription =>
+      'Save manual selections separately for Wi-Fi and mobile data.';
+
+  @override
+  String get networkServersKeepCurrent => 'Keep current server';
+
+  @override
+  String get networkServersUnavailable => 'Server unavailable';
+
+  @override
+  String get networkServersSettingsError =>
+      'Could not save network server settings';
+
+  @override
+  String get localListPasteContentLabel => 'Proxy links or config';
+
+  @override
+  String get localListContentRequired => 'Enter proxy links or config';
 }

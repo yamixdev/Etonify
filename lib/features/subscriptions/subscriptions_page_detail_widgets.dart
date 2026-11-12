@@ -492,12 +492,16 @@ class _AddResult {
     this.autoRefreshMinutes = 360,
     this.isCancelled,
   }) : fileContent = null,
-       sourceName = null;
+       sourceName = null,
+       createLocalList = false,
+       quickAdd = false;
 
   const _AddResult.file({
     required this.name,
     required this.fileContent,
     required this.sourceName,
+    this.createLocalList = false,
+    this.quickAdd = false,
     this.isCancelled,
   }) : url = '',
        requestInfo = null,
@@ -509,6 +513,8 @@ class _AddResult {
   final int autoRefreshMinutes;
   final String? fileContent;
   final String? sourceName;
+  final bool createLocalList;
+  final bool quickAdd;
   final bool Function()? isCancelled;
 
   _AddResult withCancellation(bool Function() isCancelled) {
@@ -517,6 +523,8 @@ class _AddResult {
         name: name,
         fileContent: fileContent!,
         sourceName: sourceName,
+        createLocalList: createLocalList,
+        quickAdd: quickAdd,
         isCancelled: isCancelled,
       );
     }

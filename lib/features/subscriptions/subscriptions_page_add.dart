@@ -4,6 +4,7 @@ class _AddSubscriptionSheet extends StatefulWidget {
   const _AddSubscriptionSheet({
     required this.onAdd,
     this.addingSource = false,
+    this.addingToLocalList = false,
     required this.scrollController,
     required this.onClose,
     required this.onModeChanged,
@@ -14,6 +15,7 @@ class _AddSubscriptionSheet extends StatefulWidget {
 
   final Future<bool> Function(_AddResult result) onAdd;
   final bool addingSource;
+  final bool addingToLocalList;
   final ScrollController scrollController;
   final ValueChanged<bool> onClose;
   final ValueChanged<_AddSubscriptionSheetMode> onModeChanged;
@@ -32,11 +34,15 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   final _nameController = TextEditingController();
   final _customUserAgentController = TextEditingController();
   final _customHwidController = TextEditingController();
-  _AddSubscriptionSheetMode _mode = _AddSubscriptionSheetMode.quick;
+  late _AddSubscriptionSheetMode _mode = widget.addingToLocalList
+      ? _AddSubscriptionSheetMode.manual
+      : _AddSubscriptionSheetMode.quick;
   bool _busy = false;
   bool _useCustomUserAgent = false;
   bool _sendHwid = false;
   bool _useCustomHwid = false;
+  bool _createLocalList = false;
+  bool _quickAdd = false;
   int _autoRefreshMinutes = 360;
   String? _stage;
   bool _cancelRequested = false;
@@ -137,11 +143,41 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
 
   void _submit() {
     final input = _urlController.text.trim();
+    final name = _nameController.text.trim();
+    if (widget.addingToLocalList) {
+      if (input.isEmpty) {
+        _setError(AppLocalizations.of(context).localListContentRequired);
+        return;
+      }
+      unawaited(
+        _submitResult(
+          _AddResult.file(name: '', fileContent: input, sourceName: null),
+        ),
+      );
+      return;
+    }
+    if (_createLocalList) {
+      if (name.isEmpty) {
+        _setError(AppLocalizations.of(context).localListNameRequired);
+        return;
+      }
+      unawaited(
+        _submitResult(
+          _AddResult.file(
+            name: name,
+            fileContent: input,
+            sourceName: null,
+            createLocalList: true,
+            quickAdd: _quickAdd,
+          ),
+        ),
+      );
+      return;
+    }
     if (input.isEmpty) {
       _setError(AppLocalizations.of(context).invalidUrl);
       return;
     }
-    final name = _nameController.text.trim();
     if (HappCryptoLinkDecoder.isSupportedSubscriptionUrl(input)) {
       unawaited(
         _submitResult(
@@ -336,6 +372,7 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final localMode = _createLocalList || widget.addingToLocalList;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final mediaQuery = MediaQuery.of(context);
@@ -359,7 +396,10 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
             _mode == _AddSubscriptionSheetMode.manual ||
             quickContentHeight > constraints.maxHeight + .5;
         return PopScope(
-          canPop: _mode == _AddSubscriptionSheetMode.quick || _busy,
+          canPop:
+              _mode == _AddSubscriptionSheetMode.quick ||
+              widget.addingToLocalList ||
+              _busy,
           onPopInvokedWithResult: (didPop, result) {
             if (didPop) {
               _cancelRequested = true;
@@ -412,14 +452,35 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                             )
                           : _AddSubscriptionManualCard(
                               key: const ValueKey('manual'),
+                              createLocalList: _createLocalList,
+                              addingToLocalList: widget.addingToLocalList,
+                              quickAdd: _quickAdd,
+                              onLocalListChanged:
+                                  widget.addingSource ||
+                                      widget.addingToLocalList
+                                  ? null
+                                  : (value) {
+                                      setState(() => _createLocalList = value);
+                                    },
+                              onQuickAddChanged: (value) {
+                                setState(() => _quickAdd = value);
+                              },
                               urlController: _urlController,
                               nameController: _nameController,
                               customUserAgentController:
                                   _customUserAgentController,
                               customHwidController: _customHwidController,
-                              contentLabel: _manualImportLabel(l10n),
-                              contentHint: _manualImportHint(l10n),
-                              nameLabel: l10n.subscriptionName,
+                              contentLabel: widget.addingToLocalList
+                                  ? l10n.localListPasteContentLabel
+                                  : _createLocalList
+                                  ? l10n.localListContentLabel
+                                  : l10n.subscriptionUrlOrContent,
+                              contentHint: localMode
+                                  ? null
+                                  : l10n.subscriptionUrlOrContentHint,
+                              nameLabel: _createLocalList
+                                  ? l10n.localListNameLabel
+                                  : l10n.subscriptionName,
                               customUserAgentLabel: l10n.customUserAgentTitle,
                               customUserAgentSubtitle:
                                   l10n.customUserAgentSubtitle,
@@ -507,7 +568,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                             const Gap(14),
                             Row(
                               children: [
-                                if (_mode == _AddSubscriptionSheetMode.manual)
+                                if (_mode == _AddSubscriptionSheetMode.manual &&
+                                    !widget.addingToLocalList)
                                   IconButton(
                                     tooltip: MaterialLocalizations.of(
                                       context,
@@ -540,6 +602,8 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
                                       Text(
                                         _mode == _AddSubscriptionSheetMode.quick
                                             ? l10n.addSubscriptionQuickSubtitle
+                                            : localMode
+                                            ? l10n.localListLabel
                                             : l10n.subscriptionUrlOrContentHint,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -571,12 +635,6 @@ class _AddSubscriptionSheetState extends State<_AddSubscriptionSheet> {
       },
     );
   }
-
-  String _manualImportLabel(AppLocalizations l10n) =>
-      l10n.subscriptionUrlOrContent;
-
-  String _manualImportHint(AppLocalizations l10n) =>
-      l10n.subscriptionUrlOrContentHint;
 }
 
 class _AddSubscriptionQuickOptions extends StatelessWidget {
@@ -769,6 +827,11 @@ class _AddSubscriptionLoadingCard extends StatelessWidget {
 class _AddSubscriptionManualCard extends StatelessWidget {
   const _AddSubscriptionManualCard({
     super.key,
+    required this.createLocalList,
+    required this.addingToLocalList,
+    required this.quickAdd,
+    required this.onLocalListChanged,
+    required this.onQuickAddChanged,
     required this.urlController,
     required this.nameController,
     required this.customUserAgentController,
@@ -808,7 +871,12 @@ class _AddSubscriptionManualCard extends StatelessWidget {
   final TextEditingController customUserAgentController;
   final TextEditingController customHwidController;
   final String contentLabel;
-  final String contentHint;
+  final String? contentHint;
+  final bool createLocalList;
+  final bool addingToLocalList;
+  final bool quickAdd;
+  final ValueChanged<bool>? onLocalListChanged;
+  final ValueChanged<bool> onQuickAddChanged;
   final String nameLabel;
   final String customUserAgentLabel;
   final String customUserAgentSubtitle;
@@ -838,6 +906,7 @@ class _AddSubscriptionManualCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final cs = Theme.of(context).colorScheme;
     final fieldBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
@@ -855,6 +924,15 @@ class _AddSubscriptionManualCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (onLocalListChanged != null) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.localListLabel),
+                value: createLocalList,
+                onChanged: onLocalListChanged,
+              ),
+              const Gap(8),
+            ],
             TextField(
               controller: urlController,
               keyboardType: TextInputType.multiline,
@@ -881,152 +959,164 @@ class _AddSubscriptionManualCard extends StatelessWidget {
               onChanged: (_) => onUrlChanged(),
               onSubmitted: (_) => onSubmit(),
             ),
-            const Gap(10),
-            TextField(
-              controller: nameController,
-              textInputAction: TextInputAction.done,
-              inputFormatters: [noNewlineInputFormatter],
-              decoration: InputDecoration(
-                isDense: true,
-                labelText: nameLabel,
-                prefixIcon: const Icon(Icons.label_outline_rounded),
-                filled: true,
-                fillColor: cs.surfaceContainerLowest,
-                border: fieldBorder,
-                enabledBorder: fieldBorder,
-                focusedBorder: focusedFieldBorder,
+            if (!addingToLocalList) ...[
+              const Gap(10),
+              TextField(
+                controller: nameController,
+                textInputAction: TextInputAction.done,
+                inputFormatters: [noNewlineInputFormatter],
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: nameLabel,
+                  prefixIcon: const Icon(Icons.label_outline_rounded),
+                  filled: true,
+                  fillColor: cs.surfaceContainerLowest,
+                  border: fieldBorder,
+                  enabledBorder: fieldBorder,
+                  focusedBorder: focusedFieldBorder,
+                ),
+                onSubmitted: (_) => onSubmit(),
               ),
-              onSubmitted: (_) => onSubmit(),
-            ),
+            ],
             const Gap(12),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: .36),
+            if (createLocalList)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.localListQuickAddLabel),
+                subtitle: Text(l10n.localListQuickAddDescription),
+                value: quickAdd,
+                onChanged: (value) => onQuickAddChanged(value ?? false),
+              ),
+            if (!createLocalList && !addingToLocalList) ...[
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: .36),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            autoUpdateLabel,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            autoUpdateValue,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Gap(10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final minutes in _kAutoRefreshOptions)
+                          ChoiceChip(
+                            label: Text(formatAutoRefreshOption(minutes)),
+                            selected: autoRefreshMinutes == minutes,
+                            onSelected: (_) =>
+                                onAutoRefreshMinutesChanged(minutes),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const Gap(8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.tune_rounded),
+                title: Text(
+                  customUserAgentLabel,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text('$customUserAgentSubtitle · HWID'),
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          autoUpdateLabel,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(
-                          autoUpdateValue,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.end,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                      ),
-                    ],
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(customUserAgentLabel),
+                    subtitle: Text(customUserAgentSubtitle),
+                    value: useCustomUserAgent,
+                    onChanged: onUseCustomUserAgentChanged,
                   ),
-                  const Gap(10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final minutes in _kAutoRefreshOptions)
-                        ChoiceChip(
-                          label: Text(formatAutoRefreshOption(minutes)),
-                          selected: autoRefreshMinutes == minutes,
-                          onSelected: (_) =>
-                              onAutoRefreshMinutesChanged(minutes),
-                        ),
-                    ],
+                  if (useCustomUserAgent) ...[
+                    TextField(
+                      controller: customUserAgentController,
+                      textInputAction: TextInputAction.done,
+                      inputFormatters: [noNewlineInputFormatter],
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: customUserAgentLabel,
+                        hintText: userAgentHint,
+                        prefixIcon: const Icon(Icons.badge_outlined),
+                        filled: true,
+                        fillColor: cs.surfaceContainerLowest,
+                        border: fieldBorder,
+                        enabledBorder: fieldBorder,
+                        focusedBorder: focusedFieldBorder,
+                      ),
+                      onSubmitted: (_) => onSubmit(),
+                    ),
+                    const Gap(8),
+                  ],
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(sendHwidLabel),
+                    subtitle: Text(sendHwidSubtitle),
+                    value: sendHwid,
+                    onChanged: SubscriptionFetcher.sendHwidToProviders
+                        ? null
+                        : onSendHwidChanged,
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(customHwidSwitchLabel),
+                    subtitle: Text(customHwidSwitchSubtitle),
+                    value: sendHwid && useCustomHwid,
+                    onChanged: sendHwid ? onUseCustomHwidChanged : null,
+                  ),
+                  if (sendHwid && useCustomHwid) ...[
+                    TextField(
+                      controller: customHwidController,
+                      textInputAction: TextInputAction.done,
+                      inputFormatters: [noNewlineInputFormatter],
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: customHwidLabel,
+                        helperText: customHwidSubtitle,
+                        prefixIcon: const Icon(Icons.fingerprint_rounded),
+                        filled: true,
+                        fillColor: cs.surfaceContainerLowest,
+                        border: fieldBorder,
+                        enabledBorder: fieldBorder,
+                        focusedBorder: focusedFieldBorder,
+                      ),
+                      onSubmitted: (_) => onSubmit(),
+                    ),
+                    const Gap(8),
+                  ],
                 ],
               ),
-            ),
-            const Gap(8),
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.tune_rounded),
-              title: Text(
-                customUserAgentLabel,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text('$customUserAgentSubtitle · HWID'),
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(customUserAgentLabel),
-                  subtitle: Text(customUserAgentSubtitle),
-                  value: useCustomUserAgent,
-                  onChanged: onUseCustomUserAgentChanged,
-                ),
-                if (useCustomUserAgent) ...[
-                  TextField(
-                    controller: customUserAgentController,
-                    textInputAction: TextInputAction.done,
-                    inputFormatters: [noNewlineInputFormatter],
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: customUserAgentLabel,
-                      hintText: userAgentHint,
-                      prefixIcon: const Icon(Icons.badge_outlined),
-                      filled: true,
-                      fillColor: cs.surfaceContainerLowest,
-                      border: fieldBorder,
-                      enabledBorder: fieldBorder,
-                      focusedBorder: focusedFieldBorder,
-                    ),
-                    onSubmitted: (_) => onSubmit(),
-                  ),
-                  const Gap(8),
-                ],
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(sendHwidLabel),
-                  subtitle: Text(sendHwidSubtitle),
-                  value: sendHwid,
-                  onChanged: SubscriptionFetcher.sendHwidToProviders
-                      ? null
-                      : onSendHwidChanged,
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(customHwidSwitchLabel),
-                  subtitle: Text(customHwidSwitchSubtitle),
-                  value: sendHwid && useCustomHwid,
-                  onChanged: sendHwid ? onUseCustomHwidChanged : null,
-                ),
-                if (sendHwid && useCustomHwid) ...[
-                  TextField(
-                    controller: customHwidController,
-                    textInputAction: TextInputAction.done,
-                    inputFormatters: [noNewlineInputFormatter],
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: customHwidLabel,
-                      helperText: customHwidSubtitle,
-                      prefixIcon: const Icon(Icons.fingerprint_rounded),
-                      filled: true,
-                      fillColor: cs.surfaceContainerLowest,
-                      border: fieldBorder,
-                      enabledBorder: fieldBorder,
-                      focusedBorder: focusedFieldBorder,
-                    ),
-                    onSubmitted: (_) => onSubmit(),
-                  ),
-                  const Gap(8),
-                ],
-              ],
-            ),
+            ],
             const Gap(14),
             FilledButton.icon(
               onPressed: onSubmit,

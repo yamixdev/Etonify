@@ -11,6 +11,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
     required this.routeAnimation,
     required this.onSelected,
     this.outboundForTag,
+    required this.sourceProfileId,
+    this.onLocalListChanged,
     required this.initialSort,
     this.onSortChanged,
     this.hideUnavailable = false,
@@ -28,6 +30,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
   final Animation<double> routeAnimation;
   final ValueChanged<String> onSelected;
   final Outbound? Function(String tag)? outboundForTag;
+  final String sourceProfileId;
+  final ValueChanged<String>? onLocalListChanged;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
   final bool hideUnavailable;
@@ -48,6 +52,8 @@ class _GroupOutboundsSheet extends StatelessWidget {
       routeAnimation: routeAnimation,
       onSelected: onSelected,
       outboundForTag: outboundForTag,
+      sourceProfileId: sourceProfileId,
+      onLocalListChanged: onLocalListChanged,
       initialSort: initialSort,
       onSortChanged: onSortChanged,
       hideUnavailable: hideUnavailable,
@@ -69,6 +75,8 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
     required this.routeAnimation,
     required this.onSelected,
     this.outboundForTag,
+    required this.sourceProfileId,
+    this.onLocalListChanged,
     required this.initialSort,
     this.onSortChanged,
     this.hideUnavailable = false,
@@ -86,6 +94,8 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   final Animation<double> routeAnimation;
   final ValueChanged<String> onSelected;
   final Outbound? Function(String tag)? outboundForTag;
+  final String sourceProfileId;
+  final ValueChanged<String>? onLocalListChanged;
   final ProxySort initialSort;
   final ValueChanged<ProxySort>? onSortChanged;
   final bool hideUnavailable;
@@ -368,13 +378,12 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
       return;
     }
     unawaited(HapticFeedback.selectionClick());
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: false,
-      enableDrag: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _ProxyShareSheet(proxy: proxy, outbound: outbound),
+    await showProxyShareSheet(
+      context,
+      proxy: proxy,
+      outbound: outbound,
+      sourceProfileId: widget.sourceProfileId,
+      onLocalListChanged: widget.onLocalListChanged,
     );
   }
 

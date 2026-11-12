@@ -6,6 +6,8 @@ Future<void> showProxyShareSheet(
   required AppProxySummary proxy,
   required Outbound outbound,
   Map<String, dynamic>? singboxConfig,
+  String? sourceProfileId,
+  ValueChanged<String>? onLocalListChanged,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -16,6 +18,8 @@ Future<void> showProxyShareSheet(
       proxy: proxy,
       outbound: outbound,
       singboxConfig: singboxConfig,
+      sourceProfileId: sourceProfileId,
+      onLocalListChanged: onLocalListChanged,
     ),
   );
 }
@@ -559,16 +563,68 @@ int? _intValue(Object? value) {
   return int.tryParse(value?.toString() ?? '');
 }
 
-class _ProxyShareSheet extends StatelessWidget {
+class _ProxyShareSheet extends StatefulWidget {
   const _ProxyShareSheet({
     required this.proxy,
     required this.outbound,
     this.singboxConfig,
+    this.sourceProfileId,
+    this.onLocalListChanged,
   });
 
   final AppProxySummary proxy;
   final Outbound outbound;
   final Map<String, dynamic>? singboxConfig;
+  final String? sourceProfileId;
+  final ValueChanged<String>? onLocalListChanged;
+
+  @override
+  State<_ProxyShareSheet> createState() => _ProxyShareSheetState();
+}
+
+class _ProxyShareSheetState extends State<_ProxyShareSheet> {
+  late final Future<List<Subscription>>? _localLists =
+      isConcreteSubscriptionServer(widget.outbound)
+      ? SubscriptionStore.getQuickAddLocalLists()
+      : null;
+  bool _adding = false;
+
+  Future<void> _addToLocalList(String? id) async {
+    if (id == null || _adding) return;
+    setState(() => _adding = true);
+    final onChanged = widget.onLocalListChanged;
+    LocalListAddResult result;
+    try {
+      result = await SubscriptionStore.addProxyToLocalList(
+        id,
+        widget.outbound,
+        sourceProfileId: widget.sourceProfileId,
+      );
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'Local list write failed: ${error.runtimeType}',
+      );
+      result = LocalListAddResult.unavailable;
+    }
+    if (result == LocalListAddResult.added) onChanged?.call(id);
+    if (!mounted) return;
+    setState(() => _adding = false);
+    final l10n = AppLocalizations.of(context);
+    AppNotice.show(
+      context,
+      switch (result) {
+        LocalListAddResult.added => l10n.localListProxyAdded,
+        LocalListAddResult.alreadyAdded => l10n.localListAlreadyAdded,
+        LocalListAddResult.unavailable => l10n.localListAddProxyFailed,
+      },
+      tone: switch (result) {
+        LocalListAddResult.added => AppNoticeTone.success,
+        LocalListAddResult.alreadyAdded => AppNoticeTone.warning,
+        LocalListAddResult.unavailable => AppNoticeTone.error,
+      },
+    );
+  }
 
   Future<void> _copy(
     BuildContext context, {
@@ -593,14 +649,14 @@ class _ProxyShareSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomInset = appSystemNavigationBarInset(context);
-    final shareLink = _outboundShareLink(outbound);
+    final shareLink = _outboundShareLink(widget.outbound);
     final singboxJson = _prettyJson(
-      singboxConfig ?? _singboxOutboundJson(outbound),
+      widget.singboxConfig ?? _singboxOutboundJson(widget.outbound),
     );
     final l10n = AppLocalizations.of(context);
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: .42,
+      initialChildSize: .46,
       minChildSize: .22,
       maxChildSize: .74,
       builder: (context, scrollController) {
@@ -635,7 +691,7 @@ class _ProxyShareSheet extends StatelessWidget {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    _ProxyShareSummary(proxy: proxy),
+                    _ProxyShareSummary(proxy: widget.proxy),
                     const SizedBox(height: 12),
                     Material(
                       color: theme.colorScheme.surfaceContainerLow,
@@ -675,6 +731,51 @@ class _ProxyShareSheet extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (_localLists case final localLists?)
+                      FutureBuilder<List<Subscription>>(
+                        future: localLists,
+                        builder: (context, snapshot) {
+                          final lists = snapshot.data;
+                          if (lists == null || lists.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Material(
+                              color: theme.colorScheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(18),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    isExpanded: true,
+                                    itemHeight: null,
+                                    hint: Text(l10n.localListAddProxyLabel),
+                                    disabledHint: Text(
+                                      l10n.localListAddProxyLabel,
+                                    ),
+                                    items: [
+                                      for (final list in lists)
+                                        DropdownMenuItem(
+                                          value: list.id,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: Text(list.name),
+                                          ),
+                                        ),
+                                    ],
+                                    onChanged: _adding ? null : _addToLocalList,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),

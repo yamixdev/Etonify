@@ -36,7 +36,10 @@ class RuntimeCommandCoordinator {
     _generation++;
   }
 
-  Future<RuntimeSelectionResult> selectOutbound(String outboundTag) async {
+  Future<RuntimeSelectionResult> selectOutbound(
+    String outboundTag, {
+    SelectOutboundCommand? command,
+  }) async {
     final normalizedTag = outboundTag.trim();
     final generation = ++_generation;
     final stopwatch = Stopwatch()..start();
@@ -49,7 +52,10 @@ class RuntimeCommandCoordinator {
     }
 
     try {
-      await _selectOutbound('select', normalizedTag).timeout(selectionTimeout);
+      await (command ?? _selectOutbound)(
+        'select',
+        normalizedTag,
+      ).timeout(selectionTimeout);
       stopwatch.stop();
       if (_disposed || generation != _generation) {
         return RuntimeSelectionResult._(
