@@ -97,6 +97,12 @@ kotlin {
     }
 }
 
+androidComponents.finalizeDsl { extension ->
+    // Flutter 3.50 copies custom build types to plugin libraries. The legacy
+    // AGP DSL also copies resource shrinking, which only apps support.
+    extension.buildTypes.findByName("benchmarkRelease")?.isShrinkResources = false
+}
+
 gradle.taskGraph.whenReady {
     val releaseTaskRequested = allTasks.any { task ->
         task.project == project && task.name.contains("release", ignoreCase = true)
