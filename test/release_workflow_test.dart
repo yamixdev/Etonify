@@ -6,7 +6,6 @@ void main() {
   test('Android release workflow uses updater-compatible tags and APK names', () {
     final workflow = File(
       '.github/workflows/android-release.yml',
-      '.github/workflows/windows-ci.yml',
     ).readAsStringSync();
 
     expect(workflow, contains(r'raw="${raw#v}"'));
@@ -40,6 +39,7 @@ void main() {
       '.github/workflows/ci.yml',
       '.github/workflows/codeql.yml',
       '.github/workflows/android-release.yml',
+      '.github/workflows/windows-ci.yml',
     ]) {
       final workflow = File(path).readAsStringSync();
       expect(workflow, contains('FLUTTER_VERSION: "3.50.0"'), reason: path);
