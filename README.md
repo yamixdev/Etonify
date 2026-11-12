@@ -8,7 +8,7 @@
 
 <p dir="ltr">
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.50.0-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.50.0"></a>
 </p>
 
 **[Download APK](https://github.com/yamixdev/Etonify/releases/latest)** · [Changelog](CHANGELOG.md) · [Telegram](https://t.me/etonify)
@@ -70,7 +70,7 @@ Report vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
 ## Development
 
-The source tree contains client [`0.3.13+45`](pubspec.yaml) and libbox [`v1.15.0-alpha.10-etonify.7`](android/app/libs/libbox.provenance.json). CI uses Flutter `3.47.5` and JDK `21`. Local builds also require the Android SDK and Python 3.
+The source tree contains client [`0.3.13+45`](pubspec.yaml) and libbox [`v1.15.0-alpha.10-etonify.7`](android/app/libs/libbox.provenance.json). CI uses Flutter `3.50.0` and JDK `21`. Local builds also require the Android SDK and Python 3.
 
 <details>
 <summary>Set up and check the client</summary>

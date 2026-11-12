@@ -8,7 +8,7 @@
 
 <p dir="ltr">
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.50.0-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.50.0"></a>
 </p>
 
 **[Скачать APK](https://github.com/yamixdev/Etonify/releases/latest)** · [Что нового](CHANGELOG.md) · [Telegram](https://t.me/etonify)
@@ -70,7 +70,7 @@ VPN-трафик идёт через выбранный вами сервер. �
 
 ## Разработка
 
-В исходниках клиент [`0.3.13+45`](pubspec.yaml) и libbox [`v1.15.0-alpha.10-etonify.7`](android/app/libs/libbox.provenance.json). CI использует Flutter `3.47.5` и JDK `21`. Для локальной сборки также нужны Android SDK и Python 3.
+В исходниках клиент [`0.3.13+45`](pubspec.yaml) и libbox [`v1.15.0-alpha.10-etonify.7`](android/app/libs/libbox.provenance.json). CI использует Flutter `3.50.0` и JDK `21`. Для локальной сборки также нужны Android SDK и Python 3.
 
 <details>
 <summary>Подготовка и проверки клиента</summary>

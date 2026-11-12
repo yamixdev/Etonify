@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: "3.47.5"
+  FLUTTER_VERSION: "3.50.0"
   JAVA_VERSION: "21"
 
 jobs:
@@ -60,7 +60,9 @@ jobs:
           dart --version
 
       - name: Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          git diff --exit-code -- pubspec.lock
 
       - name: Generate localization
         run: flutter gen-l10n

@@ -85,6 +85,8 @@ class MainActivity : FlutterFragmentActivity() {
     private val deepLinkEventChannelName = "meow_client/deep_link_events"
     private val secureStorageMethodChannelName = "meow_client/secure_storage"
     private val quickSettingsMethodChannelName = "meow_client/quick_settings"
+    private val batteryOptimizationMethodChannelName = "meow_client/battery_optimization"
+    private var subscriptionRefreshChannel: MethodChannel? = null
     private var pendingPrepareResult: MethodChannel.Result? = null
     private var pendingExportResult: MethodChannel.Result? = null
     private var pendingExportContent: String? = null
@@ -2278,15 +2280,16 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
         startupTasks?.close()
         val startup = StartupTaskRunner { command -> mainHandler.post(command) }
         startupTasks = startup
-        setupSingboxHostApi(flutterEngine.dartExecutor.binaryMessenger, startup)
-        SubscriptionRefreshJobs.register(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        setupSingboxHostApi(messenger, startup)
+        subscriptionRefreshChannel = SubscriptionRefreshJobs.register(applicationContext, messenger)
 
         MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "meow_client/battery_optimization",
+            messenger,
+            batteryOptimizationMethodChannelName,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getStatus" -> result.success(BatteryOptimizationSettings.getStatus(this))
@@ -2296,7 +2299,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            messenger,
             quickSettingsMethodChannelName,
         ).setMethodCallHandler { call, result ->
             if (call.method != "requestAddTile") {
@@ -2333,7 +2336,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            messenger,
             secureStorageMethodChannelName,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -2350,7 +2353,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         EventChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            messenger,
             eventChannelName,
         ).setStreamHandler(
             object : EventChannel.StreamHandler {
@@ -2362,15 +2365,13 @@ class MainActivity : FlutterFragmentActivity() {
                 }
 
                 override fun onCancel(arguments: Any?) {
-                    val registration = singboxEventSinkRegistration
-                    singboxEventSinkRegistration = 0L
-                    SingboxController.clearEventSink(registration)
+                    clearSingboxEventSink()
                 }
             },
         )
 
         EventChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            messenger,
             deepLinkEventChannelName,
         ).setStreamHandler(
             object : EventChannel.StreamHandler {
@@ -2389,7 +2390,7 @@ class MainActivity : FlutterFragmentActivity() {
         )
 
         MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            messenger,
             deepLinkMethodChannelName,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -2409,10 +2410,22 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
-        SubscriptionRefreshJobs.unregister()
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        subscriptionRefreshChannel?.let(SubscriptionRefreshJobs::unregister)
+        subscriptionRefreshChannel = null
+        listOf(
+            batteryOptimizationMethodChannelName,
+            quickSettingsMethodChannelName,
+            secureStorageMethodChannelName,
+            deepLinkMethodChannelName,
+        ).forEach { MethodChannel(messenger, it).setMethodCallHandler(null) }
+        EventChannel(messenger, eventChannelName).setStreamHandler(null)
+        EventChannel(messenger, deepLinkEventChannelName).setStreamHandler(null)
+        clearSingboxEventSink()
+        deepLinkEventSink = null
         startupTasks?.close()
         startupTasks = null
-        SingboxHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, null)
+        SingboxHostApi.setUp(messenger, null)
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -2422,14 +2435,18 @@ class MainActivity : FlutterFragmentActivity() {
         dispatchImportDeepLink(intent)
     }
 
-    override fun onDestroy() {
-        startupTasks?.close()
-        startupTasks = null
+    private fun clearSingboxEventSink() {
         val registration = singboxEventSinkRegistration
         singboxEventSinkRegistration = 0L
         if (registration != 0L) {
             SingboxController.clearEventSink(registration)
         }
+    }
+
+    override fun onDestroy() {
+        startupTasks?.close()
+        startupTasks = null
+        clearSingboxEventSink()
         deepLinkEventSink = null
         pendingDeepLinkPayload = null
         mainHandler.removeCallbacksAndMessages(null)

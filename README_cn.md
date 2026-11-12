@@ -14,7 +14,7 @@
 
 <p dir="ltr">
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.50.0-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.50.0"></a>
 </p>
 
 **[下载 APK](https://github.com/yamixdev/Etonify/releases/latest)** · [更新记录](CHANGELOG.md) · [报告问题](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
@@ -67,7 +67,7 @@ Etonify 将订阅、代理选择、路由和连接诊断整合到一个 Android 
 | 客户端 | `0.3.13+45` |
 | 内置核心 | `v1.15.0-alpha.10-etonify.7` |
 | sing-box 基线 | `v1.15.0-alpha.10` |
-| Flutter SDK | `3.47.5` |
+| Flutter SDK | `3.50.0` |
 | Android | 8.0 及以上 · API 26+ |
 | APK 架构 | `arm64-v8a` · `armeabi-v7a` |
 | 应用界面语言 | 英语和俄语 |
@@ -120,7 +120,7 @@ VPN 本身不能保证匿名性：VPN 和 DNS 提供商能看到哪些数据，�
 
 ## 开发
 
-客户端使用仓库内已提交的 AAR，正常构建应用不会重新编译 Go 核心。CI 使用 Flutter `3.47.5` 和 JDK `21`；还需要安装 Android SDK 和 Python 3。
+客户端使用仓库内已提交的 AAR，正常构建应用不会重新编译 Go 核心。CI 使用 Flutter `3.50.0` 和 JDK `21`；还需要安装 Android SDK 和 Python 3。
 
 <details>
 <summary>查看客户端准备、检查和 debug 构建步骤</summary>

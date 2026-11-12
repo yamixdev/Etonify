@@ -101,7 +101,7 @@ object SubscriptionRefreshJobs {
         }
     }
 
-    fun register(context: Context, messenger: BinaryMessenger) {
+    fun register(context: Context, messenger: BinaryMessenger): MethodChannel {
         val registered = MethodChannel(messenger, "meow_client/subscription_refresh")
         channel = registered
         registered.setMethodCallHandler { call, result ->
@@ -134,11 +134,12 @@ object SubscriptionRefreshJobs {
                  } }
             }
         }
+        return registered
     }
 
-    fun unregister() {
-        channel?.setMethodCallHandler(null)
-        channel = null
+    fun unregister(registered: MethodChannel) {
+        registered.setMethodCallHandler(null)
+        if (channel === registered) channel = null
     }
 
     fun run(context: Context, cancelled: AtomicBoolean, setConnection: (HttpURLConnection?) -> Unit) {

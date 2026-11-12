@@ -14,7 +14,7 @@
 
 <p dir="ltr">
   <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-14684D?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+"></a>
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.5-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.47.5"></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.50.0-145D86?style=flat&amp;logo=flutter&amp;logoColor=white" alt="Flutter 3.50.0"></a>
 </p>
 
 **[دانلود APK](https://github.com/yamixdev/Etonify/releases/latest)** · [تغییرات](CHANGELOG.md) · [گزارش مشکل](https://github.com/yamixdev/Etonify/issues/new/choose) · [Telegram](https://t.me/etonify)
@@ -69,7 +69,7 @@ Etonify مدیریت اشتراک‌ها، انتخاب پروکسی، مسیر�
 | کلاینت | <code dir="ltr">0.3.13+45</code> |
 | هستهٔ داخلی | <code dir="ltr">v1.15.0-alpha.10-etonify.7</code> |
 | نسخهٔ پایهٔ sing-box | <code dir="ltr">v1.15.0-alpha.10</code> |
-| Flutter SDK | <code dir="ltr">3.47.5</code> |
+| Flutter SDK | <code dir="ltr">3.50.0</code> |
 | Android | نسخهٔ ۸٫۰ و بالاتر · API 26+ |
 | معماری APK | <code dir="ltr">arm64-v8a</code> · <code dir="ltr">armeabi-v7a</code> |
 | زبان‌های رابط برنامه | انگلیسی و روسی |
@@ -122,7 +122,7 @@ VPN به‌تنهایی ناشناس‌بودن را تضمین نمی‌کند�
 
 ## توسعه
 
-کلاینت از AAR ثبت‌شده در مخزن استفاده می‌کند؛ ساخت معمول برنامه هستهٔ Go را دوباره نمی‌سازد. CI از Flutter `3.47.5` و JDK `21` استفاده می‌کند؛ Android SDK و Python 3 نیز لازم هستند.
+کلاینت از AAR ثبت‌شده در مخزن استفاده می‌کند؛ ساخت معمول برنامه هستهٔ Go را دوباره نمی‌سازد. CI از Flutter `3.50.0` و JDK `21` استفاده می‌کند؛ Android SDK و Python 3 نیز لازم هستند.
 
 <details>
 <summary>نمایش آماده‌سازی کلاینت، بررسی‌ها و ساخت debug</summary>
