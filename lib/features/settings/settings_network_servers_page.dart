@@ -251,46 +251,49 @@ class _NetworkServerPickerState extends State<_NetworkServerPicker> {
             ),
           ),
           Expanded(
-            child: RadioGroup<String>(
-              groupValue: widget.selected,
-              onChanged: (tag) => navigator.pop(tag),
-              child: ListView.builder(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  appBottomSafePadding(context, 16),
-                ),
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                itemCount: _visible.isEmpty ? 2 : _visible.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
+            child: Material(
+              type: MaterialType.transparency,
+              child: RadioGroup<String>(
+                groupValue: widget.selected,
+                onChanged: (tag) => navigator.pop(tag),
+                child: ListView.builder(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    appBottomSafePadding(context, 16),
+                  ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  itemCount: _visible.isEmpty ? 2 : _visible.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return ListTile(
+                        dense: true,
+                        leading: const Radio<String>(value: ''),
+                        title: Text(l10n.networkServersKeepCurrent),
+                        onTap: () => navigator.pop(''),
+                      );
+                    }
+                    if (_visible.isEmpty) {
+                      return ListTile(
+                        title: Text(l10n.subscriptionNoServersFound),
+                      );
+                    }
+                    final server = _visible[index - 1];
                     return ListTile(
                       dense: true,
-                      leading: const Radio<String>(value: ''),
-                      title: Text(l10n.networkServersKeepCurrent),
-                      onTap: () => navigator.pop(''),
+                      leading: Radio<String>(value: server.tag),
+                      title: Text(
+                        server.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(server.type.toUpperCase()),
+                      onTap: () => navigator.pop(server.tag),
                     );
-                  }
-                  if (_visible.isEmpty) {
-                    return ListTile(
-                      title: Text(l10n.subscriptionNoServersFound),
-                    );
-                  }
-                  final server = _visible[index - 1];
-                  return ListTile(
-                    dense: true,
-                    leading: Radio<String>(value: server.tag),
-                    title: Text(
-                      server.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(server.type.toUpperCase()),
-                    onTap: () => navigator.pop(server.tag),
-                  );
-                },
+                  },
+                ),
               ),
             ),
           ),
