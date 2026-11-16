@@ -432,6 +432,11 @@ class ParsedOutboundSchema {
     return normalized;
   }
 
+  /// Xray's suffix controls its local UDP/443 policy. It sends Vision on
+  /// the wire for both spellings, and sing-box already allows UDP/443.
+  static String normalizeXrayVlessFlow(String flow) =>
+      flow == 'xtls-rprx-vision-udp443' ? 'xtls-rprx-vision' : flow;
+
   static String? validate(Map<String, dynamic> config) {
     final type = _normalizedType(config['type']);
     if (!_knownOutboundTypes.contains(type)) {

@@ -206,6 +206,17 @@ class FlutterError (
   val details: Any? = null
 ) : RuntimeException()
 
+enum class NetworkServerKind(val raw: Int) {
+  WIFI(0),
+  MOBILE(1);
+
+  companion object {
+    fun ofRaw(raw: Int): NetworkServerKind? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class RuntimeFlagsMessage (
   val wakeLockEnabled: Boolean? = null,
@@ -937,67 +948,134 @@ data class InstalledAppMessage (
     return "InstalledAppMessage(packageName=$packageName, label=$label, system=$system, launchable=$launchable)"
   }
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class NetworkServerSettingsMessage (
+  val enabled: Boolean,
+  val remember: Boolean,
+  val configuredWifi: String? = null,
+  val configuredMobile: String? = null,
+  val rememberedWifi: String? = null,
+  val rememberedMobile: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NetworkServerSettingsMessage {
+      val enabled = pigeonVar_list[0] as Boolean
+      val remember = pigeonVar_list[1] as Boolean
+      val configuredWifi = pigeonVar_list[2] as String?
+      val configuredMobile = pigeonVar_list[3] as String?
+      val rememberedWifi = pigeonVar_list[4] as String?
+      val rememberedMobile = pigeonVar_list[5] as String?
+      return NetworkServerSettingsMessage(enabled, remember, configuredWifi, configuredMobile, rememberedWifi, rememberedMobile)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      enabled,
+      remember,
+      configuredWifi,
+      configuredMobile,
+      rememberedWifi,
+      rememberedMobile,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NetworkServerSettingsMessage
+    return SingboxApiPigeonUtils.deepEquals(this.enabled, other.enabled) && SingboxApiPigeonUtils.deepEquals(this.remember, other.remember) && SingboxApiPigeonUtils.deepEquals(this.configuredWifi, other.configuredWifi) && SingboxApiPigeonUtils.deepEquals(this.configuredMobile, other.configuredMobile) && SingboxApiPigeonUtils.deepEquals(this.rememberedWifi, other.rememberedWifi) && SingboxApiPigeonUtils.deepEquals(this.rememberedMobile, other.rememberedMobile)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.enabled)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.remember)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.configuredWifi)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.configuredMobile)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.rememberedWifi)
+    result = 31 * result + SingboxApiPigeonUtils.deepHash(this.rememberedMobile)
+    return result
+  }
+  override fun toString(): String {
+    return "NetworkServerSettingsMessage(enabled=$enabled, remember=$remember, configuredWifi=$configuredWifi, configuredMobile=$configuredMobile, rememberedWifi=$rememberedWifi, rememberedMobile=$rememberedMobile)"
+  }
+}
 private open class SingboxApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
       129.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          RuntimeFlagsMessage.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          NetworkServerKind.ofRaw(it.toInt())
         }
       }
       130.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NetworkInterfaceStateMessage.fromList(it)
+          RuntimeFlagsMessage.fromList(it)
         }
       }
       131.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UrlTestRequestMessage.fromList(it)
+          NetworkInterfaceStateMessage.fromList(it)
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          VpnNotificationPresentationMessage.fromList(it)
+          UrlTestRequestMessage.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          HttpHeaderMessage.fromList(it)
+          VpnNotificationPresentationMessage.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkFetchRequestMessage.fromList(it)
+          HttpHeaderMessage.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkFetchResponseMessage.fromList(it)
+          UnderlyingNetworkFetchRequestMessage.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          OutboundFetchRequestMessage.fromList(it)
+          UnderlyingNetworkFetchResponseMessage.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkDownloadRequestMessage.fromList(it)
+          OutboundFetchRequestMessage.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UnderlyingNetworkDownloadResponseMessage.fromList(it)
+          UnderlyingNetworkDownloadRequestMessage.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ApkInspectionMessage.fromList(it)
+          UnderlyingNetworkDownloadResponseMessage.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          ApkInspectionMessage.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           InstalledAppMessage.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          NetworkServerSettingsMessage.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -1005,52 +1083,60 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
   }
   override fun writeValue(stream: ByteArrayOutputStream, value: Any?)   {
     when (value) {
-      is RuntimeFlagsMessage -> {
+      is NetworkServerKind -> {
         stream.write(129)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is NetworkInterfaceStateMessage -> {
+      is RuntimeFlagsMessage -> {
         stream.write(130)
         writeValue(stream, value.toList())
       }
-      is UrlTestRequestMessage -> {
+      is NetworkInterfaceStateMessage -> {
         stream.write(131)
         writeValue(stream, value.toList())
       }
-      is VpnNotificationPresentationMessage -> {
+      is UrlTestRequestMessage -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is HttpHeaderMessage -> {
+      is VpnNotificationPresentationMessage -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkFetchRequestMessage -> {
+      is HttpHeaderMessage -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkFetchResponseMessage -> {
+      is UnderlyingNetworkFetchRequestMessage -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is OutboundFetchRequestMessage -> {
+      is UnderlyingNetworkFetchResponseMessage -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkDownloadRequestMessage -> {
+      is OutboundFetchRequestMessage -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is UnderlyingNetworkDownloadResponseMessage -> {
+      is UnderlyingNetworkDownloadRequestMessage -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is ApkInspectionMessage -> {
+      is UnderlyingNetworkDownloadResponseMessage -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is InstalledAppMessage -> {
+      is ApkInspectionMessage -> {
         stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is InstalledAppMessage -> {
+        stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is NetworkServerSettingsMessage -> {
+        stream.write(142)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1059,6 +1145,171 @@ private open class SingboxApiPigeonCodec : StandardMessageCodec() {
 }
 
 
+/** Generated interface from Pigeon that represents a handler of messages from Flutter. */
+interface NetworkServerHostApi {
+  fun read(profileId: String, callback: (Result<NetworkServerSettingsMessage>) -> Unit)
+  fun setEnabled(profileId: String, enabled: Boolean, callback: (Result<NetworkServerSettingsMessage>) -> Unit)
+  fun setRemember(profileId: String, remember: Boolean, callback: (Result<NetworkServerSettingsMessage>) -> Unit)
+  fun setConfigured(profileId: String, network: NetworkServerKind, tag: String?, callback: (Result<NetworkServerSettingsMessage>) -> Unit)
+  fun selectManual(profileId: String, tag: String, callback: (Result<Unit>) -> Unit)
+  fun reassertAfterStart(tag: String, callback: (Result<Unit>) -> Unit)
+  fun rememberOffline(profileId: String, tag: String, callback: (Result<Unit>) -> Unit)
+
+  companion object {
+    /** The codec used by NetworkServerHostApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      SingboxApiPigeonCodec()
+    }
+    /** Sets up an instance of `NetworkServerHostApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: NetworkServerHostApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.read$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            api.read(profileIdArg) { result: Result<NetworkServerSettingsMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.setEnabled$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            val enabledArg = args[1] as Boolean
+            api.setEnabled(profileIdArg, enabledArg) { result: Result<NetworkServerSettingsMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.setRemember$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            val rememberArg = args[1] as Boolean
+            api.setRemember(profileIdArg, rememberArg) { result: Result<NetworkServerSettingsMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.setConfigured$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            val networkArg = args[1] as NetworkServerKind
+            val tagArg = args[2] as String?
+            api.setConfigured(profileIdArg, networkArg, tagArg) { result: Result<NetworkServerSettingsMessage> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SingboxApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.selectManual$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            val tagArg = args[1] as String
+            api.selectManual(profileIdArg, tagArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.reassertAfterStart$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val tagArg = args[0] as String
+            api.reassertAfterStart(tagArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.NetworkServerHostApi.rememberOffline$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val profileIdArg = args[0] as String
+            val tagArg = args[1] as String
+            api.rememberOffline(profileIdArg, tagArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SingboxApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(SingboxApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface SingboxHostApi {
   fun prepareVpn(requiresVpn: Boolean, callback: (Result<Boolean>) -> Unit)

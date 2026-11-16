@@ -111,6 +111,8 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
+enum NetworkServerKind { wifi, mobile }
+
 class RuntimeFlagsMessage {
   RuntimeFlagsMessage({
     this.wakeLockEnabled,
@@ -1076,6 +1078,83 @@ class InstalledAppMessage {
   }
 }
 
+class NetworkServerSettingsMessage {
+  NetworkServerSettingsMessage({
+    required this.enabled,
+    required this.remember,
+    this.configuredWifi,
+    this.configuredMobile,
+    this.rememberedWifi,
+    this.rememberedMobile,
+  });
+
+  bool enabled;
+
+  bool remember;
+
+  String? configuredWifi;
+
+  String? configuredMobile;
+
+  String? rememberedWifi;
+
+  String? rememberedMobile;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      enabled,
+      remember,
+      configuredWifi,
+      configuredMobile,
+      rememberedWifi,
+      rememberedMobile,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static NetworkServerSettingsMessage decode(Object result) {
+    result as List<Object?>;
+    return NetworkServerSettingsMessage(
+      enabled: result[0]! as bool,
+      remember: result[1]! as bool,
+      configuredWifi: result[2] as String?,
+      configuredMobile: result[3] as String?,
+      rememberedWifi: result[4] as String?,
+      rememberedMobile: result[5] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NetworkServerSettingsMessage ||
+        other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(enabled, other.enabled) &&
+        _deepEquals(remember, other.remember) &&
+        _deepEquals(configuredWifi, other.configuredWifi) &&
+        _deepEquals(configuredMobile, other.configuredMobile) &&
+        _deepEquals(rememberedWifi, other.rememberedWifi) &&
+        _deepEquals(rememberedMobile, other.rememberedMobile);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NetworkServerSettingsMessage(enabled: $enabled, remember: $remember, configuredWifi: $configuredWifi, configuredMobile: $configuredMobile, rememberedWifi: $rememberedWifi, rememberedMobile: $rememberedMobile)';
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -1083,41 +1162,47 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is RuntimeFlagsMessage) {
+    } else if (value is NetworkServerKind) {
       buffer.putUint8(129);
-      writeValue(buffer, value.encode());
-    } else if (value is NetworkInterfaceStateMessage) {
+      writeValue(buffer, value.index);
+    } else if (value is RuntimeFlagsMessage) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    } else if (value is UrlTestRequestMessage) {
+    } else if (value is NetworkInterfaceStateMessage) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is VpnNotificationPresentationMessage) {
+    } else if (value is UrlTestRequestMessage) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is HttpHeaderMessage) {
+    } else if (value is VpnNotificationPresentationMessage) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is UnderlyingNetworkFetchRequestMessage) {
+    } else if (value is HttpHeaderMessage) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is UnderlyingNetworkFetchResponseMessage) {
+    } else if (value is UnderlyingNetworkFetchRequestMessage) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is OutboundFetchRequestMessage) {
+    } else if (value is UnderlyingNetworkFetchResponseMessage) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is UnderlyingNetworkDownloadRequestMessage) {
+    } else if (value is OutboundFetchRequestMessage) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is UnderlyingNetworkDownloadResponseMessage) {
+    } else if (value is UnderlyingNetworkDownloadRequestMessage) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is ApkInspectionMessage) {
+    } else if (value is UnderlyingNetworkDownloadResponseMessage) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is InstalledAppMessage) {
+    } else if (value is ApkInspectionMessage) {
       buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    } else if (value is InstalledAppMessage) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    } else if (value is NetworkServerSettingsMessage) {
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1128,36 +1213,213 @@ class _PigeonCodec extends StandardMessageCodec {
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
       case 129:
-        return RuntimeFlagsMessage.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : NetworkServerKind.values[value];
       case 130:
-        return NetworkInterfaceStateMessage.decode(readValue(buffer)!);
+        return RuntimeFlagsMessage.decode(readValue(buffer)!);
       case 131:
-        return UrlTestRequestMessage.decode(readValue(buffer)!);
+        return NetworkInterfaceStateMessage.decode(readValue(buffer)!);
       case 132:
-        return VpnNotificationPresentationMessage.decode(readValue(buffer)!);
+        return UrlTestRequestMessage.decode(readValue(buffer)!);
       case 133:
-        return HttpHeaderMessage.decode(readValue(buffer)!);
+        return VpnNotificationPresentationMessage.decode(readValue(buffer)!);
       case 134:
-        return UnderlyingNetworkFetchRequestMessage.decode(readValue(buffer)!);
+        return HttpHeaderMessage.decode(readValue(buffer)!);
       case 135:
-        return UnderlyingNetworkFetchResponseMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkFetchRequestMessage.decode(readValue(buffer)!);
       case 136:
-        return OutboundFetchRequestMessage.decode(readValue(buffer)!);
+        return UnderlyingNetworkFetchResponseMessage.decode(readValue(buffer)!);
       case 137:
+        return OutboundFetchRequestMessage.decode(readValue(buffer)!);
+      case 138:
         return UnderlyingNetworkDownloadRequestMessage.decode(
           readValue(buffer)!,
         );
-      case 138:
+      case 139:
         return UnderlyingNetworkDownloadResponseMessage.decode(
           readValue(buffer)!,
         );
-      case 139:
-        return ApkInspectionMessage.decode(readValue(buffer)!);
       case 140:
+        return ApkInspectionMessage.decode(readValue(buffer)!);
+      case 141:
         return InstalledAppMessage.decode(readValue(buffer)!);
+      case 142:
+        return NetworkServerSettingsMessage.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
+  }
+}
+
+class NetworkServerHostApi {
+  /// Constructor for [NetworkServerHostApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  NetworkServerHostApi({
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) : pigeonVar_binaryMessenger = binaryMessenger,
+       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
+           ? '.$messageChannelSuffix'
+           : '';
+
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  Future<NetworkServerSettingsMessage> read(String profileId) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.read$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as NetworkServerSettingsMessage;
+  }
+
+  Future<NetworkServerSettingsMessage> setEnabled(
+    String profileId,
+    bool enabled,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.setEnabled$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId, enabled],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as NetworkServerSettingsMessage;
+  }
+
+  Future<NetworkServerSettingsMessage> setRemember(
+    String profileId,
+    bool remember,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.setRemember$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId, remember],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as NetworkServerSettingsMessage;
+  }
+
+  Future<NetworkServerSettingsMessage> setConfigured(
+    String profileId,
+    NetworkServerKind network,
+    String? tag,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.setConfigured$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId, network, tag],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as NetworkServerSettingsMessage;
+  }
+
+  Future<void> selectManual(String profileId, String tag) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.selectManual$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId, tag],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> reassertAfterStart(String tag) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.reassertAfterStart$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[tag],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> rememberOffline(String profileId, String tag) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.NetworkServerHostApi.rememberOffline$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[profileId, tag],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 }
 

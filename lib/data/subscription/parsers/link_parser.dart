@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:meow_client/core/base64.dart';
 import 'package:meow_client/data/subscription/import_key_normalizer.dart';
+import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
 /// Thrown when a link names a transport the core cannot be configured with.
@@ -86,7 +87,11 @@ class LinkParser {
       'uuid': Uri.decodeComponent(uri.userInfo),
     };
 
-    _putIfPresent(result, 'flow', p['flow']);
+    _putIfPresent(
+      result,
+      'flow',
+      ParsedOutboundSchema.normalizeXrayVlessFlow(p['flow'] ?? ''),
+    );
     _putIfPresent(result, 'encryption', p['encryption']);
     _putIfPresent(
       result,

@@ -467,8 +467,10 @@ internal class MeowForegroundNotification(
         }
     }
 
-    fun requestLatencyRefresh(
+    internal fun requestLatencyRefresh(
         startup: Boolean = false,
+        recoveryRequest: UrlTestRequest? = null,
+        canDispatch: () -> Boolean = { true },
         onComplete: ((NetworkHandoverProbeOutcome) -> Unit)? = null,
     ): Boolean {
         val request: UrlTestRequest
@@ -476,12 +478,15 @@ internal class MeowForegroundNotification(
         val timeoutCallback: Runnable
         synchronized(this) {
             val selectedRequest = presentation.urlTestRequest ?: return false
+            if (recoveryRequest != null && recoveryProbeRequest() != recoveryRequest) return false
             if (!foregroundStarted || selectedRequest.targetOutboundTag.isEmpty() || lifecycleStatus != "Connected") {
                 return false
             }
             if (latencyActionInFlight) {
                 val context = latencyActionContext
-                if (onComplete == null || context == null || !latencyContextCurrentLocked(context)) return false
+                if (recoveryRequest != null || onComplete == null || context == null ||
+                    !latencyContextCurrentLocked(context)
+                ) return false
                 latencyCompletionObservers += onComplete
                 return true
             }
@@ -518,7 +523,9 @@ internal class MeowForegroundNotification(
         }
         val runner = latencyTestRunner
         try {
-            if (runner != null) {
+            if (!canDispatch()) {
+                completeLatencyAction(actionGeneration)
+            } else if (runner != null) {
                 runner(request, !startup, callback)
             } else SingboxController.urlTest(
                 groupTag = request.groupTag,
@@ -533,12 +540,96 @@ internal class MeowForegroundNotification(
                 logicalSessionId = request.logicalSessionId,
                 notificationStartup = startup,
                 notificationStartupToken = if (startup) nativeStartupToken ?: 0L else 0L,
+                canDispatch = canDispatch,
                 callback = callback,
             )
         } catch (_: Exception) {
             completeLatencyAction(actionGeneration)
         }
         return true
+    }
+
+    internal fun recoveryProbeRequest(): UrlTestRequest? = synchronized(this) {
+        presentation.urlTestRequest?.takeIf {
+            foregroundStarted && lifecycleStatus == "Connected" && selectedOutboundsReady &&
+                hasAuthoritativePingTarget() && it.targetOutboundTag.isNotEmpty()
+        }
+    }
+
+    internal fun requestAutoGroupRecovery(
+        runtime: Long,
+        network: Long,
+        selection: Long,
+        isCurrent: () -> Boolean,
+    ): Boolean {
+        if (!isCurrent()) return false
+        val request = synchronized(this) {
+            if (!foregroundStarted || lifecycleStatus != "Connected" ||
+                runtime != startupRuntimeGeneration || network != startupNetworkGeneration ||
+                selection != selectionEpoch
+            ) return false
+            val current = presentation.urlTestRequest ?: return false
+            val autoGroup = selectedAutoGroup() ?: return false
+            current.copy(
+                groupTag = autoGroup,
+                targetOutboundTag = "",
+                priorityOutboundTag = current.targetOutboundTag.takeIf { selectedOutboundsReady }.orEmpty(),
+                excludeOutboundTag = "",
+                timeoutMillis = current.timeoutMillis,
+                concurrency = 3,
+                deadlineMillis = maxOf(20_000, current.deadlineMillis),
+            )
+        }
+        val canDispatch = {
+            isCurrent() && synchronized(this) {
+                foregroundStarted && lifecycleStatus == "Connected" &&
+                    runtime == startupRuntimeGeneration && network == startupNetworkGeneration &&
+                    selection == selectionEpoch && selectedAutoGroup() == request.groupTag &&
+                    presentation.urlTestRequest?.url == request.url &&
+                    presentation.urlTestRequest?.timeoutMillis == request.timeoutMillis
+            }
+        }
+        val onDispatched: (Result<Unit>) -> Unit = { result ->
+            MeowDiagnostics.log(
+                "MeowForegroundNotification",
+                "auto-group probe group=${request.groupTag} accepted=${result.isSuccess}",
+            )
+        }
+        val runner = latencyTestRunner
+        if (runner != null) {
+            if (!canDispatch()) return false
+            runner(request, false, onDispatched)
+            return true
+        }
+        SingboxController.urlTest(
+            groupTag = request.groupTag,
+            targetOutboundTag = request.targetOutboundTag,
+            priorityOutboundTag = request.priorityOutboundTag,
+            excludeOutboundTag = request.excludeOutboundTag,
+            url = request.url,
+            timeoutMillis = request.timeoutMillis,
+            concurrency = request.concurrency,
+            deadlineMillis = request.deadlineMillis,
+            force = false,
+            canDispatch = canDispatch,
+            callback = onDispatched,
+        )
+        return true
+    }
+
+    private fun selectedAutoGroup(): String? {
+        var tag = rootOutboundTag
+        val visited = mutableSetOf<String>()
+        while (visited.add(tag)) {
+            val outbound = configuredOutbounds?.get(tag) ?: return null
+            when (outbound.type) {
+                "urltest" -> return tag
+                "selector" -> Unit
+                else -> return null
+            }
+            tag = selectedOutbounds[tag]?.takeIf { it in outbound.members } ?: return null
+        }
+        return null
     }
 
     private fun latencyContextCurrentLocked(context: LatencyActionContext): Boolean =

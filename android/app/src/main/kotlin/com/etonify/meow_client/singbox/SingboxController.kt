@@ -76,13 +76,15 @@ object SingboxController {
     val runtimeStateRevision: Long get() = stateRevision.get()
 
     @Synchronized
-    fun runtimeStateSnapshot(): Map<String, Any?> = mapOf(
+    fun runtimeStateSnapshot(
+        runtimeIntentFresh: Boolean = MeowApplication.isRuntimeIntentFresh(),
+    ): Map<String, Any?> = mapOf(
         "running" to running,
         "mode" to serviceMode,
         "runtimeGeneration" to activeRuntimeGeneration,
         "externalStopRevision" to externalStopRevision,
         "runtimeStateRevision" to runtimeStateRevision,
-        "runtimeIntentFresh" to MeowApplication.isRuntimeIntentFresh(),
+        "runtimeIntentFresh" to runtimeIntentFresh,
         "networkServerSelection" to networkSelection
             ?.takeIf { running && it.runtime == activeRuntimeGeneration }
             ?.let { mapOf("profileId" to it.profileId, "tag" to it.tag) },
@@ -1135,6 +1137,7 @@ object SingboxController {
         notificationStartup: Boolean = false,
         notificationStartupToken: Long = 0L,
         startupLeaseToken: Long = 0L,
+        canDispatch: () -> Boolean = { true },
         callback: (Result<Unit>) -> Unit,
     ) {
         interactiveUrlTestUntilMs = maxOf(interactiveUrlTestUntilMs,
@@ -1158,6 +1161,7 @@ object SingboxController {
                     "stale runtime before URL test"
                 }
                 check(operationNetworkGeneration == networkGeneration.get()) { "stale network before URL test" }
+                check(canDispatch()) { "stale recovery before URL test" }
                 if (notificationStartup && !MeowBoxService.validateNativeStartup(
                         notificationStartupToken, operationGeneration, operationNetworkGeneration, operationSelectionEpoch,
                     )) throw StartupUrlTestLeaseExpiredException()

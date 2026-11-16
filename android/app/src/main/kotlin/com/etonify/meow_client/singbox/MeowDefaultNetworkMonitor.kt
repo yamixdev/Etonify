@@ -264,6 +264,28 @@ object MeowDefaultNetworkMonitor {
 
     fun currentNetworkSnapshot(): Network? = synchronized(lock) { currentNetwork }
 
+    internal fun isUpstreamReadyForRecovery(): Boolean {
+        val network = currentNetworkSnapshot()?.takeIf(::isSelectableNetwork) ?: return false
+        if (MeowApplication.connectivity.getNetworkCapabilities(network)
+                ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        ) return currentNetworkSnapshot() == network
+        val reachable = runCatching {
+            val connection = network.openConnection(
+                java.net.URL("https://cp.cloudflare.com/"),
+                java.net.Proxy.NO_PROXY,
+            ) as java.net.HttpURLConnection
+            try {
+                connection.connectTimeout = 2_000
+                connection.readTimeout = 2_000
+                connection.instanceFollowRedirects = false
+                connection.responseCode == 204
+            } finally {
+                connection.disconnect()
+            }
+        }.getOrDefault(false)
+        return reachable && currentNetworkSnapshot() == network && isSelectableNetwork(network)
+    }
+
     internal fun serverNetworkSnapshot(): ServerNetworkSnapshot? {
         val committed = synchronized(lock) {
             committedServerNetwork?.takeIf {

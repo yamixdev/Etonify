@@ -27,7 +27,6 @@ internal data class NetworkServerPolicy(
 }
 
 internal object NetworkServerPreferences {
-    const val CHANNEL = "com.etonify.meow_client/network_servers"
     private val preferences get() = MeowApplication.application.getSharedPreferences("network_servers", 0)
 
     @Synchronized
@@ -47,18 +46,23 @@ internal object NetworkServerPreferences {
         "$profileId:$source:${network.key}"
 
     @Synchronized
-    fun update(profileId: String, field: String, value: Any?): NetworkServerPolicy {
-        val editor = preferences.edit()
-        when (field) {
-            "enabled", "remember" -> editor.putBoolean(field, value as Boolean)
-            else -> {
-                val network = ServerNetwork.entries.first { it.key == field }
-                val tag = (value as? String)?.takeIf(String::isNotBlank)
-                editor.putString(key(profileId, "configured", network), tag)
-                editor.remove(key(profileId, "remembered", network))
-            }
-        }
-        editor.apply()
+    fun setEnabled(profileId: String, enabled: Boolean): NetworkServerPolicy {
+        preferences.edit().putBoolean("enabled", enabled).apply()
+        return read(profileId)
+    }
+
+    @Synchronized
+    fun setRemember(profileId: String, remember: Boolean): NetworkServerPolicy {
+        preferences.edit().putBoolean("remember", remember).apply()
+        return read(profileId)
+    }
+
+    @Synchronized
+    fun setConfigured(profileId: String, network: ServerNetwork, tag: String?): NetworkServerPolicy {
+        preferences.edit()
+            .putString(key(profileId, "configured", network), tag?.takeIf(String::isNotBlank))
+            .remove(key(profileId, "remembered", network))
+            .apply()
         return read(profileId)
     }
 
@@ -72,13 +76,6 @@ internal object NetworkServerPreferences {
         if (requested == null || !read(profileId).remembers(requested, current)) return
         preferences.edit().putString(key(profileId, "remembered", requested.network), tag).apply()
     }
-
-    fun wireValue(policy: NetworkServerPolicy): Map<String, Any> = mapOf(
-        "enabled" to policy.enabled,
-        "remember" to policy.remember,
-        "configured" to policy.configured.mapKeys { it.key.key },
-        "remembered" to policy.remembered.mapKeys { it.key.key },
-    )
 }
 
 internal data class NetworkServerProfile(

@@ -57,7 +57,8 @@ class MeowBoxService(
         private const val RUNTIME_RECOVERY_MIN_INTERVAL_MS = 1_000L
         private const val NETWORK_HANDOVER_PROBE_DELAY_MS = 2_500L
         private const val NETWORK_HANDOVER_PROBE_RETRY_DELAY_MS = 5_000L
-        private const val NETWORK_RECOVERY_RESTART_COOLDOWN_MS = 60_000L
+        private const val NETWORK_SERVER_RETRY_DELAY_MS = 1_500L
+        private const val MIN_SCREEN_OFF_BEFORE_PROBE_MS = 60_000L
         private val activeServices = CopyOnWriteArraySet<MeowBoxService>()
 
         fun requestStopAll(source: String) {
@@ -117,24 +118,24 @@ class MeowBoxService(
         }
 
         internal fun updateNetworkServerPolicy(
-            profileId: String,
-            field: String,
-            value: Any?,
+            profileId: String? = null,
+            onlyNetwork: ServerNetwork? = null,
+            update: () -> NetworkServerPolicy,
             callback: (Result<NetworkServerPolicy>) -> Unit,
         ) {
             val owner = activeServices.firstOrNull { it.ownsActiveRuntime(RuntimeServiceModeResolver.VPN) }
             if (owner != null && owner.submitServiceTask("network_server_policy") {
-                val result = runCatching { NetworkServerPreferences.update(profileId, field, value) }
+                val result = runCatching(update)
                 if (result.isSuccess) {
                     owner.applyNetworkServerSelection(
                         force = true,
-                        profileId = profileId.takeIf { field != "enabled" && field != "remember" },
-                        onlyNetwork = ServerNetwork.entries.firstOrNull { it.key == field },
+                        profileId = profileId,
+                        onlyNetwork = onlyNetwork,
                     )
                 }
                 owner.mainHandler.post { callback(result) }
             }) return
-            callback(runCatching { NetworkServerPreferences.update(profileId, field, value) })
+            callback(runCatching(update))
         }
 
         internal fun selectVpnOutbound(
@@ -298,7 +299,7 @@ class MeowBoxService(
     }
     private val recoveryGate = RuntimeRecoveryGate(RUNTIME_RECOVERY_MIN_INTERVAL_MS)
     private val networkHandoverProbeGate = NetworkHandoverProbeGate()
-    private val networkHandoverRecovery = NetworkHandoverRecovery(NETWORK_RECOVERY_RESTART_COOLDOWN_MS)
+    private val networkHandoverRecovery = NetworkHandoverRecovery()
     private val recoveryCancellationGeneration = AtomicLong(0L)
     private val foregroundNotification = MeowForegroundNotification(
         service = service,
@@ -342,9 +343,15 @@ class MeowBoxService(
     private var lastServerNetwork: ServerNetwork? = null
     private var lastNetworkSelection: Pair<String, String>? = null
     private var networkSelectionNeedsReconcile = false
+    // Accessed on the service executor with the selector commands.
+    private var networkSelectionRetryNeeded = false
+    private var pendingNetworkSelectionRetry: Pair<Long, ScheduledFuture<*>>? = null
+    private var networkSelectionAttempt = 0L
     private var automaticSelectionRuntime = 0L
     private var tileStartedRuntime = false
     @Volatile private var runtimeStarting = false
+    @Volatile private var screenOffAt: Long? = null
+    @Volatile private var deviceWasIdle = false
 
     init {
         activeServices += this
@@ -354,7 +361,8 @@ class MeowBoxService(
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> updateDeviceIdleMode()
-                Intent.ACTION_SCREEN_ON -> requestRuntimeRecovery("screen_on")
+                Intent.ACTION_SCREEN_OFF -> screenOffAt = SystemClock.elapsedRealtime()
+                Intent.ACTION_SCREEN_ON -> onScreenOn()
                 Intent.ACTION_USER_PRESENT -> requestRuntimeRecovery("user_present")
             }
         }
@@ -507,7 +515,16 @@ class MeowBoxService(
         return request.startsRuntime && startTokenCurrent(request.token)
     }
 
-    fun requestRuntimeRecovery(source: String) {
+    private fun onScreenOn() {
+        val now = SystemClock.elapsedRealtime()
+        val offAt = screenOffAt
+        screenOffAt = null
+        val probeAfterIdle = deviceWasIdle || (offAt != null && now - offAt >= MIN_SCREEN_OFF_BEFORE_PROBE_MS)
+        deviceWasIdle = false
+        requestRuntimeRecovery("screen_on", wakeAt = now.takeIf { probeAfterIdle })
+    }
+
+    fun requestRuntimeRecovery(source: String, wakeAt: Long? = null) {
         val server = commandServer
         val ownsRuntime = ownsActiveRuntime()
         if (destroyed || !SingboxController.running || !ownsRuntime || server == null || nativeCloseTask != null) {
@@ -521,11 +538,15 @@ class MeowBoxService(
         val context = networkRecoveryContext()
         val now = SystemClock.elapsedRealtime()
         val handover = isNetworkHandoverRecoverySource(source)
-        if (!recoveryGate.tryAcquire(now, context.network, networkChange = handover)) {
+        val wakeProbe = wakeAt?.takeIf { currentMode() == RuntimeServiceModeResolver.VPN }
+        val canRetryPolicy = handover || source == "screen_on" || source == "device_idle_exit"
+        if (!recoveryGate.tryAcquire(now, context.network, networkChange = handover) && wakeProbe == null) {
             MeowDiagnostics.log(TAG, "runtime recovery coalesced source=$source")
-            if (handover) {
+            if (canRetryPolicy) {
                 submitServiceTask("network_server_handover") {
-                    applyNetworkServerSelection(expectedNetwork = context.network)
+                    if (handover || networkSelectionRetryNeeded) {
+                        applyNetworkServerSelection(expectedNetwork = context.network)
+                    }
                 }
             }
             return
@@ -559,9 +580,11 @@ class MeowBoxService(
                 MeowDiagnostics.log(TAG, "runtime recovery failed source=$source", error)
                 SingboxController.log("error", "runtime recovery failed source=$source error=${error.message}")
             }
-            if (handover) applyNetworkServerSelection(expectedNetwork = recovery.network)
+            if (handover || (canRetryPolicy && networkSelectionRetryNeeded)) {
+                applyNetworkServerSelection(expectedNetwork = recovery.network)
+            }
             val probe = recovery.copy(selection = foregroundNotification.currentSelectionEpoch)
-            if (networkRecoveryCurrent(probe, server)) scheduleNetworkHandoverProbe(source, probe, server)
+            if (handover || wakeProbe != null) scheduleRecoveryProbe(source, probe, server, wakeProbe)
         }
     }
 
@@ -585,18 +608,17 @@ class MeowBoxService(
         check(manualProfileId == null || profile == null || profile.id == manualProfileId) {
             "active subscription changed before selecting outbound"
         }
-        val policy = profile?.let { NetworkServerPreferences.read(it.id) }
-        if (manualProfileId != null && policy?.enabled == true && requestedNetwork != null) {
-            check(MeowDefaultNetworkMonitor.serverNetworkSnapshot() == requestedNetwork) {
-                "physical network changed before selecting outbound"
-            }
-        }
+        // The tap still applies if the network moved. Only persistence is
+        // tied to the network where the user made the choice.
         SingboxController.selectOutboundOnServiceLane("select", tag)
         check(canSelectVpnOutbound(runtime)) { "stale runtime after selecting outbound" }
         if (manualProfileId == null) return
+        val appliedNetwork = MeowDefaultNetworkMonitor.serverNetworkSnapshot()
         check(SingboxController.commitVpnSelection(runtime) {
+            clearNetworkSelectionRetry()
             automaticSelectionRuntime = 0L
             networkSelectionNeedsReconcile = false
+            lastServerNetwork = appliedNetwork?.network
             SingboxController.publishNetworkServerSelection(runtime, null, null)
             if (profile != null && profile.id == manualProfileId && tag in profile.selectableTags) {
                 lastNetworkSelection = profile.id to tag
@@ -615,21 +637,39 @@ class MeowBoxService(
         profileId: String? = null,
         onlyNetwork: ServerNetwork? = null,
         expectedNetwork: Long? = null,
+        retry: Boolean = false,
     ) {
         val runtime = serviceGeneration
         val profile = networkServerProfile ?: return
         if ((profileId != null && profileId != profile.id) || !canSelectVpnOutbound(runtime)) return
         val policy = NetworkServerPreferences.read(profile.id)
-        if (!policy.enabled) {
-            lastServerNetwork = null
-            if (!networkSelectionNeedsReconcile) return
-        }
         val network = MeowDefaultNetworkMonitor.serverNetworkSnapshot()
         if (onlyNetwork != null && network?.network != onlyNetwork) return
         if (expectedNetwork != null && SingboxController.currentNetworkGeneration != expectedNetwork) return
+        if (!policy.enabled) {
+            lastServerNetwork = null
+            if (!networkSelectionNeedsReconcile) {
+                clearNetworkSelectionRetry()
+                automaticSelectionRuntime = 0L
+                SingboxController.publishNetworkServerSelection(runtime, null, null)
+                return
+            }
+        }
+        if (!retry && !force &&
+            pendingNetworkSelectionRetry?.first == SingboxController.currentNetworkGeneration
+        ) return
+        if (policy.enabled && network == null && !networkSelectionNeedsReconcile) {
+            clearNetworkSelectionRetry()
+            networkSelectionRetryNeeded = true
+            if (!retry) scheduleNetworkSelectionRetry(runtime, profile.id)
+            return
+        }
         val previousType = lastServerNetwork
         val reconciling = networkSelectionNeedsReconcile
-        if (!force && !starting && !reconciling && network?.network == previousType) return
+        if (!force && !starting && !reconciling && !networkSelectionRetryNeeded &&
+            network?.network == previousType
+        ) return
+        clearNetworkSelectionRetry()
         val selectable = profile.selectableTags - SingboxController.networkServerExcludedTags(runtime)
         val lastTag = lastNetworkSelection?.takeIf { it.first == profile.id && it.second in selectable }?.second
         val configured = policy.target(network?.network, selectable)
@@ -643,15 +683,23 @@ class MeowBoxService(
         }
         if (target == null) {
             lastServerNetwork = network?.network
+            networkSelectionNeedsReconcile = false
+            automaticSelectionRuntime = 0L
+            SingboxController.publishNetworkServerSelection(runtime, null, null)
             return
         }
-        if (!canSelectVpnOutbound(runtime) || MeowDefaultNetworkMonitor.serverNetworkSnapshot() != network) return
+        if (!canSelectVpnOutbound(runtime)) return
+        if (MeowDefaultNetworkMonitor.serverNetworkSnapshot() != network) {
+            networkSelectionRetryNeeded = true
+            if (!retry) scheduleNetworkSelectionRetry(runtime, profile.id)
+            return
+        }
         runCatching { SingboxController.selectOutboundOnServiceLane("select", target) }
             .onSuccess {
                 if (!canSelectVpnOutbound(runtime)) return@onSuccess
                 if (MeowDefaultNetworkMonitor.serverNetworkSnapshot() != network) {
                     networkSelectionNeedsReconcile = true
-                    submitServiceTask("network_server_reconcile") { applyNetworkServerSelection() }
+                    if (!retry) scheduleNetworkSelectionRetry(runtime, profile.id)
                     return@onSuccess
                 }
                 networkSelectionNeedsReconcile = false
@@ -659,7 +707,40 @@ class MeowBoxService(
                 lastNetworkSelection = profile.id to target
                 automaticSelectionRuntime = runtime
                 SingboxController.publishNetworkServerSelection(runtime, profile.id, target)
-            }.onFailure { MeowDiagnostics.log(TAG, "network server selection failed", it) }
+            }.onFailure { error ->
+                MeowDiagnostics.log(TAG, "network server selection failed retry=$retry", error)
+                if (canSelectVpnOutbound(runtime)) {
+                    networkSelectionRetryNeeded = true
+                    if (!retry) scheduleNetworkSelectionRetry(runtime, profile.id)
+                }
+            }
+    }
+
+    private fun clearNetworkSelectionRetry() {
+        networkSelectionAttempt++
+        pendingNetworkSelectionRetry?.second?.cancel(false)
+        pendingNetworkSelectionRetry = null
+        networkSelectionRetryNeeded = false
+    }
+
+    private fun scheduleNetworkSelectionRetry(runtime: Long, profileId: String) {
+        val attempt = networkSelectionAttempt
+        val startToken = startRequest.get().token
+        val network = SingboxController.currentNetworkGeneration
+        val scheduled = scheduleRetry("network_server_selection_retry", task = {
+            submitServiceTask("network_server_selection_retry") {
+                if (attempt != networkSelectionAttempt) return@submitServiceTask
+                pendingNetworkSelectionRetry = null
+                if (startTokenCurrent(startToken) && canSelectVpnOutbound(runtime)) {
+                    applyNetworkServerSelection(
+                        force = SingboxController.currentNetworkGeneration == network,
+                        profileId = profileId,
+                        retry = true,
+                    )
+                }
+            }
+        }, delayMillis = NETWORK_SERVER_RETRY_DELAY_MS)
+        pendingNetworkSelectionRetry = scheduled?.let { network to it }
     }
 
     private fun networkRecoveryContext() = NetworkRecoveryContext(
@@ -773,33 +854,62 @@ class MeowBoxService(
     }
 
     @Synchronized
-    private fun scheduleNetworkHandoverProbe(
+    private fun scheduleRecoveryProbe(
         source: String,
         context: NetworkRecoveryContext,
         server: CommandServer,
+        wakeAt: Long?,
         retry: Boolean = false,
     ) {
-        if (!isNetworkHandoverRecoverySource(source) || !networkRecoveryCurrent(context, server) ||
-            !networkHandoverRecovery.takeProbe(context, networkRecoveryContext(), retry)
+        if (!networkRecoveryCurrent(context, server) ||
+            !networkHandoverRecovery.takeProbe(context, networkRecoveryContext(), retry, wakeAt)
         ) return
         val token = networkHandoverProbeGate.replace()
         pendingNetworkHandoverProbe?.cancel(false)
-        val onComplete: (NetworkHandoverProbeOutcome) -> Unit = { outcome ->
-            onNetworkHandoverProbeResult(source, context, server, token, outcome)
-        }
         pendingNetworkHandoverProbe = scheduleRetry(
-            "network_handover_probe:$source",
+            "network_recovery_probe:$source",
             task = probe@{
-                val accepted = synchronized(this) {
+                val request = synchronized(this) {
                     if (!networkHandoverProbeGate.isCurrent(token)) return@probe
                     pendingNetworkHandoverProbe = null
                     if (!networkRecoveryCurrent(context, server)) return@probe
-                    foregroundNotification.requestLatencyRefresh(onComplete = onComplete)
+                    foregroundNotification.recoveryProbeRequest()
                 }
-                MeowDiagnostics.log(
-                    TAG, "network handover active-outbound probe source=$source retry=$retry accepted=$accepted",
-                )
-                if (!accepted) onComplete(NetworkHandoverProbeOutcome.INCONCLUSIVE)
+                if (!networkRecoveryCurrent(context, server) ||
+                    !MeowDefaultNetworkMonitor.isUpstreamReadyForRecovery()
+                ) {
+                    onRecoveryProbeResult(source, context, server, token, wakeAt, retry,
+                        NetworkHandoverProbeOutcome.INCONCLUSIVE)
+                    return@probe
+                }
+                val isCurrent = {
+                    networkHandoverProbeGate.isCurrent(token) &&
+                        networkRecoveryCurrent(context, server) &&
+                        foregroundNotification.recoveryProbeRequest() == request
+                }
+                if (!isCurrent()) return@probe
+                if (request == null) {
+                    if (!foregroundNotification.requestAutoGroupRecovery(
+                            context.runtime, context.network, context.selection, isCurrent = isCurrent,
+                        )
+                    ) {
+                        onRecoveryProbeResult(source, context, server, token, wakeAt, retry,
+                            NetworkHandoverProbeOutcome.INCONCLUSIVE)
+                    }
+                    return@probe
+                }
+                val accepted = foregroundNotification.requestLatencyRefresh(
+                    recoveryRequest = request,
+                    canDispatch = isCurrent,
+                ) { outcome ->
+                    if (isCurrent()) {
+                        onRecoveryProbeResult(source, context, server, token, wakeAt, retry, outcome, request)
+                    }
+                }
+                if (!accepted && isCurrent()) {
+                    onRecoveryProbeResult(source, context, server, token, wakeAt, retry,
+                        NetworkHandoverProbeOutcome.INCONCLUSIVE)
+                }
             },
             delayMillis = if (retry) NETWORK_HANDOVER_PROBE_RETRY_DELAY_MS else NETWORK_HANDOVER_PROBE_DELAY_MS,
         )
@@ -807,35 +917,48 @@ class MeowBoxService(
     }
 
     @Synchronized
-    private fun onNetworkHandoverProbeResult(
+    private fun onRecoveryProbeResult(
         source: String,
         context: NetworkRecoveryContext,
         server: CommandServer,
         token: Long,
+        wakeAt: Long?,
+        retry: Boolean,
         outcome: NetworkHandoverProbeOutcome,
+        request: MeowForegroundNotification.UrlTestRequest? = null,
     ) {
         if (!networkHandoverProbeGate.tryConsume(token) || !networkRecoveryCurrent(context, server)) return
-        MeowDiagnostics.log(TAG, "network handover probe result=$outcome source=$source context=$context")
-        when (outcome) {
-            NetworkHandoverProbeOutcome.HEALTHY -> Unit
-            NetworkHandoverProbeOutcome.INCONCLUSIVE -> scheduleNetworkHandoverProbe(source, context, server, retry = true)
-            NetworkHandoverProbeOutcome.UNHEALTHY -> submitServiceTask("network_handover_unhealthy") {
-                if (!networkRecoveryCurrent(context, server) || !MeowApplication.isRuntimeIntentFresh(currentMode())) {
-                    return@submitServiceTask
-                }
-                if (!networkHandoverRecovery.takeRestart(context, networkRecoveryContext(), SystemClock.elapsedRealtime())) {
-                    MeowDiagnostics.log(TAG, "network handover restart limited source=$source context=$context")
-                    return@submitServiceTask
-                }
-                MeowDiagnostics.log(TAG, "network handover probe failed; restarting core source=$source context=$context")
-                restartCoreInternal(
-                    "network_handover_unhealthy",
-                    context.startToken,
-                    requireRuntimeIntent = true,
-                    externalStopRevision = context.externalStop,
+        MeowDiagnostics.log(TAG, "network recovery probe result=$outcome source=$source context=$context")
+        if (outcome == NetworkHandoverProbeOutcome.HEALTHY) return
+        if (!retry) {
+            scheduleRecoveryProbe(source, context, server, wakeAt, retry = true)
+            return
+        }
+        if (outcome != NetworkHandoverProbeOutcome.UNHEALTHY || request == null) return
+
+        // A failed URL only establishes that it was unreachable via this
+        // outbound. Try the selected auto group without restarting the VPN.
+        val isCurrent = {
+            networkHandoverProbeGate.isCurrent(token + 1L) &&
+                networkRecoveryCurrent(context, server) &&
+                foregroundNotification.recoveryProbeRequest() == request &&
+                MeowApplication.isRuntimeIntentFresh(currentMode())
+        }
+        scheduleAutoGroupRecovery(source, context, isCurrent)
+    }
+
+    private fun scheduleAutoGroupRecovery(
+        source: String,
+        context: NetworkRecoveryContext,
+        isCurrent: () -> Boolean,
+    ) {
+        scheduleRetry("network_recovery_group:$source", task = {
+            if (isCurrent() && MeowDefaultNetworkMonitor.isUpstreamReadyForRecovery()) {
+                foregroundNotification.requestAutoGroupRecovery(
+                    context.runtime, context.network, context.selection, isCurrent = isCurrent,
                 )
             }
-        }
+        }, delayMillis = 0L)
     }
 
     @Synchronized
@@ -1107,6 +1230,7 @@ class MeowBoxService(
                 "libbox service started mode=$mode current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
             )
             serviceGeneration = SingboxController.markServiceStarted(mode)
+            clearNetworkSelectionRetry()
             if (networkServerProfile?.id != preparedRuntimeConfig.networkServerProfile?.id) {
                 lastServerNetwork = null
                 lastNetworkSelection = null
@@ -1281,6 +1405,7 @@ class MeowBoxService(
         nativeCloseTask = null
         runningConfigHash = null
         networkServerProfile = null
+        clearNetworkSelectionRetry()
         lastServerNetwork = null
         lastNetworkSelection = null
         networkSelectionNeedsReconcile = false
@@ -1715,10 +1840,14 @@ class MeowBoxService(
         }
         val filter = IntentFilter().apply {
             addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+            addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
         runCatching {
+            val powerManager = service.getSystemService(Context.POWER_SERVICE) as PowerManager
+            screenOffAt = SystemClock.elapsedRealtime().takeUnless { powerManager.isInteractive }
+            deviceWasIdle = powerManager.isDeviceIdleMode
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 service.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
@@ -1752,6 +1881,7 @@ class MeowBoxService(
         val idle = powerManager.isDeviceIdleMode
         MeowDiagnostics.log(TAG, "device idle mode changed idle=$idle")
         if (idle) {
+            deviceWasIdle = true
             SingboxController.log(
                 "info",
                 "Android device idle/doze entered; keeping VPN core active",
@@ -1762,6 +1892,9 @@ class MeowBoxService(
             "info",
             "core wake requested by Android device idle exit",
         )
-        requestRuntimeRecovery("device_idle_exit")
+        val wakeAt = SystemClock.elapsedRealtime().takeIf { deviceWasIdle }
+        deviceWasIdle = false
+        if (wakeAt != null) screenOffAt = null
+        requestRuntimeRecovery("device_idle_exit", wakeAt)
     }
 }

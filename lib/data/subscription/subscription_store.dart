@@ -1161,11 +1161,12 @@ class SubscriptionStore {
       _throwIfImportCancelled(isCancelled);
       final outbounds = payload.outbounds;
       if (!_hasUsableOutbounds(outbounds)) {
-        throw SubscriptionContentException(
-          result.parseResult.hasUnsupportedWireGuard
-              ? SubscriptionContentFailureKind.wireGuardUnsupported
-              : SubscriptionContentFailureKind.noUsableProxies,
-        );
+        throw payload.warning ??
+            SubscriptionContentException(
+              result.parseResult.hasUnsupportedWireGuard
+                  ? SubscriptionContentFailureKind.wireGuardUnsupported
+                  : SubscriptionContentFailureKind.noUsableProxies,
+            );
       }
 
       final sub = Subscription(
@@ -1216,11 +1217,13 @@ class SubscriptionStore {
       }
       return SubscriptionImportResult(
         subscription: saved,
-        warning: result.parseResult.hasUnsupportedWireGuard
-            ? const SubscriptionContentException(
-                SubscriptionContentFailureKind.wireGuardUnsupported,
-              )
-            : null,
+        warning:
+            payload.warning ??
+            (result.parseResult.hasUnsupportedWireGuard
+                ? const SubscriptionContentException(
+                    SubscriptionContentFailureKind.wireGuardUnsupported,
+                  )
+                : null),
       );
     } catch (error) {
       if (targetProfileId != null) rethrow;
@@ -1312,11 +1315,13 @@ class SubscriptionStore {
     _throwIfImportCancelled(isCancelled);
     final outbounds = payload?.outbounds ?? const <Outbound>[];
     final groups = payload?.groups ?? const <SubscriptionGroup>[];
-    final warning = parseResult?.hasUnsupportedWireGuard == true
-        ? const SubscriptionContentException(
-            SubscriptionContentFailureKind.wireGuardUnsupported,
-          )
-        : null;
+    final warning =
+        payload?.warning ??
+        (parseResult?.hasUnsupportedWireGuard == true
+            ? const SubscriptionContentException(
+                SubscriptionContentFailureKind.wireGuardUnsupported,
+              )
+            : null);
     if (!emptyList &&
         (createLocalList
             ? concreteSubscriptionServerTags(outbounds, groups).isEmpty
@@ -2096,11 +2101,12 @@ class SubscriptionStore {
     buildStopwatch.stop();
     final outbounds = payload.outbounds;
     if (!_hasUsableOutbounds(outbounds)) {
-      throw SubscriptionContentException(
-        result.parseResult.hasUnsupportedWireGuard
-            ? SubscriptionContentFailureKind.wireGuardUnsupported
-            : SubscriptionContentFailureKind.noUsableProxies,
-      );
+      throw payload.warning ??
+          SubscriptionContentException(
+            result.parseResult.hasUnsupportedWireGuard
+                ? SubscriptionContentFailureKind.wireGuardUnsupported
+                : SubscriptionContentFailureKind.noUsableProxies,
+          );
     }
 
     final lockWaitStopwatch = Stopwatch()..start();
@@ -2214,11 +2220,15 @@ class SubscriptionStore {
           providerName: source.name,
         );
         if (!_hasUsableOutbounds(payload.outbounds)) {
-          throw const SubscriptionContentException(
-            SubscriptionContentFailureKind.noUsableProxies,
-          );
+          throw payload.warning ??
+              const SubscriptionContentException(
+                SubscriptionContentFailureKind.noUsableProxies,
+              );
         }
-        parsed[source.id] = payload;
+        parsed[source.id] = (
+          outbounds: payload.outbounds,
+          groups: payload.groups,
+        );
       }
       return _withSubscriptionWriteLock(id, () async {
         final current = await _getUnlocked(id);
@@ -2253,11 +2263,12 @@ class SubscriptionStore {
 
     final parseResult = await SubscriptionParser.parseInBackground(rawContent);
     if (parseResult.outbounds.isEmpty) {
-      throw SubscriptionContentException(
-        parseResult.hasUnsupportedWireGuard
-            ? SubscriptionContentFailureKind.wireGuardUnsupported
-            : SubscriptionContentFailureKind.noUsableProxies,
-      );
+      throw _xrayImportWarning(parseResult.warnings) ??
+          SubscriptionContentException(
+            parseResult.hasUnsupportedWireGuard
+                ? SubscriptionContentFailureKind.wireGuardUnsupported
+                : SubscriptionContentFailureKind.noUsableProxies,
+          );
     }
 
     final payload = await _buildSubscriptionPayloadAsync(
@@ -2269,9 +2280,10 @@ class SubscriptionStore {
     );
     final reparsedOutbounds = payload.outbounds;
     if (!_hasUsableOutbounds(reparsedOutbounds)) {
-      throw const SubscriptionContentException(
-        SubscriptionContentFailureKind.noUsableProxies,
-      );
+      throw payload.warning ??
+          const SubscriptionContentException(
+            SubscriptionContentFailureKind.noUsableProxies,
+          );
     }
 
     return _withSubscriptionWriteLock(id, () async {
@@ -2392,7 +2404,13 @@ class SubscriptionStore {
     return payload.outbounds;
   }
 
-  static Future<({List<Outbound> outbounds, List<SubscriptionGroup> groups})>
+  static Future<
+    ({
+      List<Outbound> outbounds,
+      List<SubscriptionGroup> groups,
+      XrayImportException? warning,
+    })
+  >
   _buildSubscriptionPayloadAsync(
     ParseResult parseResult, {
     String? providerName,
@@ -2414,9 +2432,19 @@ class SubscriptionStore {
         warnings: built.warnings,
       );
     }, debugName: 'meow-build-subscription-payload');
-    _logBuildWarningEntries(payload.warnings);
-    return (outbounds: payload.outbounds, groups: payload.groups);
+    final warnings = [...parseResult.warnings, ...payload.warnings];
+    _logBuildWarningEntries(warnings);
+    return (
+      outbounds: payload.outbounds,
+      groups: payload.groups,
+      warning: parseResult.format == SubscriptionFormat.xrayConfig
+          ? _xrayImportWarning(warnings)
+          : null,
+    );
   }
+
+  static XrayImportException? _xrayImportWarning(List<String> warnings) =>
+      warnings.isEmpty ? null : XrayImportException(warnings.first);
 
   static ({
     List<Map<String, dynamic>> outbounds,
@@ -2493,7 +2521,7 @@ class SubscriptionStore {
 
       // Generate a unique tag
       final type = (config['type'] ?? 'proxy') as String;
-      var tag = '$type-$i';
+      var tag = _uniqueTag('$type-$i', usedTags);
       // Try to use name-based tag
       final sanitized = _sanitizeTag(name);
       if (sanitized.isNotEmpty &&
@@ -2522,7 +2550,13 @@ class SubscriptionStore {
 
       // Set the tag in the config
       config['tag'] = tag;
-      if (sourceScope.startsWith('singbox-') && config['detour'] is String) {
+      final xrayDetour =
+          sourceScope.startsWith('xray-') &&
+          !(lagomProfile &&
+              sourceTag == _lagomWhitelistProxySourceTag &&
+              config['_group_only'] == true);
+      if ((sourceScope.startsWith('singbox-') || xrayDetour) &&
+          config['detour'] is String) {
         nativeDetours[tag] = (
           scope: sourceScope,
           target: config['detour'] as String,
@@ -2594,9 +2628,11 @@ class SubscriptionStore {
       final outbound = outbounds[i];
       final detour = nativeDetours[outbound.tag];
       if (detour == null) continue;
-      final resolved =
-          sourceGroupTags[detour.scope]?[detour.target] ??
+      final leaf =
           sourceScopeToTagToTags[detour.scope]?[detour.target]?.firstOrNull;
+      final resolved = detour.scope.startsWith('xray-')
+          ? leaf
+          : sourceGroupTags[detour.scope]?[detour.target] ?? leaf;
       if (resolved == null) {
         warnings.add(
           'Skipping outbound "${outbound.name}": missing chain detour',
@@ -3238,6 +3274,7 @@ class SubscriptionStore {
         }
         config['_name'] = 'Direct';
         results.add(config);
+        if (config.containsKey('detour')) continue;
         final whitelistConfig = Map<String, dynamic>.from(config);
         whitelistConfig['_name'] = 'WL';
         whitelistConfig['_source_tag'] = _lagomWhitelistProxySourceTag;

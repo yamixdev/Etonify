@@ -265,6 +265,54 @@ class InstalledAppMessage {
   bool launchable;
 }
 
+enum NetworkServerKind { wifi, mobile }
+
+class NetworkServerSettingsMessage {
+  NetworkServerSettingsMessage({
+    required this.enabled,
+    required this.remember,
+    this.configuredWifi,
+    this.configuredMobile,
+    this.rememberedWifi,
+    this.rememberedMobile,
+  });
+
+  bool enabled;
+  bool remember;
+  String? configuredWifi;
+  String? configuredMobile;
+  String? rememberedWifi;
+  String? rememberedMobile;
+}
+
+@HostApi()
+abstract class NetworkServerHostApi {
+  @asyncCallback
+  NetworkServerSettingsMessage read(String profileId);
+
+  @asyncCallback
+  NetworkServerSettingsMessage setEnabled(String profileId, bool enabled);
+
+  @asyncCallback
+  NetworkServerSettingsMessage setRemember(String profileId, bool remember);
+
+  @asyncCallback
+  NetworkServerSettingsMessage setConfigured(
+    String profileId,
+    NetworkServerKind network,
+    String? tag,
+  );
+
+  @asyncCallback
+  void selectManual(String profileId, String tag);
+
+  @asyncCallback
+  void reassertAfterStart(String tag);
+
+  @asyncCallback
+  void rememberOffline(String profileId, String tag);
+}
+
 @HostApi()
 abstract class SingboxHostApi {
   @asyncCallback

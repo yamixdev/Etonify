@@ -34,6 +34,7 @@ class ParseResult {
     this.groups = const [],
     this.bodyMeta = const {},
     this.unsupportedWireGuardCount = 0,
+    this.warnings = const [],
   });
 
   final SubscriptionFormat format;
@@ -51,6 +52,7 @@ class ParseResult {
 
   /// WireGuard entries detected and intentionally excluded from the result.
   final int unsupportedWireGuardCount;
+  final List<String> warnings;
 
   bool get hasUnsupportedWireGuard => unsupportedWireGuardCount > 0;
 
@@ -59,6 +61,7 @@ class ParseResult {
     'outbounds': outbounds,
     if (groups.isNotEmpty) 'groups': groups.map((g) => g.toMap()).toList(),
     'bodyMeta': bodyMeta,
+    if (warnings.isNotEmpty) 'warnings': warnings,
     if (unsupportedWireGuardCount > 0)
       'unsupportedWireGuardCount': unsupportedWireGuardCount,
   };
@@ -89,6 +92,8 @@ class ParseResult {
       ),
       unsupportedWireGuardCount:
           (map['unsupportedWireGuardCount'] as num?)?.toInt() ?? 0,
+      warnings:
+          (map['warnings'] as List?)?.whereType<String>().toList() ?? const [],
     );
   }
 }
@@ -269,6 +274,7 @@ class SubscriptionParser {
         return _buildResult(
           format: SubscriptionFormat.xrayConfig,
           parsedOutbounds: parsed.outbounds,
+          warnings: parsed.warnings,
           groups: parsed.groups
               .map(ParsedOutboundGroup.fromMap)
               .toList(growable: false),
@@ -344,6 +350,7 @@ class SubscriptionParser {
     required List<Map<String, dynamic>> parsedOutbounds,
     List<ParsedOutboundGroup> groups = const [],
     Map<String, String> bodyMeta = const {},
+    List<String> warnings = const [],
   }) {
     final unsupportedWireGuardCount = parsedOutbounds
         .where(isWireGuardOutboundConfig)
@@ -358,6 +365,7 @@ class SubscriptionParser {
       groups: groups,
       bodyMeta: bodyMeta,
       unsupportedWireGuardCount: unsupportedWireGuardCount,
+      warnings: warnings,
     );
   }
 

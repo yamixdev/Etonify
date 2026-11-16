@@ -17,23 +17,29 @@ internal enum class NetworkHandoverProbeOutcome {
     INCONCLUSIVE,
 }
 
-internal class NetworkHandoverRecovery(private val restartCooldownMillis: Long) {
+internal class NetworkHandoverRecovery {
     private var resetRuntime = 0L
     private var resetNetwork = 0L
-    private var restartedContext: NetworkRecoveryContext? = null
-    private var lastRestartAt: Long? = null
     private var probeContext: NetworkRecoveryContext? = null
+    private var probeWakeAt: Long? = null
     private var probeRetryTaken = false
 
     @Synchronized
-    fun takeProbe(expected: NetworkRecoveryContext, current: NetworkRecoveryContext, retry: Boolean): Boolean {
+    fun takeProbe(
+        expected: NetworkRecoveryContext,
+        current: NetworkRecoveryContext,
+        retry: Boolean,
+        wakeAt: Long? = null,
+    ): Boolean {
         if (!expected.matches(current)) return false
+        val sameProbe = probeContext == expected && probeWakeAt == wakeAt
         if (retry) {
-            if (probeContext != expected || probeRetryTaken) return false
+            if (!sameProbe || probeRetryTaken) return false
             probeRetryTaken = true
         } else {
-            if (probeContext == expected) return false
+            if (sameProbe) return false
             probeContext = expected
+            probeWakeAt = wakeAt
             probeRetryTaken = false
         }
         return true
@@ -45,16 +51,6 @@ internal class NetworkHandoverRecovery(private val restartCooldownMillis: Long) 
         reset()
         resetRuntime = expected.runtime
         resetNetwork = expected.network
-        return true
-    }
-
-    @Synchronized
-    fun takeRestart(expected: NetworkRecoveryContext, current: NetworkRecoveryContext, nowMillis: Long): Boolean {
-        if (!expected.matches(current) || restartedContext == expected) return false
-        val previous = lastRestartAt
-        if (previous != null && (nowMillis < previous || nowMillis - previous < restartCooldownMillis)) return false
-        restartedContext = expected
-        lastRestartAt = nowMillis
         return true
     }
 }

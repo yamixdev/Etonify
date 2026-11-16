@@ -1,61 +1,57 @@
-import 'package:flutter/services.dart';
+import 'package:meow_client/singbox/singbox_api.g.dart';
 
 enum ServerNetwork { wifi, mobile }
 
 class NetworkServerSettings {
-  NetworkServerSettings._(Map<String, Object?> value)
-    : enabled = value['enabled'] == true,
-      remember = value['remember'] == true,
-      configured = _choices(value['configured']),
-      remembered = _choices(value['remembered']);
+  NetworkServerSettings._(NetworkServerSettingsMessage value)
+    : enabled = value.enabled,
+      remember = value.remember,
+      configured = _choices(value.configuredWifi, value.configuredMobile),
+      remembered = _choices(value.rememberedWifi, value.rememberedMobile);
 
-  static const _channel = MethodChannel(
-    'com.etonify.meow_client/network_servers',
-  );
+  static final _api = NetworkServerHostApi();
 
   final bool enabled;
   final bool remember;
   final Map<ServerNetwork, String> configured;
   final Map<ServerNetwork, String> remembered;
 
-  static Map<ServerNetwork, String> _choices(Object? raw) {
-    if (raw is! Map<Object?, Object?>) return const {};
-    return {
-      for (final network in ServerNetwork.values)
-        if (raw[network.name] case final String tag) network: tag,
-    };
-  }
+  static Map<ServerNetwork, String> _choices(String? wifi, String? mobile) => {
+    ServerNetwork.wifi: ?wifi,
+    ServerNetwork.mobile: ?mobile,
+  };
 
   static Future<NetworkServerSettings> read(String profileId) async =>
-      NetworkServerSettings._(
-        await _channel.invokeMapMethod<String, Object?>('read', {
-              'profileId': profileId,
-            }) ??
-            const {},
-      );
+      NetworkServerSettings._(await _api.read(profileId));
 
-  static Future<NetworkServerSettings> update(
+  static Future<NetworkServerSettings> setEnabled(
     String profileId,
-    String field,
-    Object? value,
+    bool enabled,
+  ) async => NetworkServerSettings._(await _api.setEnabled(profileId, enabled));
+
+  static Future<NetworkServerSettings> setRemember(
+    String profileId,
+    bool remember,
+  ) async =>
+      NetworkServerSettings._(await _api.setRemember(profileId, remember));
+
+  static Future<NetworkServerSettings> setConfigured(
+    String profileId,
+    ServerNetwork network,
+    String? tag,
   ) async => NetworkServerSettings._(
-    await _channel.invokeMapMethod<String, Object?>('update', {
-          'profileId': profileId,
-          'field': field,
-          'value': value,
-        }) ??
-        const {},
+    await _api.setConfigured(profileId, switch (network) {
+      ServerNetwork.wifi => NetworkServerKind.wifi,
+      ServerNetwork.mobile => NetworkServerKind.mobile,
+    }, tag),
   );
 
-  static Future<void> selectManual(String profileId, String tag) => _channel
-      .invokeMethod<void>('selectManual', {'profileId': profileId, 'tag': tag});
+  static Future<void> selectManual(String profileId, String tag) =>
+      _api.selectManual(profileId, tag);
 
   static Future<void> reassertAfterStart(String tag) =>
-      _channel.invokeMethod<void>('reassertAfterStart', {'tag': tag});
+      _api.reassertAfterStart(tag);
 
   static Future<void> rememberOffline(String profileId, String tag) =>
-      _channel.invokeMethod<void>('rememberOffline', {
-        'profileId': profileId,
-        'tag': tag,
-      });
+      _api.rememberOffline(profileId, tag);
 }

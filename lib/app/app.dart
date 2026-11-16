@@ -6886,22 +6886,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
-  Future<({String id, String name, List<Outbound> servers})?>
-  _loadNetworkServerProfile() async {
+  Future<Subscription?> _loadNetworkServerProfile() async {
     if (!await _ensureActiveSubscriptionHydratedForRuntime() || !mounted) {
       return null;
     }
-    final subscription = _activeSubscription;
-    if (subscription == null) return null;
-    final tags = subscription.concreteServerTags.difference(_userExcludedTags);
-    return (
-      id: subscription.id,
-      name: subscription.name,
-      servers: [
-        for (final server in subscription.outbounds)
-          if (tags.contains(server.tag)) server,
-      ],
-    );
+    return _eligibleSubscription(_activeSubscription);
   }
 
   Future<void> _showInboundSettingsPage() async {

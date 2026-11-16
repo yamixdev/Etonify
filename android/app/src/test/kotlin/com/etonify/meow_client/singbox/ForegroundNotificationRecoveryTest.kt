@@ -28,16 +28,103 @@ class ForegroundNotificationRecoveryTest {
     private val completions = mutableListOf<NetworkHandoverProbeOutcome>()
 
     @Before fun setUp() {
+        startNotification(
+            """{"outbounds":[{"type":"selector","tag":"select","outbounds":["a","b"]},{"type":"vless","tag":"a"},{"type":"vless","tag":"b"}]}""",
+            mapOf("select" to "a"),
+        )
+    }
+
+    private fun startNotification(config: String, selected: Map<String, String>) {
         val service = Robolectric.buildService(HostService::class.java).create().get()
         service.getSharedPreferences("meow_foreground_notification", 0).edit().clear().commit()
-        MeowApplication.configFile.writeText("""{"outbounds":[{"type":"selector","tag":"select","outbounds":["a","b"]},{"type":"vless","tag":"a"},{"type":"vless","tag":"b"}]}""")
+        MeowApplication.configFile.writeText(config)
         notification = MeowForegroundNotification(service, 42) { request, _, callback ->
             requests += request
             dispatches += callback
         }
         notification.buildForForeground("Connected")
         notification.onRuntimeReady(7L, 3L, false)
-        notification.updateSelectedOutbounds(mapOf("select" to "a"), startProbe = false)
+        notification.updateSelectedOutbounds(selected, startProbe = false)
+    }
+
+    @Test fun `wake fallback does not probe other servers for a manual selection`() {
+        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun `recovery uses the configured HTTP URL and timeout and rejects changed settings`() {
+        notification.updatePresentation(mapOf(
+            "url" to "http://ping.example/check",
+            "timeoutMillis" to 12_000,
+            "deadlineMillis" to 17_000,
+        ))
+        val previous = checkNotNull(notification.recoveryProbeRequest())
+        notification.updatePresentation(mapOf(
+            "url" to "http://new.example/check",
+            "timeoutMillis" to 15_000,
+            "deadlineMillis" to 20_000,
+        ))
+
+        assertFalse(notification.requestLatencyRefresh(recoveryRequest = previous) {})
+        val current = checkNotNull(notification.recoveryProbeRequest())
+        assertTrue(notification.requestLatencyRefresh(recoveryRequest = current) {})
+        val request = requests.single()
+        assertEquals("a", request.targetOutboundTag)
+        assertEquals("http://new.example/check", request.url)
+        assertEquals(15_000, request.timeoutMillis)
+        assertEquals(20_000, request.deadlineMillis)
+    }
+
+    @Test fun `wake fallback probes only the selected auto group`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["auto","c"]},
+              {"type":"urltest","tag":"auto","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"},{"type":"vless","tag":"c"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "auto", "auto" to "a"),
+        )
+        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { false })
+        assertFalse(notification.requestAutoGroupRecovery(7L, 4L, 0L) { true })
+        assertTrue(requests.isEmpty())
+        assertTrue(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+        val request = requests.single()
+        assertEquals("auto", request.groupTag)
+        assertEquals("", request.targetOutboundTag)
+        assertEquals("a", request.priorityOutboundTag)
+        assertEquals(20_000, request.deadlineMillis)
+    }
+
+    @Test fun `fastest can recover when the core has no current leaf`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["lowest","c"]},
+              {"type":"urltest","tag":"lowest","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"},{"type":"vless","tag":"c"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "lowest"),
+        )
+        notification.updatePresentation(mapOf("url" to "http://ping.example", "timeoutMillis" to 12_000))
+
+        assertNull(notification.recoveryProbeRequest())
+        assertTrue(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+
+        val request = requests.single()
+        assertEquals("lowest", request.groupTag)
+        assertEquals("", request.targetOutboundTag)
+        assertEquals("", request.priorityOutboundTag)
+        assertEquals("http://ping.example", request.url)
+        assertEquals(12_000, request.timeoutMillis)
+
+        notification.updateSelectedOutbounds(mapOf("select" to "c"), startProbe = false)
+        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+        assertEquals(1, requests.size)
     }
 
     private fun request(): Boolean {

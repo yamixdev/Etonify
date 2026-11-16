@@ -17,6 +17,7 @@ String subscriptionSourceErrorMessage(String code, AppLocalizations l10n) {
 }
 
 String subscriptionErrorMessage(Object error, AppLocalizations l10n) {
+  if (error is XrayImportException) return error.details;
   final failure = classifySubscriptionFailure(error);
   return switch (failure.kind) {
     SubscriptionFailureKind.invalidHwid => l10n.subscriptionErrorHwid,

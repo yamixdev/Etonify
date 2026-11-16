@@ -2,6 +2,10 @@ const Map<String, String> _importedKeyAliases = {
   'noGRPCHeader': 'no_grpc_header',
   'noSSEHeader': 'no_sse_header',
   'uplinkHTTPMethod': 'uplink_http_method',
+  'sessionIDPlacement': 'session_placement',
+  'sessionIDKey': 'session_key',
+  'sessionIDTable': 'session_table',
+  'sessionIDLength': 'session_length',
 };
 
 /// Converts camelCase/PascalCase keys used by Xray into sing-box snake_case.

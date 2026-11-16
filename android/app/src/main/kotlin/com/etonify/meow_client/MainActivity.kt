@@ -28,6 +28,7 @@ import androidx.core.content.FileProvider
 // Legacy Happ native crypt5 path is intentionally disabled. Crypt5/5.1 is now
 // decrypted in Dart from extracted selector/key tables.
 // import com.etonify.meow_client.happcrypto.Crypto5IsolatedService
+import com.etonify.meow_client.singbox.CallbackTaskExecutor
 import com.etonify.meow_client.singbox.MeowBoxService
 import com.etonify.meow_client.singbox.MeowDefaultNetworkMonitor
 import com.etonify.meow_client.singbox.MeowDiagnostics
@@ -36,7 +37,6 @@ import com.etonify.meow_client.singbox.MeowProxyService
 import com.etonify.meow_client.singbox.MeowProbeService
 import com.etonify.meow_client.singbox.MeowVpnPlatformInterface
 import com.etonify.meow_client.singbox.MeowVpnService
-import com.etonify.meow_client.singbox.NetworkServerPreferences
 import com.etonify.meow_client.singbox.NetworkServerProfile
 import com.etonify.meow_client.singbox.OwnProcessMemory
 import com.etonify.meow_client.singbox.PersistentDnsCache
@@ -48,6 +48,7 @@ import com.etonify.meow_client.generated.FlutterError as PigeonFlutterError
 import com.etonify.meow_client.generated.HttpHeaderMessage
 import com.etonify.meow_client.generated.InstalledAppMessage
 import com.etonify.meow_client.generated.NetworkInterfaceStateMessage
+import com.etonify.meow_client.generated.NetworkServerHostApi
 import com.etonify.meow_client.generated.OutboundFetchRequestMessage
 import com.etonify.meow_client.generated.RuntimeFlagsMessage
 import com.etonify.meow_client.generated.SingboxHostApi
@@ -91,9 +92,10 @@ class MainActivity : FlutterFragmentActivity() {
     private var subscriptionRefreshChannel: MethodChannel? = null
     private var pendingPrepareResult: MethodChannel.Result? = null
     private var pendingExportResult: MethodChannel.Result? = null
-    private var pendingExportContent: String? = null
+    private var pendingExportContent: ByteArray? = null
+    private var exportDocumentOpen = false
     private var pendingInstallSettingsResult: MethodChannel.Result? = null
-    private var launchingApkInstaller = false
+    private var pendingApkInstallResult: MethodChannel.Result? = null
     private var pendingNotificationPermissionResult: MethodChannel.Result? = null
     private var deepLinkEventSink: EventChannel.EventSink? = null
     private var pendingDeepLinkPayload: Map<String, Any?>? = null
@@ -101,6 +103,9 @@ class MainActivity : FlutterFragmentActivity() {
     private var singboxEventSinkRegistration = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val ioTasks = CallbackTaskExecutor(ioExecutor) { command -> mainHandler.post(command) }
+    private val statusExecutor = Executors.newSingleThreadExecutor()
+    private val statusTasks = CallbackTaskExecutor(statusExecutor) { command -> mainHandler.post(command) }
     private var startupTasks: StartupTaskRunner? = null
     private val subscriptionNetworkExecutor = Executors.newFixedThreadPool(2)
     private val endpointDnsExecutor = Executors.newFixedThreadPool(2)
@@ -380,29 +385,39 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun installDownloadedApk(result: MethodChannel.Result) {
-        val file = UpdateApkLocator.resolveSingleExisting(filesDir)
-        requireTrustedUpdateIdentity(file)
-        if (!canRequestApkInstalls()) {
-            throw IllegalStateException("APK install permission is not granted.")
+        check(pendingApkInstallResult == null) { "The APK installer is already opening." }
+        pendingApkInstallResult = result
+        ioTasks.execute(task = {
+            val file = UpdateApkLocator.resolveSingleExisting(filesDir)
+            requireTrustedUpdateIdentity(file)
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        }) { verified ->
+            if (pendingApkInstallResult !== result) return@execute
+            runCatching { openVerifiedApkInstaller(verified.getOrThrow(), result) }
+                .onFailure { error ->
+                    pendingApkInstallResult = null
+                    result.error("install_apk_failed", error.message ?: error.toString(), null)
+                }
         }
-        check(!launchingApkInstaller) { "The APK installer is already opening." }
-        val uri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            file,
-        )
+    }
+
+    private fun openVerifiedApkInstaller(uri: Uri, result: MethodChannel.Result) {
+        check(!isFinishing && !isDestroyed) { "The update screen has closed." }
+        check(canRequestApkInstalls()) { "APK install permission is not granted." }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         }
-        launchingApkInstaller = true
         val launchInstaller: (Boolean) -> Unit = launch@{ stopped ->
-            launchingApkInstaller = false
-            if (!stopped || isFinishing || isDestroyed) {
-                if (!stopped) {
-                    result.error("stop_timeout", "VPN did not stop before installing the update.", null)
-                }
+            if (pendingApkInstallResult !== result) return@launch
+            pendingApkInstallResult = null
+            if (!stopped) {
+                result.error("stop_timeout", "VPN did not stop before installing the update.", null)
+                return@launch
+            }
+            if (isFinishing || isDestroyed) {
+                result.error("install_apk_failed", "The update screen has closed.", null)
                 return@launch
             }
             runCatching { startActivity(intent) }
@@ -411,20 +426,15 @@ class MainActivity : FlutterFragmentActivity() {
                     result.error("install_apk_failed", error.message, null)
                 }
         }
-        runCatching {
-            val reason = "app_update"
-            SingboxController.recordExternalStop(reason)
-            MeowVpnService.cancelScheduledRestart(this, reason)
-            if (SingboxController.running || MeowBoxService.hasActiveRuntimeOwner() ||
-                MeowApplication.isRecordedServiceAlive()
-            ) {
-                dispatchStopRuntime(reason, launchInstaller)
-            } else {
-                launchInstaller(true)
-            }
-        }.onFailure { error ->
-            launchingApkInstaller = false
-            throw error
+        val reason = "app_update"
+        SingboxController.recordExternalStop(reason)
+        MeowVpnService.cancelScheduledRestart(this, reason)
+        if (SingboxController.running || MeowBoxService.hasActiveRuntimeOwner() ||
+            MeowApplication.isRecordedServiceAlive()
+        ) {
+            dispatchStopRuntime(reason, launchInstaller)
+        } else {
+            launchInstaller(true)
         }
     }
 
@@ -456,42 +466,60 @@ class MainActivity : FlutterFragmentActivity() {
         suggestedName: String,
         result: MethodChannel.Result,
     ) {
-        if (pendingExportResult != null) {
+        if (pendingExportResult != null || exportDocumentOpen) {
             result.error("export_in_progress", "A log export is already active.", null)
             return
         }
         pendingExportResult = result
-        pendingExportContent = logsWithNativeDiagnostics(content)
-        runCatching {
-            exportDocumentLauncher.launch(
-                suggestedName.ifBlank { "meow-logs-${System.currentTimeMillis()}.txt" },
-            )
-        }.onFailure { error ->
-            pendingExportResult = null
-            pendingExportContent = null
-            result.error("export_logs_failed", error.message, null)
+        ioTasks.execute(task = {
+            logsWithNativeDiagnostics(content).toByteArray(Charsets.UTF_8)
+        }) { prepared ->
+            if (pendingExportResult !== result) return@execute
+            runCatching {
+                check(!isFinishing && !isDestroyed) { "The log export screen has closed." }
+                pendingExportContent = prepared.getOrThrow()
+                exportDocumentOpen = true
+                exportDocumentLauncher.launch(
+                    suggestedName.ifBlank { "meow-logs-${System.currentTimeMillis()}.txt" },
+                )
+            }.onFailure { error ->
+                exportDocumentOpen = false
+                finishLogExport(result, Result.failure(error))
+            }
         }
     }
 
     private fun completeLogExport(uri: Uri?) {
-        val result = pendingExportResult
+        if (!exportDocumentOpen) return
+        exportDocumentOpen = false
+        val result = pendingExportResult ?: return
         val content = pendingExportContent
-        pendingExportResult = null
         pendingExportContent = null
-        if (uri == null || content == null) {
-            result?.success(null)
+        if (uri == null) {
+            finishLogExport(result, Result.success(null))
             return
         }
-        runCatching {
+        if (content == null) {
+            finishLogExport(result, Result.failure(IllegalStateException("The log export content is missing.")))
+            return
+        }
+        ioTasks.execute(task = {
             contentResolver.openOutputStream(uri)?.use { stream ->
-                stream.write(content.toByteArray(Charsets.UTF_8))
+                stream.write(content)
                 stream.flush()
             } ?: error("Failed to open output stream")
-        }.onSuccess {
-            result?.success(uri.toString())
-        }.onFailure {
-            result?.error("export_logs_failed", it.message, null)
+            uri.toString()
+        }) { written ->
+            finishLogExport(result, written)
         }
+    }
+
+    private fun finishLogExport(result: MethodChannel.Result, outcome: Result<String?>) {
+        if (pendingExportResult !== result) return
+        pendingExportResult = null
+        pendingExportContent = null
+        outcome.onSuccess(result::success)
+            .onFailure { result.error("export_logs_failed", it.message ?: it.toString(), null) }
     }
 
     private fun inspectDownloadedApk(path: String): Map<String, Any> {
@@ -821,8 +849,8 @@ class MainActivity : FlutterFragmentActivity() {
         else -> 80
     }
 
-    private fun buildImportDeepLinkPayload(uri: Uri?): Map<String, Any?>? {
-        if (uri == null) {
+    internal fun buildImportDeepLinkPayload(uri: Uri?): Map<String, Any?>? {
+        if (uri == null || !uri.isHierarchical) {
             return null
         }
         val scheme = uri.scheme?.lowercase() ?: return null
@@ -1460,10 +1488,14 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun runtimeStatusMap(): Map<String?, Any?> {
-        val runtimeState = SingboxController.runtimeStateSnapshot()
-        val recordedState = MeowApplication.readServiceState()
+        val recordedService = MeowApplication.recordedServiceSnapshot()
+        val recordedState = recordedService.state
         val runtimeIntent = MeowApplication.readRuntimeIntent()
-        val recordedServiceAlive = MeowApplication.isRecordedServiceAlive()
+        val now = System.currentTimeMillis()
+        val runtimeState = SingboxController.runtimeStateSnapshot(
+            runtimeIntentFresh = runtimeIntent != null && now >= runtimeIntent.updatedAtMillis,
+        )
+        val recordedServiceAlive = recordedService.alive
         val activeRuntimeOwner = MeowBoxService.hasActiveRuntimeOwner(
             (runtimeState["mode"] as? String)?.takeIf { it.isNotBlank() },
         )
@@ -1482,7 +1514,7 @@ class MainActivity : FlutterFragmentActivity() {
             "recordedServiceMode" to recordedState?.mode,
             "recordedServicePid" to recordedState?.pid,
             "recordedServiceUpdatedAtMillis" to recordedState?.updatedAtMillis,
-            "recordedServiceState" to MeowApplication.describeRecordedServiceState(),
+            "recordedServiceState" to recordedService.description(),
             "activeRuntimeOwner" to activeRuntimeOwner,
             "nativeRecoveryPending" to nativeRecoveryPending,
             // Status is intentionally read-only. Recovery belongs to explicit
@@ -1492,7 +1524,7 @@ class MainActivity : FlutterFragmentActivity() {
             "runtimeIntentReason" to runtimeIntent?.reason,
             "runtimeIntentPid" to runtimeIntent?.pid,
             "runtimeIntentUpdatedAtMillis" to runtimeIntent?.updatedAtMillis,
-            "runtimeIntentState" to MeowApplication.describeRuntimeIntent(),
+            "runtimeIntentState" to MeowApplication.describeRuntimeIntent(runtimeIntent, now),
         ) + runtimeState
     }
 
@@ -1914,7 +1946,7 @@ class MainActivity : FlutterFragmentActivity() {
                 }
 
                 override fun status(callback: (Result<Map<String?, Any?>>) -> Unit) {
-                    callback(Result.success(runtimeStatusMap()))
+                    statusTasks.execute(task = ::runtimeStatusMap, callback = callback)
                 }
 
                 override fun querySelectedOutbounds(callback: (Result<Map<String?, Any?>>) -> Unit) {
@@ -2306,7 +2338,7 @@ class MainActivity : FlutterFragmentActivity() {
         startupTasks = startup
         setupSingboxHostApi(messenger, startup)
         subscriptionRefreshChannel = SubscriptionRefreshJobs.register(applicationContext, messenger)
-        registerNetworkServerSettings(messenger)
+        NetworkServerHostApi.setUp(messenger, NetworkServerChannel)
 
         MethodChannel(
             messenger,
@@ -2430,65 +2462,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     }
 
-    private fun registerNetworkServerSettings(messenger: BinaryMessenger) {
-        MethodChannel(messenger, NetworkServerPreferences.CHANNEL).setMethodCallHandler { call, result ->
-            val profileId = call.argument<String>("profileId").orEmpty()
-            when (call.method) {
-                "read" -> result.success(NetworkServerPreferences.wireValue(NetworkServerPreferences.read(profileId)))
-                "update" -> {
-                    val field = call.argument<String>("field").orEmpty()
-                    val value = call.argument<Any>("value")
-                    val valid = when (field) {
-                        "enabled", "remember" -> value is Boolean
-                        "wifi", "mobile" -> profileId.isNotBlank() && (value == null || value is String)
-                        else -> false
-                    }
-                    if (!valid) {
-                        result.error("invalid_policy", "Invalid network server setting", null)
-                    } else {
-                        MeowBoxService.updateNetworkServerPolicy(profileId, field, value) { update ->
-                            update.onSuccess { result.success(NetworkServerPreferences.wireValue(it)) }
-                                .onFailure { result.error("update_failed", it.message, null) }
-                        }
-                    }
-                }
-                "selectManual", "reassertAfterStart" -> {
-                    val manual = call.method == "selectManual"
-                    val tag = call.argument<String>("tag").orEmpty()
-                    if ((manual && profileId.isBlank()) || tag.isBlank()) {
-                        result.error("invalid_selection", "Missing subscription or outbound", null)
-                        return@setMethodCallHandler
-                    }
-                    val complete: (Result<Unit>) -> Unit = { selection ->
-                        selection.onSuccess { result.success(null) }
-                            .onFailure { result.error("select_failed", it.message, null) }
-                    }
-                    if (MeowBoxService.selectVpnOutbound(tag, profileId.takeIf { manual }, complete)) {
-                        return@setMethodCallHandler
-                    }
-                    if (SingboxController.serviceMode == "vpn") {
-                        result.error("select_failed", "VPN runtime is changing", null)
-                    } else {
-                        SingboxController.selectOutbound("select", tag, complete)
-                    }
-                }
-                "rememberOffline" -> {
-                    val tag = call.argument<String>("tag").orEmpty()
-                    if (profileId.isNotBlank() && tag.isNotBlank() &&
-                        NetworkServerPreferences.read(profileId).let { it.enabled && it.remember } &&
-                        SingboxController.serviceMode != "vpn" && !MeowBoxService.hasActiveRuntimeOwner("vpn")
-                    ) {
-                        val network = MeowDefaultNetworkMonitor.offlineServerNetworkSnapshot()
-                        NetworkServerPreferences.remember(profileId, tag, network, network)
-                    }
-                    result.success(null)
-                }
-                else -> result.notImplemented()
-            }
-        }
-    }
-
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        cancelActivityFileOperations()
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         subscriptionRefreshChannel?.let(SubscriptionRefreshJobs::unregister)
         subscriptionRefreshChannel = null
@@ -2497,7 +2472,6 @@ class MainActivity : FlutterFragmentActivity() {
             quickSettingsMethodChannelName,
             secureStorageMethodChannelName,
             deepLinkMethodChannelName,
-            NetworkServerPreferences.CHANNEL,
         ).forEach { MethodChannel(messenger, it).setMethodCallHandler(null) }
         EventChannel(messenger, eventChannelName).setStreamHandler(null)
         EventChannel(messenger, deepLinkEventChannelName).setStreamHandler(null)
@@ -2506,6 +2480,7 @@ class MainActivity : FlutterFragmentActivity() {
         startupTasks?.close()
         startupTasks = null
         SingboxHostApi.setUp(messenger, null)
+        NetworkServerHostApi.setUp(messenger, null)
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -2524,6 +2499,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
+        cancelActivityFileOperations()
         startupTasks?.close()
         startupTasks = null
         clearSingboxEventSink()
@@ -2531,9 +2507,20 @@ class MainActivity : FlutterFragmentActivity() {
         pendingDeepLinkPayload = null
         mainHandler.removeCallbacksAndMessages(null)
         ioExecutor.shutdownNow()
+        statusExecutor.shutdown()
         subscriptionNetworkExecutor.shutdownNow()
         endpointDnsExecutor.shutdownNow()
         appIconExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun cancelActivityFileOperations() {
+        val install = pendingApkInstallResult
+        val export = pendingExportResult
+        pendingApkInstallResult = null
+        pendingExportResult = null
+        pendingExportContent = null
+        install?.error("install_apk_failed", "The update screen has closed.", null)
+        export?.error("export_logs_failed", "The log export screen has closed.", null)
     }
 }

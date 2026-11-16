@@ -1116,6 +1116,62 @@ void main() {
       'streamSettings': streamSettings,
     };
 
+    test('accepts an empty dialerProxy without creating a detour', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            outbound('direct', {
+              'sockopt': {'dialerProxy': ''},
+            }),
+            outbound('invalid', {
+              'sockopt': {'dialerProxy': 123},
+            }),
+          ],
+        }),
+      );
+
+      expect(result.outbounds.single['_name'], 'direct');
+      expect(result.outbounds.single.containsKey('detour'), isFalse);
+      expect(result.warnings.single, contains('Invalid Xray proxy chain tag'));
+    });
+
+    test('accepts empty finalmask fields and rejects active masks', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            outbound('empty', {'finalmask': <String, dynamic>{}}),
+            outbound('empty-lists', {
+              'finalMask': {
+                'tcp': <Object>[],
+                'udp': <Object>[],
+                'quicParams': null,
+              },
+            }),
+            outbound('masked', {
+              'finalmask': {
+                'tcp': [
+                  {'type': 'fragment'},
+                ],
+              },
+            }),
+            outbound('quic', {
+              'finalmask': {'quicParams': <String, dynamic>{}},
+            }),
+          ],
+        }),
+      );
+
+      expect(result.outbounds.map((node) => node['_name']), [
+        'empty',
+        'empty-lists',
+      ]);
+      expect(
+        result.warnings,
+        everyElement(contains('Xray finalmask is unsupported')),
+      );
+      expect(result.warnings, hasLength(2));
+    });
+
     test('uses the nonempty REALITY password in preference to publicKey', () {
       const newKey = 'thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8';
       const oldKey = 'z0S7qx_G_rb8nATkZmCJpPC-hiQPNmqkXGkSmKM5fXY';
@@ -1142,6 +1198,106 @@ void main() {
         ),
         [newKey, newKey, oldKey, oldKey],
       );
+    });
+
+    test('imports TCP REALITY with the Xray UDP/443 Vision spelling', () {
+      const key = 'thwa3P0vSbbPNr0n94LqAzpFJGwTX3bpIlTyrIis7S8';
+      final fromJson = outbound('raw', {
+        'network': 'raw',
+        'security': 'reality',
+        'realitySettings': {'serverName': 'cover.example', 'password': key},
+      });
+      (fromJson['settings'] as Map)['flow'] = 'xtls-rprx-vision-udp443';
+      final cases = [
+        jsonEncode({
+          'outbounds': [fromJson],
+        }),
+        'vless://00000000-0000-0000-0000-000000000001@raw.example:443'
+            '?type=tcp&security=reality&flow=xtls-rprx-vision-udp443'
+            '&sni=cover.example&pbk=$key',
+      ];
+      for (final content in cases) {
+        final result = SubscriptionParser.parse(content);
+        final node = result.outbounds.single;
+        expect(node['flow'], 'xtls-rprx-vision');
+        expect(node['transport'], isNull);
+        expect(node['tls']['reality']['public_key'], key);
+        expect(node['tls']['utls']['enabled'], isTrue);
+      }
+    });
+
+    test('skips unknown transports and retains the reason across isolates', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            outbound('unsupported', {'network': 'xdrive'}),
+            outbound('raw', {'network': 'tcp'}),
+          ],
+        }),
+      );
+
+      expect(result.outbounds.single['_name'], 'raw');
+      expect(
+        ParseResult.fromMap(result.toMap()).warnings.single,
+        contains('xdrive'),
+      );
+    });
+
+    test('uses Xray XHTTP settings precedence and retains sessionID keys', () {
+      final result = SubscriptionParser.parse(
+        jsonEncode({
+          'outbounds': [
+            outbound('top', {
+              'network': 'xhttp',
+              'xhttpSettings': {
+                'xPaddingBytes': '100-300',
+                'sessionIDPlacement': 'header',
+                'sessionIDKey': 'X-Session-Test',
+                'xmux': {'maxConnections': 2},
+              },
+            }),
+            outbound('extra', {
+              'network': 'splithttp',
+              'splithttpSettings': {'mode': 'stream-one'},
+              'xhttpSettings': {
+                'host': 'top.example',
+                'mode': 'packet-up',
+                'headers': {'X-Source': 'top'},
+                'xmux': {'maxConnections': 4},
+                'extra': {
+                  'host': 'other.example',
+                  'path': '/discard',
+                  'mode': 'stream-up',
+                  'headers': {'X-Source': 'extra'},
+                  'xmux': {'maxConcurrency': '1-2'},
+                },
+              },
+            }),
+            outbound('unsupported', {
+              'network': 'xhttp',
+              'xhttpSettings': {
+                'extra': {
+                  'downloadSettings': {'network': 'xhttp'},
+                },
+              },
+            }),
+          ],
+        }),
+      );
+
+      expect(result.warnings.single, contains('downloadSettings'));
+      final top = result.outbounds[0]['transport'] as Map;
+      expect(top['mode'], 'auto');
+      expect(top['x_padding_bytes'], '100-300');
+      expect(top['session_placement'], 'header');
+      expect(top['session_key'], 'X-Session-Test');
+      expect(top['xmux'], {'max_connections': 2});
+      final extra = result.outbounds[1]['transport'] as Map;
+      expect(extra['mode'], 'packet-up');
+      expect(extra['host'], 'top.example');
+      expect(extra['path'], isNull);
+      expect(extra['headers'], {'X-Source': 'extra'});
+      expect(extra['xmux'], {'max_concurrency': '1-2'});
     });
 
     test(
@@ -1205,6 +1361,10 @@ void main() {
           'type': 'http',
           'raw_tcp': true,
           'path': '/legacy',
+          'host': ['www.baidu.com', 'www.bing.com'],
+          'headers': {
+            'Connection': ['keep-alive'],
+          },
         });
         expect(result.outbounds[2]['transport'], isNull);
       },

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:meow_client/data/subscription/import_key_normalizer.dart';
+import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/parsers/cert_pin_utils.dart';
 
 /// Extracts outbounds from an Xray / V2Ray JSON configuration and
@@ -8,14 +9,18 @@ class XrayConfigParseResult {
   const XrayConfigParseResult({
     required this.outbounds,
     this.groups = const [],
+    this.warnings = const [],
   });
 
   final List<Map<String, dynamic>> outbounds;
   final List<Map<String, dynamic>> groups;
+  final List<String> warnings;
 }
 
 class XrayConfigParser {
   XrayConfigParser._();
+
+  static final _safeOptionPattern = RegExp(r'^[a-z0-9_-]{1,32}$');
 
   /// Returns `true` if [content] looks like an Xray/V2Ray config.
   static bool canParse(String content) {
@@ -44,6 +49,7 @@ class XrayConfigParser {
   static XrayConfigParseResult parseWithGroups(String content) {
     final outbounds = <Map<String, dynamic>>[];
     final groups = <Map<String, dynamic>>[];
+    final warnings = <String>[];
     final json = jsonDecode(content);
 
     if (json is Map) {
@@ -51,9 +57,9 @@ class XrayConfigParser {
         Map<String, dynamic>.from(json),
         outbounds,
         groups,
+        warnings,
         sourceScope: _sourceScope(0),
       );
-      return XrayConfigParseResult(outbounds: outbounds, groups: groups);
     }
 
     if (json is List) {
@@ -64,12 +70,17 @@ class XrayConfigParser {
           Map<String, dynamic>.from(entry),
           outbounds,
           groups,
+          warnings,
           sourceScope: _sourceScope(i),
         );
       }
     }
 
-    return XrayConfigParseResult(outbounds: outbounds, groups: groups);
+    return XrayConfigParseResult(
+      outbounds: outbounds,
+      groups: groups,
+      warnings: warnings,
+    );
   }
 
   static const _skipProtocols = {'freedom', 'blackhole', 'dns', 'loopback'};
@@ -87,7 +98,8 @@ class XrayConfigParser {
   static void _appendParsedConfig(
     Map<String, dynamic> json,
     List<Map<String, dynamic>> results,
-    List<Map<String, dynamic>> groups, {
+    List<Map<String, dynamic>> groups,
+    List<String> warnings, {
     required String sourceScope,
   }) {
     final outbounds = json['outbounds'];
@@ -95,44 +107,69 @@ class XrayConfigParser {
       return;
     }
 
-    final remarks = (json['remarks'] as String?)?.trim();
+    final remarks = _s(json['remarks']).trim();
     final proxyEntries = outbounds
         .where((entry) {
           if (entry is! Map) return false;
-          final protocol = (entry['protocol'] ?? '') as String;
+          final protocol = _s(entry['protocol']).toLowerCase();
           return !_skipProtocols.contains(protocol);
         })
         .toList(growable: false);
     final singleProxyDisplayName =
-        proxyEntries.length == 1 && remarks != null && remarks.isNotEmpty
-        ? remarks
-        : null;
+        proxyEntries.length == 1 && remarks.isNotEmpty ? remarks : null;
 
-    final convertedSourceTags = <String>[];
+    final candidates = <(int, String, Map<String, dynamic>)>[];
+    final tagCounts = <String, int>{};
+    for (final entry in outbounds.whereType<Map<String, dynamic>>()) {
+      final tag = _s(entry['tag']).trim();
+      if (tag.isNotEmpty) {
+        tagCounts.update(tag, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
     var proxyIndex = 0;
     for (final entry in outbounds) {
       if (entry is! Map) continue;
       final ob = Map<String, dynamic>.from(entry);
 
-      final protocol = (ob['protocol'] ?? '') as String;
+      final protocol = _s(ob['protocol']).toLowerCase();
       if (_skipProtocols.contains(protocol)) continue;
 
       final sourceTag = _sourceTag(ob, proxyIndex, sourceScope);
       proxyIndex++;
-      final converted = _convert(ob);
-      if (converted != null) {
+      try {
+        final converted = _convert(ob);
+        if (converted == null) {
+          throw const FormatException(
+            'Unsupported or incomplete Xray outbound',
+          );
+        }
+        final detour = _detour(ob, converted);
+        if (detour.isNotEmpty) converted['detour'] = detour;
         converted['_source_tag'] = sourceTag;
         converted['_source_scope'] = sourceScope;
         converted['_source_order'] = int.tryParse(sourceScope.substring(5));
-        if (remarks != null && remarks.isNotEmpty) {
+        if (remarks.isNotEmpty) {
           converted['_source_profile_name'] = remarks;
         }
-        convertedSourceTags.add(sourceTag);
         if (singleProxyDisplayName != null) {
           converted['_name'] = singleProxyDisplayName;
         }
-        results.add(converted);
+        candidates.add((proxyIndex, sourceTag, converted));
+      } on FormatException catch (error) {
+        warnings.add('Outbound $proxyIndex: ${error.message}');
       }
+    }
+
+    final checkDetour = _detourValidator(candidates, tagCounts);
+    final convertedSourceTags = <String>[];
+    for (final (index, tag, converted) in candidates) {
+      final problem = checkDetour(converted);
+      if (problem != null) {
+        warnings.add('Outbound $index: $problem');
+        continue;
+      }
+      convertedSourceTags.add(tag);
+      results.add(converted);
     }
 
     _appendParsedGroups(
@@ -142,6 +179,88 @@ class XrayConfigParser {
       remarks: remarks,
       sourceScope: sourceScope,
     );
+  }
+
+  static String _detour(
+    Map<String, dynamic> ob,
+    Map<String, dynamic> converted,
+  ) {
+    final stream = _map(ob['streamSettings']);
+    final socketOptions = _map(stream['sockopt']);
+    final dialerTag = _detourTag(socketOptions['dialerProxy']);
+    final rawLegacy = ob['proxySettings'];
+    if (rawLegacy == null) return dialerTag;
+    final legacy = _map(rawLegacy);
+    final legacyTag = _detourTag(legacy['tag']);
+    if (legacyTag.isEmpty) {
+      throw const FormatException('Missing Xray proxySettings tag');
+    }
+    if (dialerTag.isNotEmpty && dialerTag != legacyTag) {
+      throw const FormatException(
+        'Conflicting Xray proxySettings and dialerProxy',
+      );
+    }
+    if (legacy['transportLayer'] != true) {
+      if (!const {'tcp', 'raw'}.contains(_network(stream)) ||
+          converted['transport'] != null ||
+          converted['type'] == 'hysteria2' ||
+          dialerTag.isNotEmpty ||
+          _s(stream['security']).toLowerCase() == 'reality') {
+        throw const FormatException(
+          'Legacy Xray proxySettings requires transportLayer for this transport or TLS mode',
+        );
+      }
+      final tls = converted['tls'];
+      // The old protocol-level detour wraps the upstream pipe with Go TLS.
+      if (tls is Map<String, dynamic>) tls.remove('utls');
+    }
+    return legacyTag;
+  }
+
+  static String _detourTag(Object? value) {
+    if (value == null || value == '') return '';
+    if (value is! String || value.trim().isEmpty) {
+      throw const FormatException('Invalid Xray proxy chain tag');
+    }
+    return value.trim();
+  }
+
+  static String? Function(Map<String, dynamic>) _detourValidator(
+    List<(int, String, Map<String, dynamic>)> candidates,
+    Map<String, int> tagCounts,
+  ) {
+    final tagged = {
+      for (final (_, tag, config) in candidates)
+        if (tagCounts[tag] == 1) tag: config,
+    };
+    final checked = <String, String?>{};
+    return (config) {
+      final visited = <String>{};
+      var target = _s(config['detour']);
+      String? problem;
+      while (target.isNotEmpty) {
+        if (checked.containsKey(target)) {
+          problem = checked[target];
+          break;
+        }
+        if (!visited.add(target)) {
+          problem = 'Xray proxy chain contains a cycle';
+          break;
+        }
+        final next = tagged[target];
+        if (next == null) {
+          problem = (tagCounts[target] ?? 0) > 1
+              ? 'Xray proxy chain refers to a duplicate outbound tag'
+              : 'Xray proxy chain refers to a missing or unsupported outbound';
+          break;
+        }
+        target = _s(next['detour']);
+      }
+      for (final tag in visited) {
+        checked[tag] = problem;
+      }
+      return problem;
+    };
   }
 
   static void _appendParsedGroups(
@@ -223,7 +342,7 @@ class XrayConfigParser {
     int proxyIndex,
     String sourceScope,
   ) {
-    final sourceTag = _s(outbound['tag']);
+    final sourceTag = _s(outbound['tag']).trim();
     if (sourceTag.isNotEmpty) {
       return sourceTag;
     }
@@ -314,10 +433,59 @@ class XrayConfigParser {
   // ─────────────────── Converter ───────────────────
 
   static Map<String, dynamic>? _convert(Map<String, dynamic> ob) {
-    final protocol = (ob['protocol'] ?? '') as String;
-    final tag = (ob['tag'] ?? '') as String;
+    final protocol = _s(ob['protocol']).toLowerCase();
+    final tag = _s(ob['tag']);
     final settings = _map(ob['settings']);
     final stream = _map(ob['streamSettings']);
+    final network = _network(stream);
+    final security = _s(stream['security']).toLowerCase();
+    if (security != '' &&
+        security != 'none' &&
+        security != 'tls' &&
+        security != 'reality') {
+      throw FormatException(
+        'Unsupported Xray security: ${_safeOption(security)}',
+      );
+    }
+    if (security == 'reality' &&
+        !const {'tcp', 'raw', 'xhttp', 'splithttp', 'grpc'}.contains(network)) {
+      throw FormatException(
+        'Unsupported Xray REALITY transport: ${_safeOption(network)}',
+      );
+    }
+    if (protocol != 'vmess' &&
+        protocol != 'vless' &&
+        protocol != 'trojan' &&
+        !(protocol == 'hysteria' && network == 'hysteria') &&
+        network != 'tcp' &&
+        network != 'raw') {
+      throw FormatException(
+        'Unsupported Xray transport: ${_safeOption(network)}',
+      );
+    }
+    for (final entry in stream.entries) {
+      if (entry.key.toLowerCase() != 'finalmask' || entry.value == null) {
+        continue;
+      }
+      final mask = entry.value;
+      if (mask is! Map ||
+          mask.entries.any(
+            (option) => switch (option.key.toString().toLowerCase()) {
+              'tcp' || 'udp' => !_isEmptyMaskList(option.value),
+              'quicparams' => option.value != null,
+              _ => false,
+            },
+          )) {
+        throw const FormatException('Xray finalmask is unsupported');
+      }
+    }
+    if ((protocol == 'shadowsocks' || protocol == 'socks') &&
+        security != '' &&
+        security != 'none') {
+      throw const FormatException(
+        'Xray stream security is unsupported for this protocol',
+      );
+    }
 
     switch (protocol) {
       case 'vmess':
@@ -364,7 +532,7 @@ class XrayConfigParser {
     };
 
     _addTls(r, stream);
-    if (!_addTransport(r, stream)) return null;
+    _addTransport(r, stream);
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -401,13 +569,13 @@ class XrayConfigParser {
       'uuid': _s(user['id']),
     };
 
-    final flow = _s(user['flow']);
+    final flow = ParsedOutboundSchema.normalizeXrayVlessFlow(_s(user['flow']));
     if (flow.isNotEmpty) r['flow'] = flow;
     final encryption = _s(user['encryption']);
     if (encryption.isNotEmpty) r['encryption'] = encryption;
 
     _addTls(r, stream);
-    if (!_addTransport(r, stream)) return null;
+    _addTransport(r, stream);
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -433,7 +601,7 @@ class XrayConfigParser {
     };
 
     _addTls(r, stream);
-    if (!_addTransport(r, stream)) return null;
+    _addTransport(r, stream);
 
     r['_name'] = tag.isNotEmpty ? tag : '${r['server']}:${r['server_port']}';
     return r;
@@ -573,10 +741,16 @@ class XrayConfigParser {
       final rs = _map(stream['realitySettings']);
       final sni = _s(rs['serverName']);
       if (sni.isNotEmpty) tls['server_name'] = sni;
-      final fp = _s(rs['fingerprint']);
-      if (fp.isNotEmpty) {
-        tls['utls'] = {'enabled': true, 'fingerprint': fp};
+      if (_s(rs['mldsa65Verify']).isNotEmpty) {
+        throw const FormatException(
+          'Xray REALITY mldsa65Verify is unsupported',
+        );
       }
+      final fp = _s(rs['fingerprint']).toLowerCase();
+      tls['utls'] = {
+        'enabled': true,
+        'fingerprint': fp.isEmpty ? 'chrome' : fp,
+      };
       final reality = <String, dynamic>{'enabled': true};
       final password = _s(rs['password']);
       final pbk = password.isNotEmpty ? password : _s(rs['publicKey']);
@@ -588,6 +762,14 @@ class XrayConfigParser {
       tls['reality'] = reality;
     } else {
       final ts = _map(stream['tlsSettings']);
+      if (_s(ts['verifyPeerCertByName']).isNotEmpty ||
+          ts['disableSystemRoot'] == true ||
+          _list(ts['certificates']).isNotEmpty ||
+          _s(ts['echConfigList']).isNotEmpty) {
+        throw const FormatException(
+          'Unsupported Xray TLS certificate policy or ECH',
+        );
+      }
       final sni = _s(ts['serverName']);
       if (sni.isNotEmpty) tls['server_name'] = sni;
       final allowInsecure = ts['allowInsecure'] ?? ts['allow_insecure'];
@@ -598,10 +780,21 @@ class XrayConfigParser {
         tls['insecure'] = true;
       }
       final alpn = ts['alpn'];
-      if (alpn is List) tls['alpn'] = alpn.map((e) => e.toString()).toList();
-      final fp = _s(ts['fingerprint']);
-      if (fp.isNotEmpty) {
-        tls['utls'] = {'enabled': true, 'fingerprint': fp};
+      if (alpn is String || alpn is List) tls['alpn'] = _stringList(alpn);
+      for (final (key, target) in const [
+        ('minVersion', 'min_version'),
+        ('maxVersion', 'max_version'),
+      ]) {
+        final version = _s(ts[key]);
+        if (version.isNotEmpty) tls[target] = version;
+      }
+      final fp = _s(ts['fingerprint']).toLowerCase();
+      final raw = const {'tcp', 'raw'}.contains(_network(stream));
+      if ((fp.isNotEmpty || raw) && fp != 'unsafe' && fp != 'hellogolang') {
+        tls['utls'] = {
+          'enabled': true,
+          'fingerprint': fp.isEmpty ? 'chrome' : fp,
+        };
       }
       final rawPins =
           ts['pinnedPeerCertSha256'] ??
@@ -619,25 +812,33 @@ class XrayConfigParser {
 
   // ━━━━━━━━━━━━━━━━━━ Transport ━━━━━━━━━━━━━━━━━━
 
-  static bool _addTransport(
+  static String _network(Map<String, dynamic> stream) =>
+      _s(stream['method'] ?? stream['network'], 'tcp').toLowerCase();
+
+  static String _safeOption(String value) =>
+      _safeOptionPattern.hasMatch(value) ? value : '(invalid value)';
+
+  static void _addTransport(
     Map<String, dynamic> r,
     Map<String, dynamic> stream,
   ) {
-    final network = _s(
-      stream['method'] ?? stream['network'],
-      'tcp',
-    ).toLowerCase();
+    final network = _network(stream);
 
     switch (network) {
       case 'ws':
+      case 'websocket':
         final ws = _map(stream['wsSettings']);
         final t = <String, dynamic>{'type': 'ws'};
         final path = _s(ws['path']);
         if (path.isNotEmpty) t['path'] = path;
         final headers = ws['headers'];
-        if (headers is Map) {
-          t['headers'] = Map<String, dynamic>.from(headers);
+        final requestHeaders = _map(headers);
+        final host = _s(ws['host']);
+        if (host.isNotEmpty) {
+          requestHeaders.removeWhere((key, _) => key.toLowerCase() == 'host');
+          requestHeaders['Host'] = host;
         }
+        if (requestHeaders.isNotEmpty) t['headers'] = requestHeaders;
         r['transport'] = t;
 
       case 'grpc':
@@ -650,6 +851,7 @@ class XrayConfigParser {
         r['transport'] = t;
 
       case 'h2':
+      case 'http':
         final hs = _map(stream['httpSettings']);
         final t = <String, dynamic>{'type': 'http'};
         final host = hs['host'];
@@ -665,31 +867,15 @@ class XrayConfigParser {
         if (host.isNotEmpty) t['host'] = host;
         final path = _s(hu['path']);
         if (path.isNotEmpty) t['path'] = path;
+        final headers = _map(hu['headers']);
+        if (headers.isNotEmpty) t['headers'] = headers;
         r['transport'] = t;
 
       case 'splithttp':
       case 'xhttp':
-        final sh = _map(stream['splithttpSettings'] ?? stream['xhttpSettings']);
-        final t = <String, dynamic>{
-          'type': 'xhttp',
-          ..._xhttpExtra(sh['extra']),
-        };
-        final host = _s(sh['host']);
-        if (host.isNotEmpty) t['host'] = host;
-        final path = _s(sh['path']);
-        if (path.isNotEmpty) t['path'] = path;
-        final mode = _s(sh['mode']);
-        if (mode.isNotEmpty) t['mode'] = mode;
-        final headers = sh['headers'];
-        if (headers is Map) {
-          t['headers'] = Map<String, dynamic>.from(headers);
-        }
-        // xmux settings
-        final xmux = sh['xmux'];
-        if (xmux is Map) {
-          t['xmux'] = Map<String, dynamic>.from(xmux);
-        }
-        r['transport'] = t;
+        r['transport'] = _xhttpTransport(
+          _map(stream['xhttpSettings'] ?? stream['splithttpSettings']),
+        );
 
       case 'kcp':
       case 'mkcp':
@@ -711,17 +897,30 @@ class XrayConfigParser {
         final header = _map(tcp['header']);
         final headerType = _s(header['type']);
         if (headerType.isEmpty || headerType == 'none') break;
-        if (headerType != 'http') return false;
+        if (headerType != 'http') {
+          throw FormatException(
+            'Unsupported Xray RAW header: ${_safeOption(headerType)}',
+          );
+        }
 
         final t = <String, dynamic>{'type': 'http', 'raw_tcp': true};
         final request = _map(header['request']);
+        final version = _s(request['version']);
+        if (version.isNotEmpty && version != '1.1') {
+          throw const FormatException('Xray RAW HTTP only supports HTTP/1.1');
+        }
         final method = _s(request['method']);
         if (method.isNotEmpty) t['method'] = method;
         final paths = _stringList(request['path']);
         if (paths.isNotEmpty) t['path'] = paths.first;
 
         final headers = <String, dynamic>{};
-        for (final entry in _map(request['headers']).entries) {
+        final requestHeaders = _map(request['headers']);
+        if (requestHeaders.isEmpty) {
+          t['host'] = const ['www.baidu.com', 'www.bing.com'];
+          headers['Connection'] = const ['keep-alive'];
+        }
+        for (final entry in requestHeaders.entries) {
           final values = _stringList(entry.value);
           if (values.isEmpty) continue;
           if (entry.key.toLowerCase() == 'host') {
@@ -732,8 +931,11 @@ class XrayConfigParser {
         }
         if (headers.isNotEmpty) t['headers'] = headers;
         r['transport'] = t;
+      default:
+        throw FormatException(
+          'Unsupported Xray transport: ${_safeOption(network)}',
+        );
     }
-    return true;
   }
 
   // ━━━━━━━━━━━━━━━━━━ Utility ━━━━━━━━━━━━━━━━━━
@@ -749,6 +951,9 @@ class XrayConfigParser {
     _ => const [],
   };
 
+  static bool _isEmptyMaskList(Object? value) =>
+      value == null || (value is List && value.isEmpty);
+
   static int _i(dynamic v, [int fallback = 0]) {
     if (v is int) return v;
     if (v is double) return v.toInt();
@@ -756,31 +961,68 @@ class XrayConfigParser {
     return fallback;
   }
 
-  static Map<String, dynamic> _xhttpExtra(dynamic rawValue) {
-    dynamic value = rawValue;
-    if (value is String && value.trim().isNotEmpty) {
+  static Map<String, dynamic> _xhttpTransport(Map<String, dynamic> settings) {
+    final rawExtra = settings['extra'];
+    dynamic effective = rawExtra ?? settings;
+    if (effective is String) {
       try {
-        value = jsonDecode(value);
-      } catch (_) {
-        return const <String, dynamic>{};
+        effective = jsonDecode(effective);
+      } on FormatException {
+        throw const FormatException('Invalid Xray XHTTP extra');
       }
     }
-    if (value is! Map) {
-      return const <String, dynamic>{};
+    if (effective is! Map) {
+      throw const FormatException('Invalid Xray XHTTP extra');
+    }
+    final transport = <String, dynamic>{'type': 'xhttp'};
+    for (final key in const ['host', 'path', 'mode']) {
+      final value = _s(settings[key]);
+      if (value.isNotEmpty) transport[key] = value;
+    }
+    transport.putIfAbsent('mode', () => 'auto');
+    if (!const {
+      'auto',
+      'packet-up',
+      'stream-up',
+      'stream-one',
+    }.contains(transport['mode'])) {
+      throw const FormatException('Unsupported Xray XHTTP mode');
+    }
+    if (_map(
+      effective['headers'],
+    ).keys.any((key) => key.toLowerCase() == 'host')) {
+      throw const FormatException('Xray XHTTP requires host outside headers');
     }
 
-    final extra = <String, dynamic>{};
-    for (final entry in value.entries) {
+    for (final entry in effective.entries) {
       final key = normalizeImportedKey(entry.key.toString());
       final item = entry.value;
-      extra[key] = key == 'xmux' && item is Map
+      if (key == 'download_settings' && item != null) {
+        throw const FormatException(
+          'Xray XHTTP downloadSettings is unsupported',
+        );
+      }
+      if (key == 'h2_params' && item != null) {
+        throw const FormatException('Xray XHTTP h2Params is unsupported');
+      }
+      if (const {
+        'type',
+        'host',
+        'path',
+        'mode',
+        'extra',
+        'download_settings',
+      }.contains(key)) {
+        continue;
+      }
+      transport[key] = key == 'xmux' && item is Map
           ? {
               for (final xmuxEntry in item.entries)
                 normalizeImportedKey(xmuxEntry.key.toString()): xmuxEntry.value,
             }
           : item;
     }
-    return extra;
+    return transport;
   }
 
   static Map<String, dynamic> _map(dynamic v) {

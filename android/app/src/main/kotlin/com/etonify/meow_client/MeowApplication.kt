@@ -380,40 +380,45 @@ class MeowApplication : Application() {
                 installedAtMillis = installedPackageInfo.lastUpdateTime,
             )
 
-        fun describeRecordedServiceState(): String {
-            val state = readServiceState()
-            if (state == null) {
-                return "state=missing"
-            }
-            val cmdline = runCatching {
+        private fun readServiceCmdline(state: ServiceState): String =
+            runCatching {
                 File("/proc/${state.pid}/cmdline")
                     .readText()
                     .replace('\u0000', ' ')
                     .trim()
             }.getOrDefault("")
-            val alive = cmdline.contains(application.packageName)
-            return buildString {
-                append("statePid=")
-                append(state.pid)
-                append(" mode=")
-                append(state.mode)
-                append(" updatedAtMillis=")
-                append(state.updatedAtMillis)
-                append(" alive=")
-                append(alive)
-                if (cmdline.isNotEmpty()) {
-                    append(" cmdline=")
-                    append(cmdline)
+
+        internal class RecordedServiceSnapshot(
+            val state: ServiceState?,
+            private val cmdline: String,
+            val alive: Boolean,
+        ) {
+            fun description(): String {
+                val current = state ?: return "state=missing"
+                return buildString {
+                    append("statePid=${current.pid} mode=${current.mode}")
+                    append(" updatedAtMillis=${current.updatedAtMillis} alive=$alive")
+                    if (cmdline.isNotEmpty()) append(" cmdline=$cmdline")
                 }
             }
         }
 
-        fun describeRuntimeIntent(): String {
-            val state = readRuntimeIntent()
+        internal fun recordedServiceSnapshot(): RecordedServiceSnapshot {
+            val state = readServiceState()
+            val cmdline = state?.let(::readServiceCmdline).orEmpty()
+            return RecordedServiceSnapshot(state, cmdline, cmdline.contains(application.packageName))
+        }
+
+        fun describeRecordedServiceState(): String = recordedServiceSnapshot().description()
+
+        fun describeRuntimeIntent(
+            state: RuntimeIntentState? = readRuntimeIntent(),
+            nowMillis: Long = System.currentTimeMillis(),
+        ): String {
             if (state == null) {
                 return "intent=missing"
             }
-            val ageMs = System.currentTimeMillis() - state.updatedAtMillis
+            val ageMs = nowMillis - state.updatedAtMillis
             return buildString {
                 append("intentPid=")
                 append(state.pid)
@@ -435,13 +440,7 @@ class MeowApplication : Application() {
             if (mode != null && state.mode != mode) {
                 return false
             }
-            val cmdline = runCatching {
-                File("/proc/${state.pid}/cmdline")
-                    .readText()
-                    .replace('\u0000', ' ')
-                    .trim()
-            }.getOrDefault("")
-            return cmdline.contains(application.packageName)
+            return readServiceCmdline(state).contains(application.packageName)
         }
 
         fun isRuntimeIntentFresh(mode: String? = null): Boolean {

@@ -85,6 +85,15 @@ class SubscriptionContentException implements Exception {
   };
 }
 
+class XrayImportException implements Exception {
+  const XrayImportException(this.details);
+
+  final String details;
+
+  @override
+  String toString() => details;
+}
+
 class SubscriptionImportCancelledException implements Exception {
   const SubscriptionImportCancelledException();
 
@@ -103,6 +112,9 @@ SubscriptionFailure classifySubscriptionFailure(Object error) {
   if (error is SubscriptionFailure) return error;
   if (error is SubscriptionHwidException) {
     return const SubscriptionFailure(SubscriptionFailureKind.invalidHwid);
+  }
+  if (error is XrayImportException) {
+    return const SubscriptionFailure(SubscriptionFailureKind.invalidContent);
   }
   if (error is SubscriptionHttpStatusException) {
     return SubscriptionFailure(

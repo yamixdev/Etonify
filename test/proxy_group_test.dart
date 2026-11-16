@@ -985,6 +985,71 @@ void main() {
     ]);
   });
 
+  test(
+    'resolves Xray detours after tag renaming and rejects broken chains',
+    () {
+      Map<String, dynamic> node(
+        String name, {
+        String? via,
+        bool legacy = false,
+      }) => {
+        'tag': name,
+        'protocol': 'vless',
+        'settings': {
+          'address': 'proxy.example',
+          'port': 443,
+          'id': '00000000-0000-0000-0000-000000000001',
+        },
+        if (via != null && legacy) 'proxySettings': {'tag': via},
+        if (via != null && !legacy)
+          'streamSettings': {
+            'network': 'tcp',
+            'sockopt': {'dialerProxy': via},
+          },
+      };
+      final result = SubscriptionParser.parse(
+        jsonEncode([
+          {
+            'outbounds': [
+              node('Top Proxy', via: 'Middle Proxy'),
+              node('Middle Proxy', via: 'Exit Proxy', legacy: true),
+              node('Exit Proxy'),
+              node('Cycle A', via: 'Cycle B'),
+              node('Cycle B', via: 'Cycle A'),
+              node('Cycle Dependent', via: 'Cycle A'),
+              node('Missing', via: 'Foreign Outbound'),
+            ],
+          },
+          {
+            'outbounds': [node('Foreign Outbound')],
+          },
+        ]),
+      );
+
+      final payload = SubscriptionStore.buildSubscriptionPayloadForTest(result);
+      final configs = {
+        for (final node in payload.outbounds)
+          node['tag']: node['config'] as Map,
+      };
+      expect(configs.keys, [
+        'top-proxy',
+        'middle-proxy',
+        'exit-proxy',
+        'foreign-outbound',
+      ]);
+      expect(configs['top-proxy']?['detour'], 'middle-proxy');
+      expect(configs['middle-proxy']?['detour'], 'exit-proxy');
+      expect(
+        result.warnings.where((warning) => warning.contains('cycle')),
+        hasLength(3),
+      );
+      expect(
+        result.warnings.where((warning) => warning.contains('missing')),
+        hasLength(1),
+      );
+    },
+  );
+
   test('parses Xray balancer as a proxy group', () {
     final content = jsonEncode({
       'remarks': '🇪🇺 Авто | Самый быстрый',
