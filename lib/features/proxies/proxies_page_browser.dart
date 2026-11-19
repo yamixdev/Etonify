@@ -134,6 +134,7 @@ extension _ProxyBrowser on _ProxiesPageState {
 
   Widget _buildBrowser(BuildContext context, AppLocalizations l10n) {
     final group = _browserGroup;
+    final pinButton = group == null ? null : _groupPinButton(group, l10n);
     final entries = _visibleEntries();
     final list =
         (widget.loading || !widget.catalogReady || _presentationLoading) &&
@@ -237,22 +238,29 @@ extension _ProxyBrowser on _ProxiesPageState {
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: TextField(
-                key: const ValueKey('proxy-browser-search'),
-                controller: _browserSearch,
-                onChanged: _searchBrowser,
-                decoration: InputDecoration(
-                  labelText: l10n.subscriptionSearchServers,
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: IconButton(
-                    tooltip: l10n.subscriptionClearSearch,
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () {
-                      _browserSearch.clear();
-                      _searchBrowser('');
-                    },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('proxy-browser-search'),
+                      controller: _browserSearch,
+                      onChanged: _searchBrowser,
+                      decoration: InputDecoration(
+                        labelText: l10n.subscriptionSearchServers,
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: IconButton(
+                          tooltip: l10n.subscriptionClearSearch,
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            _browserSearch.clear();
+                            _searchBrowser('');
+                          },
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  ?pinButton,
+                ],
               ),
             ),
             Expanded(

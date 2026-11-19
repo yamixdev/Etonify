@@ -714,6 +714,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     if (_groupSheetOpen &&
         (oldWidget.proxies != widget.proxies ||
             oldWidget.groupChildrenByTag != widget.groupChildrenByTag ||
+            !setEquals(oldWidget.pinnedProxyTags, widget.pinnedProxyTags) ||
             oldWidget.selectedTag != widget.selectedTag)) {
       _scheduleGroupPanelRefresh();
     }
@@ -1206,6 +1207,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
                   children: snapshot.childrenByTag[group.tag] ?? children,
                   groupChildrenByTag: snapshot.childrenByTag,
                   selectedTag: snapshot.selectedTag,
+                  pinButton: _groupPinButton(
+                    group,
+                    AppLocalizations.of(context),
+                  ),
                   progressiveBlurEnabled: widget.progressiveBlurEnabled,
                   runtimeStates: widget.runtimeStates,
                   routeAnimation: animation,
@@ -1286,6 +1291,19 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     final pinned = widget.pinnedProxyTags.contains(proxy.tag);
     return () => change(proxy.tag, !pinned);
+  }
+
+  Widget? _groupPinButton(AppProxySummary group, AppLocalizations l10n) {
+    final togglePin = _pinAction(group);
+    if (togglePin == null) return null;
+    final pinned = widget.pinnedProxyTags.contains(group.tag);
+    return IconButton(
+      tooltip: pinned ? l10n.proxyUnpin : l10n.proxyPin,
+      icon: Icon(pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined),
+      onPressed: () async {
+        await togglePin();
+      },
+    );
   }
 
   Future<void> _openProxyActions(AppProxySummary proxy) async {
@@ -1906,7 +1924,9 @@ class _ProxiesPageState extends State<ProxiesPage> {
               onTestLatency: widget.onProxyUrlTest != null
                   ? () => unawaited(widget.onProxyUrlTest!(proxy.tag))
                   : null,
-              onLongPress: () => _openProxyActions(proxy),
+              onLongPress: proxy.isGroup && !isLowestProxyTag(proxy.tag)
+                  ? null
+                  : () => _openProxyActions(proxy),
               onOpenGroup: proxy.isGroup && proxy.membersSelectable
                   ? (rect) => _openGroupOutbounds(proxy, rect)
                   : null,

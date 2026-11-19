@@ -6,6 +6,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
     required this.children,
     required this.groupChildrenByTag,
     required this.selectedTag,
+    this.pinButton,
     required this.progressiveBlurEnabled,
     this.runtimeStates,
     required this.routeAnimation,
@@ -25,6 +26,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
   final List<AppProxySummary> children;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
+  final Widget? pinButton;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore? runtimeStates;
   final Animation<double> routeAnimation;
@@ -47,6 +49,7 @@ class _GroupOutboundsSheet extends StatelessWidget {
       children: children,
       groupChildrenByTag: groupChildrenByTag,
       selectedTag: selectedTag,
+      pinButton: pinButton,
       progressiveBlurEnabled: progressiveBlurEnabled,
       runtimeStates: runtimeStates,
       routeAnimation: routeAnimation,
@@ -70,6 +73,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
     required this.children,
     required this.groupChildrenByTag,
     required this.selectedTag,
+    this.pinButton,
     required this.progressiveBlurEnabled,
     this.runtimeStates,
     required this.routeAnimation,
@@ -89,6 +93,7 @@ class _GroupOutboundsSheetBody extends StatefulWidget {
   final List<AppProxySummary> children;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
+  final Widget? pinButton;
   final bool progressiveBlurEnabled;
   final ProxyRuntimeVisualStore? runtimeStates;
   final Animation<double> routeAnimation;
@@ -562,6 +567,9 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
                   ),
                   child: _GroupOutboundsSheetHeader(
                     title: groupBaseTitle,
+                    pinButton: group.tag == widget.group.tag
+                        ? widget.pinButton
+                        : null,
                     l10n: l10n,
                     sort: _sort,
                     hideUnavailable: _hideUnavailable,
@@ -628,6 +636,7 @@ class _GroupOutboundsSheetBodyState extends State<_GroupOutboundsSheetBody> {
 class _GroupOutboundsSheetHeader extends StatelessWidget {
   const _GroupOutboundsSheetHeader({
     required this.title,
+    this.pinButton,
     required this.l10n,
     required this.sort,
     required this.hideUnavailable,
@@ -637,6 +646,7 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
   });
 
   final String title;
+  final Widget? pinButton;
   final AppLocalizations l10n;
   final ProxySort sort;
   final bool hideUnavailable;
@@ -670,7 +680,7 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
           ),
           Positioned(
             left: 72,
-            right: 72,
+            right: pinButton == null ? 72 : 120,
             top: 18,
             bottom: 0,
             child: Center(
@@ -705,17 +715,23 @@ class _GroupOutboundsSheetHeader extends StatelessWidget {
             bottom: 0,
             child: Align(
               alignment: Alignment.centerRight,
-              child: IconButton(
-                tooltip: l10n.sort,
-                onPressed: () => _showProxySortPicker(
-                  context,
-                  l10n: l10n,
-                  current: sort,
-                  onSelected: onSortSelected,
-                  hideUnavailable: hideUnavailable,
-                  onHideUnavailableChanged: onHideUnavailableChanged,
-                ),
-                icon: const Icon(FluentIcons.arrow_sort_24_regular),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ?pinButton,
+                  IconButton(
+                    tooltip: l10n.sort,
+                    onPressed: () => _showProxySortPicker(
+                      context,
+                      l10n: l10n,
+                      current: sort,
+                      onSelected: onSortSelected,
+                      hideUnavailable: hideUnavailable,
+                      onHideUnavailableChanged: onHideUnavailableChanged,
+                    ),
+                    icon: const Icon(FluentIcons.arrow_sort_24_regular),
+                  ),
+                ],
               ),
             ),
           ),

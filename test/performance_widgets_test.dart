@@ -95,6 +95,7 @@ void main() {
         displayName: 'LTE Авто — Нидерланды и другие серверы',
         childTags: [for (final child in children) child.tag],
       );
+      final pinChanges = <(String, bool)>[];
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('ru'),
@@ -116,6 +117,10 @@ void main() {
               sheetExtent: 1,
               progressiveBlurEnabled: false,
               groupChildrenByTag: {group.tag: children},
+              onProxyPinChanged: (tag, pinned) async {
+                pinChanges.add((tag, pinned));
+                return true;
+              },
               onSelected: (_) {},
               onUrlTest: () async {},
             ),
@@ -132,6 +137,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.text(children.first.displayName), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрепить сервер'));
+      expect(pinChanges, [(group.tag, true)]);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
