@@ -324,6 +324,7 @@ class VpnAwareRemoteDownloader {
               destination: attemptFile,
               maximumBytes: maximumBytes,
               onProgress: reportProgress,
+              reportWhileDownloading: onProgress != null,
             ),
           };
           if (!acceptedStatusCodes.contains(result.statusCode)) {
@@ -609,15 +610,36 @@ class VpnAwareRemoteDownloader {
     required File destination,
     required int maximumBytes,
     void Function(int completed, int total)? onProgress,
+    bool reportWhileDownloading = false,
   }) async {
-    final native = await SingboxRuntime.instance.downloadUrlOnUnderlyingNetwork(
-      uri: uri,
-      headers: headers,
-      destinationPath: destination.path,
-      maxBytes: maximumBytes,
-      responseStartTimeout: responseStartTimeout,
-      idleTimeout: remoteDownloadIdleTimeout,
-    );
+    // Android writes each chunk to this attempt's private file before the
+    // platform call returns. The response length arrives with the result.
+    var observedBytes = 0;
+    var statPending = false;
+    final progressTimer = reportWhileDownloading && onProgress != null
+        ? Timer.periodic(const Duration(milliseconds: 250), (timer) async {
+            if (statPending) return;
+            statPending = true;
+            final stat = await destination.stat();
+            statPending = false;
+            if (!timer.isActive || stat.size <= observedBytes) return;
+            observedBytes = stat.size;
+            onProgress(observedBytes, 0);
+          })
+        : null;
+    final Map<String, dynamic> native;
+    try {
+      native = await SingboxRuntime.instance.downloadUrlOnUnderlyingNetwork(
+        uri: uri,
+        headers: headers,
+        destinationPath: destination.path,
+        maxBytes: maximumBytes,
+        responseStartTimeout: responseStartTimeout,
+        idleTimeout: remoteDownloadIdleTimeout,
+      );
+    } finally {
+      progressTimer?.cancel();
+    }
     final downloadedBytes = (native['downloadedBytes'] as num?)?.toInt() ?? 0;
     onProgress?.call(downloadedBytes, downloadedBytes);
     return RemoteDownloadResult(

@@ -1,7 +1,6 @@
 package com.etonify.meow_client.singbox
 
 
-import android.annotation.TargetApi
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
@@ -240,7 +239,7 @@ object MeowDefaultNetworkMonitor {
             MeowDiagnostics.log(TAG, "require late current ${describeNetwork(it)}")
             return it
         }
-        return requirePhysicalNetwork(cached)
+        return requirePhysicalNetwork()
     }
 
     /**
@@ -248,8 +247,8 @@ object MeowDefaultNetworkMonitor {
      * the running VPN. Control-plane downloads and platform DNS use this path:
      * selecting a direct fallback must never trigger a libbox interface switch.
      */
-    fun requirePhysicalNetwork(preferred: Network? = currentNetworkSnapshot()): Network {
-        resolveBestNetwork(preferred = preferred)?.let {
+    fun requirePhysicalNetwork(): Network {
+        resolveBestNetwork()?.let {
             MeowDiagnostics.log(TAG, "physical network resolved ${describeNetwork(it)}")
             return it
         }
@@ -512,12 +511,7 @@ object MeowDefaultNetworkMonitor {
             }
             return
         }
-        // A callback for a newly available physical transport must be allowed
-        // to replace an old, no-longer-validated interface. While a VPN is
-        // active ConnectivityManager.activeNetwork is often the VPN itself,
-        // so keeping currentNetwork unconditionally can pin libbox to dead
-        // Wi-Fi after a Wi-Fi -> cellular handover.
-        val preferredNetwork = resolveBestNetwork(preferred = network)
+        val preferredNetwork = resolveBestNetwork()
         var previousNetwork: Network? = null
         val decision = synchronized(lock) {
             previousNetwork = currentNetwork
@@ -643,7 +637,8 @@ object MeowDefaultNetworkMonitor {
             return false
         }
         synchronized(lock) {
-            if (started) currentNetwork = effectiveNetwork
+            if (!started || listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
+            currentNetwork = effectiveNetwork
         }
         val properties = MeowApplication.connectivity.getLinkProperties(effectiveNetwork)
         val interfaceName = properties?.interfaceName
@@ -802,7 +797,6 @@ object MeowDefaultNetworkMonitor {
 
     private fun resolveBestNetwork(
         exclude: Network? = null,
-        preferred: Network? = null,
     ): Network? {
         val connectivity = MeowApplication.connectivity
         val active = connectivity.activeNetwork
@@ -834,7 +828,6 @@ object MeowDefaultNetworkMonitor {
                 )
             },
             current = current,
-            preferred = preferred,
         )?.value
         val selected = candidates.firstOrNull { it.network == selectedNetwork }
         if (selected == null && candidates.isNotEmpty()) {
@@ -972,29 +965,13 @@ object MeowDefaultNetworkMonitor {
     }
 
     private fun register() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            @TargetApi(Build.VERSION_CODES.S)
-            runCatching {
-                MeowDiagnostics.log(TAG, "register method=registerBestMatchingNetworkCallback sdk=${Build.VERSION.SDK_INT}")
-                MeowApplication.connectivity.registerBestMatchingNetworkCallback(
-                    request,
-                    callback,
-                    networkHandler,
-                )
-            }.onFailure {
-                SingboxController.log("error", "default network callback failed: ${it.message}")
-            }
-        } else {
-            runCatching {
-                MeowDiagnostics.log(TAG, "register method=registerNetworkCallback(networkHandler) sdk=${Build.VERSION.SDK_INT}")
-                MeowApplication.connectivity.registerNetworkCallback(
-                    request,
-                    callback,
-                    networkHandler,
-                )
-            }.onFailure {
-                SingboxController.log("error", "default network callback failed: ${it.message}")
-            }
+        // Standby transports can gain validation while the current network stays
+        // connected. Observe all physical candidates so that change is delivered.
+        runCatching {
+            MeowDiagnostics.log(TAG, "register method=registerNetworkCallback(networkHandler) sdk=${Build.VERSION.SDK_INT}")
+            MeowApplication.connectivity.registerNetworkCallback(request, callback, networkHandler)
+        }.onFailure {
+            SingboxController.log("error", "default network callback failed: ${it.message}")
         }
     }
 }

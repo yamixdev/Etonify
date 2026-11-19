@@ -627,6 +627,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shareProxyTitle => 'Share';
 
   @override
+  String get proxyPin => 'Pin server';
+
+  @override
+  String get proxyUnpin => 'Unpin server';
+
+  @override
+  String get proxyPinned => 'Pinned server';
+
+  @override
+  String get proxyPinFailed =>
+      'Could not save the pin. The server may have changed.';
+
+  @override
+  String get proxyGroupOpenMembers => 'Show servers';
+
+  @override
   String get shareProxyLinkLabel => 'Share link';
 
   @override

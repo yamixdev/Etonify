@@ -1221,6 +1221,10 @@ class _DownloadProgressCard extends StatelessWidget {
         : l10n.updatesUnknownSize;
     final eta = _formatEta(context, progress?.etaSeconds);
     final stage = progress?.stage ?? AppUpdateDownloadStage.downloading;
+    final showTransfer =
+        stage == AppUpdateDownloadStage.downloading ||
+        (stage == AppUpdateDownloadStage.retryingWithoutVpn &&
+            (progress?.downloadedBytes ?? 0) > 0);
     final title = switch (stage) {
       AppUpdateDownloadStage.cleaning => l10n.updatesStageCleaning,
       AppUpdateDownloadStage.retryingWithoutVpn =>
@@ -1247,9 +1251,9 @@ class _DownloadProgressCard extends StatelessWidget {
             const Gap(10),
             if (stage == AppUpdateDownloadStage.retryingWithoutVpn)
               Text(l10n.remoteDownloadRetryWithoutVpnHint),
-            if (stage == AppUpdateDownloadStage.downloading)
+            if (showTransfer)
               Text(l10n.updatesProgressBytes(downloaded, total)),
-            if (stage == AppUpdateDownloadStage.downloading &&
+            if (showTransfer &&
                 progress != null &&
                 progress!.bytesPerSecond > 0) ...[
               const Gap(4),

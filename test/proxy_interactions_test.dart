@@ -112,6 +112,54 @@ Widget _page({
 }
 
 void main() {
+  testWidgets('top proxy cards open their action sheets on long press', (
+    tester,
+  ) async {
+    final server = _proxy('server');
+    final fastest = _proxy('lowest', children: [server.tag]);
+    await tester.pumpWidget(
+      _app(
+        Scaffold(
+          body: ProxiesPage(
+            proxies: [fastest, server],
+            groupChildrenByTag: {
+              fastest.tag: [server],
+            },
+            selectedTag: server.tag,
+            activeProxy: server,
+            connected: true,
+            progressiveBlurEnabled: false,
+            hapticEnabled: false,
+            onSelected: (_) {},
+            onUrlTest: () async {},
+            onProxyUrlTest: (_) async {},
+            outboundForTag: (tag) => Outbound(
+              tag: tag,
+              name: tag,
+              config: const {
+                'type': 'socks',
+                'server': 'example.com',
+                'server_port': 1080,
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey('proxy-current-choice')));
+    await tester.pumpAndSettle();
+    expect(find.text('Share link'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Share link'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey('proxy-select-lowest')));
+    await tester.pumpAndSettle();
+    expect(find.text('Show servers'), findsOneWidget);
+    expect(find.text('Refresh latency'), findsWidgets);
+  });
+
   testWidgets('filtered group still opens and hidden members can be restored', (
     tester,
   ) async {

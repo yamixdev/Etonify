@@ -754,17 +754,24 @@ class SubscriptionStore {
     bool replaceEmptyPayload = false,
   }) async {
     await ensurePayloadReady();
-    await _withSubscriptionWriteLock(
-      sub.id,
-      () => _saveUnlocked(sub, replaceEmptyPayload: replaceEmptyPayload),
-    );
+    await _withSubscriptionWriteLock(sub.id, () async {
+      final current = getMetadata(sub.id);
+      await _saveUnlocked(
+        current == null ? sub : sub.copyWith(proxyPins: current.proxyPins),
+        replaceEmptyPayload: replaceEmptyPayload,
+      );
+    });
   }
 
   /// A backup's empty local list is a complete snapshot.
-  static Future<void> saveImportedProfile(Subscription sub) =>
-      save(sub, replaceEmptyPayload: sub.isLocalList);
+  static Future<void> saveImportedProfile(Subscription sub) async {
+    await ensurePayloadReady();
+    await _withSubscriptionWriteLock(sub.id, () async {
+      await _saveUnlocked(sub, replaceEmptyPayload: sub.isLocalList);
+    });
+  }
 
-  static Future<void> _saveUnlocked(
+  static Future<Subscription> _saveUnlocked(
     Subscription sub, {
     bool replaceEmptyPayload = false,
   }) async {
@@ -772,23 +779,39 @@ class SubscriptionStore {
     final payloadReadStopwatch = Stopwatch()..start();
     final existingPayload = await _payloadStore.get(sub.id);
     payloadReadStopwatch.stop();
+    final pins = sub.proxyPins;
     final isMetadataOnly =
         sub.outbounds.isEmpty &&
+        sub.groups.isEmpty &&
         sub.rawContent.isEmpty &&
         !replaceEmptyPayload &&
         existingPayload != null;
     if (isMetadataOnly) {
       await _saveMetadataUnlocked(sub);
-      return;
+      return sub;
     }
     final encodeStopwatch = Stopwatch()..start();
     final payloadResult = await Isolate.run(() {
       final payloadBytes = _encodeStoredPayload(jsonEncode(sub.toPayloadMap()));
       final revision = sha256.convert(payloadBytes).toString();
-      return (payload: payloadBytes, revision: revision);
+      final retainedPins = <String, String>{
+        if (pins.isNotEmpty) ...{
+          for (final outbound in sub.outbounds)
+            if (pins[outbound.tag] case final identity?)
+              if (_outboundPinIdentity(outbound) == identity)
+                outbound.tag: identity,
+          for (final group in sub.groups)
+            if (pins[group.tag] case final identity?)
+              if (_groupPinIdentity(group) == identity) group.tag: identity,
+        },
+      };
+      return (payload: payloadBytes, revision: revision, pins: retainedPins);
     }, debugName: 'meow-encode-subscription-payload');
     encodeStopwatch.stop();
-    final updatedSub = sub.copyWith(payloadRevision: payloadResult.revision);
+    final updatedSub = sub.copyWith(
+      payloadRevision: payloadResult.revision,
+      proxyPins: payloadResult.pins,
+    );
     final metadataWriteStopwatch = Stopwatch();
     final payloadUnchanged =
         existingPayload is List<int> &&
@@ -856,15 +879,80 @@ class SubscriptionStore {
           'payloadChanged=${!payloadUnchanged} '
           'bytes=${payloadResult.payload.length}',
     );
+    return updatedSub;
   }
 
   /// Saves only lightweight subscription metadata.
   static Future<void> saveMetadata(Subscription sub) async {
     await _withSubscriptionWriteLock(sub.id, () async {
-      if (!_metaStore.containsKey(sub.id)) {
-        return;
+      final current = getMetadata(sub.id);
+      if (current == null) return;
+      await _saveMetadataUnlocked(sub.copyWith(proxyPins: current.proxyPins));
+    });
+  }
+
+  static String? proxyPinIdentity(Subscription profile, String tag) {
+    if (isSyntheticProxyTag(tag)) return null;
+    for (final group in profile.groups) {
+      if (group.tag == tag) return _groupPinIdentity(group);
+    }
+    for (final outbound in profile.outbounds) {
+      if (outbound.tag == tag) return _outboundPinIdentity(outbound);
+    }
+    return null;
+  }
+
+  static String _groupPinIdentity(SubscriptionGroup group) =>
+      'group:${sha256.convert(utf8.encode(jsonEncode([group.type, group.name])))}';
+
+  static String? _outboundPinIdentity(Outbound outbound) {
+    if (!isConcreteSubscriptionServer(outbound)) return null;
+    final config = outbound.config;
+    // Connection tuning may change during refresh without replacing the server.
+    final identity = <String, dynamic>{
+      'type': outbound.type,
+      'server': outbound.server,
+      'port': outbound.port,
+      for (final key in [
+        'uuid',
+        'username',
+        'password',
+        'auth',
+        'auth_string',
+        'method',
+        'detour',
+      ])
+        if (config.containsKey(key))
+          key: _stableOutboundIdentityValue(config[key]),
+    };
+    return 'outbound:${sha256.convert(utf8.encode(jsonEncode(identity)))}';
+  }
+
+  static Future<bool> setProxyPinned(
+    String profileId,
+    String tag, {
+    required String expectedIdentity,
+    required bool pinned,
+  }) async {
+    await ensurePayloadReady();
+    return _withSubscriptionWriteLock(profileId, () async {
+      final metadata = getMetadata(profileId);
+      if (metadata == null) return false;
+      final raw = await _payloadStore.get(profileId);
+      if (raw == null) return false;
+      final identity = await Isolate.run(() {
+        final profile = _withPayloadFromRaw(metadata, raw, strict: true);
+        return proxyPinIdentity(profile, tag);
+      }, debugName: 'etonify-validate-proxy-pin');
+      if (identity != expectedIdentity) return false;
+      final pins = Map<String, String>.of(metadata.proxyPins);
+      if (pinned) {
+        pins[tag] = expectedIdentity;
+      } else {
+        pins.remove(tag);
       }
-      await _saveMetadataUnlocked(sub);
+      await _saveMetadataUnlocked(metadata.copyWith(proxyPins: pins));
+      return true;
     });
   }
 
@@ -1413,15 +1501,16 @@ class SubscriptionStore {
             SubscriptionContentFailureKind.noUsableProxies,
           );
     }
+    var saved = current;
     if (updated != null) {
-      await _saveUnlocked(updated);
+      saved = await _saveUnlocked(updated);
       if (isCancelled?.call() == true) {
         await _saveUnlocked(current, replaceEmptyPayload: true);
         throw const SubscriptionImportCancelledException();
       }
     }
     return SubscriptionImportResult(
-      subscription: updated ?? current,
+      subscription: saved,
       warning: warning,
       alreadyAdded: result == LocalListAddResult.alreadyAdded,
     );
@@ -1618,12 +1707,12 @@ class SubscriptionStore {
       snapshot: imported.copyWith(sources: const []),
     );
     final merged = await _composeSources(current, [...sources, added]);
-    await _saveUnlocked(merged);
+    final saved = await _saveUnlocked(merged);
     if (isCancelled?.call() ?? false) {
       await _saveUnlocked(current);
       throw const SubscriptionImportCancelledException();
     }
-    return merged;
+    return saved;
   });
 
   static Future<Subscription> _composeSources(
@@ -1683,8 +1772,7 @@ class SubscriptionStore {
         throw StateError('At least one source must remain enabled');
       }
       final merged = await _composeSources(current, updated);
-      await _saveUnlocked(merged);
-      return merged;
+      return _saveUnlocked(merged);
     });
   }
 
@@ -1703,8 +1791,7 @@ class SubscriptionStore {
         throw StateError('At least one source must remain enabled');
       }
       final merged = await _composeSources(current, sources);
-      await _saveUnlocked(merged);
-      return merged;
+      return _saveUnlocked(merged);
     });
   }
 
@@ -1767,8 +1854,7 @@ class SubscriptionStore {
         throw StateError('Source no longer exists');
       }
       final updated = current.copyWith(sources: sources);
-      await _saveUnlocked(updated);
-      return updated;
+      return _saveUnlocked(updated);
     });
   }
 
@@ -1888,8 +1974,7 @@ class SubscriptionStore {
         );
       }).toList();
       final merged = await _composeSources(current, sources);
-      await _saveUnlocked(merged);
-      return merged;
+      return _saveUnlocked(merged);
     });
   }
 
@@ -2172,7 +2257,7 @@ class SubscriptionStore {
       );
       _logLikelyHwidWarning(updated);
       final saveStopwatch = Stopwatch()..start();
-      await _saveUnlocked(updated);
+      final saved = await _saveUnlocked(updated);
       saveStopwatch.stop();
       totalStopwatch.stop();
       AppLogStore.info(
@@ -2188,7 +2273,7 @@ class SubscriptionStore {
             'saveMs=${saveStopwatch.elapsedMilliseconds} '
             'nodes=${preservedOutbounds.length}',
       );
-      return updated;
+      return saved;
     });
   }
 
@@ -2250,8 +2335,7 @@ class SubscriptionStore {
             )
             .toList();
         final merged = await _composeSources(current, sources);
-        await _saveUnlocked(merged);
-        return merged;
+        return _saveUnlocked(merged);
       });
     }
     final rawContent = existingBeforeParse.rawContent.trim();
@@ -2309,8 +2393,7 @@ class SubscriptionStore {
         outbounds: preservedOutbounds,
         groups: payload.groups,
       );
-      await _saveUnlocked(updated);
-      return updated;
+      return _saveUnlocked(updated);
     });
   }
 

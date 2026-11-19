@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
 import 'package:meow_client/logging/app_log_store.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/data/subscription/subscription_refresh_report.dart';
 import 'package:meow_client/data/subscription/subscription_failure.dart';
@@ -103,6 +104,7 @@ class SubscriptionCoordinator {
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
     bool buildFullProxyList = true,
+    Map<String, ProxyExclusionRules> exclusionRulesByProfile = const {},
   }) async {
     await _ensurePayloadReady?.call();
     return _runtime.resolveSubscriptions(
@@ -113,6 +115,7 @@ class SubscriptionCoordinator {
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshotFor: _payloadSnapshotFor,
       buildFullProxyList: buildFullProxyList,
+      exclusionRulesByProfile: exclusionRulesByProfile,
     );
   }
 
@@ -123,6 +126,7 @@ class SubscriptionCoordinator {
     required bool preserveRuntimeState,
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
     bool buildFullProxyList = true,
+    ProxyExclusionRules? exclusionRules,
   }) async {
     await _ensurePayloadReady?.call();
     return _runtime.hydrateActiveSubscriptionAndBuildProxyCache(
@@ -133,6 +137,7 @@ class SubscriptionCoordinator {
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshot: await _payloadSnapshotFor(metadata.id),
       buildFullProxyList: buildFullProxyList,
+      exclusionRules: exclusionRules,
     );
   }
 

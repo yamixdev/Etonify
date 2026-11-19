@@ -236,11 +236,11 @@ class ForegroundNotificationRestartTest {
         notification.onRuntimeReady(7L, 3L, true)
         notification.onClientUrlTestRequested("select", "", emptyList(), "", 20_000, "owned")
         notification.updateSelectedOutbounds(mapOf("select" to "node-new"))
-        notification.onClientStartupSessionTerminal("manual", 7L, 3L)
+        notification.onUrlTestSessionTerminal("manual", 7L, 3L)
         assertEquals(0, requests)
-        notification.onClientStartupSessionTerminal("owned", 7L, 3L)
+        notification.onUrlTestSessionTerminal("owned", 7L, 3L)
         assertEquals(1, requests)
-        notification.onClientStartupSessionTerminal("owned", 7L, 3L)
+        notification.onUrlTestSessionTerminal("owned", 7L, 3L)
         assertEquals(1, requests)
     }
 

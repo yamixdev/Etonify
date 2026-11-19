@@ -16,6 +16,7 @@ class ProxyTile extends StatelessWidget {
     this.onOpenGroup,
     this.onLongPress,
     this.onTestLatency,
+    this.pinned = false,
   });
 
   final AppProxySummary proxy;
@@ -31,6 +32,7 @@ class ProxyTile extends StatelessWidget {
   final ValueChanged<Rect>? onOpenGroup;
   final VoidCallback? onLongPress;
   final VoidCallback? onTestLatency;
+  final bool pinned;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +118,16 @@ class ProxyTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
+                if (pinned)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 4),
+                    child: Icon(
+                      Icons.push_pin_rounded,
+                      size: 14,
+                      color: theme.colorScheme.primary,
+                      semanticLabel: AppLocalizations.of(context).proxyPinned,
+                    ),
+                  ),
                 SizedBox(width: selecting ? 104 : 72, child: latencyLabel),
               ],
             ),

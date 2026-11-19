@@ -718,6 +718,7 @@ class Subscription {
     this.outbounds = const [],
     this.groups = const [],
     this.proxyChains = const [],
+    this.proxyPins = const {},
     this.urlTestConfig = const UrlTestConfig(),
     this.info,
     this.sources = const [],
@@ -743,6 +744,7 @@ class Subscription {
   final List<Outbound> outbounds;
   final List<SubscriptionGroup> groups;
   final List<SubscriptionProxyChain> proxyChains;
+  final Map<String, String> proxyPins;
   final UrlTestConfig urlTestConfig;
   final SubscriptionInfo? info;
   final List<SubscriptionSource> sources;
@@ -809,6 +811,7 @@ class Subscription {
       if (payloadRevision.isNotEmpty) 'payload_revision': payloadRevision,
       if (proxyChains.isNotEmpty)
         'proxy_chains': proxyChains.map((chain) => chain.toMap()).toList(),
+      if (proxyPins.isNotEmpty) 'proxy_pins': proxyPins,
       'urltest_config': urlTestConfig.toMap(),
       if (info != null) 'info': info!.toMap(),
       if (sources.isNotEmpty)
@@ -877,6 +880,14 @@ class Subscription {
           : -1,
       hasRawPayload: map['has_raw_payload'] == true,
       payloadRevision: map['payload_revision'] as String? ?? '',
+      proxyPins: switch (map['proxy_pins']) {
+        final Map<Object?, Object?> pins => {
+          for (final entry in pins.entries)
+            if (entry.key is String && entry.value is String)
+              entry.key as String: entry.value as String,
+        },
+        _ => const {},
+      },
       proxyChains:
           (map['proxy_chains'] as List?)
               ?.map(
@@ -973,6 +984,7 @@ class Subscription {
     List<Outbound>? outbounds,
     List<SubscriptionGroup>? groups,
     List<SubscriptionProxyChain>? proxyChains,
+    Map<String, String>? proxyPins,
     UrlTestConfig? urlTestConfig,
     SubscriptionInfo? info,
     bool clearInfo = false,
@@ -1000,6 +1012,7 @@ class Subscription {
       outbounds: outbounds ?? this.outbounds,
       groups: groups ?? this.groups,
       proxyChains: proxyChains ?? this.proxyChains,
+      proxyPins: proxyPins ?? this.proxyPins,
       urlTestConfig: urlTestConfig ?? this.urlTestConfig,
       info: clearInfo ? null : info ?? this.info,
       sources: sources ?? this.sources,

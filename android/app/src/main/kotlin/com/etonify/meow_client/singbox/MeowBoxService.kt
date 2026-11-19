@@ -287,9 +287,9 @@ class MeowBoxService(
         internal fun validateNativeStartup(token: Long, runtime: Long, network: Long, selection: Long): Boolean =
             notificationForGeneration(runtime)?.validateNativeStartup(token, runtime, network, selection) == true
 
-        internal fun onClientStartupSessionTerminal(requestId: String, runtime: Long, network: Long) {
+        internal fun onUrlTestSessionTerminal(requestId: String, runtime: Long, network: Long) {
             for (owner in activeServices) if (owner.ownsActiveRuntime() && owner.serviceGeneration == runtime)
-                owner.foregroundNotification.onClientStartupSessionTerminal(requestId, runtime, network)
+                owner.foregroundNotification.onUrlTestSessionTerminal(requestId, runtime, network)
         }
     }
 
@@ -1229,7 +1229,10 @@ class MeowBoxService(
                 TAG,
                 "libbox service started mode=$mode current=${MeowDefaultNetworkMonitor.describeCurrentState()}",
             )
-            serviceGeneration = SingboxController.markServiceStarted(mode)
+            serviceGeneration = SingboxController.markServiceStarted(
+                mode,
+                preparedRuntimeConfig.exclusionEligibleTags,
+            )
             clearNetworkSelectionRetry()
             if (networkServerProfile?.id != preparedRuntimeConfig.networkServerProfile?.id) {
                 lastServerNetwork = null
@@ -1715,6 +1718,7 @@ class MeowBoxService(
         val overrideOptions: OverrideOptions,
         val networkServerProfile: NetworkServerProfile? = null,
         val hasTunInbound: Boolean = false,
+        val exclusionEligibleTags: Set<String>? = null,
     )
 
     private class ListStringIterator(
@@ -1738,6 +1742,7 @@ class MeowBoxService(
             val splitExcludePackages = mutableListOf<String>()
             val inbounds = root.optJSONArray("inbounds")
             val outbounds = root.optJSONArray("outbounds")
+            val exclusionEligibleTags = mutableSetOf<String>()
             var hasTunInbound = false
             var changed = root.has(NetworkServerProfile.CONFIG_KEY)
             val networkServerProfile = NetworkServerProfile.removeFrom(root)
@@ -1761,18 +1766,23 @@ class MeowBoxService(
             }
             for (index in 0 until (outbounds?.length() ?: 0)) {
                 val outbound = outbounds?.optJSONObject(index) ?: continue
-                if (outbound.optString("type") == "vless" && outbound.has("packet_encoding")) {
+                val type = outbound.optString("type")
+                val tag = outbound.optString("tag")
+                if (tag.isNotEmpty() && type != "selector" && type != "urltest") {
+                    exclusionEligibleTags += tag
+                }
+                if (type == "vless" && outbound.has("packet_encoding")) {
                     val packetEncoding = outbound.opt("packet_encoding")
                     val packetEncodingValue = packetEncoding as? String
                     if (packetEncodingValue !in setOf("", "packetaddr", "xudp")) {
-                        val tag = outbound.optString("tag", "#$index")
+                        val logTag = tag.ifEmpty { "#$index" }
                         Log.w(
                             TAG,
-                            "dropping invalid vless packet_encoding tag=$tag value=$packetEncoding",
+                            "dropping invalid vless packet_encoding tag=$logTag value=$packetEncoding",
                         )
                         MeowDiagnostics.log(
                             TAG,
-                            "dropping invalid vless packet_encoding tag=$tag value=$packetEncoding",
+                            "dropping invalid vless packet_encoding tag=$logTag value=$packetEncoding",
                         )
                         outbound.remove("packet_encoding")
                         changed = true
@@ -1810,7 +1820,13 @@ class MeowBoxService(
             } else {
                 config
             }
-            PreparedRuntimeConfig(preparedConfig, overrideOptions, networkServerProfile, hasTunInbound)
+            PreparedRuntimeConfig(
+                preparedConfig,
+                overrideOptions,
+                networkServerProfile,
+                hasTunInbound,
+                exclusionEligibleTags,
+            )
         }.getOrElse { error ->
             if (error is SplitTunnelConfigurationException) {
                 throw error

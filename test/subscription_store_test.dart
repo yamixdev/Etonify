@@ -39,6 +39,60 @@ void main() {
     }
   });
 
+  test(
+    'pins follow a profile refresh only while the server identity matches',
+    () async {
+      const server = Outbound(
+        tag: 'server',
+        name: 'Server',
+        config: {'type': 'socks', 'server': 'a.test', 'server_port': 1080},
+      );
+      const profile = Subscription(
+        id: 'profile',
+        name: 'Profile',
+        url: 'https://example.test/profile',
+        outbounds: [server],
+      );
+      await SubscriptionStore.save(profile);
+      final identity = SubscriptionStore.proxyPinIdentity(profile, server.tag)!;
+      expect(
+        await SubscriptionStore.setProxyPinned(
+          profile.id,
+          server.tag,
+          expectedIdentity: identity,
+          pinned: true,
+        ),
+        isTrue,
+      );
+
+      final updatedConfig = {...server.config, 'connect_timeout': '5s'};
+      await SubscriptionStore.save(
+        profile.copyWith(outbounds: [server.copyWith(config: updatedConfig)]),
+      );
+      final refreshed = (await SubscriptionStore.get(profile.id))!;
+      expect(refreshed.proxyPins, {server.tag: identity});
+      expect(refreshed.outbounds.single.config, updatedConfig);
+
+      await SubscriptionStore.save(
+        profile.copyWith(
+          outbounds: [
+            server.copyWith(config: {...server.config, 'server': 'b.test'}),
+          ],
+        ),
+      );
+      expect(SubscriptionStore.getMetadata(profile.id)!.proxyPins, isEmpty);
+      expect(
+        await SubscriptionStore.setProxyPinned(
+          profile.id,
+          server.tag,
+          expectedIdentity: identity,
+          pinned: true,
+        ),
+        isFalse,
+      );
+    },
+  );
+
   test('local list flags and payload survive backup and storage', () async {
     final empty = (await SubscriptionStore.addFromContent(
       '',

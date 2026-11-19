@@ -7,6 +7,7 @@ import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/proxy_selection_controller.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
 
 class SubscriptionRuntimeSelection {
@@ -236,6 +237,7 @@ class SubscriptionRuntimeController {
     required FutureOr<dynamic> Function(String subscriptionId)
     payloadSnapshotFor,
     bool buildFullProxyList = true,
+    Map<String, ProxyExclusionRules> exclusionRulesByProfile = const {},
   }) async {
     if (metadataSubscriptions.isEmpty) {
       return const ResolvedSubscriptions(
@@ -265,6 +267,7 @@ class SubscriptionRuntimeController {
       runtimeSnapshot: runtimeSnapshot,
       payloadSnapshot: await payloadSnapshotFor(activeMetadata.id),
       buildFullProxyList: buildFullProxyList,
+      exclusionRules: exclusionRulesByProfile[activeMetadata.id],
     );
     final subscriptions = metadataSubscriptions
         .map(
@@ -290,6 +293,7 @@ class SubscriptionRuntimeController {
     required SubscriptionRuntimeSnapshot runtimeSnapshot,
     required dynamic payloadSnapshot,
     bool buildFullProxyList = true,
+    ProxyExclusionRules? exclusionRules,
   }) {
     final metadataMap = metadata.toMetadataMap();
     final lowestLatency = preserveRuntimeState
@@ -334,8 +338,11 @@ class SubscriptionRuntimeController {
       final normalizedSubscription = subscription.copyWith(
         selectedProxyTag: normalized.selectedProxyTag,
       );
+      final eligibleSubscription =
+          exclusionRules?.eligibleSubscription(normalizedSubscription) ??
+          normalizedSubscription;
       final cacheInput = ProxyCacheBuildInput(
-        subscription: normalizedSubscription,
+        subscription: eligibleSubscription,
         selectedProxyTag: normalized.selectedProxyTag,
         lowestLatency: lowestLatency,
         runtimeLowestOutboundTag: runtimeLowestOutboundTag,
@@ -352,9 +359,9 @@ class SubscriptionRuntimeController {
           : buildHomeProxyCache(cacheInput);
       return HydratedActiveSubscription(
         subscription: normalizedSubscription.withoutRawContentForRuntime(),
-        presentationSnapshot: compactSubscriptionForProxyCache(
-          normalizedSubscription,
-        ),
+        presentationSnapshot: exclusionRules?.hasActiveExclusions == true
+            ? null
+            : compactSubscriptionForProxyCache(normalizedSubscription),
         normalized: normalized,
         proxyCache: proxyCache,
       );

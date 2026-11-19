@@ -487,19 +487,25 @@ class _MeowClientState extends ConsumerState<MeowClient>
         !mounted) {
       return;
     }
-    final subscription = _activeSubscription;
-    if (subscription == null) return;
+    final editingSubscription = _activeSubscription;
+    if (editingSubscription == null) return;
     final rules = await navigator.push<ProxyExclusionRules>(
       MaterialPageRoute(
         builder: (_) => ProxyExclusionsPage(
-          subscription: subscription,
-          rules: _exclusionsFor(subscription),
+          subscription: editingSubscription,
+          rules: _exclusionsFor(editingSubscription),
         ),
       ),
     );
-    if (rules == null || !mounted) return;
-    if (_activeSubscription?.id != subscription.id ||
-        _activeSubscription?.payloadRevision != subscription.payloadRevision) {
+    if (rules == null ||
+        !mounted ||
+        _activeSubscription?.id != editingSubscription.id ||
+        !await _ensureActiveSubscriptionHydratedForRuntime() ||
+        !mounted) {
+      return;
+    }
+    final subscription = _activeSubscription;
+    if (subscription == null || subscription.id != editingSubscription.id) {
       return;
     }
     final runtimeGeneration = _runtimeOperations.nativeRuntimeGeneration;
@@ -521,12 +527,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       }
       if (!mounted ||
           _activeSubscription?.id != subscription.id ||
-          _activeSubscription?.payloadRevision !=
-              subscription.payloadRevision ||
           _runtimeOperations.nativeRuntimeGeneration != runtimeGeneration) {
         return;
       }
     }
+    final snapshotRevision = _activeSubscription?.payloadRevision;
     setState(() {
       _settings.proxyExclusionsByProfile = Map.unmodifiable({
         ..._settings.proxyExclusionsByProfile,
@@ -539,7 +544,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool snapshotCurrent() =>
         mounted &&
         _activeSubscription?.id == subscription.id &&
-        _activeSubscription?.payloadRevision == subscription.payloadRevision &&
+        _activeSubscription?.payloadRevision == snapshotRevision &&
         _proxySelection.isCurrentGeneration(snapshotSelection) &&
         identical(_exclusionsFor(_activeSubscription), rules);
     try {
@@ -846,7 +851,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         if (mounted && generation == _derivedCacheBuildGeneration) {
           final applyStopwatch = Stopwatch()..start();
           setState(() {
-            _proxyServerCatalog.seed(subscription, result.concreteServerTags);
+            if (!_exclusionsFor(subscription).hasActiveExclusions) {
+              _proxyServerCatalog.seed(subscription, result.concreteServerTags);
+            }
             _activeProfileCache = result.activeProfile;
             _displayProxyCache = result.displayProxy;
             _activeProxiesCache = result.activeProxies;
@@ -1594,7 +1601,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _applyProxyCacheBuildResult(ProxyCacheBuildResult result) {
     final source = _activeSubscription;
-    if (source != null) {
+    if (source != null && !_exclusionsFor(source).hasActiveExclusions) {
       _proxyServerCatalog.seed(source, result.concreteServerTags);
     }
     ++_derivedCacheBuildGeneration;
@@ -4271,16 +4278,32 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _automaticSubscriptionApplyInFlight ||
       _runtimeTransitionInProgress;
 
+  AppUpdateDownloadOperation? get _activeAppUpdateDownload =>
+      Platform.isAndroid ? _appUpdateService.activeDownload : null;
+
   Future<bool> _waitForAutomaticSubscriptionApply() async {
-    if (_automaticSubscriptionUpdatesBlocked) {
+    if (_activeAppUpdateDownload != null) {
+      AppLogStore.info(
+        'subscription refresh',
+        'automatic apply deferred until APK download completes',
+      );
+    } else if (_automaticSubscriptionUpdatesBlocked) {
       AppLogStore.info(
         'subscription refresh',
         'automatic apply deferred until URLTest/runtime transition completes',
       );
     }
     while (mounted &&
-        (!_foregroundLifecycleActive || _automaticSubscriptionUpdatesBlocked)) {
-      if (_latencyCoordinator.isRunning) {
+        (!_foregroundLifecycleActive ||
+            _automaticSubscriptionUpdatesBlocked ||
+            _activeAppUpdateDownload != null)) {
+      final download = _activeAppUpdateDownload;
+      if (download != null) {
+        await download.completed.then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {},
+        );
+      } else if (_latencyCoordinator.isRunning) {
         await _latencyCoordinator.waitForCurrentSession();
       } else {
         // Includes probe preparation/cleanup and a runtime handover. Never
@@ -5682,6 +5705,61 @@ class _MeowClientState extends ConsumerState<MeowClient>
     return success;
   }
 
+  Future<bool> _setProxyPinned(
+    Subscription profile,
+    String tag,
+    bool pinned,
+  ) async {
+    final identity = SubscriptionStore.proxyPinIdentity(profile, tag);
+    try {
+      if (identity != null &&
+          await SubscriptionStore.setProxyPinned(
+            profile.id,
+            tag,
+            expectedIdentity: identity,
+            pinned: pinned,
+          )) {
+        if (mounted) {
+          final current = _subscriptions
+              .where((entry) => entry.id == profile.id)
+              .firstOrNull;
+          final stored = SubscriptionStore.getMetadata(profile.id);
+          if (current != null && stored != null) {
+            setState(() {
+              _subscriptions = _replaceSubscription(
+                current.copyWith(proxyPins: stored.proxyPins),
+              );
+            });
+          }
+        }
+        return true;
+      }
+    } catch (error) {
+      AppLogStore.warning(
+        'subscription',
+        'Proxy pin write failed: ${error.runtimeType}',
+      );
+    }
+    if (mounted && _activeProfileId == profile.id) {
+      AppNotice.show(
+        context,
+        AppLocalizations.of(context).proxyPinFailed,
+        tone: AppNoticeTone.error,
+      );
+    }
+    return false;
+  }
+
+  Subscription _withCurrentProxyPins(Subscription profile) {
+    final stored = SubscriptionStore.getMetadata(profile.id);
+    if (stored == null ||
+        stored.payloadRevision != profile.payloadRevision ||
+        mapEquals(stored.proxyPins, profile.proxyPins)) {
+      return profile;
+    }
+    return profile.copyWith(proxyPins: stored.proxyPins);
+  }
+
   Future<void> _addProxyChain(String detourTag, String targetRef) async {
     final subscription = _activeSubscription;
     if (subscription == null) {
@@ -6255,10 +6333,17 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool urlTestAfterApply = false,
     bool automatic = false,
   }) async {
-    if (automatic && !await _waitForAutomaticSubscriptionApply()) return;
-    if (automatic) _automaticSubscriptionApplyInFlight = true;
+    if (automatic) {
+      do {
+        if (!await _waitForAutomaticSubscriptionApply() || !mounted) return;
+      } while (Platform.isAndroid &&
+          (!_foregroundLifecycleActive ||
+              _automaticSubscriptionUpdatesBlocked ||
+              _activeAppUpdateDownload != null));
+      _automaticSubscriptionApplyInFlight = true;
+    }
     try {
-      await _reloadSubscriptionsNow(
+      Future<void> reload() => _reloadSubscriptionsNow(
         preferredSubscriptionId: preferredSubscriptionId,
         preferredProxyTag: preferredProxyTag,
         applyRuntime: applyRuntime,
@@ -6267,6 +6352,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
         urlTestAfterApply: urlTestAfterApply,
         waitForHydration: automatic,
       );
+      if (automatic && Platform.isAndroid) {
+        await _appUpdateService.withAutomaticSubscriptionApply(reload);
+      } else {
+        await reload();
+      }
     } finally {
       if (automatic) {
         _automaticSubscriptionApplyInFlight = false;
@@ -6398,6 +6488,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     bool urlTestAfterApply = false,
   }) {
     final generation = _subscriptionCoordinator.beginHydration();
+    final exclusionRulesByProfile = _settings.proxyExclusionsByProfile;
     return (() async {
       final resolved = await _subscriptionCoordinator.resolveSubscriptions(
         activeSubscriptionId: activeSubscriptionId,
@@ -6407,6 +6498,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
           preserveRuntimeState: preserveRuntimeState,
         ),
         buildFullProxyList: _fullProxyListCacheRequested,
+        exclusionRulesByProfile: exclusionRulesByProfile,
       );
       if (!mounted ||
           !_subscriptionCoordinator.isHydrationCurrent(generation)) {
@@ -6426,6 +6518,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final shouldResetRuntimeState = activeChanged || !preserveRuntimeState;
       final preserveLatencyDuringReload =
           !preserveRuntimeState && !activeChanged && _connected;
+      final subscriptions = [
+        for (final subscription in resolved.subscriptions)
+          subscription.id == normalized.activeSubscriptionId
+              ? _withCurrentProxyPins(subscription)
+              : subscription,
+      ];
       if (shouldResetRuntimeState) {
         _latencyCoordinator.cancel();
       }
@@ -6433,7 +6531,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         ref
             .read(subscriptionCatalogProvider.notifier)
             .replace(
-              subscriptions: resolved.subscriptions,
+              subscriptions: subscriptions,
               activeProfileId: normalized.activeSubscriptionId,
               selectedProxyTag: normalized.selectedProxyTag,
             );
@@ -6453,11 +6551,18 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _runtimeLowestSelections.clear();
         }
         final proxyCache = resolved.proxyCache;
-        if (proxyCache != null) {
+        final id = normalized.activeSubscriptionId;
+        if (proxyCache != null &&
+            identical(
+              exclusionRulesByProfile[id],
+              _settings.proxyExclusionsByProfile[id],
+            )) {
           _applyProxyCacheBuildResult(proxyCache);
+        } else if (proxyCache != null) {
+          _rebuildDerivedCaches();
         } else {
           _applyMetadataActiveProfile(
-            resolved.subscriptions,
+            subscriptions,
             normalized.activeSubscriptionId,
             clearProxyCache:
                 shouldResetRuntimeState && !preserveLatencyDuringReload,
@@ -6528,6 +6633,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return true;
     }
     final hydrateStopwatch = Stopwatch()..start();
+    final exclusionRules = _exclusionsFor(activeSubscription);
     final hydrated = await _subscriptionCoordinator.hydrateActiveSubscription(
       metadata: activeSubscription,
       selectedProxyTag: _selectedProxyTag,
@@ -6537,6 +6643,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         preserveRuntimeState: true,
       ),
       buildFullProxyList: _fullProxyListCacheRequested,
+      exclusionRules: exclusionRules,
     );
     hydrateStopwatch.stop();
     AppLogStore.info(
@@ -6552,16 +6659,23 @@ class _MeowClientState extends ConsumerState<MeowClient>
       return false;
     }
     setState(() {
-      _subscriptions = _replaceSubscription(hydrated.subscription);
+      _subscriptions = _replaceSubscription(
+        _withCurrentProxyPins(hydrated.subscription),
+      );
       final presentationSnapshot = hydrated.presentationSnapshot;
-      if (presentationSnapshot != null) {
+      if (presentationSnapshot != null &&
+          !_exclusionsFor(hydrated.subscription).hasActiveExclusions) {
         _proxyPresentationSnapshots.seed(
           hydrated.subscription,
           presentationSnapshot,
         );
       }
       _selectedProxyTag = hydrated.normalized.selectedProxyTag;
-      _applyProxyCacheBuildResult(hydrated.proxyCache);
+      if (identical(exclusionRules, _exclusionsFor(hydrated.subscription))) {
+        _applyProxyCacheBuildResult(hydrated.proxyCache);
+      } else {
+        _rebuildDerivedCaches();
+      }
     });
     _replayPendingRuntimeGroups();
     unawaited(_syncQuickSettingsTileLabel());
@@ -10515,9 +10629,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     ({int serial, String? groupTag})? browserRequest,
     VoidCallback? onBackAtRoot,
   }) {
+    final profile = _activeSubscription;
     return ProxiesPresentationBuilder(
       data: ProxiesPresentationData(
         profileId: _activeProfileId,
+        pinnedProxyTags: profile?.proxyPins.keys.toSet() ?? const {},
         proxies: _activeProxies,
         groupChildrenByTag: _activeGroupChildrenByTag,
         selectedTag: _selectedProxyTag,
@@ -10568,6 +10684,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
             unawaited(_resolveVisibleProxyLocation(tag, isVisible)),
         refreshActiveProxyIp: _refreshActiveProxyIp,
         outboundForTag: _outboundForProxyTag,
+        changeProxyPin: profile == null
+            ? null
+            : (tag, pinned) => _setProxyPinned(profile, tag, pinned),
         onLocalListChanged: (id) {
           if (!mounted) return;
           if (id == _activeProfileId) {

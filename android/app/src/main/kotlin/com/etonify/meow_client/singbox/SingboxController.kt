@@ -35,6 +35,7 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 object SingboxController {
     private const val TAG = "MeowSingbox"
@@ -438,7 +439,7 @@ object SingboxController {
                     "physicalNetworkEpoch" to session.physicalNetworkEpoch,
                 )
                 if (session.state == "completed" || session.state == "cancelled") {
-                    if (context != null) MeowBoxService.onClientStartupSessionTerminal(
+                    if (context != null) MeowBoxService.onUrlTestSessionTerminal(
                         session.logicalSessionID.orEmpty(), context.runtime, context.network,
                     )
                 }
@@ -630,10 +631,11 @@ object SingboxController {
         }
     }
 
-    fun markServiceStarted(mode: String): Long {
+    fun markServiceStarted(mode: String, exclusionEligibleTags: Set<String>?): Long {
         val generation = runtimeGeneration.incrementAndGet()
         urlTestAttribution.clear()
         notificationLatencyCache.clear()
+        runtimeExclusionTags.set(generation to exclusionEligibleTags)
         activeRuntimeGeneration = generation
         setRunning(true, mode)
         MeowDiagnostics.log(TAG, "markServiceStarted generation=$generation mode=$mode")
@@ -666,6 +668,7 @@ object SingboxController {
             return
         }
         activeRuntimeGeneration = 0
+        clearRuntimeExclusionTags(currentGeneration)
         urlTestAttribution.clear()
         notificationLatencyCache.clear()
         cleanupStandaloneClient()
@@ -679,6 +682,7 @@ object SingboxController {
     fun forceMarkServiceStopped(reason: String) {
         val previousGeneration = activeRuntimeGeneration
         activeRuntimeGeneration = 0
+        clearRuntimeExclusionTags(previousGeneration)
         urlTestAttribution.clear()
         notificationLatencyCache.clear()
         cleanupStandaloneClient()
@@ -997,7 +1001,12 @@ object SingboxController {
     }
 
     private val liveExclusionGate = LiveUrlTestExclusionGate()
+    private val runtimeExclusionTags = AtomicReference<Pair<Long, Set<String>?>>()
     @Volatile private var networkServerExclusions: Pair<Long, Set<String>>? = null
+
+    private fun clearRuntimeExclusionTags(generation: Long) {
+        runtimeExclusionTags.updateAndGet { if (it?.first == generation) null else it }
+    }
 
     internal fun networkServerExcludedTags(runtime: Long): Set<String> =
         networkServerExclusions?.takeIf { it.first == runtime }?.second.orEmpty()
@@ -1010,11 +1019,15 @@ object SingboxController {
 
     fun setUrlTestExcludedOutbounds(tags: List<String>, runtimeGeneration: Long, callback: (Result<Unit>) -> Unit) {
         commandExecutor.execute {
+            // The profile may include servers pruned before the core started.
+            // The live RPC requires every submitted tag to be a loaded leaf.
+            val eligible = runtimeExclusionTags.get()?.takeIf { it.first == runtimeGeneration }?.second
+            val liveTags = if (eligible == null) tags else tags.filter(eligible::contains)
             val result = runCatching {
                 withStandaloneCommandClient { client ->
                     liveExclusionGate.apply(
                         runtimeGeneration,
-                        tags,
+                        liveTags,
                         { if (running) activeRuntimeGeneration else 0L },
                         { (client.javaClass.getMethod("getStartedAt").invoke(client) as Number).toLong() },
                     ) { excluded, stamp ->
@@ -1028,7 +1041,7 @@ object SingboxController {
                     }
                 }
             }.map {
-                networkServerExclusions = runtimeGeneration to tags.toSet()
+                networkServerExclusions = runtimeGeneration to liveTags.toSet()
             }
             mainHandler.post { callback(result) }
         }

@@ -31,14 +31,39 @@ class DefaultNetworkSelectionTest {
     }
 
     @Test
-    fun `prefers a callback transport over a stale unvalidated interface`() {
+    fun `keeps the current transport while both interfaces are unvalidated`() {
         val selected = selectDefaultNetworkCandidate(
             candidates = listOf(
                 candidate("wifi", hasInterface = true, score = 30),
                 candidate("cell", hasInterface = true, score = 10),
             ),
             current = "wifi",
-            preferred = "cell",
+        )
+
+        assertEquals("wifi", selected?.value)
+    }
+
+    @Test
+    fun `validated wifi wins when cellular remains connected behind the vpn`() {
+        val selected = selectDefaultNetworkCandidate(
+            candidates = listOf(
+                candidate("cell", validated = true, hasInterface = true, score = 110),
+                candidate("wifi", validated = true, hasInterface = true, score = 130),
+            ),
+            current = "cell",
+        )
+
+        assertEquals("wifi", selected?.value)
+    }
+
+    @Test
+    fun `validated cellular takes over when wifi loses validation`() {
+        val selected = selectDefaultNetworkCandidate(
+            candidates = listOf(
+                candidate("wifi", hasInterface = true, score = 30),
+                candidate("cell", validated = true, hasInterface = true, score = 110),
+            ),
+            current = "wifi",
         )
 
         assertEquals("cell", selected?.value)

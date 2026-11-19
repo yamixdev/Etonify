@@ -66,6 +66,8 @@ Duration _runtimeResortInterval(int proxyCount) {
 
 enum _ProxyChainAction { edit, rename, remove }
 
+enum _ProxyGroupAction { members, latency, share, pin }
+
 String _proxySortLabel(AppLocalizations l10n, ProxySort sort) => switch (sort) {
   ProxySort.source => l10n.sortByDefault,
   ProxySort.latency => l10n.sortByLatency,
@@ -441,6 +443,7 @@ class ProxiesPage extends StatefulWidget {
   const ProxiesPage({
     super.key,
     this.profileId = '',
+    this.pinnedProxyTags = const {},
     required this.proxies,
     required this.selectedTag,
     this.activeProxy,
@@ -469,6 +472,7 @@ class ProxiesPage extends StatefulWidget {
     this.onVisibleProxyNeedsLocation,
     this.outboundForTag,
     this.onLocalListChanged,
+    this.onProxyPinChanged,
     this.loadProxyChainTargetSources,
     this.loadProxyChainTargetsForSource,
     this.onAddProxyChain,
@@ -503,6 +507,7 @@ class ProxiesPage extends StatefulWidget {
   final VoidCallback? onEditExclusions;
   final bool hasProxyExclusions;
   final String profileId;
+  final Set<String> pinnedProxyTags;
   final List<AppProxySummary> proxies;
   final String selectedTag;
   final AppProxySummary? activeProxy;
@@ -529,6 +534,7 @@ class ProxiesPage extends StatefulWidget {
   onVisibleProxyNeedsLocation;
   final Outbound? Function(String tag)? outboundForTag;
   final ValueChanged<String>? onLocalListChanged;
+  final Future<bool> Function(String tag, bool pinned)? onProxyPinChanged;
   final Future<List<AppProfileSummary>> Function()? loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)?
   loadProxyChainTargetsForSource;
@@ -728,6 +734,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
     if (chainVisibilityChanged ||
         oldWidget.profileId != widget.profileId ||
+        !setEquals(oldWidget.pinnedProxyTags, widget.pinnedProxyTags) ||
         oldWidget.selectedTag != widget.selectedTag ||
         oldWidget.activeProxy?.tag != widget.activeProxy?.tag ||
         oldWidget.isProxyChainTag != widget.isProxyChainTag ||
@@ -992,6 +999,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
           canAddChain: _canAddChain,
           searchQuery: widget.browserMode ? _browserQuery : '',
           groupMembers: widget.browserMode && _browserPath.isNotEmpty,
+          userPinnedTags: widget.pinnedProxyTags,
           chainTags: {
             if (!widget.hideProxyChains)
               for (final proxy in proxies)
@@ -1053,6 +1061,7 @@ class _ProxiesPageState extends State<ProxiesPage> {
             canAddChain: canAddChain,
             searchQuery: query,
             groupMembers: groupMembers,
+            userPinnedTags: widget.pinnedProxyTags,
             chainTags: chains,
             runtimeStates: states,
           ),
@@ -1244,10 +1253,10 @@ class _ProxiesPageState extends State<ProxiesPage> {
     }
   }
 
-  Future<void> _openProxyShareSheet(AppProxySummary proxy) async {
-    if (proxy.isGroup) {
-      return;
-    }
+  Future<void> _openProxyShareSheet(
+    AppProxySummary proxy, {
+    bool allowPin = true,
+  }) async {
     final outbound = widget.outboundForTag?.call(proxy.tag);
     if (outbound == null) {
       return;
@@ -1261,7 +1270,110 @@ class _ProxiesPageState extends State<ProxiesPage> {
       outbound: outbound,
       sourceProfileId: widget.profileId,
       onLocalListChanged: widget.onLocalListChanged,
+      pinned: widget.pinnedProxyTags.contains(proxy.tag),
+      onTogglePin: allowPin ? _pinAction(proxy) : null,
     );
+  }
+
+  Future<bool> Function()? _pinAction(AppProxySummary proxy) {
+    final change = widget.onProxyPinChanged;
+    if (change == null ||
+        isSyntheticProxyTag(proxy.tag) ||
+        !widget.proxies.any(
+          (row) => row.tag == proxy.tag && !row.isGroupChild,
+        )) {
+      return null;
+    }
+    final pinned = widget.pinnedProxyTags.contains(proxy.tag);
+    return () => change(proxy.tag, !pinned);
+  }
+
+  Future<void> _openProxyActions(AppProxySummary proxy) async {
+    if (_isProxyChain(proxy)) {
+      await _openProxyChainActionSheet(proxy);
+      return;
+    }
+    if (!proxy.isGroup) {
+      await _openProxyShareSheet(proxy);
+      return;
+    }
+    final profileId = widget.profileId;
+    final checkLatency = widget.onProxyUrlTest;
+    final togglePin = _pinAction(proxy);
+    final pinned = widget.pinnedProxyTags.contains(proxy.tag);
+    final effective =
+        widget.runtimeStates?.valueFor(proxy.tag)?.presentation ?? proxy;
+    final members = _groupChildren(proxy);
+    final selected = members
+        .where((member) => member.tag == effective.selectedChildTag)
+        .firstOrNull;
+    if (widget.hapticEnabled) {
+      unawaited(HapticFeedback.selectionClick());
+    }
+    final action = await showModalBottomSheet<_ProxyGroupAction>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final l10n = AppLocalizations.of(sheetContext);
+        Widget option(_ProxyGroupAction action, IconData icon, String label) =>
+            ListTile(
+              leading: Icon(icon),
+              title: Text(label),
+              onTap: () => Navigator.of(sheetContext).pop(action),
+            );
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ProxyShareSummary(proxy: effective),
+                if (members.isNotEmpty)
+                  option(
+                    _ProxyGroupAction.members,
+                    Icons.list_rounded,
+                    l10n.proxyGroupOpenMembers,
+                  ),
+                if (checkLatency != null)
+                  option(
+                    _ProxyGroupAction.latency,
+                    Icons.bolt_rounded,
+                    l10n.refreshLatency,
+                  ),
+                if (selected != null && !selected.isGroup)
+                  option(
+                    _ProxyGroupAction.share,
+                    Icons.share_outlined,
+                    l10n.shareProxyTitle,
+                  ),
+                if (togglePin != null)
+                  option(
+                    _ProxyGroupAction.pin,
+                    pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                    pinned ? l10n.proxyUnpin : l10n.proxyPin,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || profileId != widget.profileId) return;
+    switch (action) {
+      case _ProxyGroupAction.members:
+        await _openGroupOutbounds(proxy, Rect.zero);
+      case _ProxyGroupAction.latency:
+        await checkLatency!(proxy.tag);
+      case _ProxyGroupAction.share:
+        await _openProxyShareSheet(selected!, allowPin: false);
+      case _ProxyGroupAction.pin:
+        await togglePin!();
+      case null:
+        break;
+    }
   }
 
   void _sortItems(List<AppProxySummary> items, {bool keepLowestFirst = true}) {
@@ -1697,7 +1809,6 @@ class _ProxiesPageState extends State<ProxiesPage> {
             child: Container(
               key: const ValueKey('proxy-current-choice'),
               margin: const EdgeInsets.fromLTRB(6, 4, 6, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
@@ -1709,47 +1820,64 @@ class _ProxiesPageState extends State<ProxiesPage> {
                   ).colorScheme.primary.withValues(alpha: .75),
                 ),
               ),
-              child: Row(
-                children: [
-                  _ProxyListCountryBadge(countryCode: current.countryCode),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onLongPress: () => _openProxyActions(current),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          _localizedProxyTitle(l10n, current),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                        _ProxyListCountryBadge(
+                          countryCode: current.countryCode,
                         ),
-                        Text(
-                          _localizedProxySubtitle(l10n, current),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _localizedProxyTitle(l10n, current),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              Text(
+                                _localizedProxySubtitle(l10n, current),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: state?.selecting == true ? 104 : 72,
+                          child: _ProxyLatencyAction(
+                            key: ValueKey(
+                              'proxy-current-latency-action-${proxy.tag}',
+                            ),
+                            proxy: current,
+                            state: state,
+                            animate: false,
+                            onPressed: widget.onProxyUrlTest == null
+                                ? null
+                                : () => unawaited(
+                                    widget.onProxyUrlTest!(proxy.tag),
+                                  ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: state?.selecting == true ? 104 : 72,
-                    child: _ProxyLatencyAction(
-                      key: ValueKey(
-                        'proxy-current-latency-action-${proxy.tag}',
-                      ),
-                      proxy: current,
-                      state: state,
-                      animate: false,
-                      onPressed: widget.onProxyUrlTest == null
-                          ? null
-                          : () => unawaited(widget.onProxyUrlTest!(proxy.tag)),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           );
@@ -1773,15 +1901,12 @@ class _ProxiesPageState extends State<ProxiesPage> {
               highlighted: proxy.highlighted,
               animate: !widget.embedded && !widget.browserMode,
               forceBaseInset: widget.browserMode,
+              pinned: widget.pinnedProxyTags.contains(proxy.tag),
               onTap: () => widget.onSelected(proxy.tag),
               onTestLatency: widget.onProxyUrlTest != null
                   ? () => unawaited(widget.onProxyUrlTest!(proxy.tag))
                   : null,
-              onLongPress: proxy.isGroup
-                  ? null
-                  : _isProxyChain(proxy)
-                  ? () => _openProxyChainActionSheet(proxy)
-                  : () => _openProxyShareSheet(proxy),
+              onLongPress: () => _openProxyActions(proxy),
               onOpenGroup: proxy.isGroup && proxy.membersSelectable
                   ? (rect) => _openGroupOutbounds(proxy, rect)
                   : null,

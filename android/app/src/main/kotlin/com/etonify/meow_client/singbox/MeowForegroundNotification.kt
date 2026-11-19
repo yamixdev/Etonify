@@ -43,6 +43,7 @@ internal class MeowForegroundNotification(
         private const val ACTION_STOP_REQUEST_CODE = 4202
         private const val CONTENT_REQUEST_CODE = 4203
         private const val DEFAULT_LATENCY_TIMEOUT_MS = 20_000L
+        private const val GROUP_LATENCY_CONCURRENCY = 3
         private const val MAX_TEXT_LENGTH = 120
         private const val DEFAULT_TRAFFIC_REFRESH_SECONDS = 2
         private const val DEFAULT_PROBE_URL = "http://cp.cloudflare.com/"
@@ -230,9 +231,13 @@ internal class MeowForegroundNotification(
     private var latencyActionInFlight = false
     private var measurementNotBeforeSeconds = 0L
     private var latencyTimeoutRunnable: Runnable? = null
+    private class GroupLatencyAction(val tag: String, val resultsThroughMillis: Long) {
+        val delays = mutableMapOf<String, Long>()
+    }
     private data class LatencyActionContext(
         val runtime: Long, val network: Long, val selection: Long, val target: String,
         val startedAtMillis: Long, val minimumRevision: Long, val requestId: String,
+        val autoGroup: GroupLatencyAction?,
     )
     private var latencyActionContext: LatencyActionContext? = null
     private val latencyCompletionObservers = mutableListOf<(NetworkHandoverProbeOutcome) -> Unit>()
@@ -409,7 +414,15 @@ internal class MeowForegroundNotification(
             val request = presentation.urlTestRequest ?: return
             if (runtimeGeneration != null && runtimeGeneration != startupRuntimeGeneration) return
             if (networkGeneration != null && networkGeneration != startupNetworkGeneration) return
-            if (selectionEpoch != null && selectionEpoch != this.selectionEpoch) return
+            val attributed = runtimeGeneration != null && networkGeneration != null && revision > 0L && sessionId > 0L
+            val context = latencyActionContext
+            val groupResult = attributed && context?.autoGroup != null &&
+                context.requestId == logicalSessionId && measuredAtMillis >= context.startedAtMillis &&
+                latencyContextCurrentLocked(context)
+            if (groupResult && normalizedTag.isNotEmpty()) {
+                context?.autoGroup?.delays?.set(normalizedTag, delayMillis)
+            }
+            if (!groupResult && selectionEpoch != null && selectionEpoch != this.selectionEpoch) return
             // Legacy group timestamps have only second precision and cannot
             // distinguish A -> B -> A. Only attributed deltas may repaint
             // after an authoritative selected leaf has changed.
@@ -422,12 +435,10 @@ internal class MeowForegroundNotification(
             // Activity reattaches. Do not paint one as the answer to a fresh
             // notification action; the core timestamp must be newer than the
             // tap that started this targeted URLTest.
-            if (timeSeconds <= 0L || timeSeconds < actionStartedAtSeconds) {
+            if (!groupResult && (timeSeconds <= 0L || timeSeconds < actionStartedAtSeconds)) {
                 return
             }
-            val attributed = runtimeGeneration != null && networkGeneration != null && revision > 0L && sessionId > 0L
             val recoveryPending = latencyCompletionObservers.isNotEmpty()
-            val context = latencyActionContext
             val ownsRecovery = recoveryPending && attributed && selectionEpoch != null && context != null &&
                 context.runtime == runtimeGeneration && context.network == networkGeneration &&
                 context.selection == selectionEpoch && context.target == normalizedTag &&
@@ -442,7 +453,9 @@ internal class MeowForegroundNotification(
                     else -> dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.HEALTHY)
                 }
             }
-            if ((!recoveryPending && (nativeStartupToken == null || attributed)) || terminalRecovery) {
+            if (context?.autoGroup == null &&
+                ((!recoveryPending && (nativeStartupToken == null || attributed)) || terminalRecovery)
+            ) {
                 latencyActionInFlight = false
                 latencyChecking = false
                 latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
@@ -458,7 +471,7 @@ internal class MeowForegroundNotification(
                 if (startupOwnership.complete(
                 startupRuntimeGeneration, startupNetworkGeneration, normalizedTag,
                 delayMillis.takeIf { it > 0L }, measuredAtMillis, status.orEmpty(), revision, sessionId, error,
-                selectionEpoch ?: this.selectionEpoch,
+                if (groupResult) this.selectionEpoch else selectionEpoch ?: this.selectionEpoch,
                 )) startupMeasurementFinished = true
                 clientStartupRequest = null
             }
@@ -476,15 +489,19 @@ internal class MeowForegroundNotification(
         val request: UrlTestRequest
         val actionGeneration: Long
         val timeoutCallback: Runnable
+        val autoGroup: String?
         synchronized(this) {
             val selectedRequest = presentation.urlTestRequest ?: return false
             if (recoveryRequest != null && recoveryProbeRequest() != recoveryRequest) return false
-            if (!foregroundStarted || selectedRequest.targetOutboundTag.isEmpty() || lifecycleStatus != "Connected") {
+            autoGroup = if (!startup && recoveryRequest == null && onComplete == null) selectedAutoGroup() else null
+            if (!foregroundStarted || lifecycleStatus != "Connected" ||
+                (autoGroup == null && selectedRequest.targetOutboundTag.isEmpty())
+            ) {
                 return false
             }
             if (latencyActionInFlight) {
                 val context = latencyActionContext
-                if (recoveryRequest != null || onComplete == null || context == null ||
+                if (recoveryRequest != null || onComplete == null || context == null || context.autoGroup != null ||
                     !latencyContextCurrentLocked(context)
                 ) return false
                 latencyCompletionObservers += onComplete
@@ -500,12 +517,21 @@ internal class MeowForegroundNotification(
             actionGeneration = ++latencyActionGeneration
             val startedAt = System.currentTimeMillis()
             latencyActionStartedAtSeconds = startedAt / 1_000L
-            request = selectedRequest.copy(logicalSessionId = "notification-${java.util.UUID.randomUUID()}")
+            val probe = if (autoGroup == null) selectedRequest else selectedRequest.copy(
+                groupTag = autoGroup,
+                targetOutboundTag = "",
+                priorityOutboundTag = selectedRequest.targetOutboundTag.takeIf { selectedOutboundsReady }.orEmpty(),
+                excludeOutboundTag = "",
+                concurrency = GROUP_LATENCY_CONCURRENCY,
+                deadlineMillis = maxOf(DEFAULT_LATENCY_TIMEOUT_MS.toInt(), selectedRequest.deadlineMillis),
+            )
+            request = probe.copy(logicalSessionId = "notification-${java.util.UUID.randomUUID()}")
             latencyActionContext = LatencyActionContext(
-                startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch, request.targetOutboundTag,
-                startedAt, SingboxController.cachedNotificationLatency(request.targetOutboundTag,
+                startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch, selectedRequest.targetOutboundTag,
+                startedAt, SingboxController.cachedNotificationLatency(selectedRequest.targetOutboundTag,
                     startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch)?.revision ?: 0L,
                 request.logicalSessionId,
+                autoGroup?.let { GroupLatencyAction(it, startedAt + request.deadlineMillis + 1_000L) },
             )
             latencyCompletionObservers.clear()
             onComplete?.let(latencyCompletionObservers::add)
@@ -521,9 +547,17 @@ internal class MeowForegroundNotification(
         val callback: (Result<Unit>) -> Unit = { result ->
             if (result.isFailure) completeLatencyAction(actionGeneration)
         }
+        val dispatchCurrent = {
+            canDispatch() && (autoGroup == null || synchronized(this) {
+                latencyActionInFlight && latencyActionGeneration == actionGeneration &&
+                    latencyActionContext?.let(::latencyContextCurrentLocked) == true &&
+                    presentation.urlTestRequest?.url == request.url &&
+                    presentation.urlTestRequest?.timeoutMillis == request.timeoutMillis
+            })
+        }
         val runner = latencyTestRunner
         try {
-            if (!canDispatch()) {
+            if (!dispatchCurrent()) {
                 completeLatencyAction(actionGeneration)
             } else if (runner != null) {
                 runner(request, !startup, callback)
@@ -540,7 +574,7 @@ internal class MeowForegroundNotification(
                 logicalSessionId = request.logicalSessionId,
                 notificationStartup = startup,
                 notificationStartupToken = if (startup) nativeStartupToken ?: 0L else 0L,
-                canDispatch = canDispatch,
+                canDispatch = dispatchCurrent,
                 callback = callback,
             )
         } catch (_: Exception) {
@@ -634,8 +668,12 @@ internal class MeowForegroundNotification(
 
     private fun latencyContextCurrentLocked(context: LatencyActionContext): Boolean =
         foregroundStarted && lifecycleStatus == "Connected" && context.runtime == startupRuntimeGeneration &&
-            context.network == startupNetworkGeneration && context.selection == selectionEpoch &&
-            context.target == presentation.urlTestRequest?.targetOutboundTag
+            context.network == startupNetworkGeneration && (if (context.autoGroup != null) {
+                context.autoGroup.tag == selectedAutoGroup() &&
+                    System.currentTimeMillis() <= context.autoGroup.resultsThroughMillis
+            } else {
+                context.selection == selectionEpoch && context.target == presentation.urlTestRequest?.targetOutboundTag
+            })
 
     private fun cancelLatencyObserversLocked() {
         latencyCompletionObservers.clear()
@@ -802,15 +840,24 @@ internal class MeowForegroundNotification(
                 deadlineMillis = 20_000,
             )
         }
-        // An outstanding action belongs to the previous outbound/network.
-        cancelLatencyObserversLocked()
-        latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
-        latencyTimeoutRunnable = null
-        latencyActionGeneration++
-        latencyActionInFlight = false
-        latencyChecking = false
+        val continuingGroup = latencyActionContext?.takeIf {
+            !clearMeasurement && it.autoGroup != null && latencyContextCurrentLocked(it)
+        }
+        // An explicit group scan can choose a new leaf while it is in progress.
+        // Its measurements remain valid for that group's current leaf.
+        if (continuingGroup == null) {
+            cancelLatencyObserversLocked()
+            latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
+            latencyTimeoutRunnable = null
+            latencyActionGeneration++
+            latencyActionInFlight = false
+            latencyChecking = false
+        }
         measurementNotBeforeSeconds = System.currentTimeMillis() / 1_000L
-        presentation = presentation.copy(latencyMillis = null, urlTestRequest = request)
+        presentation = presentation.copy(
+            latencyMillis = continuingGroup?.autoGroup?.delays?.get(target)?.takeIf { it > 0L },
+            urlTestRequest = request,
+        )
         persistPresentation(presentation)
         return true
     }
@@ -823,7 +870,8 @@ internal class MeowForegroundNotification(
             val oldTarget = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
             val wasReady = selectedOutboundsReady
             selectedOutbounds = selected.toMap()
-            if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = false)) refreshLocked()
+            val leftGroup = latencyActionContext?.autoGroup?.let { it.tag != selectedAutoGroup() } == true
+            if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = leftGroup)) refreshLocked()
             if (wasReady && oldTarget != presentation.urlTestRequest?.targetOutboundTag.orEmpty()) selectionEpoch++
             selectedOutboundsReady = hasAuthoritativePingTarget()
             updateStartupContext()
@@ -997,8 +1045,14 @@ internal class MeowForegroundNotification(
             selection == selectionEpoch && startupOwnership.dispatchNative(token)
     }
 
-    fun onClientStartupSessionTerminal(requestId: String, runtime: Long, network: Long) {
+    fun onUrlTestSessionTerminal(requestId: String, runtime: Long, network: Long) {
         synchronized(this) {
+            val action = latencyActionContext
+            if (action?.autoGroup != null && action.requestId == requestId &&
+                action.runtime == runtime && action.network == network && latencyContextCurrentLocked(action)
+            ) {
+                completeLatencyAction(latencyActionGeneration)
+            }
             val request = clientStartupRequest?.takeIf {
                 requestId.isNotEmpty() && it.logicalSessionId == requestId && it.runtime == runtime && it.network == network
             } ?: return

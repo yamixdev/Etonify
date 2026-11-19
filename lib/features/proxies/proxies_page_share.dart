@@ -8,6 +8,8 @@ Future<void> showProxyShareSheet(
   Map<String, dynamic>? singboxConfig,
   String? sourceProfileId,
   ValueChanged<String>? onLocalListChanged,
+  bool pinned = false,
+  Future<bool> Function()? onTogglePin,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -20,6 +22,8 @@ Future<void> showProxyShareSheet(
       singboxConfig: singboxConfig,
       sourceProfileId: sourceProfileId,
       onLocalListChanged: onLocalListChanged,
+      pinned: pinned,
+      onTogglePin: onTogglePin,
     ),
   );
 }
@@ -570,6 +574,8 @@ class _ProxyShareSheet extends StatefulWidget {
     this.singboxConfig,
     this.sourceProfileId,
     this.onLocalListChanged,
+    this.pinned = false,
+    this.onTogglePin,
   });
 
   final AppProxySummary proxy;
@@ -577,6 +583,8 @@ class _ProxyShareSheet extends StatefulWidget {
   final Map<String, dynamic>? singboxConfig;
   final String? sourceProfileId;
   final ValueChanged<String>? onLocalListChanged;
+  final bool pinned;
+  final Future<bool> Function()? onTogglePin;
 
   @override
   State<_ProxyShareSheet> createState() => _ProxyShareSheetState();
@@ -610,6 +618,7 @@ class _ProxyShareSheetState extends State<_ProxyShareSheet> {
     if (result == LocalListAddResult.added) onChanged?.call(id);
     if (!mounted) return;
     setState(() => _adding = false);
+    if (ModalRoute.of(context)?.isCurrent != true) return;
     final l10n = AppLocalizations.of(context);
     AppNotice.show(
       context,
@@ -624,6 +633,19 @@ class _ProxyShareSheetState extends State<_ProxyShareSheet> {
         LocalListAddResult.unavailable => AppNoticeTone.error,
       },
     );
+    if (result == LocalListAddResult.added) Navigator.of(context).pop();
+  }
+
+  Future<void> _togglePin() async {
+    final toggle = widget.onTogglePin;
+    if (toggle == null || _adding) return;
+    setState(() => _adding = true);
+    final applied = await toggle();
+    if (!mounted) return;
+    setState(() => _adding = false);
+    if (applied && ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _copy(
@@ -631,9 +653,10 @@ class _ProxyShareSheetState extends State<_ProxyShareSheet> {
     required String value,
     required String label,
   }) async {
+    if (_adding) return;
     final navigator = Navigator.of(context);
     await Clipboard.setData(ClipboardData(text: value));
-    if (!context.mounted) {
+    if (!context.mounted || ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
     final message = _copiedText(context, label);
@@ -656,7 +679,7 @@ class _ProxyShareSheetState extends State<_ProxyShareSheet> {
     final l10n = AppLocalizations.of(context);
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: .46,
+      initialChildSize: widget.onTogglePin == null ? .46 : .52,
       minChildSize: .22,
       maxChildSize: .74,
       builder: (context, scrollController) {
@@ -731,6 +754,26 @@ class _ProxyShareSheetState extends State<_ProxyShareSheet> {
                         ],
                       ),
                     ),
+                    if (widget.onTogglePin != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(18),
+                          clipBehavior: Clip.antiAlias,
+                          child: ListTile(
+                            leading: Icon(
+                              widget.pinned
+                                  ? Icons.push_pin_rounded
+                                  : Icons.push_pin_outlined,
+                            ),
+                            title: Text(
+                              widget.pinned ? l10n.proxyUnpin : l10n.proxyPin,
+                            ),
+                            onTap: _adding ? null : _togglePin,
+                          ),
+                        ),
+                      ),
                     if (_localLists case final localLists?)
                       FutureBuilder<List<Subscription>>(
                         future: localLists,

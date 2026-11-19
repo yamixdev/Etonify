@@ -624,6 +624,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get shareProxyTitle => 'Поделиться';
 
   @override
+  String get proxyPin => 'Закрепить сервер';
+
+  @override
+  String get proxyUnpin => 'Открепить сервер';
+
+  @override
+  String get proxyPinned => 'Закреплённый сервер';
+
+  @override
+  String get proxyPinFailed =>
+      'Не удалось сохранить закрепление. Возможно, сервер изменился.';
+
+  @override
+  String get proxyGroupOpenMembers => 'Показать серверы';
+
+  @override
   String get shareProxyLinkLabel => 'Ссылка профиля';
 
   @override

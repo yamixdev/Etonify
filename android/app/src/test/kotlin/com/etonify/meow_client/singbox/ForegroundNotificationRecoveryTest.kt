@@ -52,6 +52,54 @@ class ForegroundNotificationRecoveryTest {
         assertTrue(requests.isEmpty())
     }
 
+    @Test fun `explicit refresh measures only the chosen manual outbound`() {
+        assertTrue(notification.requestLatencyRefresh())
+        val request = requests.single()
+        assertEquals("select", request.groupTag)
+        assertEquals("a", request.targetOutboundTag)
+    }
+
+    @Test fun `explicit refresh of a provider group starts a bounded candidate scan`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["provider","c"]},
+              {"type":"urltest","tag":"provider","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"},{"type":"vless","tag":"c"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "provider", "provider" to "a"),
+        )
+        notification.updatePresentation(mapOf("url" to "http://ping.example", "timeoutMillis" to 5_000))
+
+        assertTrue(notification.requestLatencyRefresh())
+        assertFalse(notification.requestLatencyRefresh())
+        val request = requests.single()
+        assertEquals("provider", request.groupTag)
+        assertEquals("", request.targetOutboundTag)
+        assertEquals("a", request.priorityOutboundTag)
+        assertEquals(3, request.concurrency)
+        assertEquals(20_000, request.deadlineMillis)
+        assertEquals("http://ping.example", request.url)
+
+        val now = System.currentTimeMillis()
+        notification.onUrlTestResult("b", 23L, now / 1_000L, "available", 7L, 3L,
+            now, 1L, 1L, selectionEpoch = 0L, logicalSessionId = request.logicalSessionId)
+        notification.updateSelectedOutbounds(mapOf("select" to "provider", "provider" to "b"), startProbe = false)
+        assertFalse(notification.requestLatencyRefresh())
+        val prefs = MeowApplication.application.getSharedPreferences("meow_foreground_notification", 0)
+        assertEquals(23L, prefs.getLong("latency", -1L))
+
+        notification.onUrlTestSessionTerminal(request.logicalSessionId, 7L, 3L)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(22))
+        notification.updateSelectedOutbounds(mapOf("select" to "provider", "provider" to "a"), startProbe = false)
+        notification.updateSelectedOutbounds(mapOf("select" to "provider", "provider" to "b"), startProbe = false)
+        assertEquals(-1L, prefs.getLong("latency", -1L))
+        assertTrue(notification.requestLatencyRefresh())
+        assertEquals("b", requests.last().priorityOutboundTag)
+    }
+
     @Test fun `recovery uses the configured HTTP URL and timeout and rejects changed settings`() {
         notification.updatePresentation(mapOf(
             "url" to "http://ping.example/check",

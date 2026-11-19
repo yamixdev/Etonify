@@ -39,6 +39,7 @@ class ProxyListPresentationInput {
     this.searchQuery = '',
     this.groupMembers = false,
     this.chainTags = const {},
+    this.userPinnedTags = const {},
     this.runtimeStates = const {},
   });
   final List<AppProxySummary> proxies;
@@ -50,6 +51,7 @@ class ProxyListPresentationInput {
   final String searchQuery;
   final bool groupMembers;
   final Set<String> chainTags;
+  final Set<String> userPinnedTags;
   final Map<String, ProxyRuntimeVisualState> runtimeStates;
 }
 
@@ -118,12 +120,15 @@ ProxyListPresentation buildProxyListPresentation(
           .firstOrNull;
   final primary = <AppProxySummary>[];
   final chains = <AppProxySummary>[];
+  final userPinned = <AppProxySummary>[];
   final rest = <AppProxySummary>[];
   for (final proxy in items) {
     if (isLowestProxyTag(proxy.tag)) {
       primary.add(proxy);
     } else if (input.chainTags.contains(proxy.tag)) {
       chains.add(proxy);
+    } else if (input.userPinnedTags.contains(proxy.tag)) {
+      userPinned.add(proxy);
     } else {
       rest.add(proxy);
     }
@@ -138,7 +143,9 @@ ProxyListPresentation buildProxyListPresentation(
     for (final proxy in primary) ProxyListEntry.tile(proxy),
     for (final proxy in chains) ProxyListEntry.tile(proxy),
     if (input.canAddChain) const ProxyListEntry.addChain(),
-    if (rest.isNotEmpty && hasHeader) const ProxyListEntry.divider(),
+    if ((userPinned.isNotEmpty || rest.isNotEmpty) && hasHeader)
+      const ProxyListEntry.divider(),
+    for (final proxy in userPinned) ProxyListEntry.tile(proxy),
     for (final proxy in rest) ProxyListEntry.tile(proxy),
   ];
   return ProxyListPresentation(items, entries, {

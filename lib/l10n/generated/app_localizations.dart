@@ -1208,6 +1208,36 @@ abstract class AppLocalizations {
   /// **'Share'**
   String get shareProxyTitle;
 
+  /// No description provided for @proxyPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin server'**
+  String get proxyPin;
+
+  /// No description provided for @proxyUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin server'**
+  String get proxyUnpin;
+
+  /// No description provided for @proxyPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned server'**
+  String get proxyPinned;
+
+  /// No description provided for @proxyPinFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the pin. The server may have changed.'**
+  String get proxyPinFailed;
+
+  /// No description provided for @proxyGroupOpenMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Show servers'**
+  String get proxyGroupOpenMembers;
+
   /// No description provided for @shareProxyLinkLabel.
   ///
   /// In en, this message translates to:

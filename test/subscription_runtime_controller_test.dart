@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/subscription_runtime_controller.dart';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
+import 'package:meow_client/models/proxy_exclusion_rules.dart';
 import 'package:meow_client/models/subscription.dart';
 
 void main() {
@@ -191,6 +192,70 @@ void main() {
       expect(hydrated.normalized.selectedProxyTag, 'france');
       expect(hydrated.subscription.selectedProxyTag, 'france');
       expect(hydrated.proxyCache.displayProxy?.tag, 'france');
+    },
+  );
+
+  test(
+    'hydration keeps protocol exclusions across subscription reloads',
+    () async {
+      final controller = SubscriptionRuntimeController();
+      final stored =
+          _subscription(
+            id: 'sub-1',
+            selectedProxyTag: 'provider-group',
+            outbounds: [
+              _outbound('vless'),
+              for (final version in ['4', '5'])
+                _outbound(
+                  'socks-$version',
+                  config: {
+                    'type': 'socks',
+                    'version': version,
+                    'server': 'example.test',
+                    'server_port': 1080,
+                  },
+                ),
+            ],
+          ).copyWith(
+            groups: const [
+              SubscriptionGroup(
+                tag: 'provider-group',
+                name: 'Provider group',
+                outboundTags: ['vless', 'socks-4', 'socks-5'],
+              ),
+            ],
+          );
+      final rules = ProxyExclusionRules(
+        conditions: [ProxyExclusionCondition(protocol: 'SOCKS')],
+      );
+
+      final resolved = await controller.resolveSubscriptions(
+        metadataSubscriptions: [
+          Subscription.fromMetadataMap(stored.toMetadataMap()),
+        ],
+        activeSubscriptionId: stored.id,
+        selectedProxyTag: stored.selectedProxyTag,
+        preserveRuntimeState: false,
+        runtimeSnapshot: const SubscriptionRuntimeSnapshot(),
+        payloadSnapshotFor: (_) => jsonEncode(stored.toPayloadMap()),
+        exclusionRulesByProfile: {stored.id: rules},
+      );
+
+      expect(resolved.subscriptions.single.concreteServerTags, {
+        'vless',
+        'socks-4',
+        'socks-5',
+      });
+      expect(resolved.proxyCache!.concreteServerTags, {'vless'});
+      expect(resolved.proxyCache!.activeProxies.map((proxy) => proxy.tag), [
+        'provider-group',
+      ]);
+      expect(
+        resolved.proxyCache!.groupChildrenByTag['provider-group']!.map(
+          (proxy) => proxy.tag,
+        ),
+        ['vless'],
+      );
     },
   );
 

@@ -22,6 +22,27 @@ void main() {
     );
     expect(result.items.map((p) => p.tag), ['a', 'z']);
   });
+
+  test('pinned servers lead the regular list and respect its filter', () {
+    final result = buildProxyListPresentation(
+      ProxyListPresentationInput(
+        proxies: [
+          _proxy('regular', 'Alpha'),
+          _proxy('pinned', 'Zulu'),
+          _proxy('offline', 'Offline', unavailable: true),
+        ],
+        sort: ProxySort.name,
+        hideUnavailable: true,
+        selectedTag: '',
+        userPinnedTags: const {'pinned', 'offline'},
+      ),
+    );
+    expect(result.entries.map((entry) => entry.proxy?.tag), [
+      'pinned',
+      'regular',
+    ]);
+  });
+
   test('selection leaves source and sorted presentation rows in place', () {
     final proxies = [
       _proxy('b', 'Beta', latency: 20, fresh: true),

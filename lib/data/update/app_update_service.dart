@@ -398,9 +398,26 @@ class AppUpdateService {
       <AppUpdateChannel, Future<AppUpdateCheckResult>>{};
   final Set<Future<void>> _cacheMutations = {};
   AppUpdateDownloadOperation? _activeDownload;
+  Future<void>? _automaticSubscriptionApply;
   Future<void>? _installerLaunch;
 
   AppUpdateDownloadOperation? get activeDownload => _activeDownload;
+
+  /// Reserve an Android runtime apply after the caller has waited for any
+  /// active APK download. Subsequent downloads wait until the apply settles.
+  Future<void> withAutomaticSubscriptionApply(
+    Future<void> Function() apply,
+  ) async {
+    assert(_activeDownload == null && _automaticSubscriptionApply == null);
+    final released = Completer<void>();
+    _automaticSubscriptionApply = released.future;
+    try {
+      await apply();
+    } finally {
+      _automaticSubscriptionApply = null;
+      released.complete();
+    }
+  }
 
   /// Shares only the platform launch, not the unobservable OS installer session.
   Future<void> launchInstaller(Future<void> Function() launch) {
@@ -926,7 +943,9 @@ class AppUpdateService {
       return active;
     }
     final operation = AppUpdateDownloadOperation._(info);
+    final subscriptionApply = _automaticSubscriptionApply;
     final precedingWork = <Future<void>>[
+      ?subscriptionApply,
       ..._checksInFlight.values.map(
         (check) =>
             check.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
@@ -1014,10 +1033,11 @@ class AppUpdateService {
     if (temp.existsSync()) {
       await temp.delete();
     }
-    final startedAt = DateTime.now();
+    final transferTime = Stopwatch();
     var downloaded = 0;
     var totalBytes = info.asset.sizeBytes;
-    var lastEmitAt = startedAt;
+    int? lastEmitMillis;
+    var transferStage = AppUpdateDownloadStage.downloading;
     try {
       final uri = Uri.parse(info.asset.downloadUrl);
       final result = await VpnAwareRemoteDownloader.instance.downloadToFile(
@@ -1028,32 +1048,42 @@ class AppUpdateService {
           'User-Agent': 'Etonify-Android-Updater',
         },
         onRouteAttempt: (route, isFallback) {
-          if (isFallback && route == RemoteDownloadRoute.underlying) {
-            onProgress(
-              AppUpdateDownloadProgress(
-                downloadedBytes: downloaded,
-                totalBytes: totalBytes,
-                bytesPerSecond: 0,
-                done: false,
-                stage: AppUpdateDownloadStage.retryingWithoutVpn,
-              ),
-            );
-          }
+          downloaded = 0;
+          totalBytes = info.asset.sizeBytes;
+          transferTime
+            ..reset()
+            ..start();
+          lastEmitMillis = null;
+          transferStage = isFallback && route == RemoteDownloadRoute.underlying
+              ? AppUpdateDownloadStage.retryingWithoutVpn
+              : AppUpdateDownloadStage.downloading;
+          onProgress(
+            AppUpdateDownloadProgress(
+              downloadedBytes: 0,
+              totalBytes: 0,
+              bytesPerSecond: 0,
+              done: false,
+              stage: transferStage,
+            ),
+          );
         },
         onProgress: (completed, total) {
+          if (completed <= 0) return;
           downloaded = completed;
           if (total > 0) {
             totalBytes = total;
           }
-          final now = DateTime.now();
-          if (now.difference(lastEmitAt) >= const Duration(milliseconds: 250)) {
-            lastEmitAt = now;
+          final now = transferTime.elapsedMilliseconds;
+          final previous = lastEmitMillis;
+          if (previous == null || now - previous >= 250) {
+            lastEmitMillis = now;
             onProgress(
               AppUpdateDownloadProgress(
                 downloadedBytes: downloaded,
                 totalBytes: totalBytes,
-                bytesPerSecond: _speed(downloaded, startedAt, now),
+                bytesPerSecond: _speed(downloaded, now),
                 done: false,
+                stage: transferStage,
               ),
             );
           }
@@ -1071,7 +1101,7 @@ class AppUpdateService {
         AppUpdateDownloadProgress(
           downloadedBytes: downloaded,
           totalBytes: totalBytes,
-          bytesPerSecond: _speed(downloaded, startedAt, DateTime.now()),
+          bytesPerSecond: _speed(downloaded, transferTime.elapsedMilliseconds),
           done: false,
           stage: AppUpdateDownloadStage.verifying,
         ),
@@ -1108,7 +1138,7 @@ class AppUpdateService {
         AppUpdateDownloadProgress(
           downloadedBytes: downloaded,
           totalBytes: totalBytes,
-          bytesPerSecond: _speed(downloaded, startedAt, DateTime.now()),
+          bytesPerSecond: _speed(downloaded, transferTime.elapsedMilliseconds),
           done: true,
           filePath: target.path,
           stage: AppUpdateDownloadStage.ready,
@@ -1122,8 +1152,8 @@ class AppUpdateService {
     }
   }
 
-  static double _speed(int bytes, DateTime startedAt, DateTime now) {
-    final seconds = now.difference(startedAt).inMilliseconds / 1000;
+  static double _speed(int bytes, int elapsedMillis) {
+    final seconds = elapsedMillis / 1000;
     if (seconds <= 0) return 0;
     return bytes / seconds;
   }

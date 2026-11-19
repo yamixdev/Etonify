@@ -142,6 +142,38 @@ void main() {
     },
   );
 
+  test(
+    'an APK download waits for an automatic profile apply to settle',
+    () async {
+      final service = AppUpdateService.instance;
+      final finishApply = Completer<void>();
+      final applyError = StateError('Profile apply failed');
+      final apply = _outcome(
+        service.withAutomaticSubscriptionApply(() async {
+          await finishApply.future;
+          throw applyError;
+        }),
+      );
+      final operation = service.startDownload(server.info);
+      late final bool requestedWhileApplying;
+      try {
+        requestedWhileApplying = await Future.any([
+          server.started.future.then((_) => true),
+          Future<bool>.delayed(const Duration(milliseconds: 100), () => false),
+        ]);
+      } finally {
+        finishApply.complete();
+        server.finish();
+        await operation.completed;
+      }
+
+      expect(requestedWhileApplying, isFalse);
+      expect(await apply, same(applyError));
+      expect(server.requests, 1);
+      expect(operation.progress.done, isTrue);
+    },
+  );
+
   test('cache cleanup preserves the active partial installer', () async {
     final download = _outcome(
       AppUpdateService.instance.downloadUpdate(server.info, onProgress: (_) {}),

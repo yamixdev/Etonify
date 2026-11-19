@@ -11,6 +11,7 @@ import 'package:meow_client/models/url_test_progress.dart';
 class ProxiesPresentationData {
   const ProxiesPresentationData({
     this.profileId = '',
+    this.pinnedProxyTags = const {},
     required this.proxies,
     required this.groupChildrenByTag,
     required this.selectedTag,
@@ -38,6 +39,7 @@ class ProxiesPresentationData {
   });
 
   final String profileId;
+  final Set<String> pinnedProxyTags;
   final List<AppProxySummary> proxies;
   final Map<String, List<AppProxySummary>> groupChildrenByTag;
   final String selectedTag;
@@ -85,6 +87,7 @@ class ProxiesPresentationCallbacks {
     required this.refreshActiveProxyIp,
     required this.outboundForTag,
     this.onLocalListChanged,
+    this.changeProxyPin,
     required this.loadProxyChainTargetSources,
     required this.loadProxyChainTargetsForSource,
     required this.addProxyChain,
@@ -108,6 +111,7 @@ class ProxiesPresentationCallbacks {
   final VoidCallback refreshActiveProxyIp;
   final Outbound? Function(String tag) outboundForTag;
   final ValueChanged<String>? onLocalListChanged;
+  final Future<bool> Function(String tag, bool pinned)? changeProxyPin;
   final Future<List<AppProfileSummary>> Function() loadProxyChainTargetSources;
   final Future<List<AppProxySummary>> Function(String subscriptionId)
   loadProxyChainTargetsForSource;
@@ -142,6 +146,7 @@ class ProxiesPresentationBuilder {
   }) {
     return ProxiesPage(
       profileId: data.profileId,
+      pinnedProxyTags: data.pinnedProxyTags,
       proxies: data.proxies,
       groupChildrenByTag: data.groupChildrenByTag,
       selectedTag: data.selectedTag,
@@ -172,6 +177,7 @@ class ProxiesPresentationBuilder {
       onActiveProxyIpRefresh: callbacks.refreshActiveProxyIp,
       outboundForTag: callbacks.outboundForTag,
       onLocalListChanged: callbacks.onLocalListChanged,
+      onProxyPinChanged: callbacks.changeProxyPin,
       loadProxyChainTargetSources: callbacks.loadProxyChainTargetSources,
       loadProxyChainTargetsForSource: callbacks.loadProxyChainTargetsForSource,
       onAddProxyChain: callbacks.addProxyChain,
