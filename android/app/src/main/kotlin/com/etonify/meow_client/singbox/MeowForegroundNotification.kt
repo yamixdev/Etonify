@@ -231,7 +231,7 @@ internal class MeowForegroundNotification(
     private var latencyActionInFlight = false
     private var measurementNotBeforeSeconds = 0L
     private var latencyTimeoutRunnable: Runnable? = null
-    private class GroupLatencyAction(val tag: String, val resultsThroughMillis: Long) {
+    private class GroupLatencyAction(val tag: String, val resultsThroughElapsedMillis: Long) {
         val delays = mutableMapOf<String, Long>()
     }
     private data class LatencyActionContext(
@@ -531,7 +531,9 @@ internal class MeowForegroundNotification(
                 startedAt, SingboxController.cachedNotificationLatency(selectedRequest.targetOutboundTag,
                     startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch)?.revision ?: 0L,
                 request.logicalSessionId,
-                autoGroup?.let { GroupLatencyAction(it, startedAt + request.deadlineMillis + 1_000L) },
+                autoGroup?.let {
+                    GroupLatencyAction(it, SystemClock.elapsedRealtime() + request.deadlineMillis + 1_000L)
+                },
             )
             latencyCompletionObservers.clear()
             onComplete?.let(latencyCompletionObservers::add)
@@ -670,7 +672,7 @@ internal class MeowForegroundNotification(
         foregroundStarted && lifecycleStatus == "Connected" && context.runtime == startupRuntimeGeneration &&
             context.network == startupNetworkGeneration && (if (context.autoGroup != null) {
                 context.autoGroup.tag == selectedAutoGroup() &&
-                    System.currentTimeMillis() <= context.autoGroup.resultsThroughMillis
+                    SystemClock.elapsedRealtime() <= context.autoGroup.resultsThroughElapsedMillis
             } else {
                 context.selection == selectionEpoch && context.target == presentation.urlTestRequest?.targetOutboundTag
             })

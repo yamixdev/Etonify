@@ -637,8 +637,8 @@ object MeowDefaultNetworkMonitor {
             return false
         }
         synchronized(lock) {
-            if (!started || listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
-            currentNetwork = effectiveNetwork
+            if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
+            if (started) currentNetwork = effectiveNetwork
         }
         val properties = MeowApplication.connectivity.getLinkProperties(effectiveNetwork)
         val interfaceName = properties?.interfaceName

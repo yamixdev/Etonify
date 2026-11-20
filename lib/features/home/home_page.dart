@@ -152,22 +152,36 @@ class HomePage extends StatelessWidget {
     AppProxySummary? proxy,
     bool connectionOccupied,
   ) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottomInset),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: _buildConnectionControl(
-                proxy,
-                connectionOccupied: connectionOccupied,
-              ),
+    return CustomScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: _buildSubscriptionTile(
+            profile,
+            const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          ),
+        ),
+        SliverFillRemaining(
+          hasScrollBody: true,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + bottomInset),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Center(
+                    child: _buildConnectionControl(
+                      proxy,
+                      connectionOccupied: connectionOccupied,
+                    ),
+                  ),
+                ),
+                ?_buildActiveProxyFooter(context, proxy),
+              ],
             ),
           ),
-          _buildSubscriptionTile(profile, const EdgeInsets.only(bottom: 8)),
-          ?_buildActiveProxyFooter(context, proxy),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -187,11 +201,10 @@ class HomePage extends StatelessWidget {
             width: sideWidth,
             child: Column(
               children: [
-                const Spacer(),
                 _buildSubscriptionTile(profile, EdgeInsets.zero),
                 if (_buildActiveProxyFooter(context, proxy)
                     case final footer?) ...[
-                  const Gap(8),
+                  const Spacer(),
                   footer,
                 ],
               ],
