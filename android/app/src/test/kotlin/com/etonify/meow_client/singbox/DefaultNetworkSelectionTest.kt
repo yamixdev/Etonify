@@ -83,15 +83,39 @@ class DefaultNetworkSelectionTest {
     }
 
     @Test
-    fun `active physical network wins over a stale validated transport`() {
+    fun `active validated network wins over another validated transport`() {
         val selected = selectDefaultNetworkCandidate(
             candidates = listOf(
                 candidate("wifi", validated = true, hasInterface = true, score = 130),
-                candidate("cell", active = true, hasInterface = true, score = 40),
+                candidate("cell", active = true, validated = true, hasInterface = true, score = 150),
             ),
             current = "wifi",
         )
 
+        assertEquals("cell", selected?.value)
+    }
+
+    @Test
+    fun `validated LTE wins over active wifi with no internet`() {
+        val selected = selectDefaultNetworkCandidate(
+            listOf(
+                candidate("wifi", active = true, hasInterface = true, score = 70),
+                candidate("cell", validated = true, hasInterface = true, score = 110),
+            ),
+            current = "wifi",
+        )
+        assertEquals("cell", selected?.value)
+    }
+
+    @Test
+    fun `captive wifi does not displace the only plausible mobile network`() {
+        val selected = selectDefaultNetworkCandidate(
+            listOf(
+                candidate("wifi", active = true, hasInterface = true, score = 70, captivePortal = true),
+                candidate("cell", hasInterface = true, score = 10),
+            ),
+            current = "wifi",
+        )
         assertEquals("cell", selected?.value)
     }
 
@@ -124,11 +148,13 @@ class DefaultNetworkSelectionTest {
         validated: Boolean = false,
         hasInterface: Boolean = false,
         score: Int,
+        captivePortal: Boolean = false,
     ) = DefaultNetworkCandidate(
         value = value,
         isActive = active,
         isValidated = validated,
         hasUsableInterface = hasInterface,
         score = score,
+        isCaptivePortal = captivePortal,
     )
 }

@@ -36,4 +36,19 @@ class NetworkServerPolicyTest {
         assertFalse(policy.copy(remember = false).remembers(wifi, wifi))
         assertFalse(policy.copy(enabled = false).remembers(wifi, wifi))
     }
+
+    @Test fun `cold start selects for current wifi instead of the previous mobile default`() {
+        val tags = setOf("wifi", "mobile", "last-wifi", "last-mobile")
+        assertEquals("last-wifi", policy.startTarget(ServerNetwork.WIFI, tags, ServerNetwork.MOBILE, "mobile"))
+        assertEquals("last-mobile", policy.startTarget(ServerNetwork.MOBILE, tags, ServerNetwork.WIFI, "wifi"))
+        assertEquals("last-mobile", policy.startTarget(ServerNetwork.MOBILE, tags))
+        assertEquals("last-wifi", policy.startTarget(ServerNetwork.WIFI, tags))
+    }
+
+    @Test fun `reload preserves the explicit manual selection for the same transport`() {
+        val tags = setOf("wifi", "manual")
+        assertEquals("manual", policy.startTarget(ServerNetwork.WIFI, tags, ServerNetwork.WIFI, "manual"))
+        assertEquals("wifi", policy.startTarget(ServerNetwork.WIFI, tags, ServerNetwork.MOBILE, "manual"))
+        assertNull(policy.copy(enabled = false).startTarget(ServerNetwork.WIFI, tags, ServerNetwork.WIFI, "manual"))
+    }
 }

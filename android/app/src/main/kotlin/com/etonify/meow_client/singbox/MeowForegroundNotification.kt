@@ -241,6 +241,7 @@ internal class MeowForegroundNotification(
     )
     private var latencyActionContext: LatencyActionContext? = null
     private val latencyCompletionObservers = mutableListOf<(NetworkHandoverProbeOutcome) -> Unit>()
+    private var recoveryGroupCompletion: Pair<String, (NetworkHandoverProbeOutcome) -> Unit>? = null
     private data class Outbound(
         val type: String,
         val members: List<String>,
@@ -592,11 +593,12 @@ internal class MeowForegroundNotification(
         }
     }
 
-    internal fun requestAutoGroupRecovery(
+    internal fun requestRecoveryProbe(
         runtime: Long,
         network: Long,
         selection: Long,
         isCurrent: () -> Boolean,
+        onComplete: (NetworkHandoverProbeOutcome) -> Unit,
     ): Boolean {
         if (!isCurrent()) return false
         val request = synchronized(this) {
@@ -605,22 +607,29 @@ internal class MeowForegroundNotification(
                 selection != selectionEpoch
             ) return false
             val current = presentation.urlTestRequest ?: return false
-            val autoGroup = selectedAutoGroup() ?: return false
+            val autoGroup = selectedAutoGroup() ?: return@synchronized recoveryProbeRequest() ?: return false
             current.copy(
                 groupTag = autoGroup,
                 targetOutboundTag = "",
+                logicalSessionId = "recovery-${java.util.UUID.randomUUID()}",
                 priorityOutboundTag = current.targetOutboundTag.takeIf { selectedOutboundsReady }.orEmpty(),
                 excludeOutboundTag = "",
-                timeoutMillis = current.timeoutMillis,
-                concurrency = 3,
-                deadlineMillis = maxOf(20_000, current.deadlineMillis),
+                concurrency = GROUP_LATENCY_CONCURRENCY,
+                deadlineMillis = maxOf(DEFAULT_LATENCY_TIMEOUT_MS.toInt(), current.deadlineMillis),
             )
+        }
+        if (request.targetOutboundTag.isNotEmpty()) {
+            val canDispatch = { isCurrent() && recoveryProbeRequest() == request }
+            if (!canDispatch()) return false
+            return requestLatencyRefresh(recoveryRequest = request, canDispatch = canDispatch) { outcome ->
+                if (canDispatch()) onComplete(outcome)
+            }
         }
         val canDispatch = {
             isCurrent() && synchronized(this) {
                 foregroundStarted && lifecycleStatus == "Connected" &&
                     runtime == startupRuntimeGeneration && network == startupNetworkGeneration &&
-                    selection == selectionEpoch && selectedAutoGroup() == request.groupTag &&
+                    selectedAutoGroup() == request.groupTag &&
                     presentation.urlTestRequest?.url == request.url &&
                     presentation.urlTestRequest?.timeoutMillis == request.timeoutMillis
             }
@@ -630,10 +639,18 @@ internal class MeowForegroundNotification(
                 "MeowForegroundNotification",
                 "auto-group probe group=${request.groupTag} accepted=${result.isSuccess}",
             )
+            if (result.isFailure) {
+                completeRecoveryGroup(request.logicalSessionId, NetworkHandoverProbeOutcome.INCONCLUSIVE)
+            }
+        }
+        if (!canDispatch()) return false
+        synchronized(this) {
+            recoveryGroupCompletion = request.logicalSessionId to { outcome ->
+                if (canDispatch()) onComplete(outcome)
+            }
         }
         val runner = latencyTestRunner
         if (runner != null) {
-            if (!canDispatch()) return false
             runner(request, false, onDispatched)
             return true
         }
@@ -647,6 +664,7 @@ internal class MeowForegroundNotification(
             concurrency = request.concurrency,
             deadlineMillis = request.deadlineMillis,
             force = false,
+            logicalSessionId = request.logicalSessionId,
             canDispatch = canDispatch,
             callback = onDispatched,
         )
@@ -680,6 +698,7 @@ internal class MeowForegroundNotification(
     private fun cancelLatencyObserversLocked() {
         latencyCompletionObservers.clear()
         latencyActionContext = null
+        recoveryGroupCompletion = null
     }
 
     private fun dispatchLatencyCompletionLocked(outcome: NetworkHandoverProbeOutcome) {
@@ -1047,7 +1066,22 @@ internal class MeowForegroundNotification(
             selection == selectionEpoch && startupOwnership.dispatchNative(token)
     }
 
-    fun onUrlTestSessionTerminal(requestId: String, runtime: Long, network: Long) {
+    private fun completeRecoveryGroup(requestId: String, outcome: NetworkHandoverProbeOutcome) {
+        val deliver = synchronized(this) {
+            val pending = recoveryGroupCompletion?.takeIf { it.first == requestId } ?: return
+            recoveryGroupCompletion = null
+            pending.second
+        }
+        deliver(outcome)
+    }
+
+    internal fun onUrlTestSessionTerminal(
+        requestId: String,
+        runtime: Long,
+        network: Long,
+        outcome: NetworkHandoverProbeOutcome = NetworkHandoverProbeOutcome.INCONCLUSIVE,
+    ) {
+        completeRecoveryGroup(requestId, outcome)
         synchronized(this) {
             val action = latencyActionContext
             if (action?.autoGroup != null && action.requestId == requestId &&
@@ -1103,6 +1137,8 @@ internal class MeowForegroundNotification(
         notificationManager.createNotificationChannel(channel)
     }
 
+    internal fun onNetworkServerSelectionChanged() = synchronized(this) { refreshLocked() }
+
     private fun refreshLocked() {
         if (!foregroundStarted || refreshPending) {
             return
@@ -1132,8 +1168,8 @@ internal class MeowForegroundNotification(
     private fun buildNotification(): Notification {
         val connected = lifecycleStatus == "Connected"
         val showDetails = connected && presentation.detailed
-        val title = if (showDetails && presentation.title.isNotEmpty()) {
-            presentation.title
+        val title = if (showDetails) {
+            SingboxController.networkServerLabel() ?: presentation.title.ifEmpty { "Etonify" }
         } else {
             "Etonify"
         }

@@ -46,6 +46,8 @@ object MeowDefaultNetworkMonitor {
     private var appliedInterfaceKey: String? = null
     private var committedPhysicalKey: String? = null
     private var committedServerNetwork: Pair<Network, ServerNetworkSnapshot>? = null
+    private var wifiFailover: Pair<Network, Network>? = null
+    private var wifiFailoverProbeGeneration: Long? = null
     private var selectedNetworkLossSerial = 0L
     private var heartbeatFuture: ScheduledFuture<*>? = null
     private var pendingNotifyRunnable: Runnable? = null
@@ -107,8 +109,27 @@ object MeowDefaultNetworkMonitor {
                 }
             }
             if (decision.shouldCheckInterface) {
-                notifyListener()
+                notifyListener(immediate = true)
             }
+        }
+    }
+
+    private val defaultCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = refreshPhysicalDefault()
+        override fun onLost(network: Network) = refreshPhysicalDefault()
+    }
+
+    private fun refreshPhysicalDefault() {
+        // Query outside the callback itself, after Android publishes the new default.
+        networkHandler.post {
+            val preferred = resolveBestNetwork()
+            val changed = synchronized(lock) {
+                if (!started || currentNetwork == preferred) false else {
+                    currentNetwork = preferred
+                    true
+                }
+            }
+            if (changed) notifyListener(immediate = true)
         }
     }
 
@@ -136,6 +157,8 @@ object MeowDefaultNetworkMonitor {
             appliedInterfaceKey = null
             committedPhysicalKey = null
             committedServerNetwork = null
+            wifiFailover = null
+            wifiFailoverProbeGeneration = null
             interfaceUpdateGate.reset()
             pendingNotifyRunnable?.let(networkHandler::removeCallbacks)
             pendingNotifyRunnable = null
@@ -148,6 +171,9 @@ object MeowDefaultNetworkMonitor {
         stopHeartbeat()
         runCatching {
             MeowApplication.connectivity.unregisterNetworkCallback(callback)
+        }
+        runCatching {
+            MeowApplication.connectivity.unregisterNetworkCallback(defaultCallback)
         }
     }
 
@@ -268,7 +294,11 @@ object MeowDefaultNetworkMonitor {
         if (MeowApplication.connectivity.getNetworkCapabilities(network)
                 ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
         ) return currentNetworkSnapshot() == network
-        val reachable = runCatching {
+        return probeInternet(network) && currentNetworkSnapshot() == network && isSelectableNetwork(network)
+    }
+
+    private fun probeInternet(network: Network): Boolean =
+        runCatching {
             val connection = network.openConnection(
                 java.net.URL("https://cp.cloudflare.com/"),
                 java.net.Proxy.NO_PROXY,
@@ -282,17 +312,59 @@ object MeowDefaultNetworkMonitor {
                 connection.disconnect()
             }
         }.getOrDefault(false)
-        return reachable && currentNetworkSnapshot() == network && isSelectableNetwork(network)
+
+    /** Called once per upstream generation after a conclusive VPN probe failure. */
+    internal fun tryWifiFailover(generation: Long, canApply: () -> Boolean): Boolean {
+        val wifi = currentNetworkSnapshot() ?: return false
+        if (serverNetworkType(wifi) != ServerNetwork.WIFI || !canApply()) return false
+        val mobile = resolveBestNetwork(exclude = wifi, requiredTransport = ServerNetwork.MOBILE)
+            ?.takeIf(::hasValidatedInternet) ?: return false
+        synchronized(lock) {
+            if (!started || currentNetwork != wifi || generation != networkInterfaceGeneration.get() ||
+                generation == wifiFailoverProbeGeneration
+            ) return false
+            wifiFailoverProbeGeneration = generation
+        }
+        if (probeInternet(wifi) || !canApply() || !probeInternet(mobile) ||
+            !canApply() || !hasValidatedInternet(mobile)
+        ) return false
+        synchronized(lock) {
+            if (!started || currentNetwork != wifi || generation != networkInterfaceGeneration.get()) return false
+            wifiFailover = wifi to mobile
+            currentNetwork = mobile
+        }
+        MeowDiagnostics.log(TAG, "wifi_probe_failed switching_to_cellular generation=$generation")
+        notifyListener(immediate = true)
+        runCatching { MeowApplication.connectivity.reportNetworkConnectivity(wifi, false) }
+        return true
     }
 
-    internal fun serverNetworkSnapshot(): ServerNetworkSnapshot? {
-        val committed = synchronized(lock) {
-            committedServerNetwork?.takeIf {
-                appliedInterfaceKey != null && currentNetwork == it.first &&
-                    networkInterfaceGeneration.get() == it.second.generation
+    private fun hasValidatedInternet(network: Network): Boolean =
+        MeowApplication.connectivity.getNetworkCapabilities(network)
+            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+
+    internal fun serverNetworkSnapshot(): ServerNetworkSnapshot? = synchronized(lock) {
+        committedServerNetwork?.takeIf {
+            appliedInterfaceKey != null && currentNetwork == it.first &&
+                networkInterfaceGeneration.get() == it.second.generation
+        }?.second
+    }
+
+    internal fun selectedVpnUpstream(): Network? = synchronized(lock) {
+        currentNetwork.takeIf { started }
+    }
+
+    internal fun upstreamServerNetwork(): ServerNetwork? =
+        resolveBestNetwork()?.let(::serverNetworkType)
+
+    internal fun clearWifiFailover() {
+        val changed = synchronized(lock) {
+            if (wifiFailover == null) false else {
+                wifiFailover = null
+                true
             }
-        } ?: return null
-        return committed.second.takeIf { resolveBestNetwork() == committed.first }
+        }
+        if (changed) refreshPhysicalDefault()
     }
 
     internal fun whileServerNetworkCurrent(expected: ServerNetworkSnapshot, action: () -> Unit) {
@@ -507,7 +579,7 @@ object MeowDefaultNetworkMonitor {
                 // Ordinary Android callbacks are never forced. The listener's
                 // interface key suppresses duplicates before setUnderlyingNetworks
                 // or libbox updateDefaultInterface is called.
-                notifyListener()
+                notifyListener(immediate = true)
             }
             return
         }
@@ -531,7 +603,7 @@ object MeowDefaultNetworkMonitor {
                 "checkInterface=${decision.shouldCheckInterface} force=false",
         )
         if (decision.shouldCheckInterface) {
-            notifyListener()
+            notifyListener(immediate = decision.nextNetwork != previousNetwork)
         }
     }
 
@@ -744,10 +816,12 @@ object MeowDefaultNetworkMonitor {
             return false
         }
         val physicalChanged: Boolean
+        val becameReady: Boolean
         val nextGen: Long
         val serverNetwork = serverNetworkType(effectiveNetwork)
         synchronized(lock) {
             if (listener !== currentListener || notifyDebounceGeneration.get() != generation) return false
+            becameReady = appliedInterfaceKey == null
             appliedInterfaceKey = notifyKey
             physicalChanged = committedPhysicalKey != notifyKey
             committedPhysicalKey = notifyKey
@@ -760,7 +834,7 @@ object MeowDefaultNetworkMonitor {
         if (physicalChanged) {
             MeowBasePlatformInterface.cancelPendingDnsQueries("network_handover:$interfaceName")
         }
-        MeowBoxService.onDefaultNetworkChanged(true)
+        MeowBoxService.onDefaultNetworkChanged(true, nextGen.takeIf { physicalChanged || becameReady })
         if (physicalChanged) {
             SingboxController.emitNetworkChanged(
                 "default_interface",
@@ -797,6 +871,7 @@ object MeowDefaultNetworkMonitor {
 
     private fun resolveBestNetwork(
         exclude: Network? = null,
+        requiredTransport: ServerNetwork? = null,
     ): Network? {
         val connectivity = MeowApplication.connectivity
         val active = connectivity.activeNetwork
@@ -805,6 +880,9 @@ object MeowDefaultNetworkMonitor {
                 if (network == exclude) return@mapNotNull null
                 val capabilities = connectivity.getNetworkCapabilities(network) ?: return@mapNotNull null
                 if (!isBaseUsableNetwork(capabilities)) return@mapNotNull null
+                if (requiredTransport == ServerNetwork.MOBILE &&
+                    !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                ) return@mapNotNull null
                 val isActive = active == network
                 val isValidated =
                     capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -817,6 +895,17 @@ object MeowDefaultNetworkMonitor {
                 )
             }
         val current = synchronized(lock) { currentNetwork }
+        if (exclude == null && requiredTransport == null) {
+            val fallback = synchronized(lock) { wifiFailover }
+            if (fallback != null) {
+                val (wifi, mobile) = fallback
+                if (candidates.any { it.network == wifi && it.isValidated } &&
+                    candidates.any { it.network == mobile && it.isValidated } &&
+                    hasUsableNetworkInterface(mobile)
+                ) return mobile
+                synchronized(lock) { if (wifiFailover == fallback) wifiFailover = null }
+            }
+        }
         val selectedNetwork = selectDefaultNetworkCandidate(
             candidates = candidates.map { candidate ->
                 DefaultNetworkCandidate(
@@ -825,6 +914,7 @@ object MeowDefaultNetworkMonitor {
                     isValidated = candidate.isValidated,
                     hasUsableInterface = hasUsableNetworkInterface(candidate.network),
                     score = candidate.score,
+                    isCaptivePortal = candidate.capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL),
                 )
             },
             current = current,
@@ -862,6 +952,11 @@ object MeowDefaultNetworkMonitor {
             return false
         }
         if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)) {
+            return false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_FOREGROUND)
+        ) {
             return false
         }
         if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
@@ -972,6 +1067,11 @@ object MeowDefaultNetworkMonitor {
             MeowApplication.connectivity.registerNetworkCallback(request, callback, networkHandler)
         }.onFailure {
             SingboxController.log("error", "default network callback failed: ${it.message}")
+        }
+        runCatching {
+            MeowApplication.connectivity.registerDefaultNetworkCallback(defaultCallback, networkHandler)
+        }.onFailure {
+            MeowDiagnostics.log(TAG, "Android default network callback registration failed", it)
         }
     }
 }

@@ -79,7 +79,6 @@ class MeowQuickSettingsTileService : TileService() {
         startRuntime(targetMode)
         renderTile(
             isActive = true,
-            activeLabel = readActiveTileLabel(),
         )
         scheduleRefreshes()
     }
@@ -231,6 +230,7 @@ class MeowQuickSettingsTileService : TileService() {
     }
 
     private fun readActiveTileLabel(): String? {
+        SingboxController.networkServerLabel()?.let { return it }
         val persistedLabel = runCatching {
             val value = openFileInput(QUICK_TILE_LABEL_FILE).bufferedReader().use { it.readText() }
             value.trim().ifEmpty { null }

@@ -673,6 +673,9 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
     final theme = Theme.of(context);
     final result = _result;
     final info = result?.info;
+    final notesInfo = result?.status == AppUpdateStatus.updateAvailable
+        ? info
+        : null;
     final cachedInstallerPath = _cachedInstallerPath;
 
     return ProgressiveBlurScaffold(
@@ -747,32 +750,28 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
               const Gap(12),
               _DownloadProgressCard(progress: _downloadProgress),
             ],
-            if (info != null) ...[
-              const Gap(10),
-              Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  key: const ValueKey('open-release-notes'),
-                  leading: SettingsLeadingIcon(
-                    icon: Icons.article_outlined,
-                    color: theme.colorScheme.primary,
-                  ),
-                  title: Text(l10n.updatesReleaseNotesTitle),
-                  subtitle: Text(info.displayVersion),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (context) => ChangelogPage(
-                        currentVersion: _currentVersion,
-                        currentBuildNumber: _currentVersionCode,
-                        updateChannel: _updateChannel,
-                        initialInfo: info,
-                      ),
+            const Gap(10),
+            Card(
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                key: const ValueKey('open-release-notes'),
+                leading: SettingsLeadingIcon(
+                  icon: Icons.article_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                title: Text(l10n.updatesReleaseNotesTitle),
+                subtitle: Text(notesInfo?.displayVersion ?? _currentVersion),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => ChangelogPage(
+                      currentVersion: _currentVersion,
+                      initialInfo: notesInfo,
                     ),
                   ),
                 ),
               ),
-            ],
+            ),
             if (result?.status == AppUpdateStatus.error) ...[
               const Gap(12),
               Card(

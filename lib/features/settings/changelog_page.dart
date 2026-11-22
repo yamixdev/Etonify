@@ -1,8 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
@@ -13,14 +13,10 @@ class ChangelogPage extends StatefulWidget {
   const ChangelogPage({
     super.key,
     required this.currentVersion,
-    required this.currentBuildNumber,
-    this.updateChannel = AppUpdateChannel.stable,
     this.initialInfo,
   });
 
   final String currentVersion;
-  final int currentBuildNumber;
-  final AppUpdateChannel updateChannel;
   final AppUpdateInfo? initialInfo;
 
   @override
@@ -28,16 +24,15 @@ class ChangelogPage extends StatefulWidget {
 }
 
 class _ChangelogPageState extends State<ChangelogPage> {
-  AppUpdateInfo? _info;
-  String? _errorMessage;
+  String? _body;
   Animation<double>? _routeAnimation;
   bool _contentReady = false;
 
   @override
   void initState() {
     super.initState();
-    _info = widget.initialInfo;
-    if (_info == null) unawaited(_load());
+    _body = widget.initialInfo?.body;
+    if (_body == null) unawaited(_loadInstalledNotes());
   }
 
   @override
@@ -62,45 +57,17 @@ class _ChangelogPageState extends State<ChangelogPage> {
     setState(() => _contentReady = true);
   }
 
-  Future<void> _load() async {
-    final service = AppUpdateService.instance;
+  Future<void> _loadInstalledNotes() async {
+    var notes = '';
     try {
-      final metadata = await service.loadMetadata();
-      final cached = metadata.channel == widget.updateChannel
-          ? metadata.latestInfo
-          : null;
-      if (mounted && cached != null) {
-        setState(() => _info = cached);
-      }
-
-      final result = await service.checkForUpdates(
-        currentVersion: widget.currentVersion,
-        currentBuildNumber: widget.currentBuildNumber,
-        manual: false,
-        channel: widget.updateChannel,
+      notes = installedReleaseNotes(
+        await rootBundle.loadString('CHANGELOG.md'),
+        widget.currentVersion,
       );
-      if (!mounted) return;
-      final nextInfo = result.info;
-      final currentInfo = _info;
-      final infoChanged =
-          nextInfo != null &&
-          (currentInfo == null ||
-              nextInfo.version != currentInfo.version ||
-              nextInfo.buildNumber != currentInfo.buildNumber ||
-              nextInfo.body != currentInfo.body);
-      final nextError = currentInfo == null && nextInfo == null
-          ? result.error
-          : null;
-      if (!infoChanged && nextError == _errorMessage) return;
-      setState(() {
-        _info = nextInfo ?? currentInfo;
-        _errorMessage = nextError;
-      });
-    } catch (error) {
-      if (mounted && _info == null) {
-        setState(() => _errorMessage = error.toString());
-      }
+    } on FlutterError {
+      // The empty state still shows the installed version.
     }
+    if (mounted) setState(() => _body = notes);
   }
 
   @override
@@ -124,11 +91,11 @@ class _ChangelogPageState extends State<ChangelogPage> {
           MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
-          if (_info case final info?) ...[
+          if (_body case final body?) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Text(
-                info.displayVersion,
+                widget.initialInfo?.displayVersion ?? widget.currentVersion,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
@@ -138,7 +105,7 @@ class _ChangelogPageState extends State<ChangelogPage> {
             const Gap(8),
             if (_contentReady)
               ReleaseNotesCard(
-                body: info.body,
+                body: body,
                 showHeading: false,
                 useCard: false,
                 limitBody: false,
@@ -146,22 +113,33 @@ class _ChangelogPageState extends State<ChangelogPage> {
               )
             else
               const _ChangelogLoadingCard(),
-          ] else if (_errorMessage case final error?)
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Text(
-                error,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            )
-          else
+          ] else
             const _ChangelogLoadingCard(),
         ],
       ),
     );
   }
+}
+
+String installedReleaseNotes(String changelog, String version) {
+  String releaseTag(String value) =>
+      value.trim().replaceFirst(RegExp(r'^[vV](?=\d)'), '').split('+').first;
+
+  final installed = releaseTag(version);
+  if (installed.isEmpty) return '';
+  final headings = RegExp(
+    r'^## \[([^\]]+)\][^\r\n]*',
+    multiLine: true,
+  ).allMatches(changelog).toList();
+  for (var index = 0; index < headings.length; index++) {
+    final heading = headings[index];
+    if (releaseTag(heading[1]!) != installed) continue;
+    final end = index + 1 < headings.length
+        ? headings[index + 1].start
+        : changelog.length;
+    return changelog.substring(heading.end, end).trim();
+  }
+  return '';
 }
 
 class _ChangelogLoadingCard extends StatelessWidget {

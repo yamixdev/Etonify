@@ -47,9 +47,10 @@ class ForegroundNotificationRecoveryTest {
         notification.updateSelectedOutbounds(selected, startProbe = false)
     }
 
-    @Test fun `wake fallback does not probe other servers for a manual selection`() {
-        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
-        assertTrue(requests.isEmpty())
+    @Test fun `background recovery probes only the chosen outbound in manual mode`() {
+        assertTrue(notification.requestRecoveryProbe(7L, 3L, 0L, { true }, completions::add))
+        assertEquals("select", requests.single().groupTag)
+        assertEquals("a", requests.single().targetOutboundTag)
     }
 
     @Test fun `explicit refresh measures only the chosen manual outbound`() {
@@ -123,7 +124,7 @@ class ForegroundNotificationRecoveryTest {
         assertEquals(20_000, request.deadlineMillis)
     }
 
-    @Test fun `wake fallback probes only the selected auto group`() {
+    @Test fun `background recovery starts with the active auto group even when its leaf is known`() {
         notification.stopPublishing()
         startNotification(
             """
@@ -135,15 +136,25 @@ class ForegroundNotificationRecoveryTest {
             """.trimIndent(),
             mapOf("select" to "auto", "auto" to "a"),
         )
-        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { false })
-        assertFalse(notification.requestAutoGroupRecovery(7L, 4L, 0L) { true })
+        assertFalse(notification.requestRecoveryProbe(7L, 3L, 0L, { false }, completions::add))
+        assertFalse(notification.requestRecoveryProbe(7L, 4L, 0L, { true }, completions::add))
         assertTrue(requests.isEmpty())
-        assertTrue(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+        assertTrue(notification.requestRecoveryProbe(7L, 3L, 0L, { true }, completions::add))
         val request = requests.single()
         assertEquals("auto", request.groupTag)
         assertEquals("", request.targetOutboundTag)
         assertEquals("a", request.priorityOutboundTag)
+        assertEquals(3, request.concurrency)
         assertEquals(20_000, request.deadlineMillis)
+        dispatches.single()(Result.failure(IllegalStateException("command rejected")))
+        assertEquals(listOf(NetworkHandoverProbeOutcome.INCONCLUSIVE), completions)
+
+        assertTrue(notification.requestRecoveryProbe(7L, 3L, 0L, { true }, completions::add))
+        val next = requests.last()
+        notification.onUrlTestSessionTerminal("unrelated", 7L, 3L, NetworkHandoverProbeOutcome.UNHEALTHY)
+        assertEquals(1, completions.size)
+        notification.onUrlTestSessionTerminal(next.logicalSessionId, 7L, 3L, NetworkHandoverProbeOutcome.UNHEALTHY)
+        assertEquals(NetworkHandoverProbeOutcome.UNHEALTHY, completions.last())
     }
 
     @Test fun `fastest can recover when the core has no current leaf`() {
@@ -161,7 +172,7 @@ class ForegroundNotificationRecoveryTest {
         notification.updatePresentation(mapOf("url" to "http://ping.example", "timeoutMillis" to 12_000))
 
         assertNull(notification.recoveryProbeRequest())
-        assertTrue(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
+        assertTrue(notification.requestRecoveryProbe(7L, 3L, 0L, { true }, completions::add))
 
         val request = requests.single()
         assertEquals("lowest", request.groupTag)
@@ -171,8 +182,12 @@ class ForegroundNotificationRecoveryTest {
         assertEquals(12_000, request.timeoutMillis)
 
         notification.updateSelectedOutbounds(mapOf("select" to "c"), startProbe = false)
-        assertFalse(notification.requestAutoGroupRecovery(7L, 3L, 0L) { true })
-        assertEquals(1, requests.size)
+        assertTrue(notification.requestRecoveryProbe(
+            7L, 3L, notification.currentSelectionEpoch, { true }, completions::add,
+        ))
+        assertEquals(2, requests.size)
+        assertEquals("select", requests.last().groupTag)
+        assertEquals("c", requests.last().targetOutboundTag)
     }
 
     private fun request(): Boolean {

@@ -7121,8 +7121,6 @@ class _MeowClientState extends ConsumerState<MeowClient>
       MaterialPageRoute<void>(
         builder: (context) => ChangelogPage(
           currentVersion: _clientVersionLabel,
-          currentBuildNumber: _clientVersionCode,
-          updateChannel: _updateChannel,
         ),
       ),
     );

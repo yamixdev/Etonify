@@ -2,7 +2,7 @@ part of 'app_background_tasks.dart';
 
 // Bump when config generation/validation semantics change, even if the native
 // contract stays the same. Only one entry is retained, in private app storage.
-const _configCacheSchema = 4;
+const _configCacheSchema = 7;
 
 Map<String, Object?> _subscriptionConfigIdentity(Subscription subscription) => {
   'id': subscription.id,

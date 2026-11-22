@@ -71,8 +71,10 @@ object SingboxController {
     private val runtimeStartGeneration = AtomicLong(0)
     private val externalStopGeneration = AtomicLong(0)
     private val stateRevision = AtomicLong(0)
-    private data class NetworkSelection(val runtime: Long, val profileId: String, val tag: String)
-    private var networkSelection: NetworkSelection? = null
+    @Volatile private var networkSelection: Pair<Long, NetworkServerChoice>? = null
+    internal fun networkServerLabel(): String? = networkSelection
+        ?.takeIf { running && it.first == activeRuntimeGeneration }
+        ?.second?.let { it.label ?: it.tag }
     val externalStopRevision: Long get() = externalStopGeneration.get()
     val runtimeStateRevision: Long get() = stateRevision.get()
 
@@ -87,8 +89,8 @@ object SingboxController {
         "runtimeStateRevision" to runtimeStateRevision,
         "runtimeIntentFresh" to runtimeIntentFresh,
         "networkServerSelection" to networkSelection
-            ?.takeIf { running && it.runtime == activeRuntimeGeneration }
-            ?.let { mapOf("profileId" to it.profileId, "tag" to it.tag) },
+            ?.takeIf { running && it.first == activeRuntimeGeneration }
+            ?.let { mapOf("profileId" to it.second.profileId, "tag" to it.second.tag) },
     )
 
     @Synchronized
@@ -101,11 +103,11 @@ object SingboxController {
     }
 
     @Synchronized
-    internal fun publishNetworkServerSelection(runtime: Long, profileId: String?, tag: String?) {
+    internal fun publishNetworkServerSelection(runtime: Long, choice: NetworkServerChoice?) {
         if (!running || runtime != activeRuntimeGeneration ||
             !MeowApplication.isRuntimeIntentFresh(RuntimeServiceModeResolver.VPN)
         ) return
-        val selection = if (profileId != null && tag != null) NetworkSelection(runtime, profileId, tag) else null
+        val selection = choice?.let { runtime to it }
         if (networkSelection == selection) return
         networkSelection = selection
         stateRevision.incrementAndGet()
@@ -439,8 +441,14 @@ object SingboxController {
                     "physicalNetworkEpoch" to session.physicalNetworkEpoch,
                 )
                 if (session.state == "completed" || session.state == "cancelled") {
+                    val outcome = when {
+                        session.state != "completed" -> NetworkHandoverProbeOutcome.INCONCLUSIVE
+                        session.available > 0 -> NetworkHandoverProbeOutcome.HEALTHY
+                        session.total > 0 && session.unavailable == session.total -> NetworkHandoverProbeOutcome.UNHEALTHY
+                        else -> NetworkHandoverProbeOutcome.INCONCLUSIVE
+                    }
                     if (context != null) MeowBoxService.onUrlTestSessionTerminal(
-                        session.logicalSessionID.orEmpty(), context.runtime, context.network,
+                        session.logicalSessionID.orEmpty(), context.runtime, context.network, outcome,
                     )
                 }
             }
@@ -631,12 +639,17 @@ object SingboxController {
         }
     }
 
-    fun markServiceStarted(mode: String, exclusionEligibleTags: Set<String>?): Long {
+    internal fun markServiceStarted(
+        mode: String,
+        exclusionEligibleTags: Set<String>?,
+        initialNetworkChoice: NetworkServerChoice? = null,
+    ): Long {
         val generation = runtimeGeneration.incrementAndGet()
         urlTestAttribution.clear()
         notificationLatencyCache.clear()
         runtimeExclusionTags.set(generation to exclusionEligibleTags)
         activeRuntimeGeneration = generation
+        networkSelection = initialNetworkChoice?.let { generation to it }
         setRunning(true, mode)
         MeowDiagnostics.log(TAG, "markServiceStarted generation=$generation mode=$mode")
         return generation

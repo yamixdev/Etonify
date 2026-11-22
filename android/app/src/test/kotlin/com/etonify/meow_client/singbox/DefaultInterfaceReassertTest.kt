@@ -216,6 +216,7 @@ class DefaultInterfaceReassertTest {
             addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_FOREGROUND)
         }
         shadow.setNetworkCapabilities(nextNetwork, capabilities)
         val physical = NetworkInterface.getNetworkInterfaces().toList().first { it.index >= 0 }
@@ -371,6 +372,7 @@ class DefaultInterfaceReassertTest {
             addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_FOREGROUND)
             addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         }
         shadow.setNetworkCapabilities(nextNetwork, capabilities)
@@ -499,6 +501,7 @@ class DefaultInterfaceReassertTest {
             addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
             addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_FOREGROUND)
             addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         }
         shadow.setNetworkCapabilities(network, capabilities)
