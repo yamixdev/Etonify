@@ -7119,9 +7119,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (navigator == null) return;
     await navigator.push(
       MaterialPageRoute<void>(
-        builder: (context) => ChangelogPage(
-          currentVersion: _clientVersionLabel,
-        ),
+        builder: (context) =>
+            ChangelogPage(currentVersion: _clientVersionLabel),
       ),
     );
   }
