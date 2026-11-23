@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -778,6 +779,83 @@ void main() {
     expect(probe.build.configJson, isNot(contains('tun-in')));
     expect(probe.probeFingerprint, isNotEmpty);
   });
+
+  test(
+    'offline probe skips multiple rejected servers and their detours',
+    () async {
+      Outbound server(String tag, {String? fingerprint, String? detour}) =>
+          Outbound(
+            tag: tag,
+            name: tag,
+            config: {
+              'type': 'trojan',
+              'server': '$tag.example.test',
+              'server_port': 443,
+              'password': 'test-secret',
+              'detour': ?detour,
+              'tls': {
+                'enabled': true,
+                if (fingerprint != null)
+                  'utls': {'enabled': true, 'fingerprint': fingerprint},
+              },
+            },
+          );
+      final subscription = Subscription(
+        id: 'profile',
+        name: 'Profile',
+        url: '',
+        outbounds: [
+          server('bad-tls', fingerprint: 'unknown-fingerprint'),
+          server('bad-core'),
+          server('bad-next'),
+          server('depends-on-bad-core', detour: 'bad-core'),
+          server('working', fingerprint: 'HelloFirefox_120'),
+        ],
+      );
+      final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());
+      addTearDown(lifecycle.dispose);
+      final coordinator = _coordinator(
+        runtimeLifecycle: lifecycle,
+        snapshot: () => _snapshot(subscription: subscription),
+      );
+      addTearDown(coordinator.dispose);
+      final attempts = <List<String>>[];
+      final probe = await coordinator.buildProbeConfig(
+        checkConfig: (config) async {
+          final decoded = jsonDecode(config) as Map<String, dynamic>;
+          final outbounds = (decoded['outbounds'] as List)
+              .cast<Map<String, dynamic>>();
+          final tags = outbounds
+              .map((outbound) => outbound['tag'] as String)
+              .toList();
+          attempts.add(tags);
+          for (final tag in ['bad-core', 'bad-next']) {
+            final index = tags.indexOf(tag);
+            if (index >= 0) {
+              throw PlatformException(
+                code: 'config_check_failed',
+                message: 'initialize outbound[$index]: rejected $tag',
+              );
+            }
+          }
+          final working = outbounds.singleWhere(
+            (outbound) => outbound['tag'] == 'working',
+          );
+          expect(working['tls']['utls']['fingerprint'], 'firefox');
+        },
+      );
+      expect(attempts, hasLength(3));
+      expect(attempts.first, isNot(contains('bad-tls')));
+      expect(attempts.last, isNot(contains('depends-on-bad-core')));
+      expect(probe!.invalidOutbounds, {
+        'bad-tls': 'unknown utls fingerprint: unknown-fingerprint',
+        'bad-core': 'rejected bad-core',
+        'bad-next': 'rejected bad-next',
+        'depends-on-bad-core': 'Proxy detour is unavailable: bad-core',
+      });
+      expect(probe.build.plan.urlTestOutboundTags, ['working']);
+    },
+  );
 
   test('real VPN and probe builds share a handoff fingerprint', () async {
     final lifecycle = RuntimeLifecycleController(runtime: _BlockingRuntime());

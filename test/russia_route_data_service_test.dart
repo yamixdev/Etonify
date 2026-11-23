@@ -127,6 +127,113 @@ void main() {
     });
   });
 
+  test(
+    'a broken forced RunetFreedom archive preserves it and updates AI',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final service = RussiaRouteDataService.instance;
+        final bundled = await service.ensureBundledInstalled();
+        final requests = <Uri>[];
+        final updated = await HttpOverrides.runZoned(
+          () => service.ensureUpdated(
+            force: true,
+            bundles: {RussiaRouteBundle.runetFreedom, RussiaRouteBundle.ai},
+          ),
+          createHttpClient: (_) => _RouteFixtureHttpClient(
+            {'category-ai-!cn': 'updated-ai.fixture'},
+            requests: requests,
+            runetArchive: 'invalid ZIP',
+          ),
+        );
+
+        expect(updated.geositeRuBlockedPath, bundled.geositeRuBlockedPath);
+        expect(
+          updated.bundleStatus(RussiaRouteBundle.runetFreedom).updateFailed,
+          isTrue,
+        );
+        expect(
+          updated.bundleStatus(RussiaRouteBundle.ai).updateFailed,
+          isFalse,
+        );
+        expect(
+          updated.bundleStatus(RussiaRouteBundle.ai).lastUpdateCheckAt,
+          isNotNull,
+        );
+        expect(await _srsDomains(File(updated.aiServicesPath!)), {
+          'suffix:updated-ai.fixture',
+        });
+        expect(requests.map((uri) => uri.host), contains('fixture.invalid'));
+        expect(
+          requests
+              .where((uri) => uri.host == 'raw.githubusercontent.com')
+              .map((uri) => uri.pathSegments.last),
+          ['category-ai-!cn'],
+        );
+        expect(updated.curatedDirectServicesPath, isNull);
+        expect(updated.socialServicesPath, isNull);
+      });
+    },
+  );
+
+  test(
+    'AI and social updates remain usable independently of RunetFreedom',
+    () async {
+      await _withIsolatedRouteStorage(() async {
+        final service = RussiaRouteDataService.instance;
+        Future<RussiaRouteDataStatus> update(
+          Map<String, String> categories, {
+          Set<String> unavailableCategories = const {},
+        }) => HttpOverrides.runZoned(
+          () => service.ensureUpdated(
+            force: true,
+            bundles: {RussiaRouteBundle.ai, RussiaRouteBundle.social},
+          ),
+          createHttpClient: (_) => _RouteFixtureHttpClient(
+            categories,
+            unavailableCategories: unavailableCategories,
+          ),
+        );
+
+        final initial = await update({'category-ai-!cn': 'working-ai.fixture'});
+        final current = await update(
+          {'discord': 'updated-social.fixture'},
+          unavailableCategories: {'category-ai-!cn'},
+        );
+        final reloaded = await service.loadStatus();
+
+        expect(reloaded.available, isFalse);
+        expect(reloaded.bundleStatus(RussiaRouteBundle.ai).available, isTrue);
+        expect(
+          reloaded.bundleStatus(RussiaRouteBundle.ai).updateFailed,
+          isTrue,
+        );
+        expect(reloaded.aiServicesPath, initial.aiServicesPath);
+        expect(reloaded.socialServicesPath, current.socialServicesPath);
+        expect(
+          await _srsDomains(File(reloaded.socialServicesPath!)),
+          contains('suffix:updated-social.fixture'),
+        );
+
+        final recovered = await HttpOverrides.runZoned(
+          () => service.ensureUpdated(
+            force: true,
+            bundles: {RussiaRouteBundle.ai},
+          ),
+          createHttpClient: (_) => _RouteFixtureHttpClient({
+            'category-ai-!cn': '# upstream comment\nworking-ai.fixture',
+          }),
+        );
+        final ai = recovered.bundleStatus(RussiaRouteBundle.ai);
+        expect(ai.updateFailed, isFalse);
+        expect(
+          ai.revision,
+          initial.bundleStatus(RussiaRouteBundle.ai).revision,
+        );
+        expect(recovered.socialServicesPath, current.socialServicesPath);
+      });
+    },
+  );
+
   group('domain-list rebuild policy', () {
     test('keeps installed files when downloaded content is unchanged', () {
       expect(
@@ -645,34 +752,58 @@ Future<RussiaRouteDataStatus> _updateFixture(
   Map<String, String> categories, {
   bool force = false,
 }) async {
-  final installed = await RussiaRouteDataService.instance
-      .ensureBundledInstalled();
-  if (force) {
-    final manifest = _manifestFile(installed);
-    final metadata =
-        jsonDecode(await manifest.readAsString()) as Map<String, dynamic>;
-    metadata['lastUpdateCheckAtMillis'] = 0;
-    await manifest.writeAsString(jsonEncode(metadata));
-  }
+  await RussiaRouteDataService.instance.ensureBundledInstalled();
   return HttpOverrides.runZoned(
-    () => RussiaRouteDataService.instance.ensureUpdated(),
+    () => RussiaRouteDataService.instance.ensureUpdated(force: force),
     createHttpClient: (_) => _RouteFixtureHttpClient(categories),
   );
 }
 
 class _RouteFixtureHttpClient implements HttpClient {
-  _RouteFixtureHttpClient(this.categories, {this.notModified = false});
+  _RouteFixtureHttpClient(
+    this.categories, {
+    this.notModified = false,
+    this.requests,
+    this.unavailableCategories = const {},
+    this.runetArchive,
+  });
   final Map<String, String> categories;
   final bool notModified;
+  final List<Uri>? requests;
+  final Set<String> unavailableCategories;
+  final String? runetArchive;
 
   @override
   Future<HttpClientRequest> getUrl(Uri url) async {
+    requests?.add(url);
+    final archive = runetArchive;
     if (url.host == 'api.github.com') {
-      return _RouteFixtureRequest('', HttpStatus.notFound);
+      return archive == null
+          ? _RouteFixtureRequest('', HttpStatus.notFound)
+          : _RouteFixtureRequest(
+              jsonEncode({
+                'tag_name': '202611211010',
+                'assets': [
+                  {
+                    'name': 'sing-box.zip',
+                    'browser_download_url':
+                        'https://fixture.invalid/sing-box.zip',
+                    'size': utf8.encode(archive).length,
+                  },
+                ],
+              }),
+              HttpStatus.ok,
+            );
+    }
+    if (url.host == 'fixture.invalid' && archive != null) {
+      return _RouteFixtureRequest(archive, HttpStatus.ok);
     }
     if (url.host != 'raw.githubusercontent.com' ||
         !url.path.startsWith('/v2fly/domain-list-community/master/data/')) {
       throw StateError('Unexpected fixture request: $url');
+    }
+    if (unavailableCategories.contains(url.pathSegments.last)) {
+      return _RouteFixtureRequest('', HttpStatus.notFound);
     }
     return _RouteFixtureRequest(
       categories[url.pathSegments.last] ?? 'base.fixture',

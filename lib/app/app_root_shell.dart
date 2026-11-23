@@ -24,6 +24,7 @@ class AppRootShell extends StatelessWidget {
     required this.hapticEnabled,
     required this.home,
     required this.onDynamicColorSchemesChanged,
+    this.wrapNavigator,
   });
 
   final GlobalKey<NavigatorState> navigatorKey;
@@ -34,6 +35,7 @@ class AppRootShell extends StatelessWidget {
   final bool progressiveBlurEnabled;
   final bool hapticEnabled;
   final Widget home;
+  final Widget Function(Widget navigator)? wrapNavigator;
   final DynamicColorSchemesChanged onDynamicColorSchemesChanged;
 
   @override
@@ -61,6 +63,7 @@ class AppRootShell extends StatelessWidget {
             return const Locale('en');
           },
           builder: (context, child) {
+            final navigator = child ?? const SizedBox.shrink();
             final brightness = Theme.of(context).brightness;
             final overlayStyle = SystemUiOverlayStyle(
               statusBarColor: Colors.transparent,
@@ -83,7 +86,7 @@ class AppRootShell extends StatelessWidget {
                 progressiveBlurEnabled: progressiveBlurEnabled,
                 hapticEnabled: hapticEnabled,
                 child: AppScrollEffects(
-                  child: child ?? const SizedBox.shrink(),
+                  child: wrapNavigator?.call(navigator) ?? navigator,
                 ),
               ),
             );

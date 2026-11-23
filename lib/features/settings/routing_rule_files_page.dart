@@ -21,11 +21,16 @@ class RoutingRuleFilesPage extends StatefulWidget {
     super.key,
     required this.currentStatus,
     required this.onRefresh,
+    this.onPrepare,
+    this.onRefreshBundle,
     this.activity,
   });
 
   final RussiaRouteDataStatus currentStatus;
   final Future<RussiaRouteDataStatus> Function() onRefresh;
+  final Future<RussiaRouteDataStatus> Function()? onPrepare;
+  final Future<RussiaRouteDataStatus> Function(RussiaRouteBundle)?
+  onRefreshBundle;
   final RussiaRouteUpdateActivity? activity;
 
   @override
@@ -123,7 +128,10 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
     }
   }
 
-  Future<void> _refresh({bool initialPreparation = false}) async {
+  Future<void> _refresh({
+    bool initialPreparation = false,
+    RussiaRouteBundle? bundle,
+  }) async {
     if (_busy) return;
     _operationStartedAt = DateTime.now();
     _etaTicker?.cancel();
@@ -137,7 +145,13 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
       _busy = true;
     });
     try {
-      final status = await widget.onRefresh();
+      final refreshBundle = widget.onRefreshBundle;
+      final prepare = widget.onPrepare;
+      final status = initialPreparation && prepare != null
+          ? await prepare()
+          : bundle != null && refreshBundle != null
+          ? await refreshBundle(bundle)
+          : await widget.onRefresh();
       if (!mounted) return;
       setState(() => _status = status);
       await _loadFiles();
@@ -334,17 +348,11 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
               ],
             ),
             const Gap(settingsIslandGap),
-            Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                leading: SettingsLeadingIcon(
-                  icon: Icons.travel_explore_rounded,
-                  color: cs.tertiary,
-                ),
-                title: Text(l10n.routingRuleFilesScopeTitle),
-                subtitle: Text(l10n.routingRuleFilesScopeSubtitle),
-              ),
+            SettingsTileGroup(
+              children: [
+                for (final bundle in RussiaRouteBundle.values)
+                  _bundleTile(context, bundle),
+              ],
             ),
             const Gap(settingsSectionGap),
             Padding(
@@ -377,6 +385,37 @@ class _RoutingRuleFilesPageState extends State<RoutingRuleFilesPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _bundleTile(BuildContext context, RussiaRouteBundle bundle) {
+    final l10n = AppLocalizations.of(context);
+    final status = _status.bundleStatus(bundle);
+    final title = switch (bundle) {
+      RussiaRouteBundle.runetFreedom => 'RunetFreedom',
+      RussiaRouteBundle.curatedDirect => l10n.trafficRuleBundleCurated,
+      RussiaRouteBundle.ai => l10n.trafficRuleBundleAi,
+      RussiaRouteBundle.social => l10n.trafficRuleBundleSocial,
+    };
+    final detail = switch (status) {
+      RussiaRouteBundleStatus(available: true, updateFailed: true) =>
+        l10n.trafficRuleDataSavedCopy,
+      RussiaRouteBundleStatus(available: false) =>
+        l10n.trafficRuleDataUnavailable,
+      RussiaRouteBundleStatus(updatedAt: final date?) =>
+        MaterialLocalizations.of(context).formatMediumDate(date),
+      _ => l10n.trafficRuleDataReady,
+    };
+    return ListTile(
+      title: Text(title),
+      subtitle: Text(detail),
+      trailing: widget.onRefreshBundle == null
+          ? null
+          : IconButton(
+              tooltip: l10n.trafficRuleDataUpdateBundle(title),
+              onPressed: _busy ? null : () => _refresh(bundle: bundle),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
     );
   }
 }

@@ -1346,6 +1346,7 @@ interface SingboxHostApi {
   fun fetchUrlViaOutbound(request: OutboundFetchRequestMessage, callback: (Result<Map<String?, Any?>>) -> Unit)
   fun fetchUrlOnUnderlyingNetwork(request: UnderlyingNetworkFetchRequestMessage, callback: (Result<UnderlyingNetworkFetchResponseMessage>) -> Unit)
   fun downloadUrlOnUnderlyingNetwork(request: UnderlyingNetworkDownloadRequestMessage, callback: (Result<UnderlyingNetworkDownloadResponseMessage>) -> Unit)
+  fun cancelUnderlyingNetworkDownload(destinationPath: String)
   fun resolveHostOnUnderlyingNetwork(host: String, callback: (Result<List<String?>>) -> Unit)
   fun getAndroidId(callback: (Result<String>) -> Unit)
   fun getSubscriptionRequestDeviceInfo(callback: (Result<Map<String?, Any?>>) -> Unit)
@@ -2001,6 +2002,24 @@ interface SingboxHostApi {
                 reply.reply(SingboxApiPigeonUtils.wrapResult(data))
               }
             }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUnderlyingNetworkDownload$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val destinationPathArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.cancelUnderlyingNetworkDownload(destinationPathArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              SingboxApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

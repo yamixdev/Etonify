@@ -5,9 +5,12 @@ import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/core/widgets/input_formatters.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_route_inspector.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/developer_profile_sheet.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
+import 'package:meow_client/features/settings/traffic_rule_tools.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
@@ -20,6 +23,9 @@ class TrafficRulesPage extends StatefulWidget {
     required this.onPrepareRuleData,
     required this.onPresetChanged,
     required this.onRussiaDnsDirectResolverChanged,
+    this.trafficRuleOverrides = const [],
+    this.onTrafficRuleOverridesChanged,
+    this.onInspectTrafficRoute,
   });
 
   final TrafficRulePreset currentPreset;
@@ -29,6 +35,9 @@ class TrafficRulesPage extends StatefulWidget {
   onPrepareRuleData;
   final ValueChanged<TrafficRulePreset> onPresetChanged;
   final ValueChanged<String> onRussiaDnsDirectResolverChanged;
+  final List<TrafficRuleOverride> trafficRuleOverrides;
+  final ValueChanged<List<TrafficRuleOverride>>? onTrafficRuleOverridesChanged;
+  final Future<TrafficRoutePreview> Function(String)? onInspectTrafficRoute;
 
   @override
   State<TrafficRulesPage> createState() => _TrafficRulesPageState();
@@ -79,17 +88,6 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
     }
   }
 
-  bool _hasPreparedData(TrafficRulePreset preset) {
-    return switch (preset) {
-      TrafficRulePreset.none => true,
-      TrafficRulePreset.russianServicesDirect => _status.available,
-      TrafficRulePreset.aiViaVpn =>
-        _status.available && (_status.aiServicesPath?.isNotEmpty ?? false),
-      TrafficRulePreset.socialViaVpn =>
-        _status.available && (_status.socialServicesPath?.isNotEmpty ?? false),
-    };
-  }
-
   Future<bool> _applyPreset(TrafficRulePreset preset) async {
     if (_busy) return false;
     if (preset == _currentPreset) return true;
@@ -102,7 +100,7 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
     setState(() => _busy = true);
     try {
       var status = _status;
-      if (!_hasPreparedData(preset)) {
+      if (!_hasPreparedDataFor(status, preset)) {
         status = await widget.onPrepareRuleData(preset);
       }
       if (!mounted) return false;
@@ -141,10 +139,21 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
       TrafficRulePreset.none => true,
       TrafficRulePreset.russianServicesDirect => status.available,
       TrafficRulePreset.aiViaVpn =>
-        status.available && (status.aiServicesPath?.isNotEmpty ?? false),
+        status.bundleStatus(RussiaRouteBundle.ai).available,
       TrafficRulePreset.socialViaVpn =>
-        status.available && (status.socialServicesPath?.isNotEmpty ?? false),
+        status.bundleStatus(RussiaRouteBundle.social).available,
     };
+  }
+
+  Future<void> _openOverrides() async {
+    final rules = await Navigator.of(context).push<List<TrafficRuleOverride>>(
+      _trafficRuleRoute(
+        TrafficRuleOverridesPage(rules: widget.trafficRuleOverrides),
+      ),
+    );
+    if (mounted && rules != null) {
+      widget.onTrafficRuleOverridesChanged?.call(rules);
+    }
   }
 
   Future<TrafficRulePreset?> _openDetails(
@@ -228,6 +237,41 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),
+              ),
+            ],
+            if (widget.onTrafficRuleOverridesChanged != null ||
+                widget.onInspectTrafficRoute != null) ...[
+              const Gap(settingsIslandGap),
+              SettingsTileGroup(
+                dividerIndent: 64,
+                children: [
+                  if (widget.onTrafficRuleOverridesChanged != null)
+                    ListTile(
+                      leading: SettingsLeadingIcon(
+                        icon: Icons.rule_rounded,
+                        color: cs.primary,
+                      ),
+                      title: Text(l10n.trafficRuleOverridesTitle),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _busy ? null : _openOverrides,
+                    ),
+                  if (widget.onInspectTrafficRoute case final inspect?)
+                    ListTile(
+                      leading: SettingsLeadingIcon(
+                        icon: Icons.manage_search_rounded,
+                        color: cs.primary,
+                      ),
+                      title: Text(l10n.trafficRoutePreviewTitle),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _busy
+                          ? null
+                          : () => Navigator.of(context).push<void>(
+                              _trafficRuleRoute(
+                                TrafficRoutePreviewPage(onInspect: inspect),
+                              ),
+                            ),
+                    ),
+                ],
               ),
             ],
             const Gap(settingsIslandGap),

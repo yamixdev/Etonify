@@ -11,6 +11,33 @@ import 'package:path_provider/path_provider.dart';
 
 enum RemoteDownloadRoute { outbound, app, underlying }
 
+final class RemoteDownloadCancelled implements Exception {
+  const RemoteDownloadCancelled();
+}
+
+final class RemoteDownloadCancellation {
+  final _cancelled = Completer<void>();
+  VoidCallback? _abort;
+
+  bool get isCancelled => _cancelled.isCompleted;
+  Future<void> get whenCancelled => _cancelled.future;
+
+  void cancel() {
+    if (isCancelled) return;
+    _cancelled.complete();
+    _abort?.call();
+  }
+
+  void throwIfCancelled() {
+    if (isCancelled) throw const RemoteDownloadCancelled();
+  }
+
+  void _setAbort(VoidCallback? abort) {
+    _abort = abort;
+    if (isCancelled) abort?.call();
+  }
+}
+
 typedef RemoteDownloadRouteAttemptCallback =
     void Function(RemoteDownloadRoute route, bool isFallback);
 
@@ -123,6 +150,7 @@ Future<T> runRemoteDownloadRouteAttemptsForTest<T>({
     try {
       return await attempt(route);
     } catch (error, stackTrace) {
+      if (error is RemoteDownloadCancelled) rethrow;
       lastError = error;
       lastStackTrace = stackTrace;
       if (error is RemoteDownloadHttpException) {
@@ -267,6 +295,7 @@ class VpnAwareRemoteDownloader {
     Set<int> acceptedStatusCodes = const <int>{HttpStatus.ok},
     void Function(int completed, int total)? onProgress,
     RemoteDownloadRouteAttemptCallback? onRouteAttempt,
+    RemoteDownloadCancellation? cancellation,
   }) async {
     if (maximumBytes <= 0) {
       throw ArgumentError.value(maximumBytes, 'maximumBytes');
@@ -274,10 +303,13 @@ class VpnAwareRemoteDownloader {
     final destination = File(destinationPath);
     await destination.parent.create(recursive: true);
     final routeState = await _resolveRouteState();
+    cancellation?.throwIfCancelled();
     final routes = remoteDownloadRouteOrderForTest(
       android: Platform.isAndroid,
       vpnActive: routeState.vpnActive,
-      supportsOutboundFetch: routeState.supportsOutboundFetch,
+      // Cancellable transfers use streaming paths with a transport abort.
+      supportsOutboundFetch:
+          cancellation == null && routeState.supportsOutboundFetch,
       requiresAppFallback: maximumBytes > _outboundFetchMaximumBytes,
     );
     AppLogStore.info(
@@ -294,6 +326,7 @@ class VpnAwareRemoteDownloader {
         onRouteAttempt?.call(route, isFallback);
       },
       attempt: (route) async {
+        cancellation?.throwIfCancelled();
         final generation = attemptGeneration;
         void reportProgress(int completed, int total) {
           if (generation == attemptGeneration) {
@@ -317,6 +350,7 @@ class VpnAwareRemoteDownloader {
               destination: attemptFile,
               maximumBytes: maximumBytes,
               onProgress: reportProgress,
+              cancellation: cancellation,
             ),
             RemoteDownloadRoute.underlying => await _downloadFileViaUnderlying(
               uri: uri,
@@ -325,8 +359,10 @@ class VpnAwareRemoteDownloader {
               maximumBytes: maximumBytes,
               onProgress: reportProgress,
               reportWhileDownloading: onProgress != null,
+              cancellation: cancellation,
             ),
           };
+          cancellation?.throwIfCancelled();
           if (!acceptedStatusCodes.contains(result.statusCode)) {
             throw RemoteDownloadHttpException(
               result.statusCode,
@@ -340,6 +376,7 @@ class VpnAwareRemoteDownloader {
           if (await attemptFile.exists()) {
             await attemptFile.delete();
           }
+          cancellation?.throwIfCancelled();
           rethrow;
         }
       },
@@ -525,11 +562,14 @@ class VpnAwareRemoteDownloader {
     required File destination,
     required int maximumBytes,
     void Function(int completed, int total)? onProgress,
+    RemoteDownloadCancellation? cancellation,
   }) async {
     final client = HttpClient()
       ..connectionTimeout = responseStartTimeout
       ..idleTimeout = remoteDownloadIdleTimeout;
+    cancellation?._setAbort(() => client.close(force: true));
     try {
+      cancellation?.throwIfCancelled();
       final opened = await _openAppResponse(client, uri, headers);
       final response = opened.response;
       final declaredLength = response.contentLength;
@@ -543,6 +583,7 @@ class VpnAwareRemoteDownloader {
       final sink = destination.openWrite();
       try {
         await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
+          cancellation?.throwIfCancelled();
           completed += chunk.length;
           if (completed > maximumBytes) {
             throw RemoteDownloadTooLargeException(
@@ -565,6 +606,7 @@ class VpnAwareRemoteDownloader {
         downloadedBytes: completed,
       );
     } finally {
+      cancellation?._setAbort(null);
       client.close(force: true);
     }
   }
@@ -611,6 +653,7 @@ class VpnAwareRemoteDownloader {
     required int maximumBytes,
     void Function(int completed, int total)? onProgress,
     bool reportWhileDownloading = false,
+    RemoteDownloadCancellation? cancellation,
   }) async {
     // Android writes each chunk to this attempt's private file before the
     // platform call returns. The response length arrives with the result.
@@ -629,7 +672,9 @@ class VpnAwareRemoteDownloader {
         : null;
     final Map<String, dynamic> native;
     try {
-      native = await SingboxRuntime.instance.downloadUrlOnUnderlyingNetwork(
+      cancellation?.throwIfCancelled();
+      final runtime = SingboxRuntime.instance;
+      final download = runtime.downloadUrlOnUnderlyingNetwork(
         uri: uri,
         headers: headers,
         destinationPath: destination.path,
@@ -637,7 +682,21 @@ class VpnAwareRemoteDownloader {
         responseStartTimeout: responseStartTimeout,
         idleTimeout: remoteDownloadIdleTimeout,
       );
+      cancellation?._setAbort(() {
+        unawaited(
+          runtime.cancelUnderlyingNetworkDownload(destination.path).catchError((
+            Object error,
+          ) {
+            AppLogStore.warning(
+              'remote download',
+              'Could not cancel native transfer: $error',
+            );
+          }),
+        );
+      });
+      native = await download;
     } finally {
+      cancellation?._setAbort(null);
       progressTimer?.cancel();
     }
     final downloadedBytes = (native['downloadedBytes'] as num?)?.toInt() ?? 0;

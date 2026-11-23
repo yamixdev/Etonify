@@ -104,6 +104,9 @@ Future<String> _configFingerprint(
     'russiaAiServicesPath': input.russiaAiServicesPath,
     'russiaSocialServicesPath': input.russiaSocialServicesPath,
     'trafficRulePreset': input.trafficRulePreset.name,
+    'trafficRuleOverrides': [
+      for (final rule in input.trafficRuleOverrides) rule.toJson(),
+    ],
     'bypassLocalNetwork': input.bypassLocalNetwork,
     'splitRoutingMode': input.splitRoutingMode.name,
     'splitRoutingPackages': input.splitRoutingPackages,
@@ -231,6 +234,12 @@ Future<SingboxConfigBuildResult> buildOrReuseSingboxConfigInBackground(
     ),
     'visibleProxyOutboundCount': built.plan.visibleProxyOutboundCount,
     'urlTestOutboundTags': built.plan.urlTestOutboundTags,
+    'trafficRuleOverridesByRouteIndex': _encodeRoutingMetadata(
+      built.plan.trafficRuleOverridesByRouteIndex,
+    ),
+    'trafficRuleOverridesByDnsIndex': _encodeRoutingMetadata(
+      built.plan.trafficRuleOverridesByDnsIndex,
+    ),
     'configOutboundCount': built.configOutboundCount,
     'configInboundCount': built.configInboundCount,
     'configRouteRuleCount': built.configRouteRuleCount,
@@ -323,6 +332,12 @@ SingboxConfigBuildResult _restoreConfigEntry(
       visibleProxyOutboundCount: entry['visibleProxyOutboundCount'] as int,
       urlTestOutboundTags: (entry['urlTestOutboundTags'] as List)
           .cast<String>(),
+      trafficRuleOverridesByRouteIndex: _decodeRoutingMetadata(
+        entry['trafficRuleOverridesByRouteIndex'],
+      ),
+      trafficRuleOverridesByDnsIndex: _decodeRoutingMetadata(
+        entry['trafficRuleOverridesByDnsIndex'],
+      ),
     ),
     configJson: returnConfig ? json : '',
     configPath: input.outputConfigPath,
@@ -350,4 +365,22 @@ SingboxConfigBuildResult _restoreConfigEntry(
     _writeConfigJsonAtomically(path, json);
   }
   return result;
+}
+
+Map<String, Object> _encodeRoutingMetadata(
+  Map<int, TrafficRuleOverride> rules,
+) => rules.map((index, rule) => MapEntry(index.toString(), rule.toJson()));
+
+Map<int, TrafficRuleOverride> _decodeRoutingMetadata(Object? raw) {
+  final entries = raw as Map<String, dynamic>;
+  final rules = <int, TrafficRuleOverride>{};
+  for (final entry in entries.entries) {
+    final index = int.tryParse(entry.key);
+    final rule = TrafficRuleOverride.tryFromJson(entry.value);
+    if (index == null || rule == null) {
+      throw const FormatException('Invalid cached traffic rule metadata');
+    }
+    rules[index] = rule;
+  }
+  return Map.unmodifiable(rules);
 }

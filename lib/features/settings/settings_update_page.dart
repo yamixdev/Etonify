@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/core/formatting.dart';
 import 'package:meow_client/core/network/remote_download_error_message.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
@@ -459,6 +460,18 @@ class _SettingsUpdatePageState extends State<SettingsUpdatePage>
       });
       if (installAfterDownload) {
         await _installDownloaded();
+      }
+    } on RemoteDownloadCancelled {
+      if (mounted && identical(_downloadOperation, operation)) {
+        setState(() {
+          _downloading = false;
+          _downloadProgress = null;
+          _result = AppUpdateCheckResult(
+            status: AppUpdateStatus.updateAvailable,
+            checkedAt: DateTime.now(),
+            info: info,
+          );
+        });
       }
     } catch (error) {
       if (mounted && identical(_downloadOperation, operation)) {

@@ -114,6 +114,9 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
             return TrafficRulesPage(
               currentPreset: liveSettings.trafficRulePreset,
               currentStatus: liveStatus,
+              trafficRuleOverrides: liveSettings.trafficRuleOverrides,
+              onTrafficRuleOverridesChanged: commands.setTrafficRuleOverrides,
+              onInspectTrafficRoute: commands.inspectTrafficRoute,
               currentRussiaDnsDirectResolver:
                   liveSettings.russiaDnsDirectResolver,
               onPrepareRuleData: commands.prepareTrafficRuleData,
@@ -137,6 +140,9 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
             return RoutingRuleFilesPage(
               currentStatus: liveStatus,
               onRefresh: commands.refreshRoutingRuleData,
+              onPrepare: () =>
+                  commands.prepareTrafficRuleData(TrafficRulePreset.none),
+              onRefreshBundle: commands.refreshRoutingRuleBundle,
             );
           },
         ),

@@ -437,7 +437,10 @@ class ParsedOutboundSchema {
   static String normalizeXrayVlessFlow(String flow) =>
       flow == 'xtls-rprx-vision-udp443' ? 'xtls-rprx-vision' : flow;
 
-  static String? validate(Map<String, dynamic> config) {
+  static String? validate(
+    Map<String, dynamic> config, {
+    bool forRuntime = false,
+  }) {
     final type = _normalizedType(config['type']);
     if (!_knownOutboundTypes.contains(type)) {
       return 'unsupported outbound type: ${type.isEmpty ? 'unknown' : type}';
@@ -660,7 +663,9 @@ class ParsedOutboundSchema {
     final tls = config['tls'];
     if (tls is Map) {
       final reality = tls['reality'];
-      if (reality is Map && reality['enabled'] == true) {
+      final realityEnabled = reality is Map && reality['enabled'] == true;
+      final utls = tls['utls'];
+      if (realityEnabled) {
         final publicKey = (reality['public_key'] as String?)?.trim();
         if (publicKey == null || publicKey.isEmpty) {
           return 'missing reality public_key';
@@ -672,16 +677,26 @@ class ParsedOutboundSchema {
         if (shortId != null && _normalizeRealityShortIdValue(shortId) == null) {
           return 'invalid reality short_id';
         }
-        final utls = tls['utls'];
         if (utls is! Map || utls['enabled'] != true) {
           return 'missing reality utls';
         }
-        final fingerprint =
-            (utls['fingerprint'] as String?)?.trim().toLowerCase() ?? '';
-        if (fingerprint == 'unsafe' || fingerprint == 'hellogolang') {
+      }
+      if ((realityEnabled || (forRuntime && tls['enabled'] == true)) &&
+          utls is Map &&
+          utls['enabled'] == true) {
+        final rawFingerprint = utls['fingerprint'];
+        if (rawFingerprint != null && rawFingerprint is! String) {
+          return 'invalid utls fingerprint';
+        }
+        final fingerprint = _canonicalUtlsFingerprint(
+          rawFingerprint as String? ?? '',
+        );
+        final usesNativeTls =
+            fingerprint == 'unsafe' || fingerprint == 'hellogolang';
+        if (realityEnabled && usesNativeTls) {
           return 'Reality does not support the Xray $fingerprint fingerprint';
         }
-        if (!_validUtlsFingerprints.contains(fingerprint)) {
+        if (!usesNativeTls && !_validUtlsFingerprints.contains(fingerprint)) {
           return 'unknown utls fingerprint: ${utls['fingerprint']}';
         }
       }
@@ -1006,12 +1021,19 @@ class ParsedOutboundSchema {
       }
     }
     final tls = outbound['tls'];
-    if (tls is Map && tls['ech'] is Map) {
-      final ech = Map<String, dynamic>.from(tls['ech'] as Map)
+    if (tls is! Map) return;
+    final normalizedTls = Map<String, dynamic>.from(tls);
+    if (tls['ech'] case final Map<Object?, Object?> rawEch) {
+      normalizedTls['ech'] = Map<String, dynamic>.from(rawEch)
         ..remove('pq_signature_schemes_enabled')
         ..remove('dynamic_record_sizing_disabled');
-      outbound['tls'] = Map<String, dynamic>.from(tls)..['ech'] = ech;
     }
+    if (tls['utls'] case final Map<Object?, Object?> rawUtls) {
+      final utls = Map<String, dynamic>.from(rawUtls);
+      _normalizeUtlsFingerprint(utls);
+      normalizedTls['utls'] = utls;
+    }
+    outbound['tls'] = normalizedTls;
   }
 
   static Map<String, dynamic>? _sanitizeOutbound(
@@ -1192,11 +1214,15 @@ class ParsedOutboundSchema {
   }
 
   static void _normalizeUtlsFingerprint(Map<dynamic, dynamic> utls) {
-    final fingerprint = (utls['fingerprint'] as String?)?.trim();
-    if (fingerprint == null || fingerprint.isEmpty) {
-      return;
+    if (utls['fingerprint'] case final String fingerprint) {
+      utls['fingerprint'] = _canonicalUtlsFingerprint(fingerprint);
     }
-    utls['fingerprint'] = fingerprint.toLowerCase();
+  }
+
+  static String _canonicalUtlsFingerprint(String value) {
+    final fingerprint = value.trim().toLowerCase();
+    // The pinned uTLS dependency defines HelloFirefox_Auto = HelloFirefox_120.
+    return fingerprint == 'hellofirefox_120' ? 'firefox' : fingerprint;
   }
 
   static void _normalizeRealityShortId(Map<dynamic, dynamic> reality) {

@@ -38,7 +38,8 @@ class RuntimeRecoveryController {
   Timer? _retryTimer;
   bool _retryScheduled = false;
   int _retryGeneration = 0;
-  final Set<String> _excludedOutboundTags = <String>{};
+  final _excludedOutbounds = <String, String>{};
+  Map<String, String> _lastStartedInvalidOutbounds = const {};
   Map<int, String>? _proxyOutboundTagsByIndex;
   Map<String, dynamic>? _lastStartedConfig;
   Set<String> _lastStartedUrlTestOutboundTags = <String>{};
@@ -52,7 +53,11 @@ class RuntimeRecoveryController {
 
   bool get retryScheduled => _retryScheduled;
   Set<String> get excludedOutboundTags =>
-      Set<String>.unmodifiable(_excludedOutboundTags);
+      Set<String>.unmodifiable(_excludedOutbounds.keys);
+  Map<String, String> get urlTestRejections => {
+    ..._lastStartedInvalidOutbounds,
+    ..._excludedOutbounds,
+  };
   Set<String> get lastStartedUrlTestOutboundTags =>
       _lastStartedUrlTestOutboundTagsSnapshot ??= Set<String>.unmodifiable(
         _lastStartedUrlTestOutboundTags,
@@ -61,7 +66,7 @@ class RuntimeRecoveryController {
   void dispose() {
     cancelRetry();
     clearBuildCache();
-    _excludedOutboundTags.clear();
+    _excludedOutbounds.clear();
   }
 
   int scheduleRetry(void Function(int generation) onReady) {
@@ -99,6 +104,10 @@ class RuntimeRecoveryController {
   }
 
   void cacheStartedBuild(SingboxConfigBuildResult build) {
+    _lastStartedInvalidOutbounds = {
+      for (final outbound in build.invalidOutbounds)
+        outbound.tag: outbound.reason,
+    };
     _lastStartedUrlTestOutboundTagsSnapshot = null;
     _proxyOutboundTagsByIndex = Map<int, String>.from(
       build.plan.proxyOutboundTagsByIndex,
@@ -117,6 +126,7 @@ class RuntimeRecoveryController {
   }
 
   void clearBuildCache() {
+    _lastStartedInvalidOutbounds = const {};
     _lastStartedUrlTestOutboundTagsSnapshot = null;
     _proxyOutboundTagsByIndex = null;
     _lastStartedConfig = null;
@@ -126,7 +136,7 @@ class RuntimeRecoveryController {
   }
 
   void clearExcludedOutbounds() {
-    _excludedOutboundTags.clear();
+    _excludedOutbounds.clear();
   }
 
   Future<InvalidOutboundRecovery?> registerInvalidOutboundError(
@@ -145,19 +155,17 @@ class RuntimeRecoveryController {
     if (tag == null) {
       return null;
     }
-    // Reserve atomically. The fallback lookup above awaits, so a containment
-    // check followed by a later insert would let two overlapping runtime-error
-    // handlers claim the same tag. Set.add reports whether this call is the
-    // one that excluded it.
-    if (!_excludedOutboundTags.add(tag)) {
+    // Keep reservation and insertion synchronous after the fallback lookup.
+    if (_excludedOutbounds.containsKey(tag)) {
       return null;
     }
+    _excludedOutbounds[tag] = runtimeError.reason;
     _pendingMutationExcludedTags.add(tag);
     return InvalidOutboundRecovery(tag: tag, reason: runtimeError.reason);
   }
 
   bool hasRemainingOutbounds(Iterable<String> availableTags) {
-    return availableTags.any((tag) => !_excludedOutboundTags.contains(tag));
+    return availableTags.any((tag) => !_excludedOutbounds.containsKey(tag));
   }
 
   ConfigMutationInput? createMutationInput(String outputPath) {

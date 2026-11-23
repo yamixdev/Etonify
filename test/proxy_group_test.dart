@@ -7,6 +7,7 @@ import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/backup/etonify_backup_service.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 import 'package:meow_client/data/subscription/subscription_store.dart';
@@ -3730,6 +3731,109 @@ void main() {
       await File(fixturePath).writeAsBytes([0x53, 0x52, 0x53, 2, 0]);
     });
 
+    test('custom rules follow safety rules and precede the preset', () {
+      final rules = [
+        TrafficRuleOverride.tryParse(
+          matchType: TrafficRuleMatchType.domain,
+          value: 'api.example.com',
+          action: TrafficRuleAction.direct,
+        )!,
+        TrafficRuleOverride.tryParse(
+          matchType: TrafficRuleMatchType.domainSuffix,
+          value: 'example.com',
+          action: TrafficRuleAction.vpn,
+        )!,
+        TrafficRuleOverride.tryParse(
+          matchType: TrafficRuleMatchType.ipCidr,
+          value: '203.0.113.1',
+          action: TrafficRuleAction.vpn,
+        )!,
+      ];
+      final plan = _defaultBuilder(
+        subscription,
+        vpnInboundEnabled: true,
+        blockLeaks: true,
+        trafficRulePreset: TrafficRulePreset.aiViaVpn,
+        trafficRuleOverrides: rules,
+        russiaAiServicesPath: fixturePath,
+        adBlockEnabled: true,
+        adBlockBlockRuleSetPath: fixturePath,
+        dnsDirectThroughProxy: true,
+      ).buildPlan();
+      final route = plan.config['route'] as Map;
+      final dns = plan.config['dns'] as Map;
+      final routeRules = (route['rules'] as List).cast<Map<String, Object?>>();
+      final dnsRules = (dns['rules'] as List).cast<Map<String, Object?>>();
+      expect(
+        routeRules
+            .sublist(0, 6)
+            .map((rule) => rule['action'] ?? rule['outbound']),
+        ['sniff', 'hijack-dns', 'reject', 'reject', 'direct', 'reject'],
+      );
+      expect(plan.trafficRuleOverridesByRouteIndex, {
+        6: rules[0],
+        7: rules[1],
+        8: rules[2],
+      });
+      expect(routeRules[8], {
+        'ip_cidr': ['203.0.113.1/32'],
+        'outbound': 'select',
+      });
+      expect(routeRules[9]['rule_set'], 'ai-services');
+      expect(dnsRules.first['action'], 'reject');
+      expect(plan.trafficRuleOverridesByDnsIndex, {1: rules[0], 2: rules[1]});
+      expect(dnsRules[3]['rule_set'], 'ai-services');
+      expect(
+        (dns['servers'] as List).cast<Map<String, Object?>>().firstWhere(
+          (server) => server['tag'] == 'dns-direct',
+        )['detour'],
+        'select',
+      );
+      expect(
+        _domainDecision(plan.config, 'route', 'api.example.com', {
+          'ai-services',
+        }),
+        'direct',
+      );
+      expect(
+        _domainDecision(plan.config, 'dns', 'api.example.com', {'ai-services'}),
+        'dns-direct',
+      );
+      expect(
+        _domainDecision(plan.config, 'route', 'www.example.com', {}),
+        'select',
+      );
+      expect(
+        _domainDecision(plan.config, 'dns', 'www.example.com', {}),
+        'dns-remote',
+      );
+      expect(
+        _domainDecision(plan.config, 'route', 'api.example.com', {
+          'adblock-block',
+        }),
+        'reject',
+      );
+    });
+
+    test('custom VPN domain rules reject traffic and DNS with no proxy', () {
+      final config = _defaultBuilder(
+        subscription.copyWith(outbounds: []),
+        trafficRuleOverrides: [
+          TrafficRuleOverride.tryParse(
+            matchType: TrafficRuleMatchType.domain,
+            value: 'vpn.example.com',
+            action: TrafficRuleAction.vpn,
+          )!,
+        ],
+      ).build();
+      expect(_domainDecision(config, 'route', 'vpn.example.com', {}), 'reject');
+      expect(_domainDecision(config, 'dns', 'vpn.example.com', {}), 'reject');
+      expect(
+        _domainDecision(config, 'route', 'ordinary.example.com', {}),
+        'direct',
+      );
+    });
+
     test('allowed RU domains retain direct route and RU DNS', () {
       final config = _defaultBuilder(
         subscription,
@@ -4935,6 +5039,8 @@ String _domainDecision(
       matched = (rule['domain_suffix'] as List).any(
         (suffix) => domain == suffix || domain.endsWith('.$suffix'),
       );
+    } else if (rule.containsKey('domain')) {
+      matched = (rule['domain'] as List).contains(domain);
     } else {
       matched = false;
     }
@@ -4955,6 +5061,7 @@ SingboxConfigBuilder _defaultBuilder(
   String selectedProxyTag = '',
   bool useRussiaRouteData = false,
   TrafficRulePreset trafficRulePreset = TrafficRulePreset.none,
+  List<TrafficRuleOverride> trafficRuleOverrides = const [],
   bool markAllServersRussia = false,
   String urlTestUrl = 'https://www.gstatic.com/generate_204',
   int urlTestIntervalSeconds = 180,
@@ -4976,6 +5083,7 @@ SingboxConfigBuilder _defaultBuilder(
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled,
   List<String> splitRoutingPackages = const <String>[],
   bool adBlockEnabled = false,
+  bool blockLeaks = false,
   String? adBlockBlockRuleSetPath,
   String? adBlockAllowRuleSetPath,
   String dnsDirectResolver = 'udp://1.1.1.1',
@@ -5011,7 +5119,7 @@ SingboxConfigBuilder _defaultBuilder(
     urlTestConcurrency: urlTestConcurrency,
     urlTestUnavailableCheckIntervalSeconds:
         urlTestUnavailableCheckIntervalSeconds,
-    blockLeaks: false,
+    blockLeaks: blockLeaks,
     adBlockEnabled: adBlockEnabled,
     adBlockBlockRuleSetPath: adBlockBlockRuleSetPath,
     adBlockAllowRuleSetPath: adBlockAllowRuleSetPath,
@@ -5042,6 +5150,7 @@ SingboxConfigBuilder _defaultBuilder(
         : russiaAiServicesPath,
     russiaSocialServicesPath: russiaSocialServicesPath,
     trafficRulePreset: trafficRulePreset,
+    trafficRuleOverrides: trafficRuleOverrides,
     bypassLocalNetwork: true,
     splitRoutingMode: splitRoutingMode,
     splitRoutingPackages: splitRoutingPackages,

@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_route_inspector.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 
 typedef SetBlockLeaksCommand = void Function(bool value);
@@ -55,7 +58,11 @@ class AppSettingsCommands {
   DownloadAdBlockRuleSetCommand? _downloadAdBlockRuleSet;
   DeleteAdBlockRuleSetCommand? _deleteAdBlockRuleSet;
   RefreshRoutingRuleDataCommand? _refreshRoutingRuleData;
+  Future<RussiaRouteDataStatus> Function(RussiaRouteBundle)?
+  _refreshRoutingRuleBundle;
   SetTrafficRulePresetCommand? _setTrafficRulePreset;
+  ValueChanged<List<TrafficRuleOverride>>? _setTrafficRuleOverrides;
+  Future<TrafficRoutePreview> Function(String)? _inspectTrafficRoute;
   PrepareTrafficRuleDataCommand? _prepareTrafficRuleData;
   SetRussiaDnsDirectResolverCommand? _setRussiaDnsDirectResolver;
   SetBypassLocalNetworkCommand? _setBypassLocalNetwork;
@@ -218,13 +225,20 @@ class AppSettingsCommands {
     required SetSplitRoutingPackagesCommand setSplitRoutingPackages,
     required PreloadInstalledAppsCommand preloadInstalledApps,
     ApplySplitRoutingSettingsCommand? applySplitRoutingSettings,
+    ValueChanged<List<TrafficRuleOverride>>? setTrafficRuleOverrides,
+    Future<TrafficRoutePreview> Function(String)? inspectTrafficRoute,
+    Future<RussiaRouteDataStatus> Function(RussiaRouteBundle)?
+    refreshRoutingRuleBundle,
   }) {
     _setBlockLeaks = setBlockLeaks;
     _setAdBlockEnabled = setAdBlockEnabled;
     _downloadAdBlockRuleSet = downloadAdBlockRuleSet;
     _deleteAdBlockRuleSet = deleteAdBlockRuleSet;
     _refreshRoutingRuleData = refreshRoutingRuleData;
+    _refreshRoutingRuleBundle = refreshRoutingRuleBundle;
     _setTrafficRulePreset = setTrafficRulePreset;
+    _setTrafficRuleOverrides = setTrafficRuleOverrides;
+    _inspectTrafficRoute = inspectTrafficRoute;
     _prepareTrafficRuleData = prepareTrafficRuleData;
     _setRussiaDnsDirectResolver = setRussiaDnsDirectResolver;
     _setBypassLocalNetwork = setBypassLocalNetwork;
@@ -240,7 +254,10 @@ class AppSettingsCommands {
     _downloadAdBlockRuleSet = null;
     _deleteAdBlockRuleSet = null;
     _refreshRoutingRuleData = null;
+    _refreshRoutingRuleBundle = null;
     _setTrafficRulePreset = null;
+    _setTrafficRuleOverrides = null;
+    _inspectTrafficRoute = null;
     _prepareTrafficRuleData = null;
     _setRussiaDnsDirectResolver = null;
     _setBypassLocalNetwork = null;
@@ -278,8 +295,17 @@ class AppSettingsCommands {
     return await command();
   }
 
+  Future<RussiaRouteDataStatus> Function(RussiaRouteBundle)?
+  get refreshRoutingRuleBundle => _refreshRoutingRuleBundle;
+
   void setTrafficRulePreset(TrafficRulePreset value) =>
       _setTrafficRulePreset?.call(value);
+
+  ValueChanged<List<TrafficRuleOverride>>? get setTrafficRuleOverrides =>
+      _setTrafficRuleOverrides;
+
+  Future<TrafficRoutePreview> Function(String)? get inspectTrafficRoute =>
+      _inspectTrafficRoute;
 
   Future<RussiaRouteDataStatus> prepareTrafficRuleData(
     TrafficRulePreset preset,

@@ -821,6 +821,9 @@ class SingboxRuntime {
     };
   }
 
+  Future<void> cancelUnderlyingNetworkDownload(String destinationPath) =>
+      _hostApi.cancelUnderlyingNetworkDownload(destinationPath);
+
   Future<List<String>> resolveHostOnUnderlyingNetwork({
     required String host,
     Duration timeout = const Duration(seconds: 3),

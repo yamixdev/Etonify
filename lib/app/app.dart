@@ -63,6 +63,8 @@ import 'package:meow_client/core/widgets/app_notice.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_route_inspector.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_background_updates.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
@@ -95,6 +97,7 @@ import 'package:meow_client/features/settings/settings_routing_page.dart';
 import 'package:meow_client/features/settings/settings_security_page.dart';
 import 'package:meow_client/features/settings/settings_subscriptions_page.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
+import 'package:meow_client/features/settings/app_update_prompt.dart';
 import 'package:meow_client/features/subscriptions/subscription_error_message.dart';
 import 'package:meow_client/features/subscriptions/subscription_refresh_report_page.dart';
 import 'package:meow_client/features/subscriptions/subscriptions_page.dart';
@@ -191,6 +194,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int _clientVersionCode = 0;
   String _clientPackageName = '';
   String? _lastUpdateCleanupNoticeVersion;
+  final _appUpdateOffer = ValueNotifier<AppUpdateCheckResult?>(null);
   bool _updateCleanupInFlight = false;
   bool _notificationPermissionPromptAttempted = false;
   bool _notificationPermissionRequestInFlight = false;
@@ -279,6 +283,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   bool _offlineProgressPublished = false;
   ProbeConfigBuildResult? _offlineProbeConfig;
   bool _offlineProbeRunning = false;
+  String? _offlineProbeStartError;
   bool _automaticSubscriptionApplyInFlight = false;
   bool _manualUrlTestPreparing = false;
   Future<bool>? _manualRowUrlTestPreparation;
@@ -2447,7 +2452,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       downloadAdBlockRuleSet: _downloadAdBlockRuleSet,
       deleteAdBlockRuleSet: _deleteAdBlockRuleSet,
       refreshRoutingRuleData: _installRussiaRouteData,
+      refreshRoutingRuleBundle: _refreshRoutingRuleBundle,
       setTrafficRulePreset: _setTrafficRulePreset,
+      setTrafficRuleOverrides: _setTrafficRuleOverrides,
+      inspectTrafficRoute: _inspectTrafficRoute,
       prepareTrafficRuleData: _prepareTrafficRuleData,
       setRussiaDnsDirectResolver: _setRussiaDnsDirectResolver,
       setBypassLocalNetwork: _setBypassLocalNetwork,
@@ -2765,6 +2773,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         : _stateSaveQueue.idle;
     _urlTestInFlightNotifier.dispose();
     _urlTestProgressNotifier.dispose();
+    _appUpdateOffer.dispose();
     unawaited(_runtimeEvents.dispose());
     _deepLinkImportCoordinator.dispose();
     final store = _store;
@@ -2913,20 +2922,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await _refreshAppVersionInfo();
     if (!mounted || (Platform.isAndroid && _clientVersionCode <= 0)) return;
     await _cleanupInstalledUpdateArtifactsIfNeeded(showSnackBar: true);
+    final channel = _updateChannel;
     final result = await _appUpdateService.checkForUpdates(
       currentVersion: _clientVersionLabel,
       currentBuildNumber: _clientVersionCode,
-      channel: _updateChannel,
+      channel: channel,
     );
     if (!mounted ||
+        channel != _updateChannel ||
         (result.status != AppUpdateStatus.updateAvailable &&
             result.status != AppUpdateStatus.downloaded)) {
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _showUpdateAvailableSnackBar(result);
-    });
+    if (Platform.isAndroid) _appUpdateOffer.value = result;
   }
 
   Future<void> _cleanupInstalledUpdateArtifactsIfNeeded({
@@ -2981,20 +2989,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
   }
 
-  void _showUpdateAvailableSnackBar(AppUpdateCheckResult result) {
-    final context = _navigatorKey.currentContext;
-    if (context == null) {
+  Future<void> _installOfferedUpdate() async {
+    final canInstall = await _singboxRuntime.canInstallApks();
+    if (!mounted) return;
+    if (!canInstall) {
+      await _showUpdateSettingsPage();
       return;
     }
-    final l10n = AppLocalizations.of(context);
-    final version = result.info?.displayVersion;
-    AppNotice.show(
-      context,
-      version == null
-          ? l10n.updatesAvailableSnack
-          : l10n.updatesAvailableSnackVersion(version),
-      actionLabel: l10n.updatesOpenAction,
-      onAction: () => unawaited(_showUpdateSettingsPage()),
+    await _appUpdateService.launchInstaller(
+      _singboxRuntime.installDownloadedApk,
     );
   }
 
@@ -4257,6 +4260,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _setUpdateChannel(AppUpdateChannel channel) {
+    if (channel != _updateChannel) _appUpdateOffer.value = null;
     _applySettingsChange(() => _settings.setUpdateChannel(channel));
   }
 
@@ -7255,63 +7259,99 @@ class _MeowClientState extends ConsumerState<MeowClient>
     _applySettingsChange(() => _settings.setTrafficRulePreset(value));
   }
 
+  void _setTrafficRuleOverrides(List<TrafficRuleOverride> value) {
+    _applySettingsChange(() => _settings.setTrafficRuleOverrides(value));
+  }
+
+  Future<TrafficRoutePreview> _inspectTrafficRoute(String target) async {
+    if (!await _ensureActiveSubscriptionHydratedForRuntime() || !mounted) {
+      throw StateError('Routing configuration is unavailable');
+    }
+    final build = await _configCoordinator.buildRoutingPreviewConfig();
+    return compute(_inspectCompiledTrafficRoute, (
+      target: target,
+      config: build.plan.config,
+      customRouteRules: build.plan.trafficRuleOverridesByRouteIndex,
+      customDnsRules: build.plan.trafficRuleOverridesByDnsIndex,
+    ));
+  }
+
   Future<RussiaRouteDataStatus> _installRussiaRouteData() async {
-    final affectsActiveRuntime = _trafficRulePreset != TrafficRulePreset.none;
-    final hadInstalledData = _russiaRouteDataStatus.available;
-    final status = hadInstalledData
-        ? await _russiaRouteDataService.ensureUpdated(force: true)
-        : await _russiaRouteDataService.ensureBundledInstalled();
-    if (!mounted) {
-      return status;
-    }
-    setState(() {
-      _russiaRouteDataStatus = status;
-      ref.read(russiaRouteDataStatusProvider.notifier).update(status);
-    });
-    if (affectsActiveRuntime) {
-      await _configCoordinator.emitCurrentConfigLogAsync(
-        'russia route data prepared',
-        restartRuntime: true,
-        applyWhenNativeRunning: true,
-        forceFullServiceRestart: true,
-      );
-    }
+    final status = await _russiaRouteDataService.ensureUpdated(force: true);
+    await _applyTrafficRuleDataStatus(status);
     return status;
   }
 
   Future<RussiaRouteDataStatus> _prepareTrafficRuleData(
     TrafficRulePreset preset,
   ) async {
-    final affectsActiveRuntime =
-        _trafficRulePreset != TrafficRulePreset.none &&
-        (preset == TrafficRulePreset.none || preset == _trafficRulePreset);
-    var status = _russiaRouteDataStatus;
-    final hadPreparedData = status.available;
-    if (!status.available) {
-      status = await _russiaRouteDataService.ensureBundledInstalled();
+    final bundles = _trafficRuleBundles(preset);
+    final status = bundles.isEmpty
+        ? await _russiaRouteDataService.ensureBundledInstalled()
+        : await _russiaRouteDataService.ensureUpdated(
+            force: true,
+            bundles: bundles,
+          );
+    await _applyTrafficRuleDataStatus(status);
+    return status;
+  }
+
+  Future<RussiaRouteDataStatus> _refreshRoutingRuleBundle(
+    RussiaRouteBundle bundle,
+  ) async {
+    final status = await _russiaRouteDataService.ensureUpdated(
+      force: true,
+      bundles: {bundle},
+    );
+    await _applyTrafficRuleDataStatus(status);
+    return status;
+  }
+
+  Future<void> _applyTrafficRuleDataStatus(RussiaRouteDataStatus status) async {
+    if (!mounted) return;
+    final previous = _russiaRouteDataStatus;
+    final activeBundles = _trafficRuleBundles(_trafficRulePreset);
+    String? effectiveRevision(
+      RussiaRouteDataStatus data,
+      RussiaRouteBundle bundle,
+    ) {
+      if (bundle == RussiaRouteBundle.curatedDirect && !data.available) {
+        return null;
+      }
+      final state = data.bundleStatus(bundle);
+      return state.available ? state.revision : null;
     }
-    if (preset == TrafficRulePreset.aiViaVpn ||
-        preset == TrafficRulePreset.socialViaVpn ||
-        hadPreparedData) {
-      status = await _russiaRouteDataService.ensureUpdated(force: true);
-    }
-    if (!mounted) {
-      return status;
-    }
+
+    final activeRulesChanged = activeBundles.any(
+      (bundle) =>
+          effectiveRevision(previous, bundle) !=
+          effectiveRevision(status, bundle),
+    );
     setState(() {
       _russiaRouteDataStatus = status;
       ref.read(russiaRouteDataStatusProvider.notifier).update(status);
     });
-    if (affectsActiveRuntime) {
+    if (activeRulesChanged) {
       await _configCoordinator.emitCurrentConfigLogAsync(
         'traffic rule data prepared',
         restartRuntime: true,
         applyWhenNativeRunning: true,
         forceFullServiceRestart: true,
+        refreshCachedConfig: true,
       );
     }
-    return status;
   }
+
+  Set<RussiaRouteBundle> _trafficRuleBundles(TrafficRulePreset preset) =>
+      switch (preset) {
+        TrafficRulePreset.none => const {},
+        TrafficRulePreset.russianServicesDirect => const {
+          RussiaRouteBundle.runetFreedom,
+          RussiaRouteBundle.curatedDirect,
+        },
+        TrafficRulePreset.aiViaVpn => const {RussiaRouteBundle.ai},
+        TrafficRulePreset.socialViaVpn => const {RussiaRouteBundle.social},
+      };
 
   void _setBypassLocalNetwork(bool value) {
     _applySettingsChange(() => _settings.setBypassLocalNetwork(value));
@@ -7597,6 +7637,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _offlineUrlTestSession = null;
       _offlineProbeConfig = null;
     }
+    _recordUrlTestRejections(
+      _runtimeRecovery.urlTestRejections,
+      _userVisibleServerTags(),
+    );
     await _latencyCoordinator.runFull(reason: 'manual');
   }
 
@@ -7706,7 +7750,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
         );
       }
       final probe = await _configCoordinator.buildProbeConfig(
-        validateConfig: false,
+        checkConfig: _singboxRuntime.checkConfig,
+        isCurrent: () => generation == _offlineStartGeneration && isCurrent(),
       );
       if (!mounted || generation != _offlineStartGeneration || !isCurrent()) {
         return;
@@ -7727,7 +7772,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
       final tags = requestedTags == null
           ? eligibleTags.intersection(visible)
           : eligibleTags.intersection(requestedTags);
-      if (tags.isEmpty) {
+      final rejected = _recordUrlTestRejections(
+        probe.invalidOutbounds,
+        requestedTags ?? visible,
+        showReason: requestedTags != null,
+      );
+      if (tags.isEmpty && rejected.isEmpty) {
         throw StateError('No checkable servers in this profile');
       }
       final previous = _offlineUrlTestSession;
@@ -7741,7 +7791,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         id: 'manual-${DateTime.now().microsecondsSinceEpoch}-${++_offlineSessionSequence}',
         fingerprint: probe.probeFingerprint,
         physicalNetworkEpoch: _physicalNetworkEpoch,
-        tags: tags,
+        tags: {...tags, ...rejected},
         isUserSweep: requestedTags == null,
         visibleTags: visible,
         initialResults: {
@@ -7753,28 +7803,67 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       _offlineUrlTestSession = session;
       _offlineProbeConfig = probe;
-      final rowChecks = <Future<bool>>[];
+      void completeRejected(Iterable<String> tags) {
+        for (final tag in tags) {
+          session.accept(
+            tag: tag,
+            delayMillis: 0,
+            available: false,
+            logicalSessionId: session.id,
+            physicalNetworkEpoch: session.physicalNetworkEpoch,
+          );
+        }
+      }
+
+      completeRejected(rejected);
+      if (tags.isEmpty) {
+        _offlineProbeConfig = null;
+        _publishOfflineUrlTestProgress();
+        return;
+      }
+      final rowChecks = <Future<void>>[];
       void checkRows(Set<String> tags) {
         for (final tag in tags) {
           rowChecks.add(
-            _latencyCoordinator.runTarget(
-              targetOutboundTag: tag,
-              reason: 'manual_row',
-              logicalSessionId: session.id,
-              physicalNetworkEpoch: session.physicalNetworkEpoch,
-            ),
+            _latencyCoordinator
+                .runTarget(
+                  targetOutboundTag: tag,
+                  reason: 'manual_row',
+                  logicalSessionId: session.id,
+                  physicalNetworkEpoch: session.physicalNetworkEpoch,
+                )
+                .then((_) {
+                  if (_latencyErrors[tag] case final String error
+                      when mounted &&
+                          generation == _offlineStartGeneration &&
+                          session.measurements[tag]?.available == false) {
+                    _showAppSnackBar(error);
+                  }
+                }),
           );
         }
       }
 
       if (rows != null && capabilities.supportsTargetedUrlTest) {
         rows.onAdditionalTags = (tags) {
-          if (session.isTerminal || !eligibleTags.containsAll(tags)) {
+          final checkable = tags.intersection(eligibleTags);
+          final rejected = tags.intersection(
+            probe.invalidOutbounds.keys.toSet(),
+          );
+          if (session.isTerminal ||
+              checkable.length + rejected.length != tags.length) {
             return false;
           }
+          _recordUrlTestRejections(
+            probe.invalidOutbounds,
+            rejected,
+            showReason: true,
+          );
           session.addTags(tags);
+          completeRejected(rejected);
+          _publishOfflineUrlTestProgress();
           if (session.phase == OfflineUrlTestPhase.runningOffline) {
-            checkRows(tags);
+            checkRows(checkable);
           }
           return true;
         };
@@ -7782,6 +7871,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         rows?.close();
       }
       _publishOfflineUrlTestProgress();
+      _offlineProbeStartError = null;
       await _singboxRuntime.startProbe(probe.build.configJson);
       // The start RPC only acknowledges dispatch. From this point onward the
       // probe owns the native service even while readiness is still pending.
@@ -7830,6 +7920,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       rows?.close();
       if (generation == _offlineStartGeneration &&
           !_latencyCoordinator.isRunning) {
+        _offlineProbeStartError = null;
         _urlTestInFlightNotifier.value =
             _offlineUrlTestSession?.isTerminal == false;
       }
@@ -7839,6 +7930,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
   Future<bool> _awaitRuntimeMode(String mode, int generation) async {
     for (var attempt = 0; attempt < 100; attempt++) {
       if (!mounted || generation != _offlineStartGeneration) return false;
+      if (_offlineProbeStartError case final String error
+          when mode == 'probe') {
+        throw StateError(error);
+      }
       final status = await _singboxRuntime.status();
       if (status['running'] == true && status['mode'] == mode) {
         final nativeGeneration =
@@ -7997,6 +8092,24 @@ class _MeowClientState extends ConsumerState<MeowClient>
     await test;
   }
 
+  Set<String> _recordUrlTestRejections(
+    Map<String, String> rejections,
+    Set<String> requested, {
+    bool showReason = false,
+  }) {
+    final reasons = <String, String>{
+      for (final tag in requested) tag: ?rejections[tag],
+    };
+    if (reasons.isEmpty) return const {};
+    _proxyRuntime.recordUrlTestRejections(reasons);
+    _publishProxyRuntimeVisualStatesForUrlTestTags(reasons.keys);
+    _updateUrlTestProgressForTags(reasons.keys);
+    if (showReason && requested.length == 1) {
+      _showAppSnackBar(reasons.values.single);
+    }
+    return reasons.keys.toSet();
+  }
+
   Future<void> _runProxyUrlTest(String tag) async {
     if (_userExcludedTags.contains(tag)) return;
     if (!_connected) {
@@ -8064,6 +8177,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
+    if (_recordUrlTestRejections(_runtimeRecovery.urlTestRejections, {
+      target,
+    }, showReason: true).isNotEmpty) {
+      return;
+    }
     _haptic();
     _groupUrlTestScheduler.cancel();
     final test = _latencyCoordinator.runTarget(
@@ -8073,7 +8191,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
           _latencyCoordinator.kind != LatencySessionKind.full ||
           _urlTestProgressResultForTag(target) != null,
     );
+    final profile = _activeSubscription?.id;
+    final latencyRevision = _proxyRuntime.runtimeLatencyRevisions[target];
     await test;
+    if (mounted &&
+        profile == _activeSubscription?.id &&
+        latencyRevision != _proxyRuntime.runtimeLatencyRevisions[target]) {
+      if (_latencyErrors[target] case final String error) {
+        _showAppSnackBar(error);
+      }
+    }
     if (mounted &&
         _autoCheckServers &&
         _connected &&
@@ -8124,13 +8251,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
         revision == _activeSubscription?.payloadRevision &&
         epoch == _physicalNetworkEpoch &&
         _proxySelection.isCurrentGeneration(selection);
-    final members = <String>{
+    final requested = <String>{
       ..._concreteTagsForProxyGroup(tag),
       if (reason == 'manual_active_group')
         ...[
           ?_currentResolvedActiveOutboundTag(),
         ].where((active) => !_userExcludedTags.contains(active)),
-    }.toList(growable: false);
+    };
+    final rejected = reason == 'manual_group' || reason == 'manual_active_group'
+        ? _recordUrlTestRejections(
+            _runtimeRecovery.urlTestRejections,
+            requested,
+            showReason: true,
+          )
+        : const <String>{};
+    final members = requested.difference(rejected);
     final success = await _latencyCoordinator.runMembers(
       tags: members,
       reason: reason,
@@ -8572,6 +8707,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       russiaAiServicesPath: routeData.aiServicesPath,
       russiaSocialServicesPath: routeData.socialServicesPath,
       trafficRulePreset: _trafficRulePreset,
+      trafficRuleOverrides: _settings.trafficRuleOverrides,
       bypassLocalNetwork: _bypassLocalNetwork,
       splitRoutingMode: _splitRoutingMode,
       splitRoutingPackages: _splitRoutingPackages,
@@ -8668,6 +8804,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   void _handleRuntimeStateEvent(RuntimeStateEvent event) {
     if (!_acceptNativeRuntimeSnapshot(event.raw)) return;
+    if (!event.running &&
+        (event.hasError || _offlineProbeStartError != null) &&
+        !_runtimeDesiredByUser &&
+        _offlineUrlTestSession?.phase == OfflineUrlTestPhase.preparing &&
+        _offlineProbeConfig != null) {
+      _offlineProbeStartError ??= event.error;
+      return;
+    }
     final running = event.running;
     final mode = event.raw['mode']?.toString() ?? '';
     final nativeRuntimeGeneration =
@@ -9052,15 +9196,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
     RuntimeUrlTestResult result, {
     bool borrowedStartupResult = false,
   }) {
+    final available =
+        result.delay > 0 &&
+        result.status.toLowerCase() !=
+            ProxyRuntimeController.urlTestStatusUnavailable;
     final accepted = _latencyCoordinator.handleCoreResult(
       tag: result.tag,
       sessionId: result.sessionId,
       revision: result.revision,
       borrowedStartupResult: borrowedStartupResult,
-      available:
-          result.delay > 0 &&
-          result.status.toLowerCase() !=
-              ProxyRuntimeController.urlTestStatusUnavailable,
+      available: available,
     );
     if (!accepted) return;
     final logicalSession = _offlineUrlTestSession;
@@ -9069,10 +9214,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         !logicalSession.accept(
           tag: result.tag,
           delayMillis: result.delay,
-          available:
-              result.delay > 0 &&
-              result.status.toLowerCase() !=
-                  ProxyRuntimeController.urlTestStatusUnavailable,
+          available: available,
           logicalSessionId: result.logicalSessionId,
           physicalNetworkEpoch: result.physicalNetworkEpoch,
         )) {
@@ -9093,7 +9235,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _updateUrlTestProgressForTags(affectedTags);
     }
     unawaited(_syncQuickSettingsTileLabel());
-    if (result.delay > 0) {
+    if (available) {
       _ensureActiveLookupCaches();
       final outbound = _activeOutboundByTagLookup[result.tag];
       final profileId = _activeSubscription?.id;
@@ -10892,6 +11034,16 @@ class _MeowClientState extends ConsumerState<MeowClient>
       locale: _locale,
       progressiveBlurEnabled: _effectiveProgressiveBlurEnabled,
       hapticEnabled: _hapticEnabled,
+      wrapNavigator: Platform.isAndroid
+          ? (navigator) => AppUpdatePromptHost(
+              offer: _appUpdateOffer,
+              service: _appUpdateService,
+              navigatorKey: _navigatorKey,
+              installMode: _updateInstallMode,
+              install: _installOfferedUpdate,
+              child: navigator,
+            )
+          : null,
       home: _storageBootstrapFailed
           ? WindowsStorageErrorScreen(onRetry: _retryWindowsStorage)
           : _buildAppHome(),
@@ -10899,6 +11051,21 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 }
+
+Future<TrafficRoutePreview> _inspectCompiledTrafficRoute(
+  ({
+    String target,
+    Map<String, dynamic> config,
+    Map<int, TrafficRuleOverride> customRouteRules,
+    Map<int, TrafficRuleOverride> customDnsRules,
+  })
+  request,
+) => TrafficRouteInspector.inspect(
+  target: request.target,
+  config: request.config,
+  customRouteRules: request.customRouteRules,
+  customDnsRules: request.customDnsRules,
+);
 
 class _LocalizedSubscriptionError implements Exception {
   const _LocalizedSubscriptionError(this.message);

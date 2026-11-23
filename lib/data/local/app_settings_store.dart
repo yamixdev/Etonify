@@ -6,6 +6,7 @@ import 'package:meow_client/models/core_settings.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:meow_client/core/platform/android_files_dir.dart';
 import 'package:meow_client/data/local/hive_storage_diagnostics.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/logging/app_log_store.dart';
@@ -221,6 +222,7 @@ class AppSettingsState {
     required this.adBlockEnabled,
     required this.useRussiaRouteData,
     this.trafficRulePreset = TrafficRulePreset.none,
+    this.trafficRuleOverrides = const <TrafficRuleOverride>[],
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -306,6 +308,7 @@ class AppSettingsState {
   final bool adBlockEnabled;
   final bool useRussiaRouteData;
   final TrafficRulePreset trafficRulePreset;
+  final List<TrafficRuleOverride> trafficRuleOverrides;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -391,6 +394,7 @@ class AppSettingsState {
     bool? adBlockEnabled,
     bool? useRussiaRouteData,
     TrafficRulePreset? trafficRulePreset,
+    List<TrafficRuleOverride>? trafficRuleOverrides,
     bool? bypassLocalNetwork,
     SplitRoutingMode? splitRoutingMode,
     List<String>? splitRoutingPackages,
@@ -504,6 +508,7 @@ class AppSettingsState {
       adBlockEnabled: adBlockEnabled ?? this.adBlockEnabled,
       useRussiaRouteData: useRussiaRouteData ?? this.useRussiaRouteData,
       trafficRulePreset: trafficRulePreset ?? this.trafficRulePreset,
+      trafficRuleOverrides: trafficRuleOverrides ?? this.trafficRuleOverrides,
       bypassLocalNetwork: bypassLocalNetwork ?? this.bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode ?? this.splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages ?? this.splitRoutingPackages,
@@ -648,6 +653,7 @@ abstract class AppSettingsStore {
   static const _adBlockEnabledKey = 'ad_block_enabled';
   static const _useRussiaRouteDataKey = 'use_russia_route_data';
   static const _trafficRulePresetKey = 'traffic_rule_preset';
+  static const _trafficRuleOverridesKey = 'traffic_rule_overrides';
   static const _bypassLocalNetworkKey = 'bypass_local_network';
   static const _splitRoutingModeKey = 'split_routing_mode';
   static const _splitRoutingPackagesKey = 'split_routing_packages';
@@ -726,6 +732,7 @@ abstract class AppSettingsStore {
     _adBlockEnabledKey,
     _useRussiaRouteDataKey,
     _trafficRulePresetKey,
+    _trafficRuleOverridesKey,
     _bypassLocalNetworkKey,
     _splitRoutingModeKey,
     _splitRoutingPackagesKey,
@@ -804,6 +811,9 @@ abstract class AppSettingsStore {
     } on FormatException {
       // Missing/invalid old settings must not prevent startup.
     }
+    final trafficRuleOverrides = _decodeTrafficRuleOverrides(
+      map[_trafficRuleOverridesKey],
+    );
     Map<String, Object?> stringMap(Object? raw) {
       if (raw is String) {
         try {
@@ -1103,6 +1113,7 @@ abstract class AppSettingsStore {
       trafficRulePreset: TrafficRulePreset.fromStorage(
         map[_trafficRulePresetKey],
       ),
+      trafficRuleOverrides: trafficRuleOverrides,
       bypassLocalNetwork: boolValue(_bypassLocalNetworkKey, defaultValue: true),
       splitRoutingMode: switch (map[_splitRoutingModeKey]) {
         'proxy_selected' => SplitRoutingMode.proxySelected,
@@ -1245,6 +1256,9 @@ abstract class AppSettingsStore {
       _adBlockEnabledKey: state.adBlockEnabled ? '1' : '0',
       _useRussiaRouteDataKey: state.useRussiaRouteData ? '1' : '0',
       _trafficRulePresetKey: state.trafficRulePreset.storageValue,
+      _trafficRuleOverridesKey: jsonEncode([
+        for (final rule in state.trafficRuleOverrides) rule.toJson(),
+      ]),
       _bypassLocalNetworkKey: state.bypassLocalNetwork ? '1' : '0',
       _splitRoutingModeKey: switch (state.splitRoutingMode) {
         SplitRoutingMode.disabled => 'disabled',
@@ -1273,6 +1287,20 @@ abstract class AppSettingsStore {
           ? '1'
           : '0',
     };
+  }
+
+  List<TrafficRuleOverride> _decodeTrafficRuleOverrides(Object? raw) {
+    if (raw is String) {
+      try {
+        raw = jsonDecode(raw);
+      } on FormatException {
+        return const [];
+      }
+    }
+    if (raw is! List) return const [];
+    return List<TrafficRuleOverride>.unmodifiable(
+      raw.map(TrafficRuleOverride.tryFromJson).whereType<TrafficRuleOverride>(),
+    );
   }
 }
 

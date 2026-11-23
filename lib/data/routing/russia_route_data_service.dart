@@ -14,6 +14,10 @@ final RegExp _validDomainRegExp = RegExp(r'^[a-z0-9.\-_]+$');
 final RegExp _compiledGenerationPattern = RegExp(
   r'^domain-list-compiled-v\d+-\d+$',
 );
+final RegExp _compiledDirectoryPattern = RegExp(
+  r'^domain-list-compiled-[a-zA-Z0-9-]+$',
+);
+final RegExp _runetGenerationPattern = RegExp(r'^runetfreedom-\d+$');
 
 bool _sameStoragePath(String first, String second) => Platform.isWindows
     ? first.replaceAll('\\', '/').toLowerCase() ==
@@ -60,6 +64,38 @@ DateTime? parseRussiaRouteVersionTimestamp(String value) {
   return parsed;
 }
 
+enum RussiaRouteBundle { runetFreedom, curatedDirect, ai, social }
+
+class RussiaRouteBundleStatus {
+  const RussiaRouteBundleStatus({
+    required this.available,
+    this.updatedAtMillis,
+    this.lastUpdateCheckAtMillis,
+    this.updateFailed = false,
+    this.revision,
+  });
+
+  final bool available;
+  final int? updatedAtMillis;
+  final int? lastUpdateCheckAtMillis;
+  final bool updateFailed;
+  final String? revision;
+
+  DateTime? get updatedAt => _timestamp(updatedAtMillis);
+  DateTime? get lastUpdateCheckAt => _timestamp(lastUpdateCheckAtMillis);
+
+  bool get needsDailyUpdate {
+    final lastCheck = lastUpdateCheckAt;
+    return !available ||
+        lastCheck == null ||
+        DateTime.now().difference(lastCheck) >= const Duration(hours: 24);
+  }
+}
+
+DateTime? _timestamp(int? millis) => millis == null || millis <= 0
+    ? null
+    : DateTime.fromMillisecondsSinceEpoch(millis);
+
 class RussiaRouteDataStatus {
   const RussiaRouteDataStatus({
     required this.available,
@@ -89,6 +125,7 @@ class RussiaRouteDataStatus {
     this.domainListCommunityCompiledDirectory,
     this.domainListCommunityMetadata =
         const <String, RussiaRouteCategoryMetadata>{},
+    this.bundles = const {},
   });
 
   const RussiaRouteDataStatus.unavailable()
@@ -118,7 +155,8 @@ class RussiaRouteDataStatus {
       domainListCommunityCompilerVersion = 0,
       domainListCommunityCompiledDirectory = null,
       domainListCommunityMetadata =
-          const <String, RussiaRouteCategoryMetadata>{};
+          const <String, RussiaRouteCategoryMetadata>{},
+      bundles = const {};
 
   final bool available;
   final String sourceName;
@@ -146,6 +184,31 @@ class RussiaRouteDataStatus {
   final int domainListCommunityCompilerVersion;
   final String? domainListCommunityCompiledDirectory;
   final Map<String, RussiaRouteCategoryMetadata> domainListCommunityMetadata;
+  final Map<RussiaRouteBundle, RussiaRouteBundleStatus> bundles;
+
+  RussiaRouteBundleStatus bundleStatus(RussiaRouteBundle bundle) =>
+      bundles[bundle] ??
+      RussiaRouteBundleStatus(
+        available: switch (bundle) {
+          RussiaRouteBundle.runetFreedom => available,
+          RussiaRouteBundle.curatedDirect => curatedDirectServicesPath != null,
+          RussiaRouteBundle.ai => aiServicesPath != null,
+          RussiaRouteBundle.social => socialServicesPath != null,
+        },
+        updatedAtMillis: bundle == RussiaRouteBundle.runetFreedom
+            ? installedAtMillis
+            : domainListCommunityUpdatedAtMillis,
+        lastUpdateCheckAtMillis: bundle == RussiaRouteBundle.runetFreedom
+            ? lastUpdateCheckAtMillis
+            : null,
+        revision: switch (bundle) {
+          RussiaRouteBundle.runetFreedom =>
+            geositeRuBlockedPath ?? packageSha256,
+          RussiaRouteBundle.curatedDirect => curatedDirectServicesPath,
+          RussiaRouteBundle.ai => aiServicesPath,
+          RussiaRouteBundle.social => socialServicesPath,
+        },
+      );
 
   DateTime? get installedAt => installedAtMillis == null
       ? null
@@ -166,13 +229,8 @@ class RussiaRouteDataStatus {
       ? null
       : DateTime.fromMillisecondsSinceEpoch(lastUpdateCheckAtMillis!);
 
-  bool get needsDailyUpdate {
-    final lastCheck = lastUpdateCheckAt;
-    if (lastCheck == null) {
-      return true;
-    }
-    return DateTime.now().difference(lastCheck) >= const Duration(hours: 24);
-  }
+  bool get needsDailyUpdate =>
+      bundleStatus(RussiaRouteBundle.runetFreedom).needsDailyUpdate;
 }
 
 class RussiaRouteDataFile {
@@ -309,6 +367,17 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data';
   static const _maxDomainListCategoryBytes = 2 * 1024 * 1024;
   static const _domainListCommunityCompilerVersion = 2;
+  static const allBundles = {
+    RussiaRouteBundle.runetFreedom,
+    RussiaRouteBundle.curatedDirect,
+    RussiaRouteBundle.ai,
+    RussiaRouteBundle.social,
+  };
+  static const _domainListFileNames = <RussiaRouteBundle, String>{
+    RussiaRouteBundle.curatedDirect: 'ru-direct-services.srs',
+    RussiaRouteBundle.ai: 'ai-services.srs',
+    RussiaRouteBundle.social: 'social-services.srs',
+  };
 
   static const _assetGeositeRuBlocked =
       'assets/route_data/russia/geosite-ru-blocked.srs';
@@ -360,6 +429,9 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   ];
 
   Future<RussiaRouteDataStatus>? _updateInFlight;
+  Set<RussiaRouteBundle> _updatingBundles = const {};
+  bool _isForcedUpdate = false;
+  bool _isBundledOnly = false;
   Future<RussiaRouteDataStatus>? _domainListMigrationInFlight;
   Future<void>? _cleanupInFlight;
   int _metadataWrites = 0;
@@ -413,8 +485,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     final current = await _loadStatus();
     final pending = _domainListMigrationInFlight;
     if (pending != null) return pending;
-    if (!current.available ||
-        current.domainListCommunityCategoryCount == 0 ||
+    if (current.domainListCommunityCategoryCount == 0 ||
         current.domainListCommunityCompilerVersion >=
             _domainListCommunityCompilerVersion ||
         _updateInFlight != null) {
@@ -431,106 +502,180 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     }
   }
 
+  Future<Map<String, dynamic>> _readMetadata(
+    _RussiaRouteStoragePaths paths,
+  ) async {
+    final file = File(paths.metadataPath);
+    try {
+      String contents;
+      try {
+        contents = await file.readAsString();
+      } on FileSystemException {
+        contents = await File('${file.path}.bak').readAsString();
+      }
+      final metadata = jsonDecode(contents);
+      return metadata is Map<String, dynamic> ? metadata : {};
+    } on FileSystemException {
+      return {};
+    } on FormatException {
+      return {};
+    }
+  }
+
+  static Map<String, dynamic> _bundleMetadata(
+    Map<String, dynamic> metadata,
+    RussiaRouteBundle bundle,
+  ) {
+    final bundles = metadata['bundles'];
+    final value = bundles is Map ? bundles[bundle.name] : null;
+    return value is Map<String, dynamic> ? value : {};
+  }
+
+  static void _setBundleMetadata(
+    Map<String, dynamic> metadata,
+    RussiaRouteBundle bundle,
+    Map<String, dynamic> value,
+  ) {
+    final bundles = metadata['bundles'];
+    metadata['bundles'] = {
+      if (bundles is Map<String, dynamic>) ...bundles,
+      bundle.name: value,
+    };
+  }
+
+  static int? _metadataTimestamp(Map<String, dynamic> metadata, String field) =>
+      int.tryParse(metadata[field]?.toString() ?? '');
+
+  String? _compiledPath(
+    _RussiaRouteStoragePaths paths,
+    Map<String, dynamic> metadata,
+    RussiaRouteBundle bundle,
+  ) {
+    final bundleMetadata = _bundleMetadata(metadata, bundle);
+    final directory = bundleMetadata.containsKey('directory')
+        ? bundleMetadata['directory']
+        : metadata['domainListCommunityCompiledDirectory'];
+    if (directory != null &&
+        (directory is! String ||
+            !_compiledDirectoryPattern.hasMatch(directory))) {
+      return null;
+    }
+    final base = directory == null
+        ? '${paths.baseDirectoryPath}/rule-set-geosite'
+        : '${paths.baseDirectoryPath}/$directory';
+    final file = File('$base/${_domainListFileNames[bundle]}');
+    return _hasUsableRuleSet(file) ? file.path : null;
+  }
+
   Future<RussiaRouteDataStatus> _loadStatus() async {
     final paths = await _storagePaths();
-    final metadataFile = File(paths.metadataPath);
-    final geositeBlockedFile = File(paths.geositeRuBlockedPath);
-    final geositeAvailableOnlyInsideFile = File(
-      paths.geositeRuAvailableOnlyInsidePath,
+    final metadata = await _readMetadata(paths);
+    if (metadata.isEmpty) return const RussiaRouteDataStatus.unavailable();
+
+    final runet = _bundleMetadata(metadata, RussiaRouteBundle.runetFreedom);
+    final runetDirectory = runet['directory'];
+    final validRunetDirectory =
+        runetDirectory == null ||
+        runetDirectory is String &&
+            _runetGenerationPattern.hasMatch(runetDirectory);
+    final runetBase = runetDirectory == null
+        ? paths.baseDirectoryPath
+        : '${paths.baseDirectoryPath}/$runetDirectory';
+    final runetFiles = {
+      for (final entry in _releaseZipEntries.entries)
+        entry.value: File('$runetBase/${entry.key}'),
+    };
+    final runetAvailable =
+        validRunetDirectory && runetFiles.values.every(_hasUsableRuleSet);
+    final compiled = {
+      for (final bundle in _domainListFileNames.keys)
+        bundle: _compiledPath(paths, metadata, bundle),
+    };
+    final checkedAt = _metadataTimestamp(metadata, 'lastUpdateCheckAtMillis');
+    final domainListsUpdatedAt = _metadataTimestamp(
+      metadata,
+      'domainListCommunityUpdatedAtMillis',
     );
-    final geositeCategoryRuFile = File(paths.geositeCategoryRuPath);
-    final geoipBlockedFile = File(paths.geoipRuBlockedPath);
-    final geoipWhitelistFile = File(paths.geoipRuWhitelistPath);
-    final geoipRuFile = File(paths.geoipRuPath);
-    if (!metadataFile.existsSync() ||
-        !_hasUsableRuleSet(geositeBlockedFile) ||
-        !_hasUsableRuleSet(geositeAvailableOnlyInsideFile) ||
-        !_hasUsableRuleSet(geositeCategoryRuFile) ||
-        !_hasUsableRuleSet(geoipBlockedFile) ||
-        !_hasUsableRuleSet(geoipWhitelistFile) ||
-        !_hasUsableRuleSet(geoipRuFile)) {
-      return const RussiaRouteDataStatus.unavailable();
-    }
-    try {
-      final metadata =
-          jsonDecode(await metadataFile.readAsString()) as Map<String, dynamic>;
-      final compiledDirectory = metadata['domainListCommunityCompiledDirectory']
-          ?.toString();
-      if (compiledDirectory != null &&
-          !RegExp(
-            r'^domain-list-compiled-[a-zA-Z0-9-]+$',
-          ).hasMatch(compiledDirectory)) {
-        throw const FormatException('Invalid compiled domain-list directory');
-      }
-      final compiledBase = compiledDirectory == null
-          ? File(paths.aiServicesPath).parent.path
-          : '${paths.baseDirectoryPath}/$compiledDirectory';
-      final curatedDirectServicesFile = File(
-        '$compiledBase/ru-direct-services.srs',
-      );
-      final aiServicesFile = File('$compiledBase/ai-services.srs');
-      final socialServicesFile = File('$compiledBase/social-services.srs');
-      return RussiaRouteDataStatus(
-        available: true,
-        sourceName: metadata['sourceName']?.toString() ?? sourceName,
-        versionTag: metadata['versionTag']?.toString() ?? bundledTag,
-        sourceKind: metadata['sourceKind']?.toString() ?? sourceKindBundled,
-        releaseTag: metadata['releaseTag']?.toString(),
-        packageSha256: metadata['packageSha256']?.toString(),
-        assetSizeBytes: int.tryParse(
-          metadata['assetSizeBytes']?.toString() ?? '',
-        ),
-        verifiedAtMillis: int.tryParse(
-          metadata['verifiedAtMillis']?.toString() ?? '',
-        ),
-        verifiedFiles: _stringListFromJson(metadata['verifiedFiles']),
-        geositeRuBlockedPath: geositeBlockedFile.path,
-        geositeRuAvailableOnlyInsidePath: geositeAvailableOnlyInsideFile.path,
-        geositeCategoryRuPath: geositeCategoryRuFile.path,
-        geoipRuBlockedPath: geoipBlockedFile.path,
-        geoipRuWhitelistPath: geoipWhitelistFile.path,
-        geoipRuPath: geoipRuFile.path,
-        curatedDirectServicesPath: _hasUsableRuleSet(curatedDirectServicesFile)
-            ? curatedDirectServicesFile.path
+    final installedAt = _metadataTimestamp(metadata, 'installedAtMillis');
+    final packageSha256 = metadata['packageSha256']?.toString();
+    final statuses = <RussiaRouteBundle, RussiaRouteBundleStatus>{
+      RussiaRouteBundle.runetFreedom: RussiaRouteBundleStatus(
+        available: runetAvailable,
+        updatedAtMillis: runetAvailable
+            ? _metadataTimestamp(runet, 'updatedAtMillis') ?? installedAt
             : null,
-        aiServicesPath: _hasUsableRuleSet(aiServicesFile)
-            ? aiServicesFile.path
-            : null,
-        socialServicesPath: _hasUsableRuleSet(socialServicesFile)
-            ? socialServicesFile.path
-            : null,
-        installedAtMillis: int.tryParse(
-          metadata['installedAtMillis']?.toString() ?? '',
+        lastUpdateCheckAtMillis: checkedAt,
+        updateFailed: runet['updateFailed'] == true,
+        revision: runetAvailable ? runetFiles['geositeRuBlocked']?.path : null,
+      ),
+      for (final entry in compiled.entries)
+        entry.key: _compiledBundleStatus(
+          _bundleMetadata(metadata, entry.key),
+          path: entry.value,
+          legacyUpdatedAt: domainListsUpdatedAt,
+          legacyCheckedAt: checkedAt,
         ),
-        lastUpdateCheckAtMillis: int.tryParse(
-          metadata['lastUpdateCheckAtMillis']?.toString() ?? '',
-        ),
-        domainListCommunityUpdatedAtMillis: int.tryParse(
-          metadata['domainListCommunityUpdatedAtMillis']?.toString() ?? '',
-        ),
-        domainListCommunityCategoryCount:
-            int.tryParse(
-              metadata['domainListCommunityCategoryCount']?.toString() ?? '',
-            ) ??
-            0,
-        domainListCommunityDomainCount:
-            int.tryParse(
-              metadata['domainListCommunityDomainCount']?.toString() ?? '',
-            ) ??
-            0,
-        domainListCommunityCompilerVersion:
-            int.tryParse(
-              metadata['domainListCommunityCompilerVersion']?.toString() ?? '',
-            ) ??
-            0,
-        domainListCommunityCompiledDirectory: compiledDirectory,
-        domainListCommunityMetadata: _categoryMetadataFromJson(
-          metadata['domainListCommunityMetadata'],
-        ),
-      );
-    } catch (_) {
-      return const RussiaRouteDataStatus.unavailable();
-    }
+    };
+    String? runetPath(String key) =>
+        runetAvailable ? runetFiles[key]!.path : null;
+
+    return RussiaRouteDataStatus(
+      available: runetAvailable,
+      sourceName: metadata['sourceName']?.toString() ?? sourceName,
+      versionTag: metadata['versionTag']?.toString() ?? bundledTag,
+      sourceKind: metadata['sourceKind']?.toString() ?? sourceKindBundled,
+      releaseTag: metadata['releaseTag']?.toString(),
+      packageSha256: packageSha256,
+      assetSizeBytes: _metadataTimestamp(metadata, 'assetSizeBytes'),
+      verifiedAtMillis: _metadataTimestamp(metadata, 'verifiedAtMillis'),
+      verifiedFiles: _stringListFromJson(metadata['verifiedFiles']),
+      geositeRuBlockedPath: runetPath('geositeRuBlocked'),
+      geositeRuAvailableOnlyInsidePath: runetPath(
+        'geositeRuAvailableOnlyInside',
+      ),
+      geositeCategoryRuPath: runetPath('geositeCategoryRu'),
+      geoipRuBlockedPath: runetPath('geoipRuBlocked'),
+      geoipRuWhitelistPath: runetPath('geoipRuWhitelist'),
+      geoipRuPath: runetPath('geoipRu'),
+      curatedDirectServicesPath: compiled[RussiaRouteBundle.curatedDirect],
+      aiServicesPath: compiled[RussiaRouteBundle.ai],
+      socialServicesPath: compiled[RussiaRouteBundle.social],
+      installedAtMillis: installedAt,
+      lastUpdateCheckAtMillis: checkedAt,
+      domainListCommunityUpdatedAtMillis: domainListsUpdatedAt,
+      domainListCommunityCategoryCount:
+          _metadataTimestamp(metadata, 'domainListCommunityCategoryCount') ?? 0,
+      domainListCommunityDomainCount:
+          _metadataTimestamp(metadata, 'domainListCommunityDomainCount') ?? 0,
+      domainListCommunityCompilerVersion:
+          _metadataTimestamp(metadata, 'domainListCommunityCompilerVersion') ??
+          0,
+      domainListCommunityCompiledDirectory:
+          metadata['domainListCommunityCompiledDirectory']?.toString(),
+      domainListCommunityMetadata: _categoryMetadataFromJson(
+        metadata['domainListCommunityMetadata'],
+      ),
+      bundles: Map.unmodifiable(statuses),
+    );
+  }
+
+  RussiaRouteBundleStatus _compiledBundleStatus(
+    Map<String, dynamic> metadata, {
+    required String? path,
+    required int? legacyUpdatedAt,
+    required int? legacyCheckedAt,
+  }) {
+    return RussiaRouteBundleStatus(
+      available: path != null,
+      updatedAtMillis: path == null
+          ? null
+          : _metadataTimestamp(metadata, 'updatedAtMillis') ?? legacyUpdatedAt,
+      lastUpdateCheckAtMillis:
+          _metadataTimestamp(metadata, 'lastUpdateCheckAtMillis') ??
+          (metadata.isEmpty && path != null ? legacyCheckedAt : null),
+      updateFailed: metadata['updateFailed'] == true,
+      revision: path == null ? null : metadata['revision']?.toString() ?? path,
+    );
   }
 
   Future<RussiaRouteDataStatus> _migrateCachedDomainLists(
@@ -538,58 +683,101 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   ) async {
     try {
       final paths = await _storagePaths();
+      final metadata = await _readMetadata(paths);
       final categoryFiles = await compute(
         _readCachedDomainListCommunityCategories,
         paths.domainListCommunitySourceDirectoryPath,
         debugLabel: 'route-cached-sources-read',
       );
-      final compiled = await _compileAndInstallDomainLists(
-        paths,
+      final artifacts = await compute(
+        _compileDomainListCommunityArtifacts,
         categoryFiles,
+        debugLabel: 'route-services-compile',
       );
-      await _writeMetadata(
-        paths,
-        packageInfo: _InstalledRoutePackageInfo.fromStatus(current),
-        installedAtMillis: current.installedAtMillis ?? 0,
-        lastUpdateCheckAtMillis: current.lastUpdateCheckAtMillis ?? 0,
-        domainListCommunityUpdatedAtMillis:
-            DateTime.now().millisecondsSinceEpoch,
-        domainListCommunityCategoryCount: categoryFiles.length,
-        domainListCommunityDomainCount: compiled.domainCount,
-        domainListCommunityMetadata: current.domainListCommunityMetadata,
-        domainListCommunityCompilerVersion: _domainListCommunityCompilerVersion,
-        domainListCommunityCompiledDirectory: compiled.directory,
-      );
+      final directory = _newCompiledDirectory();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (final entry in _domainListFileNames.entries) {
+        final artifact = artifacts[entry.value]!;
+        if (artifact.domainCount == 0) return current;
+        await _writeAtomically(
+          '${paths.baseDirectoryPath}/$directory/${entry.value}',
+          artifact.ruleSetBytes,
+        );
+        _recordCompiledBundle(
+          metadata,
+          entry.key,
+          directory: directory,
+          now: now,
+          checkedRemotely: false,
+          useExistingFile: false,
+          domainCount: artifact.domainCount,
+        );
+      }
+      metadata['domainListCommunityCategoryCount'] = categoryFiles.length;
+      await _writeMetadata(paths, metadata);
       return await _loadStatus();
     } catch (_) {
       return current;
     }
   }
 
-  Future<({String directory, int domainCount})> _compileAndInstallDomainLists(
-    _RussiaRouteStoragePaths paths,
-    Map<String, String> categoryFiles,
-  ) async {
-    final artifacts = await compute(
-      _compileDomainListCommunityArtifacts,
-      categoryFiles,
-      debugLabel: 'route-services-compile',
-    );
-    final directory =
-        'domain-list-compiled-v$_domainListCommunityCompilerVersion-'
-        '${DateTime.now().microsecondsSinceEpoch}';
-    for (final entry in artifacts.entries) {
-      await _writeAtomically(
-        '${paths.baseDirectoryPath}/$directory/${entry.key}',
-        entry.value.ruleSetBytes,
-      );
+  String _newCompiledDirectory() =>
+      'domain-list-compiled-v$_domainListCommunityCompilerVersion-'
+      '${DateTime.now().microsecondsSinceEpoch}';
+
+  void _recordCompiledBundle(
+    Map<String, dynamic> metadata,
+    RussiaRouteBundle bundle, {
+    required String? directory,
+    required int now,
+    bool checkedRemotely = true,
+    required bool useExistingFile,
+    required int domainCount,
+    String? sourceRevision,
+  }) {
+    // Capture old shared or flat paths before moving a single group's pointer.
+    for (final item in _domainListFileNames.keys) {
+      final previous = _bundleMetadata(metadata, item);
+      if (!previous.containsKey('directory')) {
+        _setBundleMetadata(metadata, item, {
+          ...previous,
+          'directory': metadata['domainListCommunityCompiledDirectory'],
+          'updatedAtMillis': metadata['domainListCommunityUpdatedAtMillis'],
+          'lastUpdateCheckAtMillis': metadata['lastUpdateCheckAtMillis'],
+        });
+      }
     }
-    return (
-      directory: directory,
-      domainCount: artifacts.values.fold<int>(
-        0,
-        (sum, artifact) => sum + artifact.domainCount,
-      ),
+    final previous = _bundleMetadata(metadata, bundle);
+    final previousDirectory = previous['directory'];
+    _setBundleMetadata(metadata, bundle, {
+      ...previous,
+      'directory': directory,
+      'previousDirectory': directory == previousDirectory
+          ? previous['previousDirectory']
+          : previousDirectory,
+      if (!useExistingFile) 'updatedAtMillis': now,
+      if (checkedRemotely) 'lastUpdateCheckAtMillis': now,
+      if (checkedRemotely) 'updateFailed': false,
+      'compilerVersion': _domainListCommunityCompilerVersion,
+      'domainCount': domainCount,
+      'sourceRevision': ?sourceRevision,
+    });
+    if (!useExistingFile) {
+      final oldActive = metadata['domainListCommunityCompiledDirectory'];
+      if (directory != oldActive && oldActive is String) {
+        metadata['domainListCommunityPreviousCompiledDirectory'] = oldActive;
+      }
+      metadata['domainListCommunityCompiledDirectory'] = directory;
+      metadata['domainListCommunityUpdatedAtMillis'] = now;
+    }
+    metadata['domainListCommunityCompilerVersion'] =
+        _domainListCommunityCompilerVersion;
+    metadata['domainListCommunityDomainCount'] = _domainListFileNames.keys.fold(
+      0,
+      (total, item) =>
+          total +
+          (_metadataTimestamp(_bundleMetadata(metadata, item), 'domainCount') ??
+              0),
     );
   }
 
@@ -628,31 +816,54 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
         return;
       }
       final metadata = jsonDecode(await metadataFile.readAsString());
-      if (metadata is! Map) return;
-      final active = metadata['domainListCommunityCompiledDirectory'];
-      final previous = metadata['domainListCommunityPreviousCompiledDirectory'];
-      if (active is! String ||
-          !_compiledGenerationPattern.hasMatch(active) ||
-          (previous != null &&
-              (previous is! String ||
-                  !_compiledGenerationPattern.hasMatch(previous)))) {
+      if (metadata is! Map<String, dynamic>) return;
+      final protected = <String>{};
+      bool protect(Object? name, RegExp pattern) {
+        if (name == null) return true;
+        if (name is! String || !pattern.hasMatch(name)) return false;
+        protected.add(name);
+        return true;
+      }
+
+      if (!protect(
+            metadata['domainListCommunityCompiledDirectory'],
+            _compiledGenerationPattern,
+          ) ||
+          !protect(
+            metadata['domainListCommunityPreviousCompiledDirectory'],
+            _compiledGenerationPattern,
+          )) {
         return;
       }
-      final protected = <String>{active, if (previous is String) previous};
+      for (final bundle in RussiaRouteBundle.values) {
+        final info = _bundleMetadata(metadata, bundle);
+        final pattern = bundle == RussiaRouteBundle.runetFreedom
+            ? _runetGenerationPattern
+            : _compiledGenerationPattern;
+        if (!protect(info['directory'], pattern) ||
+            !protect(info['previousDirectory'], pattern)) {
+          return;
+        }
+      }
+      if (protected.isEmpty) return;
       for (final path in protectedRuleSetPaths) {
         final parent = Directory(
           await File(path).absolute.parent.resolveSymbolicLinks(),
         );
-        if (_sameStoragePath(parent.parent.path, base.path)) {
+        final generation = _sameStoragePath(parent.parent.path, base.path)
+            ? parent
+            : parent.parent;
+        if (_sameStoragePath(generation.parent.path, base.path)) {
           protected.add(
-            parent.uri.pathSegments.where((s) => s.isNotEmpty).last,
+            generation.uri.pathSegments.where((s) => s.isNotEmpty).last,
           );
         }
       }
       await for (final directory in base.list(followLinks: false)) {
         if (directory is! Directory) continue;
         final name = directory.uri.pathSegments.where((s) => s.isNotEmpty).last;
-        if (!_compiledGenerationPattern.hasMatch(name) ||
+        if ((!_compiledGenerationPattern.hasMatch(name) &&
+                !_runetGenerationPattern.hasMatch(name)) ||
             protected.contains(name)) {
           continue;
         }
@@ -685,56 +896,32 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<List<RussiaRouteDataFile>> listInstalledFiles() async {
-    final paths = await _storagePaths();
     final status = await loadStatus();
-    final candidates = <_RussiaRouteDataFilePath>[
-      _RussiaRouteDataFilePath(
-        'geosite-ru-blocked.srs',
-        paths.geositeRuBlockedPath,
-      ),
-      _RussiaRouteDataFilePath(
-        'geosite-ru-available-only-inside.srs',
-        paths.geositeRuAvailableOnlyInsidePath,
-      ),
-      _RussiaRouteDataFilePath(
-        'geosite-category-ru.srs',
-        paths.geositeCategoryRuPath,
-      ),
-      _RussiaRouteDataFilePath(
-        'geoip-ru-blocked.srs',
-        paths.geoipRuBlockedPath,
-      ),
-      _RussiaRouteDataFilePath(
-        'geoip-ru-whitelist.srs',
-        paths.geoipRuWhitelistPath,
-      ),
-      _RussiaRouteDataFilePath('geoip-ru.srs', paths.geoipRuPath),
-      _RussiaRouteDataFilePath(
-        'ru-direct-services.srs',
-        status.curatedDirectServicesPath ?? paths.curatedDirectServicesPath,
-      ),
-      _RussiaRouteDataFilePath(
-        'ai-services.srs',
-        status.aiServicesPath ?? paths.aiServicesPath,
-      ),
-      _RussiaRouteDataFilePath(
-        'social-services.srs',
-        status.socialServicesPath ?? paths.socialServicesPath,
-      ),
-    ];
+    final candidates = {
+      'geosite-ru-blocked.srs': status.geositeRuBlockedPath,
+      'geosite-ru-available-only-inside.srs':
+          status.geositeRuAvailableOnlyInsidePath,
+      'geosite-category-ru.srs': status.geositeCategoryRuPath,
+      'geoip-ru-blocked.srs': status.geoipRuBlockedPath,
+      'geoip-ru-whitelist.srs': status.geoipRuWhitelistPath,
+      'geoip-ru.srs': status.geoipRuPath,
+      'ru-direct-services.srs': status.curatedDirectServicesPath,
+      'ai-services.srs': status.aiServicesPath,
+      'social-services.srs': status.socialServicesPath,
+    };
     final installed = <RussiaRouteDataFile>[];
-    for (final candidate in candidates) {
-      final file = File(candidate.path);
+    for (final entry in candidates.entries) {
+      final path = entry.value;
+      if (path == null) continue;
       try {
-        final stat = await file.stat();
-        if (stat.type != FileSystemEntityType.file || stat.size <= 4) {
-          continue;
+        final stat = await File(path).stat();
+        if (stat.type == FileSystemEntityType.file && stat.size > 4) {
+          installed.add(
+            RussiaRouteDataFile(name: entry.key, sizeBytes: stat.size),
+          );
         }
-        installed.add(
-          RussiaRouteDataFile(name: candidate.name, sizeBytes: stat.size),
-        );
       } on FileSystemException {
-        // A concurrent atomic update may replace a file between lookup and stat.
+        // The file can disappear between checking status and reading its size.
       }
     }
     return installed;
@@ -759,372 +946,454 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     }
   }
 
-  Future<RussiaRouteDataStatus> ensureBundledInstalled() async {
-    while (_cleanupInFlight != null) {
-      await _cleanupInFlight;
-    }
-    final inFlight = _updateInFlight;
-    if (inFlight != null) {
-      return inFlight;
-    }
-    final future = _ensureBundledInstalled();
-    _updateInFlight = future;
-    try {
-      return await future;
-    } finally {
-      if (identical(_updateInFlight, future)) {
-        _updateInFlight = null;
-        progress.value = null;
+  Future<RussiaRouteDataStatus> ensureBundledInstalled() => _runUpdate(
+    bundles: const {RussiaRouteBundle.runetFreedom},
+    force: false,
+    bundledOnly: true,
+    update: () async {
+      _emitProgress(RussiaRouteUpdateStage.checking);
+      final current = await _loadStatus();
+      if (current.available) {
+        _emitProgress(RussiaRouteUpdateStage.complete);
+        return current;
       }
-    }
-  }
-
-  Future<RussiaRouteDataStatus> _ensureBundledInstalled() async {
-    _emitProgress(RussiaRouteUpdateStage.checking);
-    final current = await loadStatus();
-    if (current.available) {
+      final paths = await _storagePaths();
+      final metadata = await _readMetadata(paths);
+      await _installBundledFallback(paths, metadata);
+      final result = await _loadStatus();
       _emitProgress(RussiaRouteUpdateStage.complete);
-      return current;
-    }
-    final paths = await _storagePaths();
-    await Directory(paths.baseDirectoryPath).create(recursive: true);
-    final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    final packageInfo = await _installBundledRoutePackage(
+      return result;
+    },
+  );
+
+  Future<void> _installBundledFallback(
+    _RussiaRouteStoragePaths paths,
+    Map<String, dynamic> metadata,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final package = await _installBundledRoutePackage(
       paths,
-      checkedAtMillis: nowMillis,
+      checkedAtMillis: now,
     );
+    final next = Map<String, dynamic>.from(metadata);
+    _setBundleMetadata(next, RussiaRouteBundle.runetFreedom, {
+      'updatedAtMillis': now,
+    });
+    _recordRunetPackage(next, package, installedAt: now, checkedAt: 0);
     _emitProgress(RussiaRouteUpdateStage.activating);
-    await _writeMetadata(
-      paths,
-      packageInfo: packageInfo.copyWith(
-        installedAtMillis: nowMillis,
-        // The bundled package is immediately usable, but a live refresh is
-        // still due as soon as the app has network access.
-        lastUpdateCheckAtMillis: 0,
-      ),
-      installedAtMillis: nowMillis,
-      lastUpdateCheckAtMillis: 0,
-      domainListCommunityUpdatedAtMillis: nowMillis,
-      domainListCommunityCategoryCount: 0,
-      domainListCommunityDomainCount: 0,
-      domainListCommunityMetadata: const {},
-    );
-    final status = await loadStatus();
-    _emitProgress(RussiaRouteUpdateStage.complete);
-    return status;
+    await _writeMetadata(paths, next);
+    metadata.addAll(next);
   }
 
-  Future<RussiaRouteDataStatus> deleteInstalled() async {
-    await waitForGenerationCleanup();
-    final paths = await _storagePaths();
-    final base = Directory(paths.baseDirectoryPath);
-    if (base.existsSync()) {
-      await base.delete(recursive: true);
-    }
-    return const RussiaRouteDataStatus.unavailable();
-  }
+  Future<RussiaRouteDataStatus> deleteInstalled() => _runUpdate(
+    bundles: const {},
+    force: true,
+    bundledOnly: true,
+    update: () async {
+      final paths = await _storagePaths();
+      final base = Directory(paths.baseDirectoryPath);
+      if (base.existsSync()) await base.delete(recursive: true);
+      return const RussiaRouteDataStatus.unavailable();
+    },
+  );
 
   Future<RussiaRouteUpdateCheck> checkForUpdate() async {
-    final current = await loadStatus();
     final latest = await _fetchLatestRunetFreedomRelease();
-    final updateAvailable =
-        !current.available ||
-        current.sourceKind != sourceKindLive ||
-        current.releaseTag != latest.tagName;
-    if (updateAvailable || !current.available) {
-      return RussiaRouteUpdateCheck(
-        status: current,
-        latestTag: latest.tagName,
-        updateAvailable: true,
-      );
-    }
-
-    final paths = await _storagePaths();
-    final checkedAtMillis = DateTime.now().millisecondsSinceEpoch;
-    final installedAtMillis = current.installedAtMillis ?? checkedAtMillis;
-    await _writeMetadata(
-      paths,
-      packageInfo: _InstalledRoutePackageInfo.fromStatus(current).copyWith(
-        installedAtMillis: installedAtMillis,
-        lastUpdateCheckAtMillis: checkedAtMillis,
-      ),
-      installedAtMillis: installedAtMillis,
-      lastUpdateCheckAtMillis: checkedAtMillis,
-      domainListCommunityUpdatedAtMillis:
-          current.domainListCommunityUpdatedAtMillis ?? checkedAtMillis,
-      domainListCommunityCategoryCount:
-          current.domainListCommunityCategoryCount,
-      domainListCommunityDomainCount: current.domainListCommunityDomainCount,
-      domainListCommunityMetadata: current.domainListCommunityMetadata,
-      domainListCommunityCompilerVersion:
-          current.domainListCommunityCompilerVersion,
-      domainListCommunityCompiledDirectory:
-          current.domainListCommunityCompiledDirectory,
+    var updateAvailable = true;
+    final status = await _runUpdate(
+      bundles: const {},
+      force: false,
+      bundledOnly: true,
+      update: () async {
+        final current = await _loadStatus();
+        updateAvailable =
+            !current.available ||
+            current.sourceKind != sourceKindLive ||
+            current.releaseTag != latest.tagName;
+        if (updateAvailable) return current;
+        final paths = await _storagePaths();
+        final metadata = await _readMetadata(paths);
+        metadata['lastUpdateCheckAtMillis'] =
+            DateTime.now().millisecondsSinceEpoch;
+        _setBundleMetadata(metadata, RussiaRouteBundle.runetFreedom, {
+          ..._bundleMetadata(metadata, RussiaRouteBundle.runetFreedom),
+          'updateFailed': false,
+        });
+        await _writeMetadata(paths, metadata);
+        return _loadStatus();
+      },
     );
     return RussiaRouteUpdateCheck(
-      status: await loadStatus(),
+      status: status,
       latestTag: latest.tagName,
-      updateAvailable: false,
+      updateAvailable: updateAvailable,
     );
   }
 
-  Future<RussiaRouteDataStatus> ensureUpdated({bool force = false}) async {
-    while (_cleanupInFlight != null) {
-      await _cleanupInFlight;
-    }
-    final inFlight = _updateInFlight;
-    if (inFlight != null) {
-      return inFlight;
-    }
-    final future = _ensureUpdated(force: force);
-    _updateInFlight = future;
-    try {
-      return await future;
-    } finally {
-      if (identical(_updateInFlight, future)) {
+  Future<RussiaRouteDataStatus> ensureUpdated({
+    bool force = false,
+    Set<RussiaRouteBundle> bundles = allBundles,
+  }) {
+    final requested = Set<RussiaRouteBundle>.unmodifiable(bundles);
+    return _runUpdate(
+      bundles: requested,
+      force: force,
+      bundledOnly: false,
+      update: () => _ensureUpdated(force: force, bundles: requested),
+    );
+  }
+
+  Future<RussiaRouteDataStatus> _runUpdate({
+    required Set<RussiaRouteBundle> bundles,
+    required bool force,
+    required bool bundledOnly,
+    required Future<RussiaRouteDataStatus> Function() update,
+  }) async {
+    while (true) {
+      while (_cleanupInFlight != null) {
+        await _cleanupInFlight;
+      }
+      final migration = _domainListMigrationInFlight;
+      if (migration != null) {
+        await migration;
+        continue;
+      }
+      final pending = _updateInFlight;
+      if (pending != null) {
+        if (bundles.isNotEmpty &&
+            _updatingBundles.containsAll(bundles) &&
+            (bundledOnly || !_isBundledOnly) &&
+            (!force || _isForcedUpdate)) {
+          return pending;
+        }
+        try {
+          await pending;
+        } catch (_) {
+          // The requested operation gets its own attempt.
+        }
+        continue;
+      }
+      // Schedule after registering the operation so progress listeners see it.
+      final future = Future<RussiaRouteDataStatus>.microtask(update);
+      _updateInFlight = future;
+      _updatingBundles = bundles;
+      _isForcedUpdate = force;
+      _isBundledOnly = bundledOnly;
+      try {
+        return await future;
+      } finally {
         _updateInFlight = null;
+        _updatingBundles = const {};
         progress.value = null;
       }
     }
   }
 
-  Future<RussiaRouteDataStatus> _ensureUpdated({required bool force}) async {
+  Future<RussiaRouteDataStatus> _ensureUpdated({
+    required bool force,
+    required Set<RussiaRouteBundle> bundles,
+  }) async {
     _emitProgress(RussiaRouteUpdateStage.checking);
-    final current = await loadStatus();
-    if (!force && current.available && !current.needsDailyUpdate) {
-      if (current.domainListCommunityCategoryCount > 0 &&
-          current.domainListCommunityCompilerVersion <
-              _domainListCommunityCompilerVersion) {
-        return _migrateCachedDomainLists(current);
-      }
-      return current;
+    var status = await _loadStatus();
+    final needsCompilerMigration =
+        status.domainListCommunityCategoryCount > 0 &&
+        status.domainListCommunityCompilerVersion <
+            _domainListCommunityCompilerVersion;
+    if (!force &&
+        needsCompilerMigration &&
+        bundles.any(_domainListFileNames.containsKey)) {
+      status = await _migrateCachedDomainLists(status);
     }
+
     final paths = await _storagePaths();
-    await Directory(paths.baseDirectoryPath).create(recursive: true);
-    await Directory(
-      paths.domainListCommunitySourceDirectoryPath,
-    ).create(recursive: true);
-    final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    var packageInfo = _InstalledRoutePackageInfo.fromStatus(current);
-    var livePackageCheckSucceeded = false;
-    Uint8List? livePackageBytes;
-    _RunetFreedomReleaseAsset? releaseAsset;
+    final metadata = await _readMetadata(paths);
+    final compiledDirectory = _newCompiledDirectory();
+    final downloadedCategories = <String, _DownloadedCategory>{};
 
-    // 1. Download rule package if forced, missing, or new release tag available.
-    try {
-      final release = await _fetchLatestRunetFreedomRelease();
-      releaseAsset = release;
-      final needsPackageDownload =
-          force ||
-          !current.available ||
-          current.sourceKind != sourceKindLive ||
-          current.releaseTag != release.tagName;
-
-      if (needsPackageDownload) {
-        livePackageBytes = await _downloadBytes(
-          release.assetUrl,
-          maxBytes: _maxSingboxZipBytes,
-          expectedBytes: release.assetSizeBytes,
-          onProgress: (completed, total) => _emitProgress(
-            RussiaRouteUpdateStage.downloadingPackage,
-            completedBytes: completed,
-            totalBytes: total,
-          ),
-        );
-      } else {
-        packageInfo = _InstalledRoutePackageInfo.fromStatus(
-          current,
-        ).copyWith(lastUpdateCheckAtMillis: nowMillis);
+    for (final bundle in RussiaRouteBundle.values) {
+      if (!bundles.contains(bundle)) continue;
+      final bundleStatus = status.bundleStatus(bundle);
+      final compilerOutdated =
+          _domainListFileNames.containsKey(bundle) &&
+          status.domainListCommunityCompilerVersion <
+              _domainListCommunityCompilerVersion;
+      if (!force && !bundleStatus.needsDailyUpdate && !compilerOutdated) {
+        continue;
       }
-      livePackageCheckSucceeded = true;
-    } catch (_) {
-      if (force && current.available) {
-        rethrow;
-      }
-      if (current.available) {
-        packageInfo = _InstalledRoutePackageInfo.fromStatus(current);
-      } else {
-        packageInfo = await _installBundledRoutePackage(
-          paths,
-          checkedAtMillis: nowMillis,
-        );
-      }
-    }
 
-    final successfulCheckAtMillis = livePackageCheckSucceeded
-        ? nowMillis
-        : current.lastUpdateCheckAtMillis ?? 0;
-
-    // 2. Download domain-list-community service categories.
-    _DownloadedDomainListCommunity? downloaded;
-    try {
-      downloaded = await _downloadDomainListCommunityCategories(
-        sourceDirectoryPath: paths.domainListCommunitySourceDirectoryPath,
-        previousMetadata: current.domainListCommunityMetadata,
-        force: force,
-      );
-    } catch (_) {
-      // The domain-list enrichment is optional. The six verified runetfreedom
-      // rule sets already provide the complete smart-routing fallback, so a
-      // raw GitHub outage must not make a fresh/offline installation unusable.
-    }
-
-    // 3. Extract downloaded package archive (all network operations are now complete).
-    if (livePackageBytes != null && releaseAsset != null) {
-      _emitProgress(RussiaRouteUpdateStage.extractingPackage);
-      final prepared = await _prepareRoutePackageArchiveInBackground(
-        livePackageBytes,
-      );
-      await _writeRoutePackage(paths, prepared.files);
-      packageInfo = _InstalledRoutePackageInfo(
-        sourceKind: sourceKindLive,
-        versionTag: releaseAsset.tagName,
-        releaseTag: releaseAsset.tagName,
-        packageSha256: prepared.sha256,
-        assetSizeBytes: releaseAsset.assetSizeBytes ?? livePackageBytes.length,
-        verifiedAtMillis: nowMillis,
-        lastUpdateCheckAtMillis: nowMillis,
-        verifiedFiles: prepared.files.keys.toList()..sort(),
-      );
-    }
-
-    // 4. Compile domain lists into local .srs rule sets.
-    var downloadedCategoryCount = current.domainListCommunityCategoryCount;
-    var compiledDomainCount = current.domainListCommunityDomainCount;
-    var domainListCommunityUpdatedAtMillis =
-        current.domainListCommunityUpdatedAtMillis;
-    var categoryMetadata = current.domainListCommunityMetadata;
-    var compilerVersion = current.domainListCommunityCompilerVersion;
-    var compiledDirectory = current.domainListCommunityCompiledDirectory;
-
-    if (downloaded != null) {
-      final compiledFilesAvailable =
-          current.curatedDirectServicesPath != null &&
-          current.aiServicesPath != null &&
-          current.socialServicesPath != null;
-      final shouldRebuildDomainLists =
-          force ||
-          compilerVersion != _domainListCommunityCompilerVersion ||
-          shouldRebuildRussiaRouteDomainLists(
-            currentDataAvailable: current.available,
-            downloadedContentChanged: downloaded.changed,
-            compiledFilesAvailable: compiledFilesAvailable,
+      final next = Map<String, dynamic>.from(metadata);
+      try {
+        if (bundle == RussiaRouteBundle.runetFreedom) {
+          await _refreshRunetPackage(paths, next, status, force: force);
+        } else {
+          await _refreshCompiledBundle(
+            paths,
+            next,
+            bundle,
+            directory: compiledDirectory,
+            force: force,
+            downloadedCategories: downloadedCategories,
           );
-
-      if (shouldRebuildDomainLists) {
-        _emitProgress(RussiaRouteUpdateStage.compiling);
-        final categoryFiles = downloaded.categoryFiles;
-        final compiled = await _compileAndInstallDomainLists(
-          paths,
-          categoryFiles,
-        );
-        downloadedCategoryCount = categoryFiles.length;
-        compiledDomainCount = compiled.domainCount;
-        compilerVersion = _domainListCommunityCompilerVersion;
-        compiledDirectory = compiled.directory;
-        domainListCommunityUpdatedAtMillis = nowMillis;
+        }
+        _emitProgress(RussiaRouteUpdateStage.activating);
+        await _writeMetadata(paths, next);
+        metadata.addAll(next);
+      } catch (error) {
+        debugPrint('Routing rules update failed for ${bundle.name}: $error');
+        try {
+          if (bundle == RussiaRouteBundle.runetFreedom && !status.available) {
+            await _installBundledFallback(paths, metadata);
+          }
+          _setBundleMetadata(metadata, bundle, {
+            ..._bundleMetadata(metadata, bundle),
+            'updateFailed': true,
+          });
+          await _writeMetadata(paths, metadata);
+        } catch (fallbackError) {
+          debugPrint('Could not save routing update status: $fallbackError');
+        }
       }
-      categoryMetadata = downloaded.metadata;
+    }
+    final result = await _loadStatus();
+    _emitProgress(RussiaRouteUpdateStage.complete);
+    return result;
+  }
+
+  Future<void> _refreshRunetPackage(
+    _RussiaRouteStoragePaths paths,
+    Map<String, dynamic> metadata,
+    RussiaRouteDataStatus current, {
+    required bool force,
+  }) async {
+    _emitProgress(RussiaRouteUpdateStage.checking, isRetryingWithoutVpn: false);
+    final release = await _fetchLatestRunetFreedomRelease();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final previous = _bundleMetadata(metadata, RussiaRouteBundle.runetFreedom);
+    if (!force &&
+        current.available &&
+        current.sourceKind == sourceKindLive &&
+        current.releaseTag == release.tagName) {
+      _setBundleMetadata(metadata, RussiaRouteBundle.runetFreedom, {
+        ...previous,
+        'updateFailed': false,
+      });
+      metadata['lastUpdateCheckAtMillis'] = now;
+      return;
     }
 
-    // 5. Safely replace rules and persist metadata.
-    final installedAtMillis = current.installedAtMillis ?? nowMillis;
-    _emitProgress(RussiaRouteUpdateStage.activating);
-    await _writeMetadata(
-      paths,
-      packageInfo: packageInfo.copyWith(
-        installedAtMillis: installedAtMillis,
-        lastUpdateCheckAtMillis: successfulCheckAtMillis,
+    final bytes = await _downloadBytes(
+      release.assetUrl,
+      maxBytes: _maxSingboxZipBytes,
+      expectedBytes: release.assetSizeBytes,
+      onProgress: (completed, total) => _emitProgress(
+        RussiaRouteUpdateStage.downloadingPackage,
+        completedBytes: completed,
+        totalBytes: total,
       ),
-      installedAtMillis: installedAtMillis,
-      lastUpdateCheckAtMillis: successfulCheckAtMillis,
-      domainListCommunityUpdatedAtMillis:
-          domainListCommunityUpdatedAtMillis ?? nowMillis,
-      domainListCommunityCategoryCount: downloadedCategoryCount,
-      domainListCommunityDomainCount: compiledDomainCount,
-      domainListCommunityMetadata: categoryMetadata,
-      domainListCommunityCompilerVersion: compilerVersion,
-      domainListCommunityCompiledDirectory: compiledDirectory,
     );
+    _emitProgress(RussiaRouteUpdateStage.extractingPackage);
+    final prepared = await _prepareRoutePackageArchiveInBackground(bytes);
+    _validateRoutePackageFiles(prepared.files);
+    final unchanged =
+        current.available &&
+        await _installedPackageMatches(current, prepared.files);
 
-    final status = await _loadStatus();
-    _emitProgress(RussiaRouteUpdateStage.complete);
-    return status;
+    if (!unchanged) {
+      final directory = 'runetfreedom-${DateTime.now().microsecondsSinceEpoch}';
+      await _writeRoutePackage(
+        '${paths.baseDirectoryPath}/$directory',
+        prepared.files,
+      );
+      _setBundleMetadata(metadata, RussiaRouteBundle.runetFreedom, {
+        'directory': directory,
+        'previousDirectory': previous['directory'],
+        'updatedAtMillis': now,
+        'updateFailed': false,
+      });
+    } else {
+      _setBundleMetadata(metadata, RussiaRouteBundle.runetFreedom, {
+        ...previous,
+        'updateFailed': false,
+      });
+    }
+    _recordRunetPackage(
+      metadata,
+      _InstalledRoutePackageInfo(
+        sourceKind: sourceKindLive,
+        versionTag: release.tagName,
+        releaseTag: release.tagName,
+        packageSha256: prepared.sha256,
+        assetSizeBytes: release.assetSizeBytes ?? bytes.length,
+        verifiedAtMillis: now,
+        verifiedFiles: prepared.files.keys.toList()..sort(),
+      ),
+      installedAt: current.available ? current.installedAtMillis ?? now : now,
+      checkedAt: now,
+    );
+  }
+
+  Future<bool> _installedPackageMatches(
+    RussiaRouteDataStatus current,
+    Map<String, Uint8List> files,
+  ) async {
+    final installed = {
+      'geositeRuBlocked': current.geositeRuBlockedPath,
+      'geositeRuAvailableOnlyInside': current.geositeRuAvailableOnlyInsidePath,
+      'geositeCategoryRu': current.geositeCategoryRuPath,
+      'geoipRuBlocked': current.geoipRuBlockedPath,
+      'geoipRuWhitelist': current.geoipRuWhitelistPath,
+      'geoipRu': current.geoipRuPath,
+    };
+    for (final entry in installed.entries) {
+      if (entry.value == null ||
+          !await _fileMatches(File(entry.value!), files[entry.key]!)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _fileMatches(File file, List<int> bytes) async {
+    try {
+      return await file.length() == bytes.length &&
+          listEquals(await file.readAsBytes(), bytes);
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  void _recordRunetPackage(
+    Map<String, dynamic> metadata,
+    _InstalledRoutePackageInfo package, {
+    required int installedAt,
+    required int checkedAt,
+  }) {
+    metadata.addAll({
+      'sourceName': sourceName,
+      'sourceKind': package.sourceKind,
+      'versionTag': package.versionTag,
+      'releaseTag': package.releaseTag,
+      'packageSha256': package.packageSha256,
+      'assetSizeBytes': package.assetSizeBytes,
+      'verifiedAtMillis': package.verifiedAtMillis,
+      'verifiedFiles': package.verifiedFiles,
+      'installedAtMillis': installedAt,
+      'lastUpdateCheckAtMillis': checkedAt,
+    });
+  }
+
+  Future<void> _refreshCompiledBundle(
+    _RussiaRouteStoragePaths paths,
+    Map<String, dynamic> metadata,
+    RussiaRouteBundle bundle, {
+    required String directory,
+    required bool force,
+    required Map<String, _DownloadedCategory> downloadedCategories,
+  }) async {
+    final downloaded = await _downloadDomainListCommunityCategories(
+      bundle: bundle,
+      sourceDirectoryPath: paths.domainListCommunitySourceDirectoryPath,
+      previousMetadata: _categoryMetadataFromJson(
+        metadata['domainListCommunityMetadata'],
+      ),
+      downloadedCategories: downloadedCategories,
+      force: force,
+    );
+    final previous = _bundleMetadata(metadata, bundle);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final existingPath = _compiledPath(paths, metadata, bundle);
+    final categories = downloaded.categoryFiles;
+    final sortedKeys = categories.keys.toList()..sort();
+    final sourceRevision = crypto.sha256
+        .convert(
+          utf8.encode(
+            jsonEncode({for (final key in sortedKeys) key: categories[key]}),
+          ),
+        )
+        .toString();
+    final currentCompiler =
+        metadata['domainListCommunityCompilerVersion'] ==
+            _domainListCommunityCompilerVersion &&
+        (previous['compilerVersion'] ?? _domainListCommunityCompilerVersion) ==
+            _domainListCommunityCompilerVersion;
+    final shouldRebuild =
+        !currentCompiler ||
+        shouldRebuildRussiaRouteDomainLists(
+          currentDataAvailable: previous['sourceRevision'] != null,
+          downloadedContentChanged:
+              previous['sourceRevision'] != sourceRevision,
+          compiledFilesAvailable: existingPath != null,
+        );
+    if (!shouldRebuild) {
+      _setBundleMetadata(metadata, bundle, {
+        ...previous,
+        'lastUpdateCheckAtMillis': now,
+        'updateFailed': false,
+      });
+    } else {
+      _emitProgress(RussiaRouteUpdateStage.compiling);
+      final artifact = await compute(_compileBundleArtifact, (
+        bundle: bundle,
+        categories: categories,
+      ), debugLabel: 'route-services-compile');
+      if (artifact.domainCount == 0) {
+        throw FormatException(
+          'Routing list ${bundle.name} contains no usable entries',
+        );
+      }
+      final existingDirectory = previous.containsKey('directory')
+          ? previous['directory']
+          : metadata['domainListCommunityCompiledDirectory'];
+      final unchanged =
+          existingPath != null &&
+          currentCompiler &&
+          await _fileMatches(File(existingPath), artifact.ruleSetBytes);
+      if (!unchanged) {
+        await _writeAtomically(
+          '${paths.baseDirectoryPath}/$directory/${_domainListFileNames[bundle]}',
+          artifact.ruleSetBytes,
+        );
+      }
+      _recordCompiledBundle(
+        metadata,
+        bundle,
+        directory: unchanged ? existingDirectory as String? : directory,
+        now: now,
+        useExistingFile: unchanged,
+        domainCount: artifact.domainCount,
+        sourceRevision: sourceRevision,
+      );
+    }
+
+    final categoryMetadata = _categoryMetadataFromJson(
+      metadata['domainListCommunityMetadata'],
+    );
+    for (final entry in downloaded.metadata.entries) {
+      final cacheFile = _categoryCacheFile(
+        paths.domainListCommunitySourceDirectoryPath,
+        entry.key,
+      );
+      final content = utf8.encode(categories[entry.key]!);
+      if (!await _fileMatches(cacheFile, content)) {
+        await _writeAtomically(cacheFile.path, content);
+      }
+    }
+    final combined = {...categoryMetadata, ...downloaded.metadata};
+    metadata['domainListCommunityCategoryCount'] = combined.length;
+    metadata['domainListCommunityMetadata'] = {
+      for (final entry in combined.entries) entry.key: entry.value.toJson(),
+    };
   }
 
   Future<void> _writeMetadata(
-    _RussiaRouteStoragePaths paths, {
-    required _InstalledRoutePackageInfo packageInfo,
-    required int installedAtMillis,
-    required int lastUpdateCheckAtMillis,
-    required int domainListCommunityUpdatedAtMillis,
-    required int domainListCommunityCategoryCount,
-    required int domainListCommunityDomainCount,
-    required Map<String, RussiaRouteCategoryMetadata>
-    domainListCommunityMetadata,
-    int domainListCommunityCompilerVersion = 0,
-    String? domainListCommunityCompiledDirectory,
-  }) async {
-    String? previousCompiledDirectory;
+    _RussiaRouteStoragePaths paths,
+    Map<String, dynamic> metadata,
+  ) async {
     _metadataWrites++;
     try {
-      await waitForGenerationCleanup();
-      final metadataFile = File(paths.metadataPath);
-      try {
-        final previousMetadata = jsonDecode(await metadataFile.readAsString());
-        if (previousMetadata is Map) {
-          final oldActive =
-              previousMetadata['domainListCommunityCompiledDirectory'];
-          final oldPrevious =
-              previousMetadata['domainListCommunityPreviousCompiledDirectory'];
-          final previous = oldActive == domainListCommunityCompiledDirectory
-              ? oldPrevious
-              : oldActive;
-          if (previous is String &&
-              _compiledGenerationPattern.hasMatch(previous)) {
-            previousCompiledDirectory = previous;
-          }
-        }
-      } on FileSystemException {
-        previousCompiledDirectory = null;
-      } on FormatException {
-        previousCompiledDirectory = null;
-      }
       await _writeAtomically(
         paths.metadataPath,
-        utf8.encode(
-          jsonEncode({
-            'sourceName': sourceName,
-            'versionTag': packageInfo.versionTag,
-            'sourceKind': packageInfo.sourceKind,
-            if (packageInfo.releaseTag != null)
-              'releaseTag': packageInfo.releaseTag,
-            if (packageInfo.packageSha256 != null)
-              'packageSha256': packageInfo.packageSha256,
-            if (packageInfo.assetSizeBytes != null)
-              'assetSizeBytes': packageInfo.assetSizeBytes,
-            if (packageInfo.verifiedAtMillis != null)
-              'verifiedAtMillis': packageInfo.verifiedAtMillis,
-            'verifiedFiles': packageInfo.verifiedFiles,
-            'installedAtMillis': installedAtMillis,
-            'lastUpdateCheckAtMillis': lastUpdateCheckAtMillis,
-            'domainListCommunityUpdatedAtMillis':
-                domainListCommunityUpdatedAtMillis,
-            'domainListCommunityCategoryCount':
-                domainListCommunityCategoryCount,
-            'domainListCommunityDomainCount': domainListCommunityDomainCount,
-            'domainListCommunityCompilerVersion':
-                domainListCommunityCompilerVersion,
-            'domainListCommunityCompiledDirectory':
-                ?domainListCommunityCompiledDirectory,
-            'domainListCommunityPreviousCompiledDirectory':
-                ?previousCompiledDirectory,
-            'domainListCommunityMetadata': {
-              for (final entry in domainListCommunityMetadata.entries)
-                entry.key: entry.value.toJson(),
-            },
-          }),
-        ),
+        utf8.encode(jsonEncode(metadata)),
       );
     } finally {
       _metadataWrites--;
@@ -1145,7 +1414,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       'geoipRuWhitelist': await _loadBundledAsset(_assetGeoipRuWhitelist),
       'geoipRu': await _loadBundledAsset(_assetGeoipRu),
     };
-    await _writeRoutePackage(paths, files);
+    await _writeRoutePackage(paths.baseDirectoryPath, files);
     final bundledTimestamp = parseRussiaRouteVersionTimestamp(bundledTag);
     return _InstalledRoutePackageInfo(
       sourceKind: sourceKindBundled,
@@ -1153,7 +1422,6 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       releaseTag: bundledTag,
       verifiedAtMillis:
           bundledTimestamp?.millisecondsSinceEpoch ?? checkedAtMillis,
-      lastUpdateCheckAtMillis: checkedAtMillis,
       verifiedFiles: files.keys.toList()..sort(),
     );
   }
@@ -1352,28 +1620,13 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
   }
 
   Future<void> _writeRoutePackage(
-    _RussiaRouteStoragePaths paths,
+    String directory,
     Map<String, Uint8List> files,
   ) async {
     _validateRoutePackageFiles(files);
-    await _writeAtomically(
-      paths.geositeRuBlockedPath,
-      files['geositeRuBlocked']!,
-    );
-    await _writeAtomically(
-      paths.geositeRuAvailableOnlyInsidePath,
-      files['geositeRuAvailableOnlyInside']!,
-    );
-    await _writeAtomically(
-      paths.geositeCategoryRuPath,
-      files['geositeCategoryRu']!,
-    );
-    await _writeAtomically(paths.geoipRuBlockedPath, files['geoipRuBlocked']!);
-    await _writeAtomically(
-      paths.geoipRuWhitelistPath,
-      files['geoipRuWhitelist']!,
-    );
-    await _writeAtomically(paths.geoipRuPath, files['geoipRu']!);
+    for (final entry in _releaseZipEntries.entries) {
+      await _writeAtomically('$directory/${entry.key}', files[entry.value]!);
+    }
   }
 
   static void _validateRoutePackageFiles(Map<String, Uint8List> files) {
@@ -1393,55 +1646,54 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
 
   Future<_DownloadedDomainListCommunity>
   _downloadDomainListCommunityCategories({
+    required RussiaRouteBundle bundle,
     required String sourceDirectoryPath,
     required Map<String, RussiaRouteCategoryMetadata> previousMetadata,
+    required Map<String, _DownloadedCategory> downloadedCategories,
     required bool force,
   }) async {
     final categoryFiles = <String, String>{};
     final metadata = <String, RussiaRouteCategoryMetadata>{};
-    final pending = <String>[
-      ..._curatedDirectServicesCategories,
-      ..._aiServicesCategories,
-      ..._socialServicesCategories,
-    ];
-    var changed = false;
-    var completed = 0;
+    final pending = [..._rootCategoriesFor(bundle)];
     _emitProgress(
       RussiaRouteUpdateStage.downloadingCategories,
-      completedItems: 0,
+      isRetryingWithoutVpn: false,
     );
     while (pending.isNotEmpty) {
       final category = pending.removeLast();
-      if (categoryFiles.containsKey(category)) {
-        continue;
-      }
-      final downloaded = await _downloadDomainListCommunityCategory(
-        category: category,
-        sourceDirectoryPath: sourceDirectoryPath,
-        previousMetadata: previousMetadata[category],
-        force: force,
-      );
+      if (categoryFiles.containsKey(category)) continue;
+      final downloaded = downloadedCategories[category] ??=
+          await _downloadDomainListCommunityCategory(
+            category: category,
+            sourceDirectoryPath: sourceDirectoryPath,
+            previousMetadata: previousMetadata[category],
+            force: force,
+          );
       final content = downloaded.content;
       categoryFiles[category] = content;
       metadata[category] = downloaded.metadata;
-      changed = changed || downloaded.changed;
-      completed++;
-      for (final include in _extractIncludedCategories(content)) {
-        if (!categoryFiles.containsKey(include)) {
-          pending.add(include);
-        }
-      }
+      pending.addAll(_extractIncludedCategories(content));
       _emitProgress(
         RussiaRouteUpdateStage.downloadingCategories,
-        completedItems: completed,
+        completedItems: categoryFiles.length,
       );
     }
     return _DownloadedDomainListCommunity(
       categoryFiles: categoryFiles,
       metadata: metadata,
-      changed: changed,
     );
   }
+
+  static List<String> _rootCategoriesFor(RussiaRouteBundle bundle) =>
+      switch (bundle) {
+        RussiaRouteBundle.curatedDirect => _curatedDirectServicesCategories,
+        RussiaRouteBundle.ai => _aiServicesCategories,
+        RussiaRouteBundle.social => _socialServicesCategories,
+        RussiaRouteBundle.runetFreedom => throw ArgumentError.value(bundle),
+      };
+
+  File _categoryCacheFile(String sourceDirectoryPath, String category) =>
+      File('$sourceDirectoryPath/${Uri.encodeComponent(category)}.txt');
 
   Future<_DownloadedCategory> _downloadDomainListCommunityCategory({
     required String category,
@@ -1450,9 +1702,7 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     required bool force,
   }) async {
     final uri = Uri.parse('$_domainListCommunityRawBaseUrl/$category');
-    final cacheFile = File(
-      '$sourceDirectoryPath/${Uri.encodeComponent(category)}.txt',
-    );
+    final cacheFile = _categoryCacheFile(sourceDirectoryPath, category);
     final headers = <String, String>{'Accept': 'text/plain,*/*'};
     if (!force && cacheFile.existsSync()) {
       final etag = previousMetadata?.etag;
@@ -1483,12 +1733,10 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
         }
       },
     );
-    if (response.statusCode == HttpStatus.notModified &&
-        cacheFile.existsSync()) {
+    if (response.statusCode == HttpStatus.notModified) {
       return _DownloadedCategory(
         content: await cacheFile.readAsString(),
         metadata: previousMetadata ?? const RussiaRouteCategoryMetadata(),
-        changed: false,
       );
     }
     final bytes = response.bytes ?? Uint8List(0);
@@ -1497,7 +1745,6 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
         ? await cacheFile.readAsString()
         : null;
     final changed = previousContent != content;
-    await _writeAtomically(cacheFile.path, utf8.encode(content));
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
     return _DownloadedCategory(
       content: content,
@@ -1508,7 +1755,6 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
             ? nowMillis
             : previousMetadata?.updatedAtMillis ?? nowMillis,
       ),
-      changed: changed,
     );
   }
 
@@ -1538,22 +1784,22 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
       return;
     } on FileSystemException {
       final backup = File('$path.bak');
-      if (backup.existsSync()) {
-        await backup.delete();
-      }
       if (target.existsSync()) {
+        if (backup.existsSync()) await backup.delete();
         await target.rename(backup.path);
       }
       try {
         await temp.rename(path);
-        if (backup.existsSync()) {
-          await backup.delete();
-        }
       } catch (_) {
         if (!target.existsSync() && backup.existsSync()) {
           await backup.rename(path);
         }
         rethrow;
+      }
+      try {
+        if (backup.existsSync()) await backup.delete();
+      } on FileSystemException {
+        // The new file is already active. A later write can remove the backup.
       }
     }
   }
@@ -1567,20 +1813,6 @@ class RussiaRouteDataService implements RussiaRouteUpdateActivity {
     final base = Directory('$baseDirPath/route-data/russia-v2ray-rules-dat');
     return _RussiaRouteStoragePaths(
       baseDirectoryPath: base.path,
-      geositeRuBlockedPath:
-          '${base.path}/rule-set-geosite/geosite-ru-blocked.srs',
-      geositeRuAvailableOnlyInsidePath:
-          '${base.path}/rule-set-geosite/geosite-ru-available-only-inside.srs',
-      geositeCategoryRuPath:
-          '${base.path}/rule-set-geosite/geosite-category-ru.srs',
-      geoipRuBlockedPath: '${base.path}/rule-set-geoip/geoip-ru-blocked.srs',
-      geoipRuWhitelistPath:
-          '${base.path}/rule-set-geoip/geoip-ru-whitelist.srs',
-      geoipRuPath: '${base.path}/rule-set-geoip/geoip-ru.srs',
-      curatedDirectServicesPath:
-          '${base.path}/rule-set-geosite/ru-direct-services.srs',
-      aiServicesPath: '${base.path}/rule-set-geosite/ai-services.srs',
-      socialServicesPath: '${base.path}/rule-set-geosite/social-services.srs',
       domainListCommunitySourceDirectoryPath:
           '${base.path}/domain-list-community',
       metadataPath: '${base.path}/manifest.json',
@@ -1612,39 +1844,14 @@ Future<_PreparedRoutePackage> _prepareRoutePackageArchiveInBackground(
   );
 }
 
-class _RussiaRouteDataFilePath {
-  const _RussiaRouteDataFilePath(this.name, this.path);
-
-  final String name;
-  final String path;
-}
-
 class _RussiaRouteStoragePaths {
   const _RussiaRouteStoragePaths({
     required this.baseDirectoryPath,
-    required this.geositeRuBlockedPath,
-    required this.geositeRuAvailableOnlyInsidePath,
-    required this.geositeCategoryRuPath,
-    required this.geoipRuBlockedPath,
-    required this.geoipRuWhitelistPath,
-    required this.geoipRuPath,
-    required this.curatedDirectServicesPath,
-    required this.aiServicesPath,
-    required this.socialServicesPath,
     required this.domainListCommunitySourceDirectoryPath,
     required this.metadataPath,
   });
 
   final String baseDirectoryPath;
-  final String geositeRuBlockedPath;
-  final String geositeRuAvailableOnlyInsidePath;
-  final String geositeCategoryRuPath;
-  final String geoipRuBlockedPath;
-  final String geoipRuWhitelistPath;
-  final String geoipRuPath;
-  final String curatedDirectServicesPath;
-  final String aiServicesPath;
-  final String socialServicesPath;
   final String domainListCommunitySourceDirectoryPath;
   final String metadataPath;
 }
@@ -1669,8 +1876,6 @@ class _InstalledRoutePackageInfo {
     this.packageSha256,
     this.assetSizeBytes,
     this.verifiedAtMillis,
-    this.installedAtMillis,
-    this.lastUpdateCheckAtMillis,
     this.verifiedFiles = const <String>[],
   });
 
@@ -1680,72 +1885,24 @@ class _InstalledRoutePackageInfo {
   final String? packageSha256;
   final int? assetSizeBytes;
   final int? verifiedAtMillis;
-  final int? installedAtMillis;
-  final int? lastUpdateCheckAtMillis;
   final List<String> verifiedFiles;
-
-  static _InstalledRoutePackageInfo fromStatus(RussiaRouteDataStatus status) {
-    return _InstalledRoutePackageInfo(
-      sourceKind: status.sourceKind,
-      versionTag: status.versionTag,
-      releaseTag: status.releaseTag,
-      packageSha256: status.packageSha256,
-      assetSizeBytes: status.assetSizeBytes,
-      verifiedAtMillis: status.verifiedAtMillis,
-      installedAtMillis: status.installedAtMillis,
-      lastUpdateCheckAtMillis: status.lastUpdateCheckAtMillis,
-      verifiedFiles: status.verifiedFiles,
-    );
-  }
-
-  _InstalledRoutePackageInfo copyWith({
-    String? sourceKind,
-    String? versionTag,
-    String? releaseTag,
-    String? packageSha256,
-    int? assetSizeBytes,
-    int? verifiedAtMillis,
-    int? installedAtMillis,
-    int? lastUpdateCheckAtMillis,
-    List<String>? verifiedFiles,
-  }) {
-    return _InstalledRoutePackageInfo(
-      sourceKind: sourceKind ?? this.sourceKind,
-      versionTag: versionTag ?? this.versionTag,
-      releaseTag: releaseTag ?? this.releaseTag,
-      packageSha256: packageSha256 ?? this.packageSha256,
-      assetSizeBytes: assetSizeBytes ?? this.assetSizeBytes,
-      verifiedAtMillis: verifiedAtMillis ?? this.verifiedAtMillis,
-      installedAtMillis: installedAtMillis ?? this.installedAtMillis,
-      lastUpdateCheckAtMillis:
-          lastUpdateCheckAtMillis ?? this.lastUpdateCheckAtMillis,
-      verifiedFiles: verifiedFiles ?? this.verifiedFiles,
-    );
-  }
 }
 
 class _DownloadedDomainListCommunity {
   const _DownloadedDomainListCommunity({
     required this.categoryFiles,
     required this.metadata,
-    required this.changed,
   });
 
   final Map<String, String> categoryFiles;
   final Map<String, RussiaRouteCategoryMetadata> metadata;
-  final bool changed;
 }
 
 class _DownloadedCategory {
-  const _DownloadedCategory({
-    required this.content,
-    required this.metadata,
-    required this.changed,
-  });
+  const _DownloadedCategory({required this.content, required this.metadata});
 
   final String content;
   final RussiaRouteCategoryMetadata metadata;
-  final bool changed;
 }
 
 Map<String, RussiaRouteCategoryMetadata> _categoryMetadataFromJson(
@@ -1805,6 +1962,17 @@ Map<String, _CompiledRuleSetArtifact> _compileDomainListCommunityArtifacts(
   ),
   'ai-services.srs': _compileAiServicesArtifact(categoryFiles),
   'social-services.srs': _compileSocialServicesArtifact(categoryFiles),
+};
+
+_CompiledRuleSetArtifact _compileBundleArtifact(
+  ({RussiaRouteBundle bundle, Map<String, String> categories}) inputs,
+) => switch (inputs.bundle) {
+  RussiaRouteBundle.curatedDirect => _compileCuratedDirectServicesArtifact(
+    inputs.categories,
+  ),
+  RussiaRouteBundle.ai => _compileAiServicesArtifact(inputs.categories),
+  RussiaRouteBundle.social => _compileSocialServicesArtifact(inputs.categories),
+  RussiaRouteBundle.runetFreedom => throw ArgumentError.value(inputs.bundle),
 };
 
 _CompiledRuleSetArtifact _compileCuratedDirectServicesArtifact(

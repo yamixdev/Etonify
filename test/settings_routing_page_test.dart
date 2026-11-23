@@ -10,13 +10,111 @@ import 'package:meow_client/app/providers/app_settings_provider.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
+import 'package:meow_client/data/routing/traffic_route_inspector.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/features/settings/settings_routing_page.dart';
+import 'package:meow_client/features/settings/traffic_rule_tools.dart';
 import 'package:meow_client/features/settings/traffic_rules_page.dart';
 import 'package:meow_client/l10n/app_localizations.dart';
 import 'package:meow_client/widgets/app_loading_indicator.dart';
 
 void main() {
+  testWidgets('custom rules validate input and save the normalized rule', (
+    tester,
+  ) async {
+    List<TrafficRuleOverride>? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                saved = await Navigator.of(context)
+                    .push<List<TrafficRuleOverride>>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const TrafficRuleOverridesPage(rules: []),
+                      ),
+                    );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(TrafficRuleOverridesPage)),
+    );
+    await tester.tap(find.text(l10n.add));
+    await tester.pumpAndSettle();
+    final value = find.byKey(const ValueKey('traffic-rule-override-value'));
+    final saveRule = find.widgetWithText(FilledButton, l10n.saveAction);
+    await tester.enterText(value, 'https://example.org/path');
+    await tester.ensureVisible(saveRule);
+    await tester.tap(saveRule);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.trafficRuleInvalid), findsOneWidget);
+    await tester.enterText(value, '*.Example.ORG');
+    await tester.ensureVisible(saveRule);
+    await tester.tap(saveRule);
+    await tester.pumpAndSettle();
+    expect(find.text('example.org'), findsOneWidget);
+    expect(saved, isNull);
+    await tester.tap(find.widgetWithText(TextButton, l10n.saveAction));
+    await tester.pumpAndSettle();
+    expect(saved!.single.value, 'example.org');
+    expect(saved!.single.action, TrafficRuleAction.vpn);
+  });
+
+  testWidgets('route preview shows the resolver and clears stale results', (
+    tester,
+  ) async {
+    final checked = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: TrafficRoutePreviewPage(
+          onInspect: (target) async {
+            checked.add(target);
+            return TrafficRoutePreview(
+              target: target,
+              route: const TrafficRuleMatch(
+                tag: 'direct',
+                ruleIndex: null,
+                label: 'route.final',
+              ),
+              dns: const TrafficRuleMatch(
+                tag: 'dns-remote',
+                ruleIndex: 2,
+                label: 'domain',
+                resolver: 'dns.example.org',
+                detour: 'select',
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    final target = find.byKey(const ValueKey('traffic-route-preview-target'));
+    await tester.enterText(target, 'example.org');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(checked, ['example.org']);
+    expect(find.textContaining('dns.example.org'), findsOneWidget);
+    await tester.enterText(target, 'example.net');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('dns.example.org'), findsNothing);
+  });
+
   testWidgets(
     'traffic preparation shows progress and keeps selection disabled',
     (tester) async {

@@ -42,6 +42,14 @@ class AppUpdateAsset {
   final int sizeBytes;
   final String? digestSha256;
 
+  String? get androidAbi {
+    final fileName = name.toLowerCase();
+    for (final abi in AppUpdateService._assetTokens) {
+      if (fileName.contains(abi)) return abi;
+    }
+    return fileName.contains('universal') ? 'universal' : null;
+  }
+
   AppUpdateAsset copyWith({int? sizeBytes, String? digestSha256}) =>
       AppUpdateAsset(
         name: name,
@@ -330,6 +338,7 @@ class AppUpdateDownloadOperation extends ChangeNotifier {
 
   final AppUpdateInfo info;
   final _completion = Completer<void>();
+  final _cancellation = RemoteDownloadCancellation();
   AppUpdateDownloadProgress _progress = const AppUpdateDownloadProgress(
     downloadedBytes: 0,
     totalBytes: 0,
@@ -340,8 +349,22 @@ class AppUpdateDownloadOperation extends ChangeNotifier {
 
   AppUpdateDownloadProgress get progress => _progress;
   Future<void> get completed => _completion.future;
+  bool get isCancelling =>
+      _cancellation.isCancelled && !_completion.isCompleted;
+  bool get canCancel =>
+      !_completion.isCompleted &&
+      !_cancellation.isCancelled &&
+      _progress.stage != AppUpdateDownloadStage.verifying &&
+      _progress.stage != AppUpdateDownloadStage.ready;
+
+  void cancel() {
+    if (!canCancel) return;
+    _cancellation.cancel();
+    notifyListeners();
+  }
 
   void _report(AppUpdateDownloadProgress progress) {
+    if (_cancellation.isCancelled) return;
     _progress = progress;
     notifyListeners();
   }
@@ -971,12 +994,18 @@ class AppUpdateService {
     try {
       for (final work in precedingWork) {
         try {
-          await work;
+          await Future.any([work, operation._cancellation.whenCancelled]);
         } catch (_) {
           // A failed earlier check/cleanup must not poison a new download.
         }
+        operation._cancellation.throwIfCancelled();
       }
-      await _downloadUpdate(operation.info, onProgress: operation._report);
+      operation._cancellation.throwIfCancelled();
+      await _downloadUpdate(
+        operation.info,
+        onProgress: operation._report,
+        cancellation: operation._cancellation,
+      );
       _activeDownload = null;
       operation._completion.complete();
     } catch (error, stack) {
@@ -988,6 +1017,7 @@ class AppUpdateService {
   Future<void> _downloadUpdate(
     AppUpdateInfo info, {
     required void Function(AppUpdateDownloadProgress progress) onProgress,
+    required RemoteDownloadCancellation cancellation,
   }) async {
     final directory = await _updatesDirectory();
     final fileName = sanitizeAssetFileName(info.asset.name);
@@ -1002,8 +1032,20 @@ class AppUpdateService {
       ),
     );
     final existingPath = await _validDownloadedPathFor(info, target.path);
+    cancellation.throwIfCancelled();
     if (existingPath != null) {
       await cleanupOldDownloads(keepPath: existingPath);
+      final existingSize = await File(existingPath).length();
+      cancellation.throwIfCancelled();
+      onProgress(
+        AppUpdateDownloadProgress(
+          downloadedBytes: existingSize,
+          totalBytes: info.asset.sizeBytes,
+          bytesPerSecond: 0,
+          done: false,
+          stage: AppUpdateDownloadStage.verifying,
+        ),
+      );
       await _saveMetadata(
         AppUpdateMetadata(
           lastCheckAtMillis: DateTime.now().millisecondsSinceEpoch,
@@ -1015,7 +1057,7 @@ class AppUpdateService {
       );
       onProgress(
         AppUpdateDownloadProgress(
-          downloadedBytes: await File(existingPath).length(),
+          downloadedBytes: existingSize,
           totalBytes: info.asset.sizeBytes,
           bytesPerSecond: 0,
           done: true,
@@ -1026,6 +1068,7 @@ class AppUpdateService {
       return;
     }
     await cleanupOldDownloads(keepPath: target.path);
+    cancellation.throwIfCancelled();
     final temp = File('${target.path}.part');
     if (target.existsSync()) {
       await target.delete();
@@ -1039,11 +1082,13 @@ class AppUpdateService {
     int? lastEmitMillis;
     var transferStage = AppUpdateDownloadStage.downloading;
     try {
+      cancellation.throwIfCancelled();
       final uri = Uri.parse(info.asset.downloadUrl);
       final result = await VpnAwareRemoteDownloader.instance.downloadToFile(
         uri: uri,
         destinationPath: temp.path,
         maximumBytes: _maxUpdateApkBytes,
+        cancellation: cancellation,
         headers: const <String, String>{
           'User-Agent': 'Etonify-Android-Updater',
         },
@@ -1060,7 +1105,7 @@ class AppUpdateService {
           onProgress(
             AppUpdateDownloadProgress(
               downloadedBytes: 0,
-              totalBytes: 0,
+              totalBytes: info.asset.sizeBytes,
               bytesPerSecond: 0,
               done: false,
               stage: transferStage,
@@ -1089,14 +1134,11 @@ class AppUpdateService {
           }
         },
       );
+      cancellation.throwIfCancelled();
       downloaded = result.downloadedBytes;
       if (totalBytes <= 0) {
         totalBytes = downloaded;
       }
-      if (target.existsSync()) {
-        await target.delete();
-      }
-      await temp.rename(target.path);
       onProgress(
         AppUpdateDownloadProgress(
           downloadedBytes: downloaded,
@@ -1106,6 +1148,8 @@ class AppUpdateService {
           stage: AppUpdateDownloadStage.verifying,
         ),
       );
+      if (target.existsSync()) await target.delete();
+      await temp.rename(target.path);
       final verification = await verifyDownloadedApk(info, target.path);
       if (!verification.ok) {
         if (target.existsSync()) {

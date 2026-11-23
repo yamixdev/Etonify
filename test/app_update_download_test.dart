@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/core/network/vpn_aware_remote_download.dart';
 import 'support/windows_storage_fixture.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
@@ -35,8 +36,12 @@ class _DownloadServer {
       await request.response.flush();
       if (!started.isCompleted) started.complete();
       await release.future;
-      request.response.add([3, 4]);
-      await request.response.close();
+      try {
+        request.response.add([3, 4]);
+        await request.response.close();
+      } catch (_) {
+        if (!allowClientAbort) rethrow;
+      }
     });
   }
 
@@ -44,6 +49,7 @@ class _DownloadServer {
   final started = Completer<void>();
   final release = Completer<void>();
   int requests = 0;
+  bool allowClientAbort = false;
 
   AppUpdateInfo get info => AppUpdateInfo(
     version: '0.4.0',
@@ -104,6 +110,39 @@ void main() {
     server.finish();
     await server.server.close(force: true);
   });
+
+  test(
+    'cancel aborts the body stream, deletes partial files and allows retry',
+    () async {
+      final service = AppUpdateService.instance;
+      server.allowClientAbort = true;
+      final operation = service.startDownload(server.info);
+      final beganWriting = Completer<void>();
+      operation.addListener(() {
+        if (operation.progress.downloadedBytes > 0 &&
+            !beganWriting.isCompleted) {
+          beganWriting.complete();
+        }
+      });
+      final outcome = _outcome(operation.completed);
+      await beganWriting.future.timeout(const Duration(seconds: 5));
+      operation.cancel();
+      expect(operation.canCancel, isFalse);
+      expect(
+        await outcome.timeout(const Duration(seconds: 5)),
+        isA<RemoteDownloadCancelled>(),
+      );
+      expect(service.activeDownload, isNull);
+      final updates = Directory('${root.path}${Platform.pathSeparator}updates');
+      expect(await updates.list().toList(), isEmpty);
+
+      server.finish();
+      final next = service.startDownload(server.info);
+      await next.completed.timeout(const Duration(seconds: 5));
+      expect(server.requests, 2);
+      expect(await File(next.progress.filePath!).readAsBytes(), [1, 2, 3, 4]);
+    },
+  );
 
   test(
     'concurrent downloads share one writer and both receive ready',

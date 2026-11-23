@@ -435,6 +435,8 @@ abstract class SingboxHostApi {
     UnderlyingNetworkDownloadRequestMessage request,
   );
 
+  void cancelUnderlyingNetworkDownload(String destinationPath);
+
   @asyncCallback
   List<String?> resolveHostOnUnderlyingNetwork(String host);
 

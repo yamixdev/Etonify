@@ -196,6 +196,23 @@ class ProxyRuntimeController {
     return Set<String>.unmodifiable(affectedTags);
   }
 
+  void recordUrlTestRejections(Map<String, String> reasons) {
+    if (reasons.isEmpty) return;
+    for (final entry in reasons.entries) {
+      runtimeLatencies.remove(entry.key);
+      runtimeLatencyTimes.remove(entry.key);
+      invalidatedLatencyTags.remove(entry.key);
+      unavailableLatencyTags.add(entry.key);
+      latencyErrors[entry.key] = entry.value;
+      latencyFailureCounts[entry.key] = 1;
+    }
+    lowestLatency = _computeLowestLatency(
+      runtimeLatencies,
+      unavailableLatencyTags,
+      invalidatedLatencyTags,
+    );
+  }
+
   /// Drops measurements that belong to a previous Android network while
   /// keeping selector choices intact. Until fresh URLTest telemetry arrives,
   /// callers must not fall back to the persisted ping for these tags.

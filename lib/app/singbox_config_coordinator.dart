@@ -4,17 +4,20 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/app/runtime_lifecycle_controller.dart';
 import 'package:meow_client/data/adblock/ad_block_rule_set_service.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/routing/russia_route_data_service.dart';
 import 'package:meow_client/logging/app_log_store.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
+import 'package:meow_client/singbox/runtime_start_error.dart';
 import 'package:meow_client/singbox/singbox_runtime.dart';
 
 Future<Set<String>?> _ruleSetPathsInBackground(String content) =>
@@ -51,10 +54,12 @@ class ProbeConfigBuildResult {
   const ProbeConfigBuildResult({
     required this.build,
     required this.probeFingerprint,
+    this.invalidOutbounds = const {},
   });
 
   final SingboxConfigBuildResult build;
   final String probeFingerprint;
+  final Map<String, String> invalidOutbounds;
 }
 
 /// Hashes probe-relevant configuration without the current selector choice or
@@ -169,6 +174,7 @@ class SingboxConfigCoordinatorSnapshot {
     required this.russiaAiServicesPath,
     this.russiaSocialServicesPath,
     this.trafficRulePreset = TrafficRulePreset.none,
+    this.trafficRuleOverrides = const <TrafficRuleOverride>[],
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -229,6 +235,7 @@ class SingboxConfigCoordinatorSnapshot {
   final String? russiaAiServicesPath;
   final String? russiaSocialServicesPath;
   final TrafficRulePreset trafficRulePreset;
+  final List<TrafficRuleOverride> trafficRuleOverrides;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -806,8 +813,15 @@ class SingboxConfigCoordinator {
     }
   }
 
+  Future<SingboxConfigBuildResult> buildRoutingPreviewConfig() =>
+      buildSingboxConfigInBackground(
+        _currentSingboxConfigBuildInput(returnConfig: true),
+      );
+
   Future<ProbeConfigBuildResult?> buildProbeConfig({
     bool validateConfig = true,
+    Future<void> Function(String)? checkConfig,
+    bool Function()? isCurrent,
   }) async {
     var capabilities = _readSnapshot().capabilities;
     if (!capabilities.isCompatible && _refreshCapabilities != null) {
@@ -822,21 +836,63 @@ class SingboxConfigCoordinator {
       return null;
     }
     final generation = ++_singboxConfigBuildGeneration;
-    final input = _currentSingboxConfigBuildInput(
-      returnConfig: true,
-      capabilitiesOverride: capabilities,
-      probeOnly: true,
-    );
+    final rejectedByCore = <String, String>{};
+    SingboxConfigBuildInput probeInput({required bool returnConfig}) =>
+        _currentSingboxConfigBuildInput(
+          returnConfig: returnConfig,
+          capabilitiesOverride: capabilities,
+          probeOnly: true,
+          additionalExcludedOutboundTags: rejectedByCore.keys,
+        );
+    final input = probeInput(returnConfig: true);
     final initialFingerprint = await singboxConfigFingerprintInBackground(
       input,
     );
-    final build = await buildSingboxConfigInBackground(input);
-    if (validateConfig && capabilities.supportsConfigCheck) {
-      await SingboxRuntime.instance.checkConfig(build.configJson);
+    bool current() =>
+        _isMounted() &&
+        generation == _singboxConfigBuildGeneration &&
+        (isCurrent?.call() ?? true);
+    var build = await buildSingboxConfigInBackground(input);
+    final invalidOutbounds = <String, String>{
+      for (final outbound in build.invalidOutbounds)
+        outbound.tag: outbound.reason,
+    };
+    final validate = checkConfig ?? SingboxRuntime.instance.checkConfig;
+    while (current() &&
+        validateConfig &&
+        (checkConfig != null || capabilities.supportsConfigCheck) &&
+        build.plan.urlTestOutboundTags.isNotEmpty) {
+      try {
+        await validate(build.configJson);
+        break;
+      } catch (error) {
+        if (!current()) return null;
+        final message = error is PlatformException ? error.message : null;
+        final invalid = parseRuntimeInvalidOutboundError(
+          message ?? error.toString(),
+        );
+        if (invalid == null) rethrow;
+        final outbounds = build.plan.config['outbounds'] as List;
+        final index = invalid.outboundIndex;
+        final outbound = index < outbounds.length ? outbounds[index] : null;
+        final tag = outbound is Map ? outbound['tag'] : null;
+        if (tag is! String ||
+            !build.plan.urlTestOutboundTags.contains(tag) ||
+            rejectedByCore.containsKey(tag)) {
+          rethrow;
+        }
+        rejectedByCore[tag] = invalid.reason;
+        build = await buildSingboxConfigInBackground(
+          probeInput(returnConfig: true),
+        );
+        invalidOutbounds.addEntries(
+          build.invalidOutbounds.map(
+            (outbound) => MapEntry(outbound.tag, outbound.reason),
+          ),
+        );
+      }
     }
-    if (!_isMounted() || generation != _singboxConfigBuildGeneration) {
-      return null;
-    }
+    if (!current()) return null;
     final currentFingerprint = await singboxConfigFingerprintInBackground(
       _currentSingboxConfigBuildInput(
         returnConfig: false,
@@ -844,12 +900,16 @@ class SingboxConfigCoordinator {
         capabilitiesOverride: capabilities,
       ),
     );
-    if (currentFingerprint != initialFingerprint) {
+    if (!current() || currentFingerprint != initialFingerprint) {
       return null;
     }
     return ProbeConfigBuildResult(
       build: build,
       probeFingerprint: probeFingerprintForConfig(build.plan.config),
+      invalidOutbounds: Map.unmodifiable({
+        ...invalidOutbounds,
+        ...rejectedByCore,
+      }),
     );
   }
 
@@ -900,6 +960,12 @@ class SingboxConfigCoordinator {
     _pendingRoutePaths[generation] = {
       ?input.adBlockBlockRuleSetPath,
       ?input.adBlockAllowRuleSetPath,
+      ?input.russiaGeositeRuBlockedPath,
+      ?input.russiaGeositeRuAvailableOnlyInsidePath,
+      ?input.russiaGeositeCategoryRuPath,
+      ?input.russiaGeoipRuBlockedPath,
+      ?input.russiaGeoipRuWhitelistPath,
+      ?input.russiaGeoipRuPath,
       ?input.russiaCuratedDirectServicesPath,
       ?input.russiaAiServicesPath,
       ?input.russiaSocialServicesPath,
@@ -1285,6 +1351,7 @@ class SingboxConfigCoordinator {
     required bool returnConfig,
     LibboxCapabilities? capabilitiesOverride,
     bool probeOnly = false,
+    Iterable<String> additionalExcludedOutboundTags = const [],
   }) {
     final snapshot = _readSnapshot();
     return SingboxConfigBuildInput(
@@ -1292,7 +1359,10 @@ class SingboxConfigCoordinator {
       includeAndroidProfileId:
           Platform.isAndroid && !probeOnly && snapshot.vpnInboundEnabled,
       selectedProxyTag: snapshot.selectedProxyTag,
-      excludedOutboundTags: Set<String>.from(snapshot.excludedOutboundTags),
+      excludedOutboundTags: {
+        ...snapshot.excludedOutboundTags,
+        ...additionalExcludedOutboundTags,
+      },
       vpnInboundEnabled: !probeOnly && snapshot.vpnInboundEnabled,
       vpnMtu: snapshot.vpnMtu,
       vpnStrictRoute: snapshot.vpnStrictRoute,
@@ -1330,6 +1400,7 @@ class SingboxConfigCoordinator {
       russiaAiServicesPath: snapshot.russiaAiServicesPath,
       russiaSocialServicesPath: snapshot.russiaSocialServicesPath,
       trafficRulePreset: snapshot.trafficRulePreset,
+      trafficRuleOverrides: snapshot.trafficRuleOverrides,
       bypassLocalNetwork: snapshot.bypassLocalNetwork,
       splitRoutingMode: snapshot.splitRoutingMode,
       splitRoutingPackages: snapshot.splitRoutingPackages,

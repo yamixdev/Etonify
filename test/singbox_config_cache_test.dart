@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/singbox/libbox_capabilities.dart';
@@ -18,6 +19,46 @@ void main() {
     output = '${directory.path}/candidate.json';
   });
   tearDown(() => directory.deleteSync(recursive: true));
+
+  test(
+    'custom rule order invalidates cache and metadata survives reuse',
+    () async {
+      final rules = [
+        TrafficRuleOverride.tryParse(
+          matchType: TrafficRuleMatchType.domain,
+          value: 'api.example.net',
+          action: TrafficRuleAction.direct,
+        )!,
+        TrafficRuleOverride.tryParse(
+          matchType: TrafficRuleMatchType.domainSuffix,
+          value: 'example.net',
+          action: TrafficRuleAction.vpn,
+        )!,
+      ];
+      final original = _input(output: output, trafficRuleOverrides: rules);
+      final reversed = _input(
+        output: output,
+        trafficRuleOverrides: rules.reversed.toList(),
+      );
+      final first = await buildOrReuseSingboxConfigInBackground(
+        original,
+        cachePath: cache,
+      );
+      final second = await buildOrReuseSingboxConfigInBackground(
+        reversed,
+        cachePath: cache,
+      );
+      expect(second.reusedConfig, isFalse);
+      expect(second.inputFingerprint, isNot(first.inputFingerprint));
+      final hit = await buildOrReuseSingboxConfigInBackground(
+        reversed,
+        cachePath: cache,
+      );
+      expect(hit.reusedConfig, isTrue);
+      expect(hit.plan.trafficRuleOverridesByRouteIndex.values, rules.reversed);
+      expect(hit.plan.trafficRuleOverridesByDnsIndex.values, rules.reversed);
+    },
+  );
 
   test(
     'chain metadata changes invalidate an unchanged payload revision',
@@ -493,6 +534,7 @@ Subscription _subscription(int count, {int port = 443}) => Subscription(
 
 SingboxConfigBuildInput _input({
   CoreSettings coreSettings = const CoreSettings(),
+  List<TrafficRuleOverride> trafficRuleOverrides = const [],
   required String output,
   String selected = 'first',
   int mtu = 1500,
@@ -502,6 +544,7 @@ SingboxConfigBuildInput _input({
   LibboxCapabilities capabilities = LibboxCapabilities.bundledLegacy,
 }) => SingboxConfigBuildInput(
   coreSettings: coreSettings,
+  trafficRuleOverrides: trafficRuleOverrides,
   activeSubscription: subscription ?? _subscription(2),
   selectedProxyTag: selected,
   excludedOutboundTags: <String>{},

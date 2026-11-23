@@ -11,6 +11,30 @@ import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/subscription_parser.dart';
 
 void main() {
+  test('legacy Firefox 120 is accepted and normalized for libbox', () {
+    final outbound = <String, dynamic>{
+      'type': 'trojan',
+      'server': 'example.org',
+      'server_port': 443,
+      'password': 'test-secret',
+      'tls': {
+        'enabled': true,
+        'utls': {'enabled': true, 'fingerprint': ' HelloFirefox_120 '},
+      },
+    };
+    expect(ParsedOutboundSchema.validate(outbound), isNull);
+    final runtime = Map<String, dynamic>.of(outbound);
+    ParsedOutboundSchema.migrateTo114(runtime);
+    expect(runtime['tls']['utls']['fingerprint'], 'firefox');
+    expect(outbound['tls']['utls']['fingerprint'], ' HelloFirefox_120 ');
+
+    outbound['tls']['utls']['fingerprint'] = 'unknown-client-hello';
+    expect(
+      ParsedOutboundSchema.validate(outbound, forRuntime: true),
+      'unknown utls fingerprint: unknown-client-hello',
+    );
+  });
+
   group('explicit proxy port validation', () {
     for (final scheme in [
       'vless',

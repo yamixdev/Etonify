@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/subscription_fetcher.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
@@ -40,6 +42,7 @@ class AppSettingsImpactRegistry {
     'block leaks changed',
     'adblock changed',
     'traffic rule preset changed',
+    'traffic rule overrides changed',
     'bypass local network changed',
     'split routing mode changed',
     'split routing packages changed',
@@ -183,6 +186,8 @@ class AppSettingsController {
   bool adBlockEnabled = false;
   bool useRussiaRouteData = false;
   TrafficRulePreset trafficRulePreset = TrafficRulePreset.none;
+  List<TrafficRuleOverride> _trafficRuleOverrides = const [];
+  List<TrafficRuleOverride> get trafficRuleOverrides => _trafficRuleOverrides;
   bool bypassLocalNetwork = true;
   SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled;
   List<String> splitRoutingPackages = const <String>[];
@@ -287,6 +292,7 @@ class AppSettingsController {
       adBlockEnabled: adBlockEnabled,
       useRussiaRouteData: useRussiaRouteData,
       trafficRulePreset: trafficRulePreset,
+      trafficRuleOverrides: trafficRuleOverrides,
       bypassLocalNetwork: bypassLocalNetwork,
       splitRoutingMode: splitRoutingMode,
       splitRoutingPackages: splitRoutingPackages,
@@ -396,6 +402,7 @@ class AppSettingsController {
             state.useRussiaRouteData
         ? TrafficRulePreset.russianServicesDirect
         : state.trafficRulePreset;
+    _trafficRuleOverrides = List.unmodifiable(state.trafficRuleOverrides);
     // Kept only for the legacy config builder call while profiles migrate.
     // The persisted source of truth is now trafficRulePreset.
     useRussiaRouteData =
@@ -1018,6 +1025,17 @@ class AppSettingsController {
     return const AppSettingsChange(
       changed: true,
       configReason: 'traffic rule preset changed',
+    );
+  }
+
+  AppSettingsChange setTrafficRuleOverrides(List<TrafficRuleOverride> value) {
+    if (listEquals(trafficRuleOverrides, value)) {
+      return const AppSettingsChange.none();
+    }
+    _trafficRuleOverrides = List.unmodifiable(value);
+    return const AppSettingsChange(
+      changed: true,
+      configReason: 'traffic rule overrides changed',
     );
   }
 

@@ -7,6 +7,7 @@ import 'package:hive_ce/src/box/box_base_impl.dart';
 import 'package:meow_client/models/core_settings.dart';
 import 'package:meow_client/app/app_settings_controller.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/platform/windows/desktop_preferences.dart';
@@ -54,6 +55,39 @@ class _CountingSettingsFile extends Fake implements RandomAccessFile {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('custom traffic rules retain their order in storage and backup', () {
+    final store = MemoryAppSettingsStore();
+    final initial = store.mapState({});
+    expect(initial.trafficRuleOverrides, isEmpty);
+
+    final withRules = store.mapState({
+      'traffic_rule_overrides': [
+        {'matchType': 'domain', 'value': 'api.example.net', 'action': 'direct'},
+        {'matchType': 'domainSuffix', 'value': 'example.net', 'action': 'vpn'},
+        {'matchType': 'ipCidr', 'value': '198.51.100.1/40', 'action': 'vpn'},
+      ],
+    });
+    final rules = withRules.trafficRuleOverrides;
+    expect(rules.map((rule) => rule.action), [
+      TrafficRuleAction.direct,
+      TrafficRuleAction.vpn,
+    ]);
+    expect(
+      store.mapState(store.stateToMap(withRules)).trafficRuleOverrides,
+      rules,
+    );
+    expect(
+      store
+          .mergeSafeImportMap(initial, store.stateToSafeExportMap(withRules))
+          .trafficRuleOverrides,
+      rules,
+    );
+    expect(
+      store.mapState({'traffic_rule_overrides': '['}).trafficRuleOverrides,
+      isEmpty,
+    );
+  });
+
   test('proxy chain visibility persists and defaults to visible', () {
     final store = MemoryAppSettingsStore();
     final initial = store.mapState({});

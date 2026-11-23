@@ -1276,6 +1276,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updatesDownloadAction => 'Download update';
 
   @override
+  String get updatesLaterAction => 'Later';
+
+  @override
+  String get updatesUniversalApk => 'Universal APK';
+
+  @override
+  String get updatesEtonifyTitle => 'Etonify update';
+
+  @override
+  String get updatesCancelDownload => 'Cancel download';
+
+  @override
+  String get updatesCancellingDownload => 'Cancelling download…';
+
+  @override
   String get updatesInstallAction => 'Install APK';
 
   @override
@@ -3330,6 +3345,94 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trafficRulesTitle => 'Traffic rules';
+
+  @override
+  String get trafficRuleOverridesTitle => 'Custom rules';
+
+  @override
+  String get trafficRuleOverridesHint =>
+      'Rules are checked from top to bottom before the preset. Drag to change the order.';
+
+  @override
+  String get trafficRuleViaVpn => 'Via VPN';
+
+  @override
+  String get trafficRuleDirect => 'Direct';
+
+  @override
+  String get trafficRuleExactDomain => 'Exact domain';
+
+  @override
+  String get trafficRuleDomainSuffix => 'Domain and subdomains';
+
+  @override
+  String get trafficRuleIpCidr => 'IP address or CIDR';
+
+  @override
+  String get trafficRuleInvalid => 'Check the address format.';
+
+  @override
+  String get trafficRuleDuplicate => 'A rule for this address already exists.';
+
+  @override
+  String get trafficRuleEdit => 'Edit rule';
+
+  @override
+  String get trafficRuleMatchType => 'Match type';
+
+  @override
+  String get trafficRuleRoute => 'Route';
+
+  @override
+  String get trafficRouteInvalidTarget => 'Enter a domain or IP address.';
+
+  @override
+  String get trafficRoutePreviewFailed => 'Could not check the route.';
+
+  @override
+  String get trafficRoutePreviewTitle => 'Check route';
+
+  @override
+  String get trafficRoutePreviewHint =>
+      'Preview based on your settings. Enter a domain or IP address.';
+
+  @override
+  String get trafficRouteTarget => 'Domain or IP address';
+
+  @override
+  String get trafficRouteBlocked => 'Blocked';
+
+  @override
+  String get trafficRouteUndetermined => 'More connection details needed';
+
+  @override
+  String get trafficRouteDefault => 'Default rule';
+
+  @override
+  String get trafficRuleBundleCurated => 'Direct service list';
+
+  @override
+  String get trafficRuleBundleAi => 'AI services';
+
+  @override
+  String get trafficRuleBundleSocial => 'Social networks';
+
+  @override
+  String get trafficRuleDataReady => 'Ready';
+
+  @override
+  String get trafficRuleDataUnavailable => 'Unavailable';
+
+  @override
+  String get trafficRuleDataSavedCopy => 'Update failed. Using the saved copy.';
+
+  @override
+  String trafficRuleDataUpdateBundle(String bundle) {
+    return 'Update $bundle';
+  }
+
+  @override
+  String get trafficRouteLocalDns => 'System DNS';
 
   @override
   String get trafficRulesSettingsTitle => 'Traffic rules';

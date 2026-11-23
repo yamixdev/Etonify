@@ -1274,6 +1274,21 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updatesDownloadAction => 'Скачать обновление';
 
   @override
+  String get updatesLaterAction => 'Позже';
+
+  @override
+  String get updatesUniversalApk => 'Универсальный APK';
+
+  @override
+  String get updatesEtonifyTitle => 'Обновление Etonify';
+
+  @override
+  String get updatesCancelDownload => 'Отменить скачивание';
+
+  @override
+  String get updatesCancellingDownload => 'Отменяем скачивание…';
+
+  @override
   String get updatesInstallAction => 'Установить APK';
 
   @override
@@ -3332,6 +3347,95 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get trafficRulesTitle => 'Правила трафика';
+
+  @override
+  String get trafficRuleOverridesTitle => 'Пользовательские правила';
+
+  @override
+  String get trafficRuleOverridesHint =>
+      'Правила проверяются сверху вниз перед готовым набором. Перетащите правило, чтобы изменить порядок.';
+
+  @override
+  String get trafficRuleViaVpn => 'Через VPN';
+
+  @override
+  String get trafficRuleDirect => 'Напрямую';
+
+  @override
+  String get trafficRuleExactDomain => 'Точный домен';
+
+  @override
+  String get trafficRuleDomainSuffix => 'Домен и поддомены';
+
+  @override
+  String get trafficRuleIpCidr => 'IP-адрес или подсеть';
+
+  @override
+  String get trafficRuleInvalid => 'Проверьте формат адреса.';
+
+  @override
+  String get trafficRuleDuplicate => 'Правило для этого адреса уже есть.';
+
+  @override
+  String get trafficRuleEdit => 'Изменить правило';
+
+  @override
+  String get trafficRuleMatchType => 'Тип совпадения';
+
+  @override
+  String get trafficRuleRoute => 'Маршрут';
+
+  @override
+  String get trafficRouteInvalidTarget => 'Введите домен или IP-адрес.';
+
+  @override
+  String get trafficRoutePreviewFailed => 'Не удалось проверить маршрут.';
+
+  @override
+  String get trafficRoutePreviewTitle => 'Проверить маршрут';
+
+  @override
+  String get trafficRoutePreviewHint =>
+      'Предпросмотр по настройкам. Введите домен или IP-адрес.';
+
+  @override
+  String get trafficRouteTarget => 'Домен или IP-адрес';
+
+  @override
+  String get trafficRouteBlocked => 'Заблокировано';
+
+  @override
+  String get trafficRouteUndetermined => 'Нужны данные соединения';
+
+  @override
+  String get trafficRouteDefault => 'Правило по умолчанию';
+
+  @override
+  String get trafficRuleBundleCurated => 'Список прямых сервисов';
+
+  @override
+  String get trafficRuleBundleAi => 'Нейросети';
+
+  @override
+  String get trafficRuleBundleSocial => 'Социальные сети';
+
+  @override
+  String get trafficRuleDataReady => 'Готово';
+
+  @override
+  String get trafficRuleDataUnavailable => 'Недоступно';
+
+  @override
+  String get trafficRuleDataSavedCopy =>
+      'Ошибка обновления. Используется сохранённая копия.';
+
+  @override
+  String trafficRuleDataUpdateBundle(String bundle) {
+    return 'Обновить $bundle';
+  }
+
+  @override
+  String get trafficRouteLocalDns => 'Системный DNS';
 
   @override
   String get trafficRulesSettingsTitle => 'Правила трафика';

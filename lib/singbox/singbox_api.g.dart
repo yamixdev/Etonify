@@ -2134,6 +2134,26 @@ class SingboxHostApi {
     return pigeonVar_replyValue! as UnderlyingNetworkDownloadResponseMessage;
   }
 
+  Future<void> cancelUnderlyingNetworkDownload(String destinationPath) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.meow_client.SingboxHostApi.cancelUnderlyingNetworkDownload$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[destinationPath],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
   Future<List<String?>> resolveHostOnUnderlyingNetwork(String host) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.meow_client.SingboxHostApi.resolveHostOnUnderlyingNetwork$pigeonVar_messageChannelSuffix';

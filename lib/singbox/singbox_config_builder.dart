@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:meow_client/core/lowest_proxy_groups.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_support.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
@@ -80,6 +81,7 @@ class SingboxConfigBuilder {
     this.russiaAiServicesPath,
     this.russiaSocialServicesPath,
     this.trafficRulePreset = TrafficRulePreset.none,
+    this.trafficRuleOverrides = const <TrafficRuleOverride>[],
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -134,6 +136,7 @@ class SingboxConfigBuilder {
   final String? russiaAiServicesPath;
   final String? russiaSocialServicesPath;
   final TrafficRulePreset trafficRulePreset;
+  final List<TrafficRuleOverride> trafficRuleOverrides;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -323,6 +326,68 @@ class SingboxConfigBuilder {
       defaultSecureDnsDirectResolver,
     );
 
+    final routeRulesBeforePreset = <Map<String, Object>>[
+      {'action': 'sniff'},
+      {
+        'type': 'logical',
+        'mode': 'or',
+        'rules': [
+          {'protocol': 'dns'},
+          {'port': 53},
+        ],
+        'action': 'hijack-dns',
+      },
+      if (vpnInboundEnabled)
+        {
+          'inbound': 'tun-in',
+          'network': 'icmp',
+          'ip_cidr': '172.19.0.2/32',
+          'action': 'reject',
+          'method': 'drop',
+        },
+      if (blockLeaks) {'protocol': 'stun', 'action': 'reject'},
+      if (bypassLocalNetwork) {'ip_is_private': true, 'outbound': 'direct'},
+      if (adBlockActive)
+        {..._adBlockRejectionMatch(adBlockAllowActive), 'action': 'reject'},
+    ];
+    final dnsRulesBeforePreset = <Map<String, Object>>[
+      if (adBlockActive)
+        {
+          ..._adBlockRejectionMatch(adBlockAllowActive),
+          'action': 'reject',
+          'method': 'default',
+        },
+    ];
+    final overridesByRouteIndex = <int, TrafficRuleOverride>{};
+    final overridesByDnsIndex = <int, TrafficRuleOverride>{};
+    for (final rule in trafficRuleOverrides) {
+      final field = switch (rule.matchType) {
+        TrafficRuleMatchType.domain => 'domain',
+        TrafficRuleMatchType.domainSuffix => 'domain_suffix',
+        TrafficRuleMatchType.ipCidr => 'ip_cidr',
+      };
+      final useProxy = rule.action == TrafficRuleAction.vpn;
+      final reject = useProxy && !hasProxies;
+      overridesByRouteIndex[routeRulesBeforePreset.length] = rule;
+      routeRulesBeforePreset.add({
+        field: [rule.value],
+        if (reject)
+          'action': 'reject'
+        else
+          'outbound': useProxy ? 'select' : 'direct',
+      });
+
+      // CIDRs match the connection's destination. DNS cannot decide them from
+      // a question name, and a DNS lookup must not reorder these route rules.
+      if (rule.matchType == TrafficRuleMatchType.ipCidr) continue;
+      overridesByDnsIndex[dnsRulesBeforePreset.length] = rule;
+      dnsRulesBeforePreset.add({
+        field: [rule.value],
+        'action': reject ? 'reject' : 'route',
+        if (!reject) 'server': useProxy ? 'dns-remote' : 'dns-direct',
+      });
+    }
+
     final plan = SingboxBuildPlan(
       config: {
         'log': {'level': logLevel},
@@ -368,15 +433,10 @@ class SingboxConfigBuilder {
               russiaCuratedDirectServicesActive ||
               aiServicesActive ||
               socialServicesActive ||
-              adBlockActive ||
+              dnsRulesBeforePreset.isNotEmpty ||
               fakeIpActive)
             'rules': [
-              if (adBlockActive)
-                {
-                  ..._adBlockRejectionMatch(adBlockAllowActive),
-                  'action': 'reject',
-                  'method': 'default',
-                },
+              ...dnsRulesBeforePreset,
               if (russiaRouteDataActive)
                 {
                   'rule_set': 'ru-geosite-ru-blocked',
@@ -585,32 +645,7 @@ class SingboxConfigBuilder {
                 },
             ],
           'rules': [
-            {'action': 'sniff'},
-            {
-              'type': 'logical',
-              'mode': 'or',
-              'rules': [
-                {'protocol': 'dns'},
-                {'port': 53},
-              ],
-              'action': 'hijack-dns',
-            },
-            if (vpnInboundEnabled)
-              {
-                'inbound': 'tun-in',
-                'network': 'icmp',
-                'ip_cidr': '172.19.0.2/32',
-                'action': 'reject',
-                'method': 'drop',
-              },
-            if (blockLeaks) {'protocol': 'stun', 'action': 'reject'},
-            if (bypassLocalNetwork)
-              {'ip_is_private': true, 'outbound': 'direct'},
-            if (adBlockActive)
-              {
-                ..._adBlockRejectionMatch(adBlockAllowActive),
-                'action': 'reject',
-              },
+            ...routeRulesBeforePreset,
             if (aiServicesActive)
               {
                 'rule_set': 'ai-services',
@@ -651,6 +686,8 @@ class SingboxConfigBuilder {
       },
       proxyOutboundTagsByIndex: proxyOutboundIndexes,
       visibleProxyOutboundCount: outbounds.length,
+      trafficRuleOverridesByRouteIndex: Map.unmodifiable(overridesByRouteIndex),
+      trafficRuleOverridesByDnsIndex: Map.unmodifiable(overridesByDnsIndex),
       // Only concrete outbounds included in this exact config can produce a
       // terminal URLTest event. Selector/urltest group tags resolve to one of
       // these leaves in the core and must not keep a Flutter session pending.
@@ -763,43 +800,48 @@ class SingboxConfigBuilder {
     if (_outboundCompatibilityError(outbound.config) != null) {
       return false;
     }
-    if (!_supportsOutboundConfigExtensions(outbound.config)) {
+    if (outboundCapabilityError(outbound.config, capabilities) != null) {
       return false;
     }
     return _hasValidServer(outbound.config);
   }
 
-  bool _supportsOutboundConfigExtensions(Map<String, dynamic> config) {
-    if (!capabilities.isCompatible) return false;
+  static String? outboundCapabilityError(
+    Map<String, dynamic> config,
+    LibboxCapabilities capabilities,
+  ) {
+    if (!capabilities.isCompatible) return 'Incompatible libbox';
     final type = config['type']?.toString().trim().toLowerCase() ?? '';
     if (type == 'vless') {
       final rawEncryption = config['encryption']?.toString().trim() ?? '';
       if (rawEncryption.isNotEmpty && rawEncryption.toLowerCase() != 'none') {
-        if (!_supportsCoreConfigExtension(
-              capabilities.supportsVlessEncryption,
-            ) ||
+        if ((!capabilities.isLegacyContract &&
+                !capabilities.supportsVlessEncryption) ||
             !capabilities.supportsVlessEncryptionValue(rawEncryption)) {
-          return false;
+          return 'Unsupported VLESS encryption';
         }
       }
     }
 
     final transport = config['transport'];
-    if (transport is! Map) return true;
+    if (transport is! Map) return null;
     final transportType =
         transport['type']?.toString().trim().toLowerCase() ?? '';
     final transportMode = transport['mode']?.toString().trim() ?? '';
-    return switch (transportType) {
-      'xhttp' =>
-        _supportsCoreConfigExtension(capabilities.supportsXHttp) &&
-            (capabilities.apiVersion < 2 ||
-                capabilities.supportsXHttpMode(transportMode)),
-      'splithttp' =>
-        _supportsCoreConfigExtension(capabilities.supportsSplitHttpAlias) &&
-            (capabilities.apiVersion < 2 ||
-                capabilities.supportsXHttpMode(transportMode)),
+    final supported = switch (transportType) {
+      'xhttp' => capabilities.supportsXHttp,
+      'splithttp' => capabilities.supportsSplitHttpAlias,
       _ => true,
     };
+    if (!capabilities.isLegacyContract && !supported) {
+      return 'Unsupported transport: $transportType';
+    }
+    if ((transportType == 'xhttp' || transportType == 'splithttp') &&
+        capabilities.apiVersion >= 2 &&
+        !capabilities.supportsXHttpMode(transportMode)) {
+      return 'Unsupported XHTTP mode: $transportMode';
+    }
+    return null;
   }
 
   bool _isGroupOnlyOutbound(Outbound outbound) {
@@ -945,6 +987,7 @@ class SingboxConfigBuilder {
       final tag = chain.tag.trim();
       final target = _targetOutboundForChain(chain, outboundByTag);
       if (tag.isEmpty ||
+          excludedOutboundTags.contains(tag) ||
           target == null ||
           !seen.add(tag) ||
           !selectableBaseTags.contains(chain.detourTag.trim())) {
@@ -979,7 +1022,9 @@ class SingboxConfigBuilder {
         targetSubscriptionId != activeSubscriptionId) {
       return _snapshotOutboundFor(chain);
     }
-    final target = outboundByTag[chain.targetTag.trim()];
+    final targetTag = chain.targetTag.trim();
+    if (excludedOutboundTags.contains(targetTag)) return null;
+    final target = outboundByTag[targetTag];
     if (target != null || activeSubscription?.sources.isNotEmpty == true) {
       return target;
     }
@@ -1511,10 +1556,14 @@ class SingboxBuildPlan {
     required this.proxyOutboundTagsByIndex,
     required this.visibleProxyOutboundCount,
     this.urlTestOutboundTags = const <String>[],
+    this.trafficRuleOverridesByRouteIndex = const {},
+    this.trafficRuleOverridesByDnsIndex = const {},
   });
 
   final Map<String, dynamic> config;
   final Map<int, String> proxyOutboundTagsByIndex;
   final int visibleProxyOutboundCount;
   final List<String> urlTestOutboundTags;
+  final Map<int, TrafficRuleOverride> trafficRuleOverridesByRouteIndex;
+  final Map<int, TrafficRuleOverride> trafficRuleOverridesByDnsIndex;
 }

@@ -4,6 +4,38 @@ import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/url_test_progress.dart';
 
 void main() {
+  test('rejections keep successful pings and allow a later recovery', () {
+    final controller = ProxyRuntimeController();
+    addTearDown(controller.dispose);
+    controller.applyUrlTestResult(
+      tag: 'working',
+      measuredAtMillis: 1000,
+      delay: 35,
+      status: 'available',
+      error: '',
+      revision: 1,
+    );
+    controller.recordUrlTestRejections({
+      'bad-a': 'bad fingerprint',
+      'bad-b': 'unsupported transport',
+    });
+    expect(controller.runtimeLatencies, {'working': 35});
+    expect(controller.latencyErrors, {
+      'bad-a': 'bad fingerprint',
+      'bad-b': 'unsupported transport',
+    });
+    controller.applyUrlTestResult(
+      tag: 'bad-a',
+      measuredAtMillis: 2000,
+      delay: 45,
+      status: 'available',
+      error: '',
+      revision: 2,
+    );
+    expect(controller.runtimeLatencies, {'working': 35, 'bad-a': 45});
+    expect(controller.latencyErrors, {'bad-b': 'unsupported transport'});
+  });
+
   test(
     'compact URLTest results use revisions instead of second timestamps',
     () {

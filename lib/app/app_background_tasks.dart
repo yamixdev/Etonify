@@ -8,6 +8,7 @@ import 'package:meow_client/core/outbound_location.dart';
 import 'package:meow_client/core/proxy_group_country.dart';
 import 'package:meow_client/core/proxy_selection_catalog.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/data/routing/traffic_rule_preset.dart';
 import 'package:meow_client/data/subscription/outbound_schema.dart';
 import 'package:meow_client/data/subscription/outbound_support.dart';
@@ -373,6 +374,7 @@ class SingboxConfigBuildInput {
     required this.russiaAiServicesPath,
     required this.russiaSocialServicesPath,
     this.trafficRulePreset = TrafficRulePreset.none,
+    this.trafficRuleOverrides = const <TrafficRuleOverride>[],
     required this.bypassLocalNetwork,
     required this.splitRoutingMode,
     required this.splitRoutingPackages,
@@ -430,6 +432,7 @@ class SingboxConfigBuildInput {
   final String? russiaAiServicesPath;
   final String? russiaSocialServicesPath;
   final TrafficRulePreset trafficRulePreset;
+  final List<TrafficRuleOverride> trafficRuleOverrides;
   final bool bypassLocalNetwork;
   final SplitRoutingMode splitRoutingMode;
   final List<String> splitRoutingPackages;
@@ -489,10 +492,12 @@ class StartupValidationInput {
   const StartupValidationInput({
     required this.subscription,
     required this.excludedOutboundTags,
+    this.capabilities = LibboxCapabilities.bundledLegacy,
   });
 
   final Subscription? subscription;
   final Set<String> excludedOutboundTags;
+  final LibboxCapabilities capabilities;
 }
 
 class InvalidStartupOutbound {
@@ -1032,6 +1037,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     StartupValidationInput(
       subscription: input.activeSubscription,
       excludedOutboundTags: input.excludedOutboundTags,
+      capabilities: input.capabilities,
     ),
   );
   final invalidOutboundTags = validation.invalidOutbounds
@@ -1083,6 +1089,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     russiaAiServicesPath: input.russiaAiServicesPath,
     russiaSocialServicesPath: input.russiaSocialServicesPath,
     trafficRulePreset: input.trafficRulePreset,
+    trafficRuleOverrides: input.trafficRuleOverrides,
     bypassLocalNetwork: input.bypassLocalNetwork,
     splitRoutingMode: input.splitRoutingMode,
     splitRoutingPackages: input.splitRoutingPackages,
@@ -1124,6 +1131,9 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
           proxyOutboundTagsByIndex: plan.proxyOutboundTagsByIndex,
           visibleProxyOutboundCount: plan.visibleProxyOutboundCount,
           urlTestOutboundTags: plan.urlTestOutboundTags,
+          trafficRuleOverridesByRouteIndex:
+              plan.trafficRuleOverridesByRouteIndex,
+          trafficRuleOverridesByDnsIndex: plan.trafficRuleOverridesByDnsIndex,
         );
   return SingboxConfigBuildResult(
     plan: resultPlan,
@@ -1134,9 +1144,7 @@ SingboxConfigBuildResult buildSingboxConfig(SingboxConfigBuildInput input) {
     configInboundCount: ((config['inbounds'] as List?) ?? const []).length,
     configRouteRuleCount:
         (((config['route'] as Map?)?['rules'] as List?) ?? const []).length,
-    invalidOutbounds: validation.invalidOutbounds
-        .take(5)
-        .toList(growable: false),
+    invalidOutbounds: List.unmodifiable(validation.invalidOutbounds),
     invalidOutboundCount: validation.invalidOutbounds.length,
     selectedProxyInvalid:
         input.selectedProxyTag.isNotEmpty &&
@@ -1291,13 +1299,23 @@ StartupValidationResult validateStartupOutbounds(StartupValidationInput input) {
 
   var startableCount = 0;
   final invalidOutbounds = <InvalidStartupOutbound>[];
+  final dependents = <String, List<Outbound>>{};
   for (final outbound in subscription.outbounds) {
     if (outbound.info.deleted ||
         input.excludedOutboundTags.contains(outbound.tag)) {
       continue;
     }
-    final validationError = ParsedOutboundSchema.validate(outbound.config);
+    final validationError =
+        ParsedOutboundSchema.validate(outbound.config, forRuntime: true) ??
+        SingboxConfigBuilder.outboundCapabilityError(
+          outbound.config,
+          input.capabilities,
+        );
     if (validationError == null) {
+      if (outbound.config['detour'] case final String detour
+          when detour.isNotEmpty) {
+        (dependents[detour] ??= []).add(outbound);
+      }
       startableCount++;
       continue;
     }
@@ -1308,6 +1326,26 @@ StartupValidationResult validateStartupOutbounds(StartupValidationInput input) {
         reason: validationError,
       ),
     );
+  }
+  // A rejected hop must not leave downstream outbounds pointing at a missing
+  // detour. Each healthy candidate depends on at most one configured hop.
+  final rejected = [
+    ...input.excludedOutboundTags,
+    ...invalidOutbounds.map((outbound) => outbound.tag),
+  ];
+  for (var index = 0; index < rejected.length; index++) {
+    final detour = rejected[index];
+    for (final outbound in dependents.remove(detour) ?? const <Outbound>[]) {
+      invalidOutbounds.add(
+        InvalidStartupOutbound(
+          tag: outbound.tag,
+          name: outbound.name,
+          reason: 'Proxy detour is unavailable: $detour',
+        ),
+      );
+      rejected.add(outbound.tag);
+      startableCount--;
+    }
   }
 
   return StartupValidationResult(

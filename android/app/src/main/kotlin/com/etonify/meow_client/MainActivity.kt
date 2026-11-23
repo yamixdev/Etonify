@@ -75,6 +75,9 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : FlutterFragmentActivity() {
     companion object {
@@ -108,6 +111,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val statusTasks = CallbackTaskExecutor(statusExecutor) { command -> mainHandler.post(command) }
     private var startupTasks: StartupTaskRunner? = null
     private val subscriptionNetworkExecutor = Executors.newFixedThreadPool(2)
+    private val underlyingDownloads = ConcurrentHashMap<String, UnderlyingDownloadAbort>()
     private val endpointDnsExecutor = Executors.newFixedThreadPool(2)
     private val appIconExecutor = Executors.newFixedThreadPool(3)
     private var lastPerformanceSnapshotUptimeMs = 0L
@@ -700,6 +704,15 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    private class UnderlyingDownloadAbort {
+        val cancelled = AtomicBoolean()
+        val connection = AtomicReference<HttpURLConnection>()
+
+        fun check() {
+            if (cancelled.get()) throw java.io.IOException("download_cancelled")
+        }
+    }
+
     private fun downloadUrlOnUnderlyingNetwork(
         rawUrl: String,
         headers: Map<String, String>,
@@ -707,7 +720,9 @@ class MainActivity : FlutterFragmentActivity() {
         maxBytes: Long,
         responseStartTimeoutMs: Int,
         idleTimeoutMs: Int,
+        abort: UnderlyingDownloadAbort,
     ): Map<String, Any> {
+        abort.check()
         if (getSystemService(android.net.ConnectivityManager::class.java).activeNetwork == null) {
             throw java.io.IOException("network_unavailable")
         }
@@ -720,13 +735,16 @@ class MainActivity : FlutterFragmentActivity() {
         var redirectCount = 0
         try {
             while (true) {
+                abort.check()
                 validateSubscriptionRequest(url)
                 val connection = network.openConnection(url) as HttpURLConnection
+                abort.connection.set(connection)
                 val responseDeadline = ResponseStartDeadline(boundedResponseTimeout)
                 val abortBeforeResponse = Runnable {
                     responseDeadline.expire { connection.disconnect() }
                 }
                 try {
+                    abort.check()
                     connection.requestMethod = "GET"
                     connection.instanceFollowRedirects = false
                     connection.connectTimeout = boundedResponseTimeout
@@ -776,8 +794,10 @@ class MainActivity : FlutterFragmentActivity() {
                             FileOutputStream(destination, false).use { output ->
                                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                                 while (true) {
+                                    abort.check()
                                     val read = input.read(buffer)
                                     if (read < 0) break
+                                    abort.check()
                                     downloadedBytes += read
                                     require(downloadedBytes <= maxBytes) {
                                         "Response is larger than $maxBytes bytes."
@@ -793,6 +813,7 @@ class MainActivity : FlutterFragmentActivity() {
                         if (name == null || values.isNullOrEmpty()) continue
                         responseHeaders[name.lowercase()] = values.joinToString(", ")
                     }
+                    abort.check()
                     return linkedMapOf(
                         "statusCode" to statusCode,
                         "downloadedBytes" to downloadedBytes,
@@ -804,6 +825,7 @@ class MainActivity : FlutterFragmentActivity() {
                     throw responseDeadline.failure(error)
                 } finally {
                     mainHandler.removeCallbacks(abortBeforeResponse)
+                    abort.connection.compareAndSet(connection, null)
                     connection.disconnect()
                 }
             }
@@ -2130,8 +2152,13 @@ class MainActivity : FlutterFragmentActivity() {
                     val idleTimeoutMs = request.idleTimeoutMillis
                         .coerceIn(1_000L, 60_000L)
                         .toInt()
+                    val abort = UnderlyingDownloadAbort()
+                    if (underlyingDownloads.putIfAbsent(destinationPath, abort) != null) {
+                        callback(errorResult("download_in_progress", "The destination already has an active download"))
+                        return
+                    }
                     subscriptionNetworkExecutor.execute {
-                        runCatching {
+                        val result = runCatching {
                             underlyingNetworkDownloadResponse(
                                 downloadUrlOnUnderlyingNetwork(
                                     url,
@@ -2140,9 +2167,12 @@ class MainActivity : FlutterFragmentActivity() {
                                     maxBytes,
                                     responseStartTimeoutMs,
                                     idleTimeoutMs,
+                                    abort,
                                 ),
                             )
-                        }.onSuccess { response ->
+                        }
+                        underlyingDownloads.remove(destinationPath, abort)
+                        result.onSuccess { response ->
                             mainHandler.post { callback(Result.success(response)) }
                         }.onFailure { error ->
                             mainHandler.post {
@@ -2153,6 +2183,15 @@ class MainActivity : FlutterFragmentActivity() {
                                     ),
                                 )
                             }
+                        }
+                    }
+                }
+
+                override fun cancelUnderlyingNetworkDownload(destinationPath: String) {
+                    val abort = underlyingDownloads[destinationPath.trim()] ?: return
+                    if (abort.cancelled.compareAndSet(false, true)) {
+                        abort.connection.get()?.let { connection ->
+                            ioExecutor.execute { runCatching { connection.disconnect() } }
                         }
                     }
                 }

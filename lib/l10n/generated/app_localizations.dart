@@ -2372,6 +2372,36 @@ abstract class AppLocalizations {
   /// **'Download update'**
   String get updatesDownloadAction;
 
+  /// No description provided for @updatesLaterAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updatesLaterAction;
+
+  /// No description provided for @updatesUniversalApk.
+  ///
+  /// In en, this message translates to:
+  /// **'Universal APK'**
+  String get updatesUniversalApk;
+
+  /// No description provided for @updatesEtonifyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Etonify update'**
+  String get updatesEtonifyTitle;
+
+  /// No description provided for @updatesCancelDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get updatesCancelDownload;
+
+  /// No description provided for @updatesCancellingDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling download…'**
+  String get updatesCancellingDownload;
+
   /// No description provided for @updatesInstallAction.
   ///
   /// In en, this message translates to:
@@ -5909,6 +5939,174 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Traffic rules'**
   String get trafficRulesTitle;
+
+  /// No description provided for @trafficRuleOverridesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom rules'**
+  String get trafficRuleOverridesTitle;
+
+  /// No description provided for @trafficRuleOverridesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Rules are checked from top to bottom before the preset. Drag to change the order.'**
+  String get trafficRuleOverridesHint;
+
+  /// No description provided for @trafficRuleViaVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'Via VPN'**
+  String get trafficRuleViaVpn;
+
+  /// No description provided for @trafficRuleDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct'**
+  String get trafficRuleDirect;
+
+  /// No description provided for @trafficRuleExactDomain.
+  ///
+  /// In en, this message translates to:
+  /// **'Exact domain'**
+  String get trafficRuleExactDomain;
+
+  /// No description provided for @trafficRuleDomainSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain and subdomains'**
+  String get trafficRuleDomainSuffix;
+
+  /// No description provided for @trafficRuleIpCidr.
+  ///
+  /// In en, this message translates to:
+  /// **'IP address or CIDR'**
+  String get trafficRuleIpCidr;
+
+  /// No description provided for @trafficRuleInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the address format.'**
+  String get trafficRuleInvalid;
+
+  /// No description provided for @trafficRuleDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'A rule for this address already exists.'**
+  String get trafficRuleDuplicate;
+
+  /// No description provided for @trafficRuleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit rule'**
+  String get trafficRuleEdit;
+
+  /// No description provided for @trafficRuleMatchType.
+  ///
+  /// In en, this message translates to:
+  /// **'Match type'**
+  String get trafficRuleMatchType;
+
+  /// No description provided for @trafficRuleRoute.
+  ///
+  /// In en, this message translates to:
+  /// **'Route'**
+  String get trafficRuleRoute;
+
+  /// No description provided for @trafficRouteInvalidTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a domain or IP address.'**
+  String get trafficRouteInvalidTarget;
+
+  /// No description provided for @trafficRoutePreviewFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check the route.'**
+  String get trafficRoutePreviewFailed;
+
+  /// No description provided for @trafficRoutePreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check route'**
+  String get trafficRoutePreviewTitle;
+
+  /// No description provided for @trafficRoutePreviewHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview based on your settings. Enter a domain or IP address.'**
+  String get trafficRoutePreviewHint;
+
+  /// No description provided for @trafficRouteTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain or IP address'**
+  String get trafficRouteTarget;
+
+  /// No description provided for @trafficRouteBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get trafficRouteBlocked;
+
+  /// No description provided for @trafficRouteUndetermined.
+  ///
+  /// In en, this message translates to:
+  /// **'More connection details needed'**
+  String get trafficRouteUndetermined;
+
+  /// No description provided for @trafficRouteDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default rule'**
+  String get trafficRouteDefault;
+
+  /// No description provided for @trafficRuleBundleCurated.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct service list'**
+  String get trafficRuleBundleCurated;
+
+  /// No description provided for @trafficRuleBundleAi.
+  ///
+  /// In en, this message translates to:
+  /// **'AI services'**
+  String get trafficRuleBundleAi;
+
+  /// No description provided for @trafficRuleBundleSocial.
+  ///
+  /// In en, this message translates to:
+  /// **'Social networks'**
+  String get trafficRuleBundleSocial;
+
+  /// No description provided for @trafficRuleDataReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get trafficRuleDataReady;
+
+  /// No description provided for @trafficRuleDataUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get trafficRuleDataUnavailable;
+
+  /// No description provided for @trafficRuleDataSavedCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed. Using the saved copy.'**
+  String get trafficRuleDataSavedCopy;
+
+  /// No description provided for @trafficRuleDataUpdateBundle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update {bundle}'**
+  String trafficRuleDataUpdateBundle(String bundle);
+
+  /// No description provided for @trafficRouteLocalDns.
+  ///
+  /// In en, this message translates to:
+  /// **'System DNS'**
+  String get trafficRouteLocalDns;
 
   /// No description provided for @trafficRulesSettingsTitle.
   ///
