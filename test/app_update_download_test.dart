@@ -31,6 +31,7 @@ class _DownloadServer {
   _DownloadServer(this.server) {
     server.listen((request) async {
       requests++;
+      request.response.bufferOutput = false;
       request.response.contentLength = 4;
       request.response.add([1, 2]);
       await request.response.flush();
@@ -125,11 +126,18 @@ void main() {
         }
       });
       final outcome = _outcome(operation.completed);
-      await beganWriting.future.timeout(const Duration(seconds: 5));
+      await beganWriting.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw StateError('No first chunk before cancellation'),
+      );
       operation.cancel();
       expect(operation.canCancel, isFalse);
       expect(
-        await outcome.timeout(const Duration(seconds: 5)),
+        await outcome.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () =>
+              throw StateError('The cancelled download did not finish'),
+        ),
         isA<RemoteDownloadCancelled>(),
       );
       expect(service.activeDownload, isNull);
@@ -138,7 +146,10 @@ void main() {
 
       server.finish();
       final next = service.startDownload(server.info);
-      await next.completed.timeout(const Duration(seconds: 5));
+      await next.completed.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw StateError('The retry did not finish'),
+      );
       expect(server.requests, 2);
       expect(await File(next.progress.filePath!).readAsBytes(), [1, 2, 3, 4]);
     },

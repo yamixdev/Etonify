@@ -581,9 +581,17 @@ class VpnAwareRemoteDownloader {
       }
       var completed = 0;
       final sink = destination.openWrite();
+      final chunks = StreamIterator(
+        limitRemoteDownloadIdle(response, uri: uri),
+      );
+      cancellation?._setAbort(() {
+        chunks.cancel().ignore();
+        client.close(force: true);
+      });
       try {
-        await for (final chunk in limitRemoteDownloadIdle(response, uri: uri)) {
+        while (await chunks.moveNext()) {
           cancellation?.throwIfCancelled();
+          final chunk = chunks.current;
           completed += chunk.length;
           if (completed > maximumBytes) {
             throw RemoteDownloadTooLargeException(
@@ -594,9 +602,14 @@ class VpnAwareRemoteDownloader {
           sink.add(chunk);
           onProgress?.call(completed, declaredLength > 0 ? declaredLength : 0);
         }
+        cancellation?.throwIfCancelled();
         await sink.flush();
       } finally {
-        await sink.close();
+        try {
+          await chunks.cancel();
+        } finally {
+          await sink.close();
+        }
       }
       return RemoteDownloadResult(
         statusCode: response.statusCode,

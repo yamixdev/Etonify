@@ -106,14 +106,18 @@ void main() {
     expect(find.text('26.08.2026 16:35'), findsOneWidget);
     expect(find.text('Общий размер'), findsOneWidget);
     expect(find.text('0 B'), findsOneWidget);
-    expect(find.text('Сейчас в приоритете Россия'), findsOneWidget);
-    expect(
-      find.text(
-        'Набор пока содержит правила для российских сетей и сервисов. '
-        'География будет расширяться в следующих обновлениях.',
-      ),
-      findsOneWidget,
-    );
+    final bundles = find.text('RunetFreedom');
+    await tester.scrollUntilVisible(bundles, 120);
+    expect(bundles, findsOneWidget);
+    for (final title in [
+      'Список прямых сервисов',
+      'Нейросети',
+      'Социальные сети',
+    ]) {
+      final bundle = find.text(title);
+      await tester.scrollUntilVisible(bundle, 120);
+      expect(bundle, findsOneWidget);
+    }
     expect(find.byIcon(Icons.verified_rounded), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());

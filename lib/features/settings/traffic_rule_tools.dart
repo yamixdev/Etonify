@@ -83,26 +83,29 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
         itemBuilder: (context, index) {
           final rule = _rules[index];
           final viaVpn = rule.action == TrafficRuleAction.vpn;
-          return ListTile(
+          return Material(
             key: ObjectKey(rule),
-            leading: ReorderableDragStartListener(
-              index: index,
-              child: const SizedBox(
-                width: 40,
-                height: 48,
-                child: Icon(Icons.drag_handle_rounded),
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: ReorderableDragStartListener(
+                index: index,
+                child: const SizedBox(
+                  width: 40,
+                  height: 48,
+                  child: Icon(Icons.drag_handle_rounded),
+                ),
               ),
-            ),
-            title: Text(rule.value),
-            subtitle: Text(
-              '${_matchLabel(l10n, rule.matchType)} • '
-              '${viaVpn ? l10n.trafficRuleViaVpn : l10n.trafficRuleDirect}',
-            ),
-            onTap: () => _edit(index),
-            trailing: IconButton(
-              tooltip: l10n.delete,
-              onPressed: () => setState(() => _rules.removeAt(index)),
-              icon: const Icon(Icons.close_rounded),
+              title: Text(rule.value),
+              subtitle: Text(
+                '${_matchLabel(l10n, rule.matchType)} • '
+                '${viaVpn ? l10n.trafficRuleViaVpn : l10n.trafficRuleDirect}',
+              ),
+              onTap: () => _edit(index),
+              trailing: IconButton(
+                tooltip: l10n.delete,
+                onPressed: () => setState(() => _rules.removeAt(index)),
+                icon: const Icon(Icons.close_rounded),
+              ),
             ),
           );
         },
