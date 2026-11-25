@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meow_client/app/app_background_tasks.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
+import 'package:meow_client/data/routing/traffic_route_inspector.dart';
 import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/models/subscription.dart';
 import 'package:meow_client/models/core_settings.dart';
@@ -19,6 +20,63 @@ void main() {
     output = '${directory.path}/candidate.json';
   });
   tearDown(() => directory.deleteSync(recursive: true));
+
+  test('split tunnel preserves custom route and DNS precedence', () async {
+    final rules = [
+      TrafficRuleOverride.tryParse(
+        matchType: TrafficRuleMatchType.domain,
+        value: 'api.example.net',
+        action: TrafficRuleAction.direct,
+      )!,
+      TrafficRuleOverride.tryParse(
+        matchType: TrafficRuleMatchType.domainSuffix,
+        value: 'example.net',
+        action: TrafficRuleAction.vpn,
+      )!,
+    ];
+    const app = 'net.example.browser';
+    for (final mode in SplitRoutingMode.values) {
+      final build = await buildOrReuseSingboxConfigInBackground(
+        _input(
+          output: output,
+          trafficRuleOverrides: rules,
+          splitRoutingMode: mode,
+          splitRoutingPackages: const [app],
+        ),
+        cachePath: cache,
+      );
+      final plan = build.plan;
+      final tun = (plan.config['inbounds'] as List)
+          .cast<Map<String, Object?>>()
+          .singleWhere((inbound) => inbound['tag'] == 'tun-in');
+      expect(
+        tun['include_package'],
+        mode == SplitRoutingMode.proxySelected
+            ? [app, 'com.etonify.meow_client']
+            : null,
+      );
+      expect(
+        tun['exclude_package'],
+        mode == SplitRoutingMode.bypassSelected ? [app] : null,
+      );
+      final exact = await TrafficRouteInspector.inspect(
+        target: 'api.example.net',
+        config: plan.config,
+        customRouteRules: plan.trafficRuleOverridesByRouteIndex,
+        customDnsRules: plan.trafficRuleOverridesByDnsIndex,
+      );
+      final suffix = await TrafficRouteInspector.inspect(
+        target: 'www.example.net',
+        config: plan.config,
+        customRouteRules: plan.trafficRuleOverridesByRouteIndex,
+        customDnsRules: plan.trafficRuleOverridesByDnsIndex,
+      );
+      expect(exact.route.tag, 'direct');
+      expect(exact.dns?.tag, 'dns-direct');
+      expect(suffix.route.tag, 'select');
+      expect(suffix.dns?.tag, 'dns-remote');
+    }
+  });
 
   test(
     'custom rule order invalidates cache and metadata survives reuse',
@@ -535,6 +593,8 @@ Subscription _subscription(int count, {int port = 443}) => Subscription(
 SingboxConfigBuildInput _input({
   CoreSettings coreSettings = const CoreSettings(),
   List<TrafficRuleOverride> trafficRuleOverrides = const [],
+  SplitRoutingMode splitRoutingMode = SplitRoutingMode.disabled,
+  List<String> splitRoutingPackages = const [],
   required String output,
   String selected = 'first',
   int mtu = 1500,
@@ -578,8 +638,8 @@ SingboxConfigBuildInput _input({
   russiaAiServicesPath: null,
   russiaSocialServicesPath: null,
   bypassLocalNetwork: true,
-  splitRoutingMode: SplitRoutingMode.disabled,
-  splitRoutingPackages: <String>[],
+  splitRoutingMode: splitRoutingMode,
+  splitRoutingPackages: splitRoutingPackages,
   logLevel: 'info',
   tcpFastOpenEnabled: false,
   tcpMultiPathEnabled: false,

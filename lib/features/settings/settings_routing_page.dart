@@ -114,6 +114,12 @@ class _SettingsRoutingPageState extends ConsumerState<SettingsRoutingPage> {
             return TrafficRulesPage(
               currentPreset: liveSettings.trafficRulePreset,
               currentStatus: liveStatus,
+              splitRoutingMode:
+                  !kIsWeb &&
+                      defaultTargetPlatform == TargetPlatform.android &&
+                      liveSettings.vpnInboundEnabled
+                  ? liveSettings.splitRoutingMode
+                  : SplitRoutingMode.disabled,
               trafficRuleOverrides: liveSettings.trafficRuleOverrides,
               onTrafficRuleOverridesChanged: commands.setTrafficRuleOverrides,
               onInspectTrafficRoute: commands.inspectTrafficRoute,

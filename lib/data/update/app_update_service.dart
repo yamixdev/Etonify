@@ -524,17 +524,22 @@ class AppUpdateService {
         metadataMatchesChannel &&
         metadata.latestInfo != null &&
         metadata.latestInfo!.asset.digestSha256 == null;
+    final canUseCachedCheck = !metadata.isDue && !cachedInfoMissingDigest;
+    final hasPendingInstaller =
+        metadata.downloadedUpdatePath?.trim().isNotEmpty == true;
     if (!manual &&
         metadataMatchesChannel &&
-        !metadata.isDue &&
-        !cachedInfoMissingDigest) {
+        (canUseCachedCheck || hasPendingInstaller)) {
       final cached = await _cachedCheckResultFor(
         metadata,
         currentVersion: currentVersion,
         currentBuildNumber: currentBuildNumber,
         channel: channel,
       );
-      if (cached != null) {
+      // A verified update waiting for installation should be available on the
+      // next launch without a release request, even after the check expires.
+      if (cached != null &&
+          (canUseCachedCheck || cached.status == AppUpdateStatus.downloaded)) {
         return cached;
       }
     }
@@ -1331,14 +1336,13 @@ class AppUpdateService {
     final normalizedPath = path?.trim();
     if (normalizedPath == null || normalizedPath.isEmpty) return null;
     final file = File(normalizedPath);
-    if (!file.existsSync()) return null;
     if (!file.path.toLowerCase().endsWith('.apk')) return null;
     final expectedName = sanitizeAssetFileName(info.asset.name).toLowerCase();
     final actualName = file.uri.pathSegments.last.toLowerCase();
     if (actualName != expectedName) return null;
-    final length = await file.length();
-    if (length <= 0) return null;
-    if (info.asset.sizeBytes > 0 && length != info.asset.sizeBytes) {
+    final stat = await file.stat();
+    if (stat.type != FileSystemEntityType.file || stat.size <= 0) return null;
+    if (info.asset.sizeBytes > 0 && stat.size != info.asset.sizeBytes) {
       return null;
     }
     final verification = await verifyDownloadedApk(info, file.path);

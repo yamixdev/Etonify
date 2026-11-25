@@ -1294,6 +1294,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updatesInstallAction => 'Install APK';
 
   @override
+  String get updatesUpdateNow => 'Update now';
+
+  @override
   String get updatesDownloadWarning =>
       'Keep Etonify open until the download finishes.';
 

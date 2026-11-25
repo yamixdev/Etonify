@@ -230,10 +230,15 @@ internal class MeowForegroundNotification(
     private var latencyActionStartedAtSeconds = 0L
     private var latencyActionInFlight = false
     private var measurementNotBeforeSeconds = 0L
+    private var historyNotBeforeSeconds = 0L
+    private var displayedMeasurementMillis = 0L
+    private var lastGroupsRevision = 0L
+    private var pendingSelectionLookup: Any? = null
     private var latencyTimeoutRunnable: Runnable? = null
     private class GroupLatencyAction(val tag: String, val resultsThroughElapsedMillis: Long) {
-        val delays = mutableMapOf<String, Long>()
+        val measurements = mutableMapOf<String, GroupLatencyMeasurement>()
     }
+    private data class GroupLatencyMeasurement(val delay: Long?, val measuredAt: Long, val revision: Long)
     private data class LatencyActionContext(
         val runtime: Long, val network: Long, val selection: Long, val target: String,
         val startedAtMillis: Long, val minimumRevision: Long, val requestId: String,
@@ -282,6 +287,7 @@ internal class MeowForegroundNotification(
             lifecycleStatus = status
             if (status in setOf("Starting", "Restarting", "Reloading", "Stopping")) {
                 cancelLatencyObserversLocked()
+                pendingSelectionLookup = null
                 startupRuntimeGeneration = 0L
                 startupOwnership.update(0L, startupNetworkGeneration, "", false, tileStartup)
             }
@@ -304,14 +310,19 @@ internal class MeowForegroundNotification(
             if (foregroundStarted && lifecycleStatus == "Connected") {
                 val oldTarget = previous.urlTestRequest?.targetOutboundTag.orEmpty()
                 val nativeTarget = resolveCurrentPingTarget()
-                val target = if (selectedOutboundsReady || incoming.urlTestRequest?.targetOutboundTag.isNullOrEmpty())
-                    nativeTarget else incoming.urlTestRequest.targetOutboundTag
+                val target = if (startupRuntimeGeneration > 0L || selectedOutboundsReady ||
+                    incoming.urlTestRequest?.targetOutboundTag.isNullOrEmpty()
+                ) nativeTarget else incoming.urlTestRequest.targetOutboundTag
                 val request = (incoming.urlTestRequest ?: previous.urlTestRequest)?.copy(
                     targetOutboundTag = target, priorityOutboundTag = target, excludeOutboundTag = "",
                 )
+                val canUseFlutterLatency = startupRuntimeGeneration <= 0L &&
+                    incoming.urlTestRequest?.targetOutboundTag == target &&
+                    (target != oldTarget || displayedMeasurementMillis == 0L)
                 presentation = incoming.copy(
                     urlTestRequest = request,
-                    latencyMillis = incoming.latencyMillis ?: previous.latencyMillis.takeIf { target == oldTarget },
+                    latencyMillis = incoming.latencyMillis.takeIf { canUseFlutterLatency }
+                        ?: previous.latencyMillis.takeIf { target == oldTarget },
                 )
                 // UI attachment commonly has no runtime target yet. It changes
                 // labels/settings, not the native leaf's in-flight ownership.
@@ -322,12 +333,6 @@ internal class MeowForegroundNotification(
             }
             persistPresentation(presentation)
             trafficRateWindow.requestImmediateEmission()
-            if (!latencyChecking) {
-                // Flutter delivers the last known successful result on every
-                // selected-outbound update. Do not leave an old action result
-                // visible after a real selection change.
-                latencyActionInFlight = false
-            }
             refreshLocked()
         }
         return true
@@ -377,6 +382,7 @@ internal class MeowForegroundNotification(
 
     private fun deactivateLocked(): Runnable? {
         cancelLatencyObserversLocked()
+        pendingSelectionLookup = null
         foregroundStarted = false
         notificationGeneration++
         refreshPending = false
@@ -420,15 +426,22 @@ internal class MeowForegroundNotification(
             val groupResult = attributed && context?.autoGroup != null &&
                 context.requestId == logicalSessionId && measuredAtMillis >= context.startedAtMillis &&
                 latencyContextCurrentLocked(context)
-            if (groupResult && normalizedTag.isNotEmpty()) {
-                context?.autoGroup?.delays?.set(normalizedTag, delayMillis)
+            val measuredDelay = delayMillis.takeIf { it > 0L && status != "unavailable" }
+            val isMeasurement = measuredDelay != null || status == "unavailable"
+            if (groupResult && isMeasurement && normalizedTag.isNotEmpty()) {
+                val measurements = checkNotNull(context?.autoGroup).measurements
+                if ((measurements[normalizedTag]?.revision ?: 0L) < revision) {
+                    measurements[normalizedTag] = GroupLatencyMeasurement(measuredDelay, measuredAtMillis, revision)
+                }
             }
             if (!groupResult && selectionEpoch != null && selectionEpoch != this.selectionEpoch) return
             // Legacy group timestamps have only second precision and cannot
             // distinguish A -> B -> A. Only attributed deltas may repaint
             // after an authoritative selected leaf has changed.
             if (selectionEpoch == null && this.selectionEpoch > 0L) return
-            if (!foregroundStarted || lifecycleStatus != "Connected" || normalizedTag != request.targetOutboundTag) {
+            if (!foregroundStarted || lifecycleStatus != "Connected" || normalizedTag != request.targetOutboundTag ||
+                (startupRuntimeGeneration > 0L && !selectedOutboundsReady)
+            ) {
                 return
             }
             val actionStartedAtSeconds = if (latencyActionInFlight) latencyActionStartedAtSeconds else measurementNotBeforeSeconds
@@ -454,17 +467,22 @@ internal class MeowForegroundNotification(
                     else -> dispatchLatencyCompletionLocked(NetworkHandoverProbeOutcome.HEALTHY)
                 }
             }
+            val ownsLeafAction = attributed && context != null &&
+                context.requestId == logicalSessionId && measuredAtMillis >= context.startedAtMillis &&
+                revision > context.minimumRevision
             if (context?.autoGroup == null &&
-                ((!recoveryPending && (nativeStartupToken == null || attributed)) || terminalRecovery)
+                (terminalRecovery || (!recoveryPending &&
+                    (ownsLeafAction || (nativeStartupToken != null && attributed))))
             ) {
                 latencyActionInFlight = false
                 latencyChecking = false
                 latencyTimeoutRunnable?.let(mainHandler::removeCallbacks)
                 latencyTimeoutRunnable = null
             }
-            presentation = presentation.copy(
-                latencyMillis = delayMillis.takeIf { it > 0L },
-            )
+            if (measuredAtMillis >= displayedMeasurementMillis && isMeasurement) {
+                displayedMeasurementMillis = measuredAtMillis
+                presentation = presentation.copy(latencyMillis = measuredDelay)
+            }
             // CommandGroup snapshots have no request identity/revision. They
             // may repaint, but only a real attributed delta can own startup.
             if (attributed) {
@@ -481,10 +499,54 @@ internal class MeowForegroundNotification(
         }
     }
 
+    internal fun requestManualLatencyRefresh(
+        querySelection: ((Result<Map<String, Any?>>) -> Unit) -> Unit = SingboxController::querySelectedOutbounds,
+    ): Boolean {
+        val lookup = synchronized(this) {
+            if (pendingSelectionLookup != null) return false
+            if (!foregroundStarted || lifecycleStatus != "Connected") return false
+            if (startupRuntimeGeneration <= 0L || selectedOutboundsReady || selectedAutoGroup() != null) {
+                null
+            } else {
+                Any().also {
+                    pendingSelectionLookup = it
+                    refreshLocked()
+                }
+            }
+        }
+        if (lookup == null) return requestLatencyRefresh(explicit = true)
+        querySelection { result ->
+            val ready = synchronized(this) {
+                if (pendingSelectionLookup !== lookup) return@querySelection
+                val snapshot = result.getOrNull()
+                if (snapshot != null && !selectedOutboundsReady && selectedAutoGroup() == null &&
+                    snapshot["runtimeGeneration"] == startupRuntimeGeneration &&
+                    snapshot["networkGeneration"] == startupNetworkGeneration
+                ) {
+                    val selections = (snapshot["selectedOutbounds"] as? Map<*, *>)?.entries.orEmpty()
+                        .mapNotNull { (tag, member) ->
+                            if (tag is String && member is String) tag to member else null
+                        }.toMap()
+                    updateSelectedOutbounds(selections, startProbe = false)
+                }
+                (selectedOutboundsReady || selectedAutoGroup() != null).also { ready ->
+                    if (!ready) {
+                        pendingSelectionLookup = null
+                        refreshLocked()
+                    }
+                }
+            }
+            if (ready) requestLatencyRefresh(explicit = true, selectionLookup = lookup)
+        }
+        return true
+    }
+
     internal fun requestLatencyRefresh(
         startup: Boolean = false,
         recoveryRequest: UrlTestRequest? = null,
         canDispatch: () -> Boolean = { true },
+        explicit: Boolean = false,
+        selectionLookup: Any? = null,
         onComplete: ((NetworkHandoverProbeOutcome) -> Unit)? = null,
     ): Boolean {
         val request: UrlTestRequest
@@ -492,21 +554,31 @@ internal class MeowForegroundNotification(
         val timeoutCallback: Runnable
         val autoGroup: String?
         synchronized(this) {
+            if (pendingSelectionLookup !== selectionLookup) return false
+            if (selectionLookup != null) {
+                pendingSelectionLookup = null
+                refreshLocked()
+            }
             val selectedRequest = presentation.urlTestRequest ?: return false
             if (recoveryRequest != null && recoveryProbeRequest() != recoveryRequest) return false
             autoGroup = if (!startup && recoveryRequest == null && onComplete == null) selectedAutoGroup() else null
             if (!foregroundStarted || lifecycleStatus != "Connected" ||
-                (autoGroup == null && selectedRequest.targetOutboundTag.isEmpty())
+                (autoGroup == null && (selectedRequest.targetOutboundTag.isEmpty() ||
+                    (startupRuntimeGeneration > 0L && !selectedOutboundsReady)))
             ) {
                 return false
             }
             if (latencyActionInFlight) {
                 val context = latencyActionContext
-                if (recoveryRequest != null || onComplete == null || context == null || context.autoGroup != null ||
-                    !latencyContextCurrentLocked(context)
-                ) return false
-                latencyCompletionObservers += onComplete
-                return true
+                if (explicit && autoGroup != null && nativeStartupToken != null) {
+                    completeLatencyAction(latencyActionGeneration)
+                } else {
+                    if (recoveryRequest != null || onComplete == null || context == null || context.autoGroup != null ||
+                        !latencyContextCurrentLocked(context)
+                    ) return false
+                    latencyCompletionObservers += onComplete
+                    return true
+                }
             }
             if (onComplete != null && clientStartupRequest?.let {
                     it.runtime == startupRuntimeGeneration && it.network == startupNetworkGeneration &&
@@ -551,12 +623,12 @@ internal class MeowForegroundNotification(
             if (result.isFailure) completeLatencyAction(actionGeneration)
         }
         val dispatchCurrent = {
-            canDispatch() && (autoGroup == null || synchronized(this) {
+            canDispatch() && synchronized(this) {
                 latencyActionInFlight && latencyActionGeneration == actionGeneration &&
                     latencyActionContext?.let(::latencyContextCurrentLocked) == true &&
                     presentation.urlTestRequest?.url == request.url &&
                     presentation.urlTestRequest?.timeoutMillis == request.timeoutMillis
-            })
+            }
         }
         val runner = latencyTestRunner
         try {
@@ -822,7 +894,7 @@ internal class MeowForegroundNotification(
         setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
     }
 
-    private fun resolveCurrentPingTarget(): String {
+    private fun resolveCurrentPingTarget(allowFallback: Boolean = startupRuntimeGeneration <= 0L): String {
         var tag = rootOutboundTag
         val visited = mutableSetOf<String>()
         while (tag.isNotEmpty() && visited.add(tag)) {
@@ -830,8 +902,9 @@ internal class MeowForegroundNotification(
             when (outbound.type) {
                 "selector", "urltest" -> {
                     tag = selectedOutbounds[tag]?.takeIf { it in outbound.members }
-                        ?: outbound.defaultTag.takeIf { it in outbound.members }
-                        ?: outbound.members.firstOrNull().orEmpty()
+                        ?: if (allowFallback) outbound.defaultTag.takeIf { it in outbound.members }
+                            ?: outbound.members.firstOrNull().orEmpty()
+                        else return ""
                 }
                 "direct", "block", "dns", "" -> break
                 else -> return tag
@@ -875,12 +948,55 @@ internal class MeowForegroundNotification(
             latencyChecking = false
         }
         measurementNotBeforeSeconds = System.currentTimeMillis() / 1_000L
+        val measurement = continuingGroup?.autoGroup?.measurements?.get(target)
+        displayedMeasurementMillis = measurement?.measuredAt ?: 0L
         presentation = presentation.copy(
-            latencyMillis = continuingGroup?.autoGroup?.delays?.get(target)?.takeIf { it > 0L },
+            latencyMillis = measurement?.delay,
             urlTestRequest = request,
         )
         persistPresentation(presentation)
         return true
+    }
+
+    internal fun updateGroupsSnapshot(
+        selected: Map<String, String>,
+        latencyHistory: List<Map<String, Any?>>,
+        runtime: Long,
+        network: Long,
+        revision: Long = 0L,
+    ) {
+        synchronized(this) {
+            if (runtime != startupRuntimeGeneration || network != startupNetworkGeneration ||
+                !foregroundStarted || lifecycleStatus != "Connected" ||
+                (revision > 0L && revision <= lastGroupsRevision)
+            ) return
+            val committed = SingboxController.committedNetworkServerTag(runtime, network)
+            if (committed != null && selected["select"] != committed) return
+            if (revision > 0L) lastGroupsRevision = revision
+            updateSelectedOutbounds(selected, runtime, network, startProbe = false)
+            if (selectedOutboundsReady && lifecycleStatus == "Connected") {
+                val tag = presentation.urlTestRequest?.targetOutboundTag
+                val history = latencyHistory.lastOrNull { it["tag"] == tag }
+                val delay = (history?.get("delay") as? Long)?.takeIf { it > 0L }
+                val unavailable = history?.get("status") == "unavailable"
+                val seconds = history?.get("time") as? Long ?: 0L
+                val time = seconds * 1_000L
+                val actionStartedAt = latencyActionContext?.startedAtMillis?.takeIf { latencyActionInFlight } ?: 0L
+                // A group snapshot describes the selected leaf and its history
+                // together. Use it for display without completing a URLTest.
+                if ((delay != null || unavailable) && seconds >= historyNotBeforeSeconds &&
+                    time > maxOf(displayedMeasurementMillis, actionStartedAt)
+                ) {
+                    displayedMeasurementMillis = time
+                    if (presentation.latencyMillis != delay) {
+                        presentation = presentation.copy(latencyMillis = delay)
+                        persistPresentation(presentation)
+                        refreshLocked()
+                    }
+                }
+            }
+            requestStartupLatencyIfReady()
+        }
     }
 
     fun updateSelectedOutbounds(selected: Map<String, String>, runtimeGeneration: Long? = null, networkGeneration: Long? = null, startProbe: Boolean = true) {
@@ -890,9 +1006,11 @@ internal class MeowForegroundNotification(
             if (networkGeneration != null && networkGeneration != startupNetworkGeneration) return
             val oldTarget = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
             val wasReady = selectedOutboundsReady
+            val previousAutoGroup = selectedAutoGroup()
             selectedOutbounds = selected.toMap()
-            val leftGroup = latencyActionContext?.autoGroup?.let { it.tag != selectedAutoGroup() } == true
-            if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = leftGroup)) refreshLocked()
+            val autoGroup = selectedAutoGroup()
+            val groupChanged = previousAutoGroup != autoGroup && latencyActionInFlight
+            if (setPingTarget(resolveCurrentPingTarget(), clearMeasurement = groupChanged)) refreshLocked()
             if (wasReady && oldTarget != presentation.urlTestRequest?.targetOutboundTag.orEmpty()) selectionEpoch++
             selectedOutboundsReady = hasAuthoritativePingTarget()
             updateStartupContext()
@@ -902,14 +1020,20 @@ internal class MeowForegroundNotification(
 
     fun onRuntimeReady(runtimeGeneration: Long, networkGeneration: Long, tileStartup: Boolean) {
         synchronized(this) {
+            if (networkGeneration < startupNetworkGeneration) return
             if (runtimeGeneration != this.startupRuntimeGeneration) {
-                cancelLatencyObserversLocked()
+                this.startupRuntimeGeneration = runtimeGeneration
+                startupNetworkGeneration = networkGeneration
+                pendingSelectionLookup = null
+                historyNotBeforeSeconds = System.currentTimeMillis() / 1_000L
                 startupMeasurementFinished = false
                 selectionEpoch = 0L
+                selectedOutbounds = emptyMap()
                 selectedOutboundsReady = false
+                setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
+            } else {
+                onNetworkGenerationChanged(networkGeneration)
             }
-            this.startupRuntimeGeneration = runtimeGeneration
-            this.startupNetworkGeneration = networkGeneration
             this.tileStartup = tileStartup
             updateStartupContext()
             requestStartupLatencyIfReady()
@@ -918,8 +1042,12 @@ internal class MeowForegroundNotification(
 
     fun onNetworkGenerationChanged(networkGeneration: Long) {
         synchronized(this) {
-            if (networkGeneration == startupNetworkGeneration) return
+            if (networkGeneration <= startupNetworkGeneration) return
             startupNetworkGeneration = networkGeneration
+            pendingSelectionLookup = null
+            // The history stream has only whole-second timestamps.
+            historyNotBeforeSeconds = System.currentTimeMillis() / 1_000L + 1L
+            selectedOutbounds = emptyMap()
             selectedOutboundsReady = false
             setPingTarget(resolveCurrentPingTarget(), clearMeasurement = true)
             updateStartupContext()
@@ -954,7 +1082,7 @@ internal class MeowForegroundNotification(
     }
 
     private fun requestStartupLatencyIfReady() {
-        if (startupMeasurementFinished || latencyActionInFlight) return
+        if (startupMeasurementFinished || latencyActionInFlight || pendingSelectionLookup != null) return
         if (selectedOutboundsReady && lifecycleStatus == "Connected") {
             val leaf = presentation.urlTestRequest?.targetOutboundTag.orEmpty()
             SingboxController.cachedNotificationLatency(leaf, startupRuntimeGeneration, startupNetworkGeneration, selectionEpoch)?.let {
@@ -1137,7 +1265,11 @@ internal class MeowForegroundNotification(
         notificationManager.createNotificationChannel(channel)
     }
 
-    internal fun onNetworkServerSelectionChanged() = synchronized(this) { refreshLocked() }
+    internal fun onNetworkServerSelectionChanged(tag: String, runtime: Long, network: Long) = synchronized(this) {
+        if (runtime != startupRuntimeGeneration || network != startupNetworkGeneration) return@synchronized
+        updateSelectedOutbounds(selectedOutbounds + ("select" to tag), runtime, network, startProbe = false)
+        refreshLocked()
+    }
 
     private fun refreshLocked() {
         if (!foregroundStarted || refreshPending) {
@@ -1205,7 +1337,9 @@ internal class MeowForegroundNotification(
             // notification asks Android to promote every traffic refresh.
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
-        if (showDetails && !presentation.urlTestRequest?.targetOutboundTag.isNullOrEmpty()) {
+        if (showDetails && presentation.urlTestRequest != null &&
+            (selectedAutoGroup() != null || resolveCurrentPingTarget(allowFallback = true).isNotEmpty())
+        ) {
             builder.addAction(
                 Notification.Action.Builder(
                     Icon.createWithResource(service, android.R.drawable.ic_popup_sync),
@@ -1236,7 +1370,7 @@ internal class MeowForegroundNotification(
         val speed = "↓ ${formatRate(displayedDownlink)}  ↑ ${formatRate(displayedUplink)}"
         val totals = "↓ ${formatBytes(downlinkTotal)}  ↑ ${formatBytes(uplinkTotal)}"
         val latency = when {
-            latencyChecking -> presentation.checkingText
+            latencyChecking || pendingSelectionLookup != null -> presentation.checkingText
             presentation.latencyMillis != null -> "${presentation.latencyMillis} мс"
             else -> presentation.unavailableText
         }

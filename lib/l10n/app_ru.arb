@@ -437,6 +437,7 @@
   "updatesCancelDownload": "Отменить скачивание",
   "updatesCancellingDownload": "Отменяем скачивание…",
   "updatesInstallAction": "Установить APK",
+  "updatesUpdateNow": "Обновить сейчас",
   "updatesDownloadWarning": "Не закрывайте Etonify до завершения загрузки.",
   "updatesOpeningInstaller": "Открываем системный установщик…",
   "updatesInstallPermissionHint": "Разрешите установку APK для Etonify, затем нажмите «Установить APK» ещё раз.",

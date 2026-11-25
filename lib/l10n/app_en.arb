@@ -437,6 +437,7 @@
   "updatesCancelDownload": "Cancel download",
   "updatesCancellingDownload": "Cancelling download…",
   "updatesInstallAction": "Install APK",
+  "updatesUpdateNow": "Update now",
   "updatesDownloadWarning": "Keep Etonify open until the download finishes.",
   "updatesOpeningInstaller": "Opening the system installer…",
   "updatesInstallPermissionHint": "Allow APK installs for Etonify, then tap “Install APK” again.",

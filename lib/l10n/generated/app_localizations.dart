@@ -2408,6 +2408,12 @@ abstract class AppLocalizations {
   /// **'Install APK'**
   String get updatesInstallAction;
 
+  /// No description provided for @updatesUpdateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update now'**
+  String get updatesUpdateNow;
+
   /// No description provided for @updatesDownloadWarning.
   ///
   /// In en, this message translates to:

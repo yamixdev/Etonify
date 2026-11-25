@@ -60,6 +60,112 @@ class ForegroundNotificationRecoveryTest {
         assertEquals("a", request.targetOutboundTag)
     }
 
+    @Test fun `background group snapshot shows latency for the newly selected leaf`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["provider"]},
+              {"type":"urltest","tag":"provider","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "provider", "provider" to "a"),
+        )
+        val now = System.currentTimeMillis() / 1_000L
+        val history = listOf(
+            mapOf("tag" to "a", "delay" to 70L, "time" to now),
+            mapOf("tag" to "b", "delay" to 24L, "time" to now),
+        )
+        val selected = mapOf("select" to "provider", "provider" to "b")
+        val prefs = MeowApplication.application.getSharedPreferences("meow_foreground_notification", 0)
+        notification.updateGroupsSnapshot(selected, history, 7L, 3L)
+        assertEquals(24L, prefs.getLong("latency", -1L))
+        assertTrue(requests.isEmpty())
+
+        notification.onNetworkGenerationChanged(4L)
+        notification.updateGroupsSnapshot(selected, history, 7L, 4L)
+        assertEquals(-1L, prefs.getLong("latency", -1L))
+    }
+
+    @Test fun `explicit refresh looks up the selected group once when selection is unknown`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["a","provider"],"default":"a"},
+              {"type":"urltest","tag":"provider","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"}
+            ]}
+            """.trimIndent(),
+            emptyMap(),
+        )
+        var finish: ((Result<Map<String, Any?>>) -> Unit)? = null
+        assertTrue(notification.requestManualLatencyRefresh { finish = it })
+        assertFalse(notification.requestManualLatencyRefresh { error("Duplicate selector lookup") })
+        assertTrue(requests.isEmpty())
+
+        requireNotNull(finish)(Result.success(mapOf(
+            "runtimeGeneration" to 7L,
+            "networkGeneration" to 3L,
+            "selectedOutbounds" to mapOf("select" to "provider", "provider" to "b"),
+        )))
+        assertEquals("provider", requests.single().groupTag)
+        assertEquals("", requests.single().targetOutboundTag)
+        assertEquals("b", requests.single().priorityOutboundTag)
+    }
+
+    @Test fun `group history cannot finish a manual latency request`() {
+        assertTrue(notification.requestManualLatencyRefresh())
+        val time = System.currentTimeMillis() / 1_000L + 2L
+        notification.updateGroupsSnapshot(
+            mapOf("select" to "a"),
+            listOf(mapOf("tag" to "a", "delay" to 32L, "time" to time)),
+            7L, 3L,
+        )
+        assertFalse(notification.requestManualLatencyRefresh())
+        assertEquals(1, requests.size)
+    }
+
+    @Test fun `handover refresh looks up the new network instead of testing the previous group`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["provider","c"]},
+              {"type":"urltest","tag":"provider","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"},{"type":"vless","tag":"c"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "provider", "provider" to "a"),
+        )
+        notification.onNetworkGenerationChanged(4L)
+
+        var finish: ((Result<Map<String, Any?>>) -> Unit)? = null
+        assertTrue(notification.requestManualLatencyRefresh { finish = it })
+        assertTrue(requests.isEmpty())
+        requireNotNull(finish)(Result.success(mapOf(
+            "runtimeGeneration" to 7L,
+            "networkGeneration" to 4L,
+            "selectedOutbounds" to mapOf("select" to "c"),
+        )))
+
+        assertEquals("select", requests.single().groupTag)
+        assertEquals("c", requests.single().targetOutboundTag)
+    }
+
+    @Test fun `handover cannot restore stale Flutter latency for the same leaf`() {
+        notification.onNetworkGenerationChanged(4L)
+        notification.updateSelectedOutbounds(mapOf("select" to "a"), 7L, 4L, startProbe = false)
+        notification.updatePresentation(mapOf(
+            "url" to "http://ping.example",
+            "targetOutboundTag" to "a",
+            "latencyMillis" to 35L,
+        ))
+        val prefs = MeowApplication.application.getSharedPreferences("meow_foreground_notification", 0)
+        assertEquals(-1L, prefs.getLong("latency", -1L))
+    }
+
     @Test fun `explicit refresh of a provider group starts a bounded candidate scan`() {
         notification.stopPublishing()
         startNotification(
@@ -99,6 +205,39 @@ class ForegroundNotificationRecoveryTest {
         assertEquals(-1L, prefs.getLong("latency", -1L))
         assertTrue(notification.requestLatencyRefresh())
         assertEquals("b", requests.last().priorityOutboundTag)
+    }
+
+    @Test fun `explicit group refresh supersedes a tile startup leaf measurement`() {
+        notification.stopPublishing()
+        startNotification(
+            """
+            {"outbounds":[
+              {"type":"selector","tag":"select","outbounds":["provider"]},
+              {"type":"urltest","tag":"provider","outbounds":["a","b"]},
+              {"type":"vless","tag":"a"},{"type":"vless","tag":"b"}
+            ]}
+            """.trimIndent(),
+            mapOf("select" to "provider", "provider" to "a"),
+        )
+        notification.onRuntimeReady(7L, 3L, true)
+        assertEquals("a", requests.single().targetOutboundTag)
+
+        assertTrue(notification.requestManualLatencyRefresh())
+        assertFalse(notification.requestManualLatencyRefresh())
+        val group = requests.last()
+        assertEquals("provider", group.groupTag)
+        assertEquals("", group.targetOutboundTag)
+
+        val measuredAt = System.currentTimeMillis()
+        notification.onUrlTestResult(
+            "b", 23L, measuredAt / 1_000L, "available", 7L, 3L, measuredAt, 2L, 2L,
+            selectionEpoch = 0L, logicalSessionId = group.logicalSessionId,
+        )
+        notification.onUrlTestSessionTerminal(group.logicalSessionId, 7L, 3L)
+        notification.updateSelectedOutbounds(mapOf("select" to "provider", "provider" to "b"), startProbe = false)
+
+        val prefs = MeowApplication.application.getSharedPreferences("meow_foreground_notification", 0)
+        assertEquals(23L, prefs.getLong("latency", -1L))
     }
 
     @Test fun `recovery uses the configured HTTP URL and timeout and rejects changed settings`() {

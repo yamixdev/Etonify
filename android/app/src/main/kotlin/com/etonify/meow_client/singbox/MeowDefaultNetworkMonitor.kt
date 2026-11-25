@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 object MeowDefaultNetworkMonitor {
     private const val TAG = "MeowDefaultNetwork"
     private const val NETWORK_CHANGE_DEBOUNCE_MS = 500L
+    private const val WIFI_RECOVERY_DELAY_MS = 15_000L
+    private const val WIFI_RECOVERY_MAX_DELAY_MS = 60_000L
     private val lock = Any()
     private val networkHandlerThread = HandlerThread("MeowNetworkCallback").apply { start() }
     private val networkHandler = Handler(networkHandlerThread.looper)
@@ -47,6 +49,7 @@ object MeowDefaultNetworkMonitor {
     private var committedPhysicalKey: String? = null
     private var committedServerNetwork: Pair<Network, ServerNetworkSnapshot>? = null
     private var wifiFailover: Pair<Network, Network>? = null
+    private var wifiRecoveryFuture: ScheduledFuture<*>? = null
     private var wifiFailoverProbeGeneration: Long? = null
     private var selectedNetworkLossSerial = 0L
     private var heartbeatFuture: ScheduledFuture<*>? = null
@@ -157,7 +160,7 @@ object MeowDefaultNetworkMonitor {
             appliedInterfaceKey = null
             committedPhysicalKey = null
             committedServerNetwork = null
-            wifiFailover = null
+            clearWifiFailoverLocked()
             wifiFailoverProbeGeneration = null
             interfaceUpdateGate.reset()
             pendingNotifyRunnable?.let(networkHandler::removeCallbacks)
@@ -330,8 +333,10 @@ object MeowDefaultNetworkMonitor {
         ) return false
         synchronized(lock) {
             if (!started || currentNetwork != wifi || generation != networkInterfaceGeneration.get()) return false
-            wifiFailover = wifi to mobile
+            val fallback = wifi to mobile
+            wifiFailover = fallback
             currentNetwork = mobile
+            scheduleWifiRecoveryLocked(fallback, WIFI_RECOVERY_DELAY_MS)
         }
         MeowDiagnostics.log(TAG, "wifi_probe_failed switching_to_cellular generation=$generation")
         notifyListener(immediate = true)
@@ -342,6 +347,37 @@ object MeowDefaultNetworkMonitor {
     private fun hasValidatedInternet(network: Network): Boolean =
         MeowApplication.connectivity.getNetworkCapabilities(network)
             ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+
+    private fun scheduleWifiRecoveryLocked(fallback: Pair<Network, Network>, delayMillis: Long) {
+        wifiRecoveryFuture = heartbeatExecutor.schedule({
+            val (wifi, mobile) = fallback
+            val generation = synchronized(lock) {
+                if (!started || wifiFailover !== fallback || currentNetwork != mobile) return@schedule
+                networkInterfaceGeneration.get()
+            }
+            val recovered = hasValidatedInternet(wifi) && hasUsableNetworkInterface(wifi) &&
+                probeInternet(wifi)
+            synchronized(lock) {
+                if (!started || wifiFailover !== fallback || currentNetwork != mobile) return@schedule
+                if (recovered && generation == networkInterfaceGeneration.get() &&
+                    hasValidatedInternet(wifi)
+                ) {
+                    clearWifiFailoverLocked()
+                } else {
+                    scheduleWifiRecoveryLocked(fallback, minOf(delayMillis * 2, WIFI_RECOVERY_MAX_DELAY_MS))
+                    return@schedule
+                }
+            }
+            MeowDiagnostics.log(TAG, "wifi_probe_recovered generation=$generation")
+            refreshPhysicalDefault()
+        }, delayMillis, TimeUnit.MILLISECONDS)
+    }
+
+    private fun clearWifiFailoverLocked() {
+        wifiFailover = null
+        wifiRecoveryFuture?.cancel(false)
+        wifiRecoveryFuture = null
+    }
 
     internal fun serverNetworkSnapshot(): ServerNetworkSnapshot? = synchronized(lock) {
         committedServerNetwork?.takeIf {
@@ -360,7 +396,7 @@ object MeowDefaultNetworkMonitor {
     internal fun clearWifiFailover() {
         val changed = synchronized(lock) {
             if (wifiFailover == null) false else {
-                wifiFailover = null
+                clearWifiFailoverLocked()
                 true
             }
         }
@@ -444,14 +480,14 @@ object MeowDefaultNetworkMonitor {
                 .getOrDefault(-1)
         }
         val key = physicalInterfaceKey(network, interfaceName, index)
-        val delivered = synchronized(lock) {
-            listener != null && appliedInterfaceKey == key
+        val (delivered, generation) = synchronized(lock) {
+            (listener != null && appliedInterfaceKey == key) to networkInterfaceGeneration.get()
         }
         return InterfaceState(
             available = interfaceName.isNotEmpty() && index >= 0 && delivered,
             interfaceName = interfaceName,
             interfaceIndex = index,
-            generation = networkInterfaceGeneration.get(),
+            generation = generation,
             reason = reason,
             updatedAtMillis = System.currentTimeMillis(),
         )
@@ -730,6 +766,7 @@ object MeowDefaultNetworkMonitor {
             }
             SingboxController.noteNetworkGeneration(nextGen)
             MeowBasePlatformInterface.cancelPendingDnsQueries("default_interface_missing")
+            MeowBoxService.onDefaultNetworkChanged(false)
             runCatching { currentListener.updateDefaultInterface("", -1, false, false) }
                 .onFailure {
                     interfaceUpdateGate.failed("missing:$effectiveNetwork")
@@ -903,7 +940,7 @@ object MeowDefaultNetworkMonitor {
                     candidates.any { it.network == mobile && it.isValidated } &&
                     hasUsableNetworkInterface(mobile)
                 ) return mobile
-                synchronized(lock) { if (wifiFailover == fallback) wifiFailover = null }
+                synchronized(lock) { if (wifiFailover === fallback) clearWifiFailoverLocked() }
             }
         }
         val selectedNetwork = selectDefaultNetworkCandidate(

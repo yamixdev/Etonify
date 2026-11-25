@@ -55,6 +55,57 @@ void main() {
       isNull,
     );
   });
+
+  test('root confirmation rejects a reply from before Wi-Fi to LTE', () {
+    final reply = <String, dynamic>{
+      'runtimeGeneration': 7,
+      'networkGeneration': 3,
+      'runtimeStateRevision': 14,
+      'selectedOutbounds': {'select': 'wifi'},
+    };
+    expect(
+      ProxySelectionController.rootSelectionFromSnapshot(
+        reply,
+        runtimeGeneration: 7,
+        networkGeneration: 4,
+        minimumStateRevision: 14,
+      ),
+      isNull,
+    );
+    expect(
+      ProxySelectionController.rootSelectionFromSnapshot(
+        reply,
+        runtimeGeneration: 7,
+        networkGeneration: 3,
+        minimumStateRevision: 15,
+      ),
+      isNull,
+    );
+  });
+
+  test('automatic server choice belongs to its committed transport', () {
+    final reply = <String, dynamic>{
+      'runtimeGeneration': 7,
+      'runtimeStateRevision': 15,
+      'networkServerSelection': {
+        'profileId': 'active',
+        'networkGeneration': 4,
+        'tag': 'lte',
+      },
+    };
+    String? choice(int network, {String profile = 'active'}) =>
+        ProxySelectionController.networkServerSelectionFromSnapshot(
+          reply,
+          runtimeGeneration: 7,
+          networkGeneration: network,
+          minimumStateRevision: 15,
+          profileId: profile,
+        );
+    expect(choice(3), isNull);
+    expect(choice(4, profile: 'other'), isNull);
+    expect(choice(4), 'lte');
+    expect(choice(5), isNull);
+  });
   test(
     'failed runtime switch reconciles to actual root instead of request',
     () {

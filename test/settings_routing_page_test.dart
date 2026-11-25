@@ -73,6 +73,150 @@ void main() {
     expect(saved!.single.action, TrafficRuleAction.vpn);
   });
 
+  testWidgets('rule sheet accepts an IP and edits it with the keyboard open', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(340, 680)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+    List<TrafficRuleOverride>? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                saved = await Navigator.of(context)
+                    .push<List<TrafficRuleOverride>>(
+                      MaterialPageRoute(
+                        builder: (_) => const TrafficRuleOverridesPage(
+                          rules: [],
+                          splitRoutingMode: SplitRoutingMode.bypassSelected,
+                        ),
+                      ),
+                    );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(TrafficRuleOverridesPage)),
+    );
+    expect(
+      find.text(l10n.splitRoutingModeBypassSelectedSubtitle),
+      findsOneWidget,
+    );
+    final add = find.widgetWithText(FilledButton, l10n.add);
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    await tester.pumpAndSettle();
+    final value = find.byKey(const ValueKey('traffic-rule-override-value'));
+    await tester.enterText(value, '192.0.2.31/24');
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.widgetWithText(ChoiceChip, l10n.trafficRuleIpCidr),
+          )
+          .selected,
+      isTrue,
+    );
+    final direct = find.widgetWithText(ChoiceChip, l10n.trafficRuleDirect);
+    await tester.ensureVisible(direct);
+    await tester.tap(direct);
+    await tester.pumpAndSettle();
+    final saveRule = find.widgetWithText(FilledButton, l10n.saveAction);
+    await tester.ensureVisible(saveRule);
+    await tester.tap(saveRule);
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+
+    expect(find.text('192.0.2.0/24'), findsOneWidget);
+    final edit = find.byTooltip(l10n.trafficRuleEdit);
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(value, '203.0.113.10');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('203.0.113.10/32'), findsOneWidget);
+    expect(saved, isNull);
+    await tester.tap(find.widgetWithText(TextButton, l10n.saveAction));
+    await tester.pumpAndSettle();
+    expect(saved!.single.value, '203.0.113.10/32');
+    expect(saved!.single.action, TrafficRuleAction.direct);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('route check uses the expressive loader without resizing', (
+    tester,
+  ) async {
+    final pending = Completer<TrafficRoutePreview>();
+    var calls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: TrafficRoutePreviewPage(
+          splitRoutingMode: SplitRoutingMode.proxySelected,
+          onInspect: (_) {
+            calls++;
+            return pending.future;
+          },
+        ),
+      ),
+    );
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(TrafficRoutePreviewPage)),
+    );
+    expect(
+      find.text(l10n.splitRoutingModeProxySelectedSubtitle),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.splitRoutingRulesHint), findsOneWidget);
+    final target = find.byKey(const ValueKey('traffic-route-preview-target'));
+    await tester.enterText(target, 'example.org');
+    final check = find.widgetWithText(
+      FilledButton,
+      l10n.trafficRoutePreviewTitle,
+    );
+    final idleSize = tester.getSize(check);
+    await tester.tap(check);
+    await tester.pump();
+
+    expect(find.byType(AppLoadingIndicator), findsOneWidget);
+    expect(tester.getSize(check), idleSize);
+    await tester.tap(check);
+    await tester.pump();
+    expect(calls, 1);
+
+    pending.complete(
+      const TrafficRoutePreview(
+        target: 'example.org',
+        route: TrafficRuleMatch(tag: 'direct', ruleIndex: null, label: ''),
+        dns: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AppLoadingIndicator), findsNothing);
+    expect(find.textContaining(l10n.trafficRuleDirect), findsOneWidget);
+  });
+
   testWidgets('route preview shows the resolver and clears stale results', (
     tester,
   ) async {

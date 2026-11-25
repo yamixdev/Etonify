@@ -1,15 +1,23 @@
 import 'package:gap/gap.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:meow_client/core/widgets/input_formatters.dart';
+import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/routing/traffic_route_inspector.dart';
 import 'package:meow_client/data/routing/traffic_rule_override.dart';
 import 'package:meow_client/features/settings/settings_ui.dart';
 import 'package:meow_client/l10n/generated/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:meow_client/widgets/progressive_blur_scaffold.dart';
 
 class TrafficRuleOverridesPage extends StatefulWidget {
-  const TrafficRuleOverridesPage({super.key, required this.rules});
+  const TrafficRuleOverridesPage({
+    super.key,
+    required this.rules,
+    this.splitRoutingMode = SplitRoutingMode.disabled,
+  });
 
   final List<TrafficRuleOverride> rules;
+  final SplitRoutingMode splitRoutingMode;
 
   @override
   State<TrafficRuleOverridesPage> createState() =>
@@ -20,10 +28,18 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
   late final _rules = List<TrafficRuleOverride>.of(widget.rules);
 
   Future<void> _edit([int? index]) async {
-    final rule = await showDialog<TrafficRuleOverride>(
+    final rule = await showModalBottomSheet<TrafficRuleOverride>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 520),
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => _TrafficRuleEditor(
         initial: index == null ? null : _rules[index],
+        splitRoutingMode: widget.splitRoutingMode,
         isDuplicate: (candidate) => _rules.indexed.any(
           (item) =>
               item.$1 != index &&
@@ -45,9 +61,16 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     return ProgressiveBlurScaffold(
       appBar: AppBar(
-        title: Text(l10n.trafficRuleOverridesTitle),
+        toolbarHeight: 68,
+        title: Text(
+          l10n.trafficRuleOverridesTitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleLarge,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, List.of(_rules)),
@@ -66,9 +89,18 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
         header: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l10n.trafficRuleOverridesHint),
-            const Gap(8),
-            TextButton.icon(
+            Text(
+              l10n.trafficRuleOverridesHint,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (widget.splitRoutingMode != SplitRoutingMode.disabled) ...[
+              const Gap(12),
+              _SplitRoutingRuleScope(mode: widget.splitRoutingMode),
+            ],
+            const Gap(12),
+            FilledButton.tonalIcon(
               onPressed: _edit,
               icon: const Icon(Icons.add_rounded),
               label: Text(l10n.add),
@@ -82,15 +114,16 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
         }),
         itemBuilder: (context, index) {
           final rule = _rules[index];
-          final viaVpn = rule.action == TrafficRuleAction.vpn;
-          return Material(
+          final colors = theme.colorScheme;
+          return Card(
             key: ObjectKey(rule),
-            type: MaterialType.transparency,
+            margin: const EdgeInsets.only(bottom: 6),
+            clipBehavior: Clip.antiAlias,
             child: ListTile(
               leading: ReorderableDragStartListener(
                 index: index,
                 child: const SizedBox(
-                  width: 40,
+                  width: 36,
                   height: 48,
                   child: Icon(Icons.drag_handle_rounded),
                 ),
@@ -98,13 +131,23 @@ class _TrafficRuleOverridesPageState extends State<TrafficRuleOverridesPage> {
               title: Text(rule.value),
               subtitle: Text(
                 '${_matchLabel(l10n, rule.matchType)} • '
-                '${viaVpn ? l10n.trafficRuleViaVpn : l10n.trafficRuleDirect}',
+                '${_routeLabel(l10n, rule.action)}',
               ),
               onTap: () => _edit(index),
-              trailing: IconButton(
-                tooltip: l10n.delete,
-                onPressed: () => setState(() => _rules.removeAt(index)),
-                icon: const Icon(Icons.close_rounded),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: l10n.trafficRuleEdit,
+                    onPressed: () => _edit(index),
+                    icon: Icon(Icons.edit_outlined, color: colors.primary),
+                  ),
+                  IconButton(
+                    tooltip: l10n.delete,
+                    onPressed: () => setState(() => _rules.removeAt(index)),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ],
               ),
             ),
           );
@@ -121,10 +164,70 @@ String _matchLabel(AppLocalizations l10n, TrafficRuleMatchType type) =>
       TrafficRuleMatchType.ipCidr => l10n.trafficRuleIpCidr,
     };
 
+String _routeLabel(AppLocalizations l10n, TrafficRuleAction action) =>
+    action == TrafficRuleAction.vpn
+    ? l10n.trafficRuleViaVpn
+    : l10n.trafficRuleDirect;
+
+class _SplitRoutingRuleScope extends StatelessWidget {
+  const _SplitRoutingRuleScope({required this.mode});
+
+  final SplitRoutingMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final modeLabel = switch (mode) {
+      SplitRoutingMode.proxySelected =>
+        l10n.splitRoutingModeProxySelectedSubtitle,
+      SplitRoutingMode.bypassSelected =>
+        l10n.splitRoutingModeBypassSelectedSubtitle,
+      SplitRoutingMode.disabled => l10n.splitRoutingModeDisabledSubtitle,
+    };
+    return Card(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.alt_route_rounded,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
+            const Gap(10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.splitRoutingTitle,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  Text(modeLabel),
+                  Text(l10n.splitRoutingRulesHint),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TrafficRuleEditor extends StatefulWidget {
-  const _TrafficRuleEditor({required this.initial, required this.isDuplicate});
+  const _TrafficRuleEditor({
+    required this.initial,
+    required this.splitRoutingMode,
+    required this.isDuplicate,
+  });
 
   final TrafficRuleOverride? initial;
+  final SplitRoutingMode splitRoutingMode;
   final bool Function(TrafficRuleOverride) isDuplicate;
 
   @override
@@ -136,6 +239,7 @@ class _TrafficRuleEditorState extends State<_TrafficRuleEditor> {
   late var _type =
       widget.initial?.matchType ?? TrafficRuleMatchType.domainSuffix;
   late var _action = widget.initial?.action ?? TrafficRuleAction.vpn;
+  late var _suggestMatchType = widget.initial == null;
   String? _error;
 
   @override
@@ -161,90 +265,132 @@ class _TrafficRuleEditorState extends State<_TrafficRuleEditor> {
     Navigator.pop(context, result);
   }
 
+  void _onValueChanged(String value) {
+    var type = _type;
+    if (_suggestMatchType) {
+      final ipRule = TrafficRuleOverride.tryParse(
+        matchType: TrafficRuleMatchType.ipCidr,
+        value: value,
+        action: _action,
+      );
+      type = ipRule?.matchType ?? TrafficRuleMatchType.domainSuffix;
+    }
+    if (type == _type && _error == null) return;
+    setState(() {
+      _type = type;
+      _error = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return AlertDialog(
-      scrollable: true,
-      title: Text(widget.initial == null ? l10n.add : l10n.trafficRuleEdit),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DropdownButtonFormField<TrafficRuleMatchType>(
-            initialValue: _type,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: l10n.trafficRuleMatchType),
-            items: [
-              for (final type in TrafficRuleMatchType.values)
-                DropdownMenuItem(
-                  value: type,
-                  child: Text(_matchLabel(l10n, type)),
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.initial == null ? l10n.add : l10n.trafficRuleEdit,
+                style: theme.textTheme.titleLarge,
+              ),
+              const Gap(14),
+              TextField(
+                key: const ValueKey('traffic-rule-override-value'),
+                controller: _value,
+                autofocus: widget.initial == null,
+                autocorrect: false,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                inputFormatters: [noNewlineInputFormatter],
+                onChanged: _onValueChanged,
+                onSubmitted: (_) => _submit(l10n),
+                decoration: InputDecoration(
+                  labelText: l10n.trafficRouteTarget,
+                  hintText: _type == TrafficRuleMatchType.ipCidr
+                      ? '192.0.2.0/24'
+                      : 'example.org',
+                  errorText: _error,
                 ),
-            ],
-            onChanged: (type) {
-              if (type == null) return;
-              setState(() {
-                _type = type;
-                _error = null;
-              });
-            },
-          ),
-          const Gap(12),
-          TextField(
-            key: const ValueKey('traffic-rule-override-value'),
-            controller: _value,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-            decoration: InputDecoration(
-              labelText: _matchLabel(l10n, _type),
-              hintText: _type == TrafficRuleMatchType.ipCidr
-                  ? '192.0.2.0/24'
-                  : 'example.org',
-              errorText: _error,
-            ),
-          ),
-          const Gap(12),
-          DropdownButtonFormField<TrafficRuleAction>(
-            initialValue: _action,
-            decoration: InputDecoration(labelText: l10n.trafficRuleRoute),
-            items: [
-              DropdownMenuItem(
-                value: TrafficRuleAction.vpn,
-                child: Text(l10n.trafficRuleViaVpn),
               ),
-              DropdownMenuItem(
-                value: TrafficRuleAction.direct,
-                child: Text(l10n.trafficRuleDirect),
+              const Gap(14),
+              Text(
+                l10n.trafficRuleMatchType,
+                style: theme.textTheme.labelLarge,
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final type in TrafficRuleMatchType.values)
+                    ChoiceChip(
+                      label: Text(_matchLabel(l10n, type)),
+                      selected: _type == type,
+                      onSelected: (_) => setState(() {
+                        _suggestMatchType = false;
+                        _type = type;
+                        _error = null;
+                      }),
+                    ),
+                ],
+              ),
+              const Gap(8),
+              Text(l10n.trafficRuleRoute, style: theme.textTheme.labelLarge),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final action in const [
+                    TrafficRuleAction.vpn,
+                    TrafficRuleAction.direct,
+                  ])
+                    ChoiceChip(
+                      label: Text(_routeLabel(l10n, action)),
+                      selected: _action == action,
+                      onSelected: (_) => setState(() => _action = action),
+                    ),
+                ],
+              ),
+              if (widget.splitRoutingMode != SplitRoutingMode.disabled) ...[
+                const Gap(8),
+                Text(
+                  l10n.splitRoutingRulesHint,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const Gap(16),
+              FilledButton(
+                onPressed: () => _submit(l10n),
+                child: Text(l10n.saveAction),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(l10n.cancel),
               ),
             ],
-            onChanged: (action) {
-              if (action != null) setState(() => _action = action);
-            },
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () => _submit(l10n),
-          child: Text(l10n.saveAction),
-        ),
-      ],
     );
   }
 }
 
 class TrafficRoutePreviewPage extends StatefulWidget {
-  const TrafficRoutePreviewPage({super.key, required this.onInspect});
+  const TrafficRoutePreviewPage({
+    super.key,
+    required this.onInspect,
+    this.splitRoutingMode = SplitRoutingMode.disabled,
+  });
 
   final Future<TrafficRoutePreview> Function(String) onInspect;
+  final SplitRoutingMode splitRoutingMode;
 
   @override
   State<TrafficRoutePreviewPage> createState() =>
@@ -334,10 +480,21 @@ class _TrafficRoutePreviewPageState extends State<TrafficRoutePreviewPage> {
           const Gap(12),
           FilledButton.icon(
             onPressed: _busy ? null : _inspect,
-            icon: const Icon(Icons.search_rounded),
+            icon: SizedBox.square(
+              dimension: 24,
+              child: _busy
+                  ? AppLoadingIndicator(
+                      size: 24,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    )
+                  : const Icon(Icons.search_rounded),
+            ),
             label: Text(l10n.trafficRoutePreviewTitle),
           ),
-          if (_busy) const LinearProgressIndicator(),
+          if (widget.splitRoutingMode != SplitRoutingMode.disabled) ...[
+            const Gap(settingsIslandGap),
+            _SplitRoutingRuleScope(mode: widget.splitRoutingMode),
+          ],
           if (result != null) ...[
             const Gap(settingsIslandGap),
             SettingsTileGroup(

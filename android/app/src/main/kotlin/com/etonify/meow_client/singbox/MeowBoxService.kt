@@ -118,6 +118,9 @@ class MeowBoxService(
                         boxService.serviceGeneration, SingboxController.currentNetworkGeneration,
                         boxService.tileStartedRuntime,
                     )
+                    SingboxController.replayNotificationGroups(
+                        boxService.serviceGeneration, SingboxController.currentNetworkGeneration,
+                    )
                 }
             }
         }
@@ -197,15 +200,23 @@ class MeowBoxService(
             }
         }
 
-        fun publishNotificationSelectedOutbounds(groups: List<Map<String, Any?>>, runtimeGeneration: Long, networkGeneration: Long) {
+        internal fun publishNotificationGroupsSnapshot(
+            groups: List<Map<String, Any?>>,
+            latencyHistory: List<Map<String, Any?>>,
+            runtimeGeneration: Long,
+            networkGeneration: Long,
+            revision: Long,
+        ) {
             val selected = groups.mapNotNull { group ->
                 val tag = group["tag"] as? String ?: return@mapNotNull null
                 val member = group["selected"] as? String ?: return@mapNotNull null
                 tag to member
             }.toMap()
             for (boxService in activeServices) {
-                if (boxService.ownsActiveRuntime()) {
-                    boxService.foregroundNotification.updateSelectedOutbounds(selected, runtimeGeneration, networkGeneration, startProbe = false)
+                if (boxService.ownsActiveRuntime() && boxService.serviceGeneration == runtimeGeneration) {
+                    boxService.foregroundNotification.updateGroupsSnapshot(
+                        selected, latencyHistory, runtimeGeneration, networkGeneration, revision,
+                    )
                 }
             }
         }
@@ -243,16 +254,12 @@ class MeowBoxService(
             }
         }
 
-        internal fun finishNotificationGroupsSnapshot(runtimeGeneration: Long, networkGeneration: Long) {
-            for (owner in activeServices) if (owner.ownsActiveRuntime() && owner.serviceGeneration == runtimeGeneration &&
-                SingboxController.currentNetworkGeneration == networkGeneration
-            ) owner.foregroundNotification.onGroupsSnapshotReady()
-        }
-
         fun requestNotificationLatencyRefresh(): Boolean {
             var accepted = false
             for (boxService in activeServices) {
-                accepted = boxService.foregroundNotification.requestLatencyRefresh() || accepted
+                if (boxService.ownsActiveRuntime()) {
+                    accepted = boxService.foregroundNotification.requestManualLatencyRefresh() || accepted
+                }
             }
             return accepted
         }
@@ -463,7 +470,7 @@ class MeowBoxService(
                 }
             }
             MeowForegroundNotification.ACTION_REFRESH_LATENCY -> {
-                val accepted = foregroundNotification.requestLatencyRefresh()
+                val accepted = foregroundNotification.requestManualLatencyRefresh()
                 MeowDiagnostics.log(
                     TAG,
                     "notification_latency_refresh accepted=$accepted running=${SingboxController.running}",
@@ -681,7 +688,14 @@ class MeowBoxService(
         val reconciling = networkSelectionNeedsReconcile
         if (!force && !starting && !reconciling && !networkSelectionRetryNeeded &&
             network?.network == previousType
-        ) return
+        ) {
+            if (network != null && automaticSelectionRuntime == runtime) {
+                lastNetworkSelection?.takeIf { it.first == profile.id }?.let {
+                    SingboxController.publishNetworkServerSelection(runtime, profile.choice(it.second), network.generation)
+                }
+            }
+            return
+        }
         clearNetworkSelectionRetry()
         val selectable = profile.selectableTags - SingboxController.networkServerExcludedTags(runtime)
         val lastTag = lastNetworkSelection?.takeIf { it.first == profile.id && it.second in selectable }?.second
@@ -720,10 +734,15 @@ class MeowBoxService(
                 lastServerNetwork = network?.network
                 lastNetworkSelection = profile.id to target
                 networkSelectionWasManual = false
-                automaticSelectionRuntime = runtime
-                SingboxController.publishNetworkServerSelection(runtime, profile.choice(target))
+                automaticSelectionRuntime = if (policy.enabled && network != null) runtime else 0L
+                SingboxController.publishNetworkServerSelection(
+                    runtime, profile.choice(target).takeIf { automaticSelectionRuntime == runtime },
+                    network?.generation ?: SingboxController.currentNetworkGeneration,
+                )
                 MeowDiagnostics.log(TAG, "network server applied network=${network?.network?.key} generation=${network?.generation}")
-                foregroundNotification.onNetworkServerSelectionChanged()
+                if (network != null) {
+                    foregroundNotification.onNetworkServerSelectionChanged(target, runtime, network.generation)
+                }
                 MeowQuickSettingsTileService.requestRefresh(service)
             }.onFailure { error ->
                 MeowDiagnostics.log(TAG, "network server selection failed retry=$retry", error)
@@ -1294,6 +1313,7 @@ class MeowBoxService(
                 mode,
                 preparedRuntimeConfig.exclusionEligibleTags,
                 startupSelection?.let { startupProfile?.choice(it.second) },
+                startupSelection?.first?.generation,
             )
             clearNetworkSelectionRetry()
             if (networkServerProfile?.id != preparedRuntimeConfig.networkServerProfile?.id) {
@@ -1320,6 +1340,7 @@ class MeowBoxService(
             foregroundNotification.onRuntimeReady(
                 serviceGeneration, SingboxController.currentNetworkGeneration, tileStartedRuntime,
             )
+            SingboxController.replayNotificationGroups(serviceGeneration, SingboxController.currentNetworkGeneration)
             runningConfigHash = configHash
             SingboxController.log(
                 "info",

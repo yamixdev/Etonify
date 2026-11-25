@@ -23,6 +23,7 @@ class TrafficRulesPage extends StatefulWidget {
     required this.onPrepareRuleData,
     required this.onPresetChanged,
     required this.onRussiaDnsDirectResolverChanged,
+    this.splitRoutingMode = SplitRoutingMode.disabled,
     this.trafficRuleOverrides = const [],
     this.onTrafficRuleOverridesChanged,
     this.onInspectTrafficRoute,
@@ -35,6 +36,7 @@ class TrafficRulesPage extends StatefulWidget {
   onPrepareRuleData;
   final ValueChanged<TrafficRulePreset> onPresetChanged;
   final ValueChanged<String> onRussiaDnsDirectResolverChanged;
+  final SplitRoutingMode splitRoutingMode;
   final List<TrafficRuleOverride> trafficRuleOverrides;
   final ValueChanged<List<TrafficRuleOverride>>? onTrafficRuleOverridesChanged;
   final Future<TrafficRoutePreview> Function(String)? onInspectTrafficRoute;
@@ -148,7 +150,10 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
   Future<void> _openOverrides() async {
     final rules = await Navigator.of(context).push<List<TrafficRuleOverride>>(
       _trafficRuleRoute(
-        TrafficRuleOverridesPage(rules: widget.trafficRuleOverrides),
+        TrafficRuleOverridesPage(
+          rules: widget.trafficRuleOverrides,
+          splitRoutingMode: widget.splitRoutingMode,
+        ),
       ),
     );
     if (mounted && rules != null) {
@@ -267,7 +272,10 @@ class _TrafficRulesPageState extends State<TrafficRulesPage> {
                           ? null
                           : () => Navigator.of(context).push<void>(
                               _trafficRuleRoute(
-                                TrafficRoutePreviewPage(onInspect: inspect),
+                                TrafficRoutePreviewPage(
+                                  onInspect: inspect,
+                                  splitRoutingMode: widget.splitRoutingMode,
+                                ),
                               ),
                             ),
                     ),

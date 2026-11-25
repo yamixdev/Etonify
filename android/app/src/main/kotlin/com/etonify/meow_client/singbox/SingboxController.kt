@@ -71,10 +71,14 @@ object SingboxController {
     private val runtimeStartGeneration = AtomicLong(0)
     private val externalStopGeneration = AtomicLong(0)
     private val stateRevision = AtomicLong(0)
-    @Volatile private var networkSelection: Pair<Long, NetworkServerChoice>? = null
+    private data class NetworkSelection(val runtime: Long, val network: Long, val choice: NetworkServerChoice)
+    @Volatile private var networkSelection: NetworkSelection? = null
+    private val latestNetworkEvent = AtomicReference<Map<String, Any?>?>()
     internal fun networkServerLabel(): String? = networkSelection
-        ?.takeIf { running && it.first == activeRuntimeGeneration }
-        ?.second?.let { it.label ?: it.tag }
+        ?.takeIf { running && it.runtime == activeRuntimeGeneration }
+        ?.choice?.let { it.label ?: it.tag }
+    internal fun committedNetworkServerTag(runtime: Long, network: Long): String? =
+        networkSelection?.takeIf { it.runtime == runtime && it.network == network }?.choice?.tag
     val externalStopRevision: Long get() = externalStopGeneration.get()
     val runtimeStateRevision: Long get() = stateRevision.get()
 
@@ -89,8 +93,8 @@ object SingboxController {
         "runtimeStateRevision" to runtimeStateRevision,
         "runtimeIntentFresh" to runtimeIntentFresh,
         "networkServerSelection" to networkSelection
-            ?.takeIf { running && it.first == activeRuntimeGeneration }
-            ?.let { mapOf("profileId" to it.second.profileId, "tag" to it.second.tag) },
+            ?.takeIf { running && it.runtime == activeRuntimeGeneration }
+            ?.let { mapOf("profileId" to it.choice.profileId, "tag" to it.choice.tag, "networkGeneration" to it.network) },
     )
 
     @Synchronized
@@ -103,11 +107,16 @@ object SingboxController {
     }
 
     @Synchronized
-    internal fun publishNetworkServerSelection(runtime: Long, choice: NetworkServerChoice?) {
+    internal fun publishNetworkServerSelection(
+        runtime: Long,
+        choice: NetworkServerChoice?,
+        network: Long = currentNetworkGeneration,
+    ) {
         if (!running || runtime != activeRuntimeGeneration ||
+            network != currentNetworkGeneration ||
             !MeowApplication.isRuntimeIntentFresh(RuntimeServiceModeResolver.VPN)
         ) return
-        val selection = choice?.let { runtime to it }
+        val selection = choice?.let { NetworkSelection(runtime, network, it) }
         if (networkSelection == selection) return
         networkSelection = selection
         stateRevision.incrementAndGet()
@@ -156,8 +165,22 @@ object SingboxController {
     private var uiForeground = true
     @Volatile
     private var latestStatusPayload: Map<String, Any?>? = null
-    @Volatile
-    private var latestGroupsPayload: Map<String, Any?>? = null
+    private data class GroupsSnapshot(
+        val revision: Long,
+        val runtime: Long,
+        val network: Long,
+        val groups: List<Map<String, Any?>>,
+        val latencyHistory: List<Map<String, Any?>>,
+    ) {
+        val payload: Map<String, Any?> = mapOf(
+            "type" to runtimeEventGroups,
+            "groups" to groups,
+            "runtimeGeneration" to runtime,
+            "networkGeneration" to network,
+        )
+    }
+    private val groupsRevision = AtomicLong()
+    private val latestGroupsSnapshot = AtomicReference<GroupsSnapshot?>()
     @Volatile
     private var lastEmittedStatusPayload: Map<String, Any?>? = null
     @Volatile
@@ -256,6 +279,7 @@ object SingboxController {
             // enough for a handover to happen while this snapshot is encoded.
             val eventNetworkGeneration = networkGeneration.get()
             val eventRuntimeGeneration = activeRuntimeGeneration
+            val eventGroupsRevision = groupsRevision.incrementAndGet()
             val groups = mutableListOf<Map<String, Any?>>()
             val notificationResults = mutableListOf<Map<String, Any?>>()
             val selectedGroups = mutableListOf<String>()
@@ -353,22 +377,13 @@ object SingboxController {
                     log("warning", "urltest_high_delay $summary")
                 }
             }
-            if (commandClientLifecycle.acceptsEvents(epoch) && eventRuntimeGeneration == activeRuntimeGeneration && eventNetworkGeneration == networkGeneration.get()) {
-                // Keep tile-only notification actions on the actual selected
-                // leaf, including core-restored and nested auto-group choices.
-                MeowBoxService.publishNotificationSelectedOutbounds(groups, eventRuntimeGeneration, eventNetworkGeneration)
-                for (result in notificationResults) MeowBoxService.publishNotificationUrlTestResult(
-                    result["tag"] as? String, result["delay"] as Long, result["time"] as Long,
-                    result["status"] as? String, eventRuntimeGeneration, eventNetworkGeneration,
-                )
-                MeowBoxService.finishNotificationGroupsSnapshot(eventRuntimeGeneration, eventNetworkGeneration)
-            }
+            if (!commandClientLifecycle.acceptsEvents(epoch) || eventRuntimeGeneration != activeRuntimeGeneration ||
+                eventNetworkGeneration != networkGeneration.get()
+            ) return
             emitCoalescedGroups(
-                mapOf(
-                    "type" to runtimeEventGroups,
-                    "groups" to groups,
-                    "runtimeGeneration" to eventRuntimeGeneration,
-                    "networkGeneration" to eventNetworkGeneration,
+                GroupsSnapshot(
+                    eventGroupsRevision, eventRuntimeGeneration, eventNetworkGeneration,
+                    groups, notificationResults,
                 ),
             )
         }
@@ -455,24 +470,7 @@ object SingboxController {
             if (payload.size > 2) emit(payload)
         }
 
-        override fun writeOutbounds(message: OutboundGroupItemIterator?) {
-            if (message == null || !commandClientLifecycle.acceptsEvents(epoch)) return
-            // Etonify subscribes to CommandGroup, which remains the
-            // authoritative tree used by the proxy list. CommandOutbounds is
-            // optional in libbox 1.14; if enabled later, still consume its
-            // targeted URLTest results for the foreground notification.
-            while (message.hasNext()) {
-                val item = message.next()
-                MeowBoxService.publishNotificationUrlTestResult(
-                    tag = item.tag,
-                    delayMillis = item.urlTestDelay.toLong(),
-                    timeSeconds = item.urlTestTime,
-                    status = item.urlTestStatus,
-                    runtimeGeneration = activeRuntimeGeneration,
-                    networkGeneration = networkGeneration.get(),
-                )
-            }
-        }
+        override fun writeOutbounds(message: OutboundGroupItemIterator?) = Unit
 
         override fun writeLogs(messageList: LogIterator?) {
             if (messageList == null || !commandClientLifecycle.acceptsEvents(epoch)) return
@@ -547,6 +545,7 @@ object SingboxController {
             TAG,
             "runtime event sink attached registration=$registration running=$running",
         )
+        if (running) emitCurrentNetwork()
         emitCurrentState()
         emitCurrentStatus()
         emitCurrentGroups()
@@ -630,6 +629,7 @@ object SingboxController {
             "ui foreground=$value changed=$changed registration=$registration running=$running",
         )
         if (value && running && eventSink != null) {
+            emitCurrentNetwork()
             emitCurrentState()
             emitCurrentStatus()
             emitCurrentGroups()
@@ -643,13 +643,16 @@ object SingboxController {
         mode: String,
         exclusionEligibleTags: Set<String>?,
         initialNetworkChoice: NetworkServerChoice? = null,
+        initialSelectionNetwork: Long? = null,
     ): Long {
         val generation = runtimeGeneration.incrementAndGet()
         urlTestAttribution.clear()
         notificationLatencyCache.clear()
         runtimeExclusionTags.set(generation to exclusionEligibleTags)
         activeRuntimeGeneration = generation
-        networkSelection = initialNetworkChoice?.let { generation to it }
+        networkSelection = initialNetworkChoice?.let {
+            NetworkSelection(generation, initialSelectionNetwork ?: currentNetworkGeneration, it)
+        }
         setRunning(true, mode)
         MeowDiagnostics.log(TAG, "markServiceStarted generation=$generation mode=$mode")
         return generation
@@ -1088,13 +1091,19 @@ object SingboxController {
     fun querySelectedOutbounds(callback: (Result<Map<String, Any?>>) -> Unit) {
         val generation = activeRuntimeGeneration
         commandExecutor.execute {
+            // The core can capture a group snapshot before its callback runs.
+            // Keep the context of this stream through delivery to the caller.
+            val queryNetwork = currentNetworkGeneration
+            val queryRevision = runtimeStateRevision
+            fun queryIsCurrent(): Boolean = running && generation == activeRuntimeGeneration &&
+                queryNetwork == currentNetworkGeneration && queryRevision == runtimeStateRevision
+
             val result = runCatching {
-                check(generation > 0L && generation == activeRuntimeGeneration && running) {
-                    "stale runtime before selector query"
+                check(generation > 0L && queryIsCurrent()) {
+                    "stale context before selector query"
                 }
                 val ready = CountDownLatch(1)
-                val snapshot = java.util.concurrent.atomic.AtomicReference<Map<String, String>?>()
-                val snapshotNetwork = AtomicLong(0L)
+                val snapshot = AtomicReference<Map<String, String>?>()
                 val handler = object : CommandClientHandler {
                     override fun connected() = Unit
                     override fun disconnected(message: String?) { ready.countDown() }
@@ -1109,7 +1118,10 @@ object SingboxController {
                     override fun writeStatus(message: StatusMessage?) = Unit
                     override fun writeGroups(message: OutboundGroupIterator?) {
                         if (message == null) return
-                        val sampledNetwork = networkGeneration.get()
+                        if (!queryIsCurrent()) {
+                            ready.countDown()
+                            return
+                        }
                         val selected = mutableMapOf<String, String>()
                         while (message.hasNext()) {
                             val group = message.next()
@@ -1117,7 +1129,13 @@ object SingboxController {
                             val member = group.selected ?: continue
                             if (member.isNotBlank()) selected[tag] = member
                         }
-                        if (snapshot.compareAndSet(null, selected)) snapshotNetwork.set(sampledNetwork)
+                        if (!queryIsCurrent()) {
+                            ready.countDown()
+                            return
+                        }
+                        val committed = committedNetworkServerTag(generation, queryNetwork)
+                        if (committed != null && selected["select"] != committed) return
+                        snapshot.compareAndSet(null, selected)
                         ready.countDown()
                     }
                 }
@@ -1130,19 +1148,29 @@ object SingboxController {
                 }
                 mainHandler.postDelayed(timeout, 4_000L)
                 try {
+                    check(queryIsCurrent()) { "stale context before connecting selector query" }
                     client.connect()
                     check(ready.await((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0L), TimeUnit.MILLISECONDS)) {
                         "selector query timed out"
                     }
-                    check(generation == activeRuntimeGeneration && running) { "stale runtime after selector query" }
-                    val selected = checkNotNull(snapshot.get()) { "selector query disconnected" }
-                    mapOf("runtimeGeneration" to generation, "networkGeneration" to snapshotNetwork.get(), "selectedOutbounds" to selected)
+                    check(queryIsCurrent()) { "stale context after selector query" }
+                    mapOf(
+                        "runtimeGeneration" to generation,
+                        "networkGeneration" to queryNetwork,
+                        "runtimeStateRevision" to queryRevision,
+                        "selectedOutbounds" to checkNotNull(snapshot.get()) { "selector query disconnected" },
+                    )
                 } finally {
                     mainHandler.removeCallbacks(timeout)
                     runCatching { client.disconnect() }
                 }
             }
-            mainHandler.post { callback(result) }
+            mainHandler.post {
+                callback(result.mapCatching { selected ->
+                    check(queryIsCurrent()) { "stale selector query before delivery" }
+                    selected
+                })
+            }
         }
     }
 
@@ -1327,18 +1355,28 @@ object SingboxController {
         networkHandle: Long = 0L,
     ) {
         noteNetworkGeneration(networkGeneration)
-        emit(
-            mapOf(
-                "type" to runtimeEventNetwork,
-                "reason" to reason,
-                "description" to description,
-                "interfaceName" to interfaceName,
-                "interfaceIndex" to interfaceIndex,
-                "networkGeneration" to networkGeneration,
-                "networkHandle" to networkHandle,
-                "uptimeMs" to SystemClock.uptimeMillis(),
-            ),
+        if (networkGeneration != currentNetworkGeneration) return
+        val event = mapOf(
+            "type" to runtimeEventNetwork,
+            "reason" to reason,
+            "description" to description,
+            "interfaceName" to interfaceName,
+            "interfaceIndex" to interfaceIndex,
+            "networkGeneration" to networkGeneration,
+            "networkHandle" to networkHandle,
+            "uptimeMs" to SystemClock.uptimeMillis(),
         )
+        latestNetworkEvent.updateAndGet { previous ->
+            if ((previous?.get("networkGeneration") as? Long ?: 0L) > networkGeneration) previous else event
+        }
+        emitCurrentNetwork()
+    }
+
+    private fun emitCurrentNetwork() {
+        mainHandler.post {
+            val event = latestNetworkEvent.get() ?: return@post
+            if (event["networkGeneration"] == currentNetworkGeneration) eventSink?.success(event)
+        }
     }
 
     fun noteNetworkGeneration(networkGeneration: Long) {
@@ -1366,8 +1404,14 @@ object SingboxController {
         mainHandler.post { drainStatusEvent() }
     }
 
-    private fun emitCoalescedGroups(payload: Map<String, Any?>) {
-        latestGroupsPayload = payload
+    private fun emitCoalescedGroups(snapshot: GroupsSnapshot) {
+        val latest = latestGroupsSnapshot.updateAndGet { previous ->
+            if (isCurrentGroupsSnapshot(snapshot) &&
+                (previous == null || snapshot.revision > previous.revision)
+            ) snapshot else previous
+        }
+        if (latest !== snapshot) return
+        publishNotificationGroups(snapshot)
         if (!groupsEventScheduled.compareAndSet(false, true)) {
             return
         }
@@ -1393,9 +1437,10 @@ object SingboxController {
     }
 
     private fun drainGroupsEvent() {
-        val payload = latestGroupsPayload
+        val snapshot = latestGroupsSnapshot.get()
+        val payload = snapshot?.takeIf(::isCurrentGroupsSnapshot)?.payload
         if (payload == null || payload == lastEmittedGroupsPayload) {
-            groupsEventScheduled.set(false)
+            finishGroupsEvent(snapshot)
             return
         }
         val now = SystemClock.uptimeMillis()
@@ -1409,8 +1454,18 @@ object SingboxController {
         }
         lastGroupsEventUptimeMs = now
         lastEmittedGroupsPayload = payload
-        groupsEventScheduled.set(false)
         eventSink?.success(payload)
+        finishGroupsEvent(snapshot)
+    }
+
+    private fun finishGroupsEvent(snapshot: GroupsSnapshot?) {
+        groupsEventScheduled.set(false)
+        val latest = latestGroupsSnapshot.get()
+        if (latest !== snapshot && latest != null && isCurrentGroupsSnapshot(latest) &&
+            groupsEventScheduled.compareAndSet(false, true)
+        ) {
+            mainHandler.post { drainGroupsEvent() }
+        }
     }
 
     private fun emitCurrentState(
@@ -1443,8 +1498,25 @@ object SingboxController {
     }
 
     private fun emitCurrentGroups() {
-        latestGroupsPayload?.let(::emit)
+        mainHandler.post {
+            latestGroupsSnapshot.get()?.takeIf(::isCurrentGroupsSnapshot)?.let { eventSink?.success(it.payload) }
+        }
     }
+
+    internal fun replayNotificationGroups(runtime: Long, network: Long) {
+        latestGroupsSnapshot.get()?.takeIf { it.runtime == runtime && it.network == network }
+            ?.let(::publishNotificationGroups)
+    }
+
+    private fun publishNotificationGroups(snapshot: GroupsSnapshot) {
+        if (!isCurrentGroupsSnapshot(snapshot)) return
+        MeowBoxService.publishNotificationGroupsSnapshot(
+            snapshot.groups, snapshot.latencyHistory, snapshot.runtime, snapshot.network, snapshot.revision,
+        )
+    }
+
+    private fun isCurrentGroupsSnapshot(snapshot: GroupsSnapshot): Boolean =
+        snapshot.runtime == activeRuntimeGeneration && snapshot.network == currentNetworkGeneration
 
     private fun fetchOutboundExternalInfo(outboundTag: String): Map<String, String> {
         val normalizedTag = outboundTag.trim()

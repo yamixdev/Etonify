@@ -290,6 +290,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
   int _offlineProbeRuntimeGeneration = 0;
   int _physicalNetworkEpoch = 0;
   String _physicalInterfaceKey = '';
+  int _lastRuntimeNetworkEventGeneration = 0;
+  int _networkLatencyHistoryNotBeforeSeconds = 0;
+  Map<String, dynamic> _nativeNetworkServerSnapshot = const {};
+  ({String profileId, int runtime, int network, String tag})?
+  _lastRuntimeGroupSelection;
   int _offlineSessionSequence = 0;
   int _offlineStartGeneration = 0;
   bool _fullUrlTestSessionRunning = false;
@@ -1224,7 +1229,15 @@ class _MeowClientState extends ConsumerState<MeowClient>
 
   Future<bool> _networkInterfaceUsable({String reason = 'dart_check'}) async {
     try {
+      final lastNetworkEvent = _lastRuntimeNetworkEventGeneration;
       final state = await _singboxRuntime.getNetworkInterfaceState();
+      if (!mounted) return false;
+      if (Platform.isAndroid &&
+          (state.generation < _networkInterfaceGeneration ||
+              (lastNetworkEvent != _lastRuntimeNetworkEventGeneration &&
+                  state.generation == _networkInterfaceGeneration))) {
+        return _runtimeOperations.networkUsable;
+      }
       final wasUsable = _runtimeOperations.networkUsable;
       _networkInterfaceGeneration = state.generation;
       _runtimeOperations.updateNetwork(
@@ -4065,6 +4078,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
     }
     if (transition.transitionStarted) {
       _pendingRuntimeGroups.clear();
+      _lastRuntimeGroupSelection = null;
       _runtimeCommands.invalidate();
       _runtimeOperations.beginRuntimeTransition();
     } else if (transition.transitionFinished) {
@@ -4091,6 +4105,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         phase == AppConnectionPhase.failed ||
         phase == AppConnectionPhase.stopping) {
       _pendingRuntimeGroups.clear();
+      _lastRuntimeGroupSelection = null;
     }
     _serverConnectionInfo.value = _currentServerConnectionInfo();
   }
@@ -5122,6 +5137,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
             return;
           }
           if (result.status == RuntimeSelectionStatus.stale) {
+            if (requireRuntimeConfirmation) {
+              await _reconcileRuntimeProxySelection(selectionGeneration);
+            }
             return;
           }
           if (!result.applied) {
@@ -8490,6 +8508,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     String? subscriptionId,
     Map<String, dynamic> snapshot,
   ) async {
+    final snapshotNetwork =
+        (snapshot['networkGeneration'] as num?)?.toInt() ?? 0;
+    if (mounted && snapshotNetwork > _networkInterfaceGeneration) {
+      await _networkInterfaceUsable(reason: 'runtime_selector_confirmation');
+    }
     if (!mounted ||
         !_connected ||
         subscriptionId != _activeSubscription?.id ||
@@ -8499,10 +8522,14 @@ class _MeowClientState extends ConsumerState<MeowClient>
             !_proxySelection.runtimeSelectionUnconfirmed)) {
       return;
     }
-    var actual = ProxySelectionController.rootSelectionFromSnapshot(
+    final networkGeneration = _networkInterfaceGeneration;
+    final actualFromQuery = ProxySelectionController.rootSelectionFromSnapshot(
       snapshot,
       runtimeGeneration: runtimeGeneration,
+      networkGeneration: networkGeneration,
+      minimumStateRevision: _lastNativeRuntimeStateRevision,
     );
+    var actual = actualFromQuery ?? _currentNativeNetworkServerTag();
     if (actual != null &&
         _activeSubscription != null &&
         _proxySelection.validSelectedProxyTagForSubscription(
@@ -8519,6 +8546,10 @@ class _MeowClientState extends ConsumerState<MeowClient>
     if (actual != null) {
       final confirmedTag = actual;
       final updated = _withSelectedOutbound(_activeSubscription!, confirmedTag);
+      final revision = snapshot['runtimeStateRevision'];
+      if (actualFromQuery != null && revision is int) {
+        _lastNativeRuntimeStateRevision = revision;
+      }
       _runtimeOperations.synchronizeSelection(confirmedTag);
       setState(() {
         _subscriptions = _replaceSubscription(updated);
@@ -8527,14 +8558,13 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _displayProxyCache =
             _displayProxyForSelectedTag(confirmedTag) ?? _displayProxyCache;
       });
+      _resetActiveProxyIpState(rebuild: false);
       final selections = snapshot['selectedOutbounds'];
-      final networkGeneration =
-          (snapshot['networkGeneration'] as num?)?.toInt() ?? 0;
-      if (selections is Map && networkGeneration > 0) {
+      if (actualFromQuery != null && selections is Map && snapshotNetwork > 0) {
         _applyGroupUpdatesImpl(
           RuntimeGroupsEvent(
             runtimeGeneration: runtimeGeneration,
-            networkGeneration: networkGeneration,
+            networkGeneration: snapshotNetwork,
             groups: [
               for (final entry in selections.entries)
                 if (entry.key is String && entry.value is String)
@@ -8542,6 +8572,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
             ],
           ),
         );
+      } else if (actualFromQuery == null) {
+        _restoreRuntimeDiagnosticsFromGroups(updated.id, confirmedTag);
       }
       await _proxySelection.enqueuePersistence(
         generation: generation,
@@ -8555,6 +8587,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _scheduleActiveOutboundIpRefresh();
     } else {
       setState(() {});
+      unawaited(_syncRuntimeState());
       _showAppSnackBar(
         'Proxy switch was not confirmed. The displayed server is last known.',
       );
@@ -8909,30 +8942,48 @@ class _MeowClientState extends ConsumerState<MeowClient>
   }
 
   void _applyNativeNetworkServerSelection(Map<String, dynamic> snapshot) {
-    final selection = snapshot['networkServerSelection'];
+    _nativeNetworkServerSnapshot = snapshot;
+    _replayNativeNetworkServerSelection();
+  }
+
+  String? _currentNativeNetworkServerTag() {
+    final profileId = _activeSubscription?.id;
+    if (profileId == null) return null;
+    return ProxySelectionController.networkServerSelectionFromSnapshot(
+      _nativeNetworkServerSnapshot,
+      runtimeGeneration: _runtimeOperations.nativeRuntimeGeneration,
+      networkGeneration: _networkInterfaceGeneration,
+      minimumStateRevision: _lastNativeRuntimeStateRevision,
+      profileId: profileId,
+    );
+  }
+
+  void _replayNativeNetworkServerSelection() {
     final subscription = _activeSubscription;
     if (!mounted ||
         !_connected ||
         _runtimeIntent.explicitStopInProgress ||
         subscription == null ||
-        selection is! Map<Object?, Object?> ||
-        selection['profileId'] != subscription.id ||
         (_proxySelection.hasPendingRuntimeSelection &&
             !_proxySelection.pendingRuntimeSelectionIsStartGuard)) {
       return;
     }
-    final tag = selection['tag'];
-    if (tag is! String ||
-        tag == _selectedProxyTag ||
+    final tag = _currentNativeNetworkServerTag();
+    if (tag == null ||
+        (tag == _selectedProxyTag &&
+            !_proxySelection.runtimeSelectionUnconfirmed) ||
         _userExcludedTags.contains(tag) ||
         _validSelectedProxyTagForSubscription(subscription, tag) != tag) {
       return;
     }
     final previousTag = _selectedProxyTag;
     final generation = _beginLocalProxySelection();
+    _proxySelection.resolveRuntimeSelection(
+      generation: generation,
+      actualTag: tag,
+    );
     final updated = _withSelectedOutbound(subscription, tag);
     _runtimeOperations.synchronizeSelection(tag);
-    _resetActiveProxyIpState(rebuild: false);
     setState(() {
       _subscriptions = _replaceSubscription(updated);
       _activeLookupSubscription = null;
@@ -8940,6 +8991,8 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _displayProxyCache =
           _displayProxyForSelectedTag(tag) ?? _displayProxyCache;
     });
+    _resetActiveProxyIpState(rebuild: false);
+    _restoreRuntimeDiagnosticsFromGroups(subscription.id, tag);
     _publishProxyRuntimeVisualStatesForTags({previousTag, tag});
     _scheduleVpnNotificationSync();
     unawaited(_syncQuickSettingsTileLabel());
@@ -8955,6 +9008,22 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
   }
 
+  void _restoreRuntimeDiagnosticsFromGroups(String profileId, String tag) {
+    final groupSelection = _lastRuntimeGroupSelection;
+    if (!_runtimeOperations.diagnosticsReady &&
+        groupSelection != null &&
+        groupSelection.profileId == profileId &&
+        groupSelection.runtime == _runtimeOperations.nativeRuntimeGeneration &&
+        groupSelection.network == _networkInterfaceGeneration &&
+        groupSelection.tag == tag) {
+      _runtimeOperations.acceptGroupsSnapshot(
+        nativeRuntimeGeneration: groupSelection.runtime,
+        selectedTag: groupSelection.tag,
+      );
+      if (_runtimeOperations.diagnosticsReady) _onRuntimeDiagnosticsReady();
+    }
+  }
+
   void _handleRuntimeNetworkEvent(Map<String, dynamic> event) {
     final reason = event['reason']?.toString() ?? 'network';
     final interfaceName = event['interfaceName']?.toString();
@@ -8963,6 +9032,12 @@ class _MeowClientState extends ConsumerState<MeowClient>
     final networkGeneration =
         (event['networkGeneration'] as num?)?.toInt() ??
         ++_networkInterfaceGeneration;
+    if (Platform.isAndroid &&
+        (networkGeneration < _networkInterfaceGeneration ||
+            networkGeneration <= _lastRuntimeNetworkEventGeneration)) {
+      return;
+    }
+    _lastRuntimeNetworkEventGeneration = networkGeneration;
     AppLogStore.info(
       'network',
       'default network changed: $reason'
@@ -8988,6 +9063,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
     );
     if (physicalChanged) {
       ++_physicalNetworkEpoch;
+      if (Platform.isAndroid) {
+        // Group history has no request identity and only whole-second timestamps.
+        _networkLatencyHistoryNotBeforeSeconds =
+            DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1;
+      }
       _publicIpController.invalidate();
       final logicalSession = _offlineUrlTestSession;
       if (logicalSession != null && !logicalSession.isTerminal) {
@@ -9052,11 +9132,11 @@ class _MeowClientState extends ConsumerState<MeowClient>
       _urlTestCancelled = false;
       _updateUrlTestProgress(isRunning: false, isCancelled: false);
     }
-    _replayPendingRuntimeGroups();
-    _scheduleVpnNotificationSync();
     if (!diagnosticsWereReady && _runtimeOperations.diagnosticsReady) {
       _onRuntimeDiagnosticsReady();
     }
+    _replayPendingRuntimeGroups();
+    _scheduleVpnNotificationSync();
     if (!_foregroundLifecycleActive) {
       _deferredAutomaticUrlTest.defer();
       _runtimeIntent.deferRetryUntilResume();
@@ -9991,6 +10071,7 @@ class _MeowClientState extends ConsumerState<MeowClient>
         _activeSubscription?.outbounds.isNotEmpty != true) {
       return;
     }
+    _replayNativeNetworkServerSelection();
     final event = _pendingRuntimeGroups.take(
       _runtimeOperations.nativeRuntimeGeneration,
       networkGeneration: _networkInterfaceGeneration,
@@ -10053,6 +10134,19 @@ class _MeowClientState extends ConsumerState<MeowClient>
       );
       return;
     }
+    if (event.runtimeGeneration > 0 &&
+        event.runtimeGeneration == _runtimeOperations.nativeRuntimeGeneration &&
+        eventNetworkGeneration > 0 &&
+        eventNetworkGeneration == currentNetworkGeneration) {
+      // CommandGroup can confirm a transport's new selector before the
+      // service publishes the state event authorizing that server choice.
+      _lastRuntimeGroupSelection = (
+        profileId: activeSubscription.id,
+        runtime: event.runtimeGeneration,
+        network: eventNetworkGeneration,
+        tag: canonicalSelectedTag.trim(),
+      );
+    }
     final diagnosticsBecameReady =
         !diagnosticsWereReady && _runtimeOperations.diagnosticsReady;
     _pendingRuntimeGroups.clear();
@@ -10076,7 +10170,9 @@ class _MeowClientState extends ConsumerState<MeowClient>
         currentResolvedActiveOutboundTag: previousActiveOutboundTag,
         activeOutboundTags: _activeOutboundByTagLookup.keys.toSet(),
         latencySessionRunning: _latencyCoordinator.isRunning,
-        shouldIgnoreLatencyResult: _latencyCoordinator.shouldIgnoreGroupResult,
+        shouldIgnoreLatencyResult: (tag, time) =>
+            time < _networkLatencyHistoryNotBeforeSeconds ||
+            _latencyCoordinator.shouldIgnoreGroupResult(tag, time),
         proxyCacheContainsTag: _proxyCacheContainsTag,
         visibleGroupProxyCacheMissingChild: _visibleGroupProxyCacheMissingChild,
       ),

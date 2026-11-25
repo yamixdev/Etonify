@@ -1292,6 +1292,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get updatesInstallAction => 'Установить APK';
 
   @override
+  String get updatesUpdateNow => 'Обновить сейчас';
+
+  @override
   String get updatesDownloadWarning =>
       'Не закрывайте Etonify до завершения загрузки.';
 

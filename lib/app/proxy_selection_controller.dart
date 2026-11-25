@@ -22,15 +22,59 @@ class ProxySelectionController {
   static String? rootSelectionFromSnapshot(
     Map<String, dynamic> snapshot, {
     required int runtimeGeneration,
+    int networkGeneration = 0,
+    int minimumStateRevision = 0,
   }) {
-    if (runtimeGeneration <= 0 ||
-        snapshot['runtimeGeneration'] != runtimeGeneration) {
+    if (!_matchesRuntimeSnapshot(
+          snapshot,
+          runtimeGeneration,
+          minimumStateRevision,
+        ) ||
+        (networkGeneration > 0 &&
+            snapshot['networkGeneration'] != networkGeneration)) {
       return null;
     }
     final selections = snapshot['selectedOutbounds'];
     if (selections is! Map || selections['select'] is! String) return null;
     final root = (selections['select'] as String).trim();
     return root.isEmpty ? null : root;
+  }
+
+  static String? networkServerSelectionFromSnapshot(
+    Map<String, dynamic> snapshot, {
+    required int runtimeGeneration,
+    required int networkGeneration,
+    required int minimumStateRevision,
+    required String profileId,
+  }) {
+    if (!_matchesRuntimeSnapshot(
+          snapshot,
+          runtimeGeneration,
+          minimumStateRevision,
+        ) ||
+        networkGeneration <= 0) {
+      return null;
+    }
+    final selection = snapshot['networkServerSelection'];
+    if (selection is! Map ||
+        selection['profileId'] != profileId ||
+        selection['networkGeneration'] != networkGeneration) {
+      return null;
+    }
+    final tag = selection['tag'];
+    return tag is String && tag.isNotEmpty ? tag : null;
+  }
+
+  static bool _matchesRuntimeSnapshot(
+    Map<String, dynamic> snapshot,
+    int runtimeGeneration,
+    int minimumStateRevision,
+  ) {
+    final revision = snapshot['runtimeStateRevision'];
+    return runtimeGeneration > 0 &&
+        snapshot['runtimeGeneration'] == runtimeGeneration &&
+        (minimumStateRevision <= 0 ||
+            (revision is int && revision >= minimumStateRevision));
   }
 
   int _generation = 0;

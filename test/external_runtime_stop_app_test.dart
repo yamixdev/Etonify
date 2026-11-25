@@ -547,6 +547,147 @@ void main() {
     );
   }
 
+  testWidgets('handover confirms groups received before the server status', (
+    tester,
+  ) async {
+    final profile = _subscription.copyWith(
+      id: 'handover-profile',
+      outbounds: [
+        ..._subscription.outbounds,
+        const Outbound(
+          tag: 'mobile',
+          name: 'Mobile server',
+          config: {'type': 'socks', 'server': '192.0.2.2', 'server_port': 1080},
+        ),
+      ],
+    );
+    final state = AppSettingsController()
+        .toState(
+          onboardingCompleted: true,
+          acceptedLegalVersion: '0.2.1',
+          acceptedLegalAtMillis: 1,
+          activeProfileId: _subscription.id,
+          selectedProxyTag: 'test',
+        )
+        .copyWith(
+          localeCode: 'en',
+          autoConnectOnLaunch: false,
+          autoCheckServers: false,
+          autoCheckNoticeAcknowledged: true,
+          hwidDefaultNoticeShown: true,
+        );
+    final container = ProviderContainer(
+      overrides: [singboxRuntimeProvider.overrideWithValue(runtime)],
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 16));
+      container.dispose();
+    });
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MeowClient(store: MemoryAppSettingsStore(state)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    container
+        .read(subscriptionCatalogProvider.notifier)
+        .replace(
+          subscriptions: [profile],
+          activeProfileId: profile.id,
+          selectedProxyTag: 'test',
+        );
+    await tester.pumpAndSettle();
+
+    Future<void> network(int generation, String name) async {
+      runtime.network = NetworkInterfaceSnapshot(
+        available: true,
+        interfaceName: name,
+        interfaceIndex: generation,
+        generation: generation,
+        reason: 'default_interface',
+        updatedAtMillis: generation,
+      );
+      runtime.controller.add({
+        'type': 'network',
+        'reason': 'default_interface',
+        'networkGeneration': generation,
+        'interfaceName': name,
+        'interfaceIndex': generation,
+      });
+      await tester.pump();
+    }
+
+    Future<void> groups(int networkGeneration, String tag) async {
+      runtime.controller.add({
+        'type': 'groups',
+        'runtimeGeneration': runtime.runtimeGeneration,
+        'networkGeneration': networkGeneration,
+        'groups': [
+          {'tag': 'select', 'selected': tag, 'items': <Map<String, String>>[]},
+        ],
+      });
+      await tester.pump();
+    }
+
+    Future<void> selection(int networkGeneration, String tag) async {
+      runtime.stateRevision++;
+      runtime.controller.add({
+        'type': 'state',
+        ...runtime.snapshot(),
+        'networkServerSelection': {
+          'profileId': profile.id,
+          'tag': tag,
+          'networkGeneration': networkGeneration,
+        },
+      });
+      await tester.pump();
+    }
+
+    String selected() =>
+        container.read(subscriptionCatalogProvider).selectedProxyTag;
+    bool diagnosticsReady(int networkGeneration, String tag) =>
+        AppLogStore.entries.value.any(
+          (entry) => entry.message.contains(
+            'runtime diagnostics ready nativeGeneration=1 '
+            'networkGeneration=$networkGeneration selected=$tag',
+          ),
+        );
+
+    runtime.stateRevision++;
+    runtime.controller.add({'type': 'state', ...runtime.snapshot()});
+    await tester.pump();
+    await network(1, 'wlan0');
+    await groups(1, 'test');
+    expect(selected(), 'test');
+    expect(
+      diagnosticsReady(1, 'test'),
+      isTrue,
+      reason: AppLogStore.entries.value
+          .map((entry) => entry.message)
+          .join('\n'),
+    );
+
+    await network(2, 'rmnet_data0');
+    await groups(2, 'mobile');
+    expect(selected(), 'test');
+    expect(diagnosticsReady(2, 'mobile'), isFalse);
+    await selection(2, 'mobile');
+    expect(selected(), 'mobile');
+    expect(diagnosticsReady(2, 'mobile'), isTrue);
+
+    await network(3, 'wlan0');
+    await groups(1, 'test');
+    await selection(3, 'test');
+    expect(selected(), 'test');
+    expect(diagnosticsReady(3, 'test'), isFalse);
+    await groups(3, 'test');
+    expect(diagnosticsReady(3, 'test'), isTrue);
+    expect(runtime.startCalls, 0);
+    expect(runtime.stopCalls, 0);
+  });
+
   for (final replayStoppedState in [false, true]) {
     testWidgets(
       replayStoppedState

@@ -9,8 +9,10 @@ import 'package:hive_ce/hive.dart';
 import 'package:meow_client/data/local/app_settings_store.dart';
 import 'package:meow_client/data/update/app_update_channel.dart';
 import 'package:meow_client/data/update/app_update_service.dart';
+import 'package:meow_client/features/settings/app_update_prompt.dart';
 import 'package:meow_client/features/settings/settings_update_page.dart';
 import 'package:meow_client/l10n/app_localizations.dart';
+import 'package:meow_client/widgets/app_loading_indicator.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 class _UpdatePaths extends PathProviderPlatform {
@@ -286,6 +288,37 @@ void main() {
     },
   );
 
+  test(
+    'automatic check restores an installer before fetching releases',
+    () async {
+      final service = AppUpdateService.instance;
+      server.finish();
+      await service.startDownload(server.info).completed;
+      final metadata = await service.loadMetadata();
+      await Hive.box<dynamic>('app_update_state').putAll(
+        AppUpdateMetadata(
+          lastCheckAtMillis: DateTime(2020).millisecondsSinceEpoch,
+          lastStatus: AppUpdateStatus.downloaded,
+          latestInfo: metadata.latestInfo,
+          downloadedUpdatePath: metadata.downloadedUpdatePath,
+        ).toMap(),
+      );
+      var networkAttempts = 0;
+
+      final result = await HttpOverrides.runZoned(
+        () => service.checkForUpdates(currentVersion: '0.3.0'),
+        createHttpClient: (_) {
+          networkAttempts++;
+          throw const SocketException('Offline');
+        },
+      );
+
+      expect(result.status, AppUpdateStatus.downloaded);
+      expect(result.downloadedFilePath, metadata.downloadedUpdatePath);
+      expect(networkAttempts, 0);
+    },
+  );
+
   test('a conflicting asset cannot replace the active operation', () async {
     final operation = AppUpdateService.instance.startDownload(server.info);
     await server.started.future;
@@ -417,6 +450,62 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'compact download progress puts the percentage after the animation',
+    (tester) async {
+      late AppUpdateDownloadOperation operation;
+      await tester.runAsync(() async {
+        operation = AppUpdateService.instance.startDownload(server.info);
+        final received = Completer<void>();
+        void onProgress() {
+          if (operation.progress.downloadedBytes >= 2 &&
+              !received.isCompleted) {
+            received.complete();
+          }
+        }
+
+        operation.addListener(onProgress);
+        await received.future;
+        operation.removeListener(onProgress);
+      });
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: appLocalizationsDelegates,
+          home: Scaffold(
+            bottomNavigationBar: AppUpdateDownloadBar(
+              info: server.info,
+              operation: operation,
+              downloaded: false,
+              installing: false,
+              onOpen: () {},
+              onDismiss: () {},
+            ),
+          ),
+        ),
+      );
+      final label = find.text('Downloading update');
+      final indicator = find.byType(AppLinearProgressIndicator);
+      final percent = find.text('50%');
+      expect(
+        tester.getCenter(label).dx,
+        lessThan(tester.getCenter(indicator).dx),
+      );
+      expect(
+        tester.getCenter(indicator).dx,
+        lessThan(tester.getCenter(percent).dx),
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      server.finish();
+      await tester.runAsync(() => operation.completed);
+    },
+  );
 
   testWidgets(
     'double install taps reserve permission flow before verification',
